@@ -42,7 +42,7 @@ struct StrongImportWizard: View {
                 .tabViewStyle(.page(indexDisplayMode: .never))
                 .animation(.spring(), value: step)
             }
-            .background(Theme.Colors.background)
+            .background(AdaptiveBackground())
             .navigationTitle("Import Data")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -503,6 +503,7 @@ struct StrongImportWizard: View {
                             isImporting = false
                             step = 2
                         }
+                        Haptics.notify(.success)
 
                         startAutoHealthSyncIfNeeded()
                     }

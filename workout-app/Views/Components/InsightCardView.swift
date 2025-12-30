@@ -20,7 +20,10 @@ struct InsightCardView: View {
     }
     
     var body: some View {
-        Button(action: { onTap?() }) {
+        Button(action: {
+            Haptics.selection()
+            onTap?()
+        }) {
             HStack(spacing: Theme.Spacing.lg) {
                 // Icon
                 Image(systemName: insight.type.iconName)
@@ -49,7 +52,7 @@ struct InsightCardView: View {
                 }
             }
             .padding(Theme.Spacing.lg)
-            .glassBackground()
+            .glassBackground(elevation: 2)
         }
         .buttonStyle(ScaleButtonStyle())
         .opacity(isAppearing ? 1 : 0)

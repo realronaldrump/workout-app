@@ -7,8 +7,11 @@ struct HealthDashboardView: View {
     
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: Theme.Spacing.xl) {
+            ZStack {
+                AdaptiveBackground()
+                
+                ScrollView {
+                    VStack(spacing: Theme.Spacing.xl) {
                     
                     if healthManager.healthDataStore.isEmpty {
                         emptyState
@@ -23,9 +26,9 @@ struct HealthDashboardView: View {
                         recentWorkoutsSection
                     }
                 }
-                .padding()
+                    .padding()
+                }
             }
-            .background(Theme.Colors.background)
             .navigationTitle("Health Insights")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -122,7 +125,7 @@ struct HealthDashboardView: View {
                 .foregroundStyle(Theme.Colors.textSecondary)
         }
         .padding()
-        .glassBackground()
+        .glassBackground(elevation: 2)
     }
     
     private var trendsSection: some View {
@@ -151,8 +154,8 @@ struct HealthDashboardView: View {
                 }
                 .frame(height: 150)
             }
-            .padding()
-            .glassBackground()
+            .padding(Theme.Spacing.lg)
+            .glassBackground(elevation: 2)
         }
     }
     
@@ -164,8 +167,8 @@ struct HealthDashboardView: View {
             
             ForEach(healthManager.healthDataStore.values.sorted(by: { $0.workoutDate > $1.workoutDate }), id: \.workoutId) { data in
                 HealthDataSummaryView(healthData: data)
-                    .padding()
-                    .glassBackground()
+                    .padding(Theme.Spacing.lg)
+                    .glassBackground(elevation: 2)
             }
         }
     }

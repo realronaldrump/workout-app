@@ -12,11 +12,11 @@ struct VolumeProgressChart: View {
     }
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             HStack {
                 Text("Progress")
-                    .font(.title2)
-                    .fontWeight(.bold)
+                    .font(Theme.Typography.title2)
+                    .foregroundColor(Theme.Colors.textPrimary)
                 
                 Spacer()
                 
@@ -35,19 +35,19 @@ struct VolumeProgressChart: View {
                         x: .value("Date", dataPoint.date),
                         y: .value(selectedMetric.rawValue, dataPoint.value)
                     )
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(Theme.Colors.accent)
                     
                     AreaMark(
                         x: .value("Date", dataPoint.date),
                         y: .value(selectedMetric.rawValue, dataPoint.value)
                     )
-                    .foregroundStyle(Color.accentColor.opacity(0.2))
+                    .foregroundStyle(Theme.Colors.accent.opacity(0.2))
                     
                     PointMark(
                         x: .value("Date", dataPoint.date),
                         y: .value(selectedMetric.rawValue, dataPoint.value)
                     )
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(Theme.Colors.accent)
                 }
             }
             .frame(height: 200)
@@ -73,9 +73,25 @@ struct VolumeProgressChart: View {
                     }
                 }
             }
-            .padding()
-            .background(Color(.systemGray6))
-            .cornerRadius(12)
+            .padding(Theme.Spacing.lg)
+            .glassBackground(elevation: 2)
+            .gesture(
+                DragGesture(minimumDistance: 24)
+                    .onEnded { value in
+                        let direction = value.translation.width
+                        guard abs(direction) > 40 else { return }
+                        let all = VolumeMetric.allCases
+                        guard let index = all.firstIndex(of: selectedMetric) else { return }
+                        let nextIndex = direction < 0 ? min(index + 1, all.count - 1) : max(index - 1, 0)
+                        if nextIndex != index {
+                            selectedMetric = all[nextIndex]
+                            Haptics.selection()
+                        }
+                    }
+            )
+        }
+        .onChange(of: selectedMetric) { _ in
+            Haptics.selection()
         }
     }
     

@@ -2,24 +2,25 @@ import SwiftUI
 
 struct RecentWorkoutsView: View {
     let workouts: [Workout]
+    @EnvironmentObject var healthManager: HealthKitManager
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             HStack {
                 Text("Recent Workouts")
-                    .font(.title2)
-                    .fontWeight(.bold)
+                    .font(Theme.Typography.title2)
+                    .foregroundColor(Theme.Colors.textPrimary)
                 
                 Spacer()
                 
                 NavigationLink(destination: WorkoutHistoryView(workouts: workouts)) {
                     Text("See All")
-                        .font(.subheadline)
-                        .foregroundColor(.accentColor)
+                        .font(Theme.Typography.subheadline)
+                        .foregroundColor(Theme.Colors.accent)
                 }
             }
             
-            VStack(spacing: 12) {
+            VStack(spacing: Theme.Spacing.md) {
                 ForEach(workouts) { workout in
                     WorkoutRowView(workout: workout)
                 }
@@ -30,39 +31,35 @@ struct RecentWorkoutsView: View {
 
 struct WorkoutRowView: View {
     let workout: Workout
+    @EnvironmentObject var healthManager: HealthKitManager
     
     var body: some View {
         NavigationLink(destination: WorkoutDetailView(workout: workout)) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                HStack {
                     Text(workout.name)
-                        .font(.headline)
-                        .foregroundColor(.primary)
+                        .font(Theme.Typography.condensed)
+                        .tracking(-0.2)
+                        .foregroundColor(Theme.Colors.textPrimary)
                     
                     Text(workout.date.formatted(date: .abbreviated, time: .shortened))
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                        .font(Theme.Typography.caption)
+                        .foregroundColor(Theme.Colors.textTertiary)
                 }
                 
-                Spacer()
-                
-                VStack(alignment: .trailing, spacing: 4) {
-                    Text(workout.duration)
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                    
-                    Text("\(workout.exercises.count) exercises")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                HStack(spacing: Theme.Spacing.md) {
+                    Label(workout.duration, systemImage: "clock")
+                    Label("\(workout.exercises.count) exercises", systemImage: "figure.strengthtraining.traditional")
                 }
+                .font(Theme.Typography.caption)
+                .foregroundColor(Theme.Colors.textSecondary)
                 
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                if let data = healthManager.getHealthData(for: workout.id) {
+                    HealthDataSummaryView(healthData: data)
+                }
             }
-            .padding()
-            .background(Color(.systemGray6))
-            .cornerRadius(10)
+            .padding(Theme.Spacing.lg)
+            .glassBackground(elevation: 2)
         }
         .buttonStyle(PlainButtonStyle())
     }

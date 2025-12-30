@@ -11,29 +11,31 @@ struct HealthSyncWizard: View {
     
     var body: some View {
         NavigationStack {
-            VStack {
-                // Progress Indicator
-                HStack(spacing: 8) {
-                    ForEach(0..<3) { index in
-                        Capsule()
-                            .fill(index <= step ? Theme.Colors.error : Theme.Colors.surface) // Red/pink for Health
-                            .frame(height: 4)
-                            .animation(.spring(), value: step)
+            ZStack {
+                AdaptiveBackground()
+                VStack {
+                    // Progress Indicator
+                    HStack(spacing: 8) {
+                        ForEach(0..<3) { index in
+                            Capsule()
+                                .fill(index <= step ? Theme.Colors.error : Theme.Colors.surface) // Red/pink for Health
+                                .frame(height: 4)
+                                .animation(.spring(), value: step)
+                        }
                     }
+                    .padding(.horizontal, Theme.Spacing.xl)
+                    .padding(.top, Theme.Spacing.lg)
+                    
+                    TabView(selection: $step) {
+                        introStep.tag(0)
+                        authStep.tag(1)
+                        syncStep.tag(2)
+                        successStep.tag(3)
+                    }
+                    .tabViewStyle(.page(indexDisplayMode: .never))
+                    .animation(.spring(), value: step)
                 }
-                .padding(.horizontal, Theme.Spacing.xl)
-                .padding(.top, Theme.Spacing.lg)
-                
-                TabView(selection: $step) {
-                    introStep.tag(0)
-                    authStep.tag(1)
-                    syncStep.tag(2)
-                    successStep.tag(3)
-                }
-                .tabViewStyle(.page(indexDisplayMode: .never))
-                .animation(.spring(), value: step)
             }
-            .background(Theme.Colors.background)
             .navigationTitle("Apple Health")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -220,6 +222,7 @@ struct HealthSyncWizard: View {
                 withAnimation {
                     step = 3 // Success step
                 }
+                Haptics.notify(.success)
             } catch {
                 errorMessage = error.localizedDescription
             }

@@ -22,33 +22,36 @@ struct WorkoutHistoryView: View {
     }
     
     var body: some View {
-        ScrollView {
-            LazyVStack(spacing: Theme.Spacing.xl) {
-                if workouts.isEmpty {
-                    ContentUnavailableView(
-                        "No History",
-                        systemImage: "clock.badge.exclamationmark",
-                        description: Text("Complete workouts to see them here.")
-                    )
-                    .padding(.top, 50)
-                } else {
-                    ForEach(groupedWorkouts, id: \.month) { group in
-                        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-                            Text(group.month)
-                                .font(Theme.Typography.title3)
-                                .foregroundStyle(Theme.Colors.textSecondary)
-                                .padding(.horizontal)
-                            
-                            ForEach(group.workouts) { workout in
-                                WorkoutHistoryRow(workout: workout)
+        ZStack {
+            AdaptiveBackground()
+            
+            ScrollView {
+                LazyVStack(spacing: Theme.Spacing.xl) {
+                    if workouts.isEmpty {
+                        ContentUnavailableView(
+                            "No History",
+                            systemImage: "clock.badge.exclamationmark",
+                            description: Text("Complete workouts to see them here.")
+                        )
+                        .padding(.top, 50)
+                    } else {
+                        ForEach(groupedWorkouts, id: \.month) { group in
+                            VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+                                Text(group.month)
+                                    .font(Theme.Typography.title3)
+                                    .foregroundStyle(Theme.Colors.textSecondary)
+                                    .padding(.horizontal)
+                                
+                                ForEach(group.workouts) { workout in
+                                    WorkoutHistoryRow(workout: workout)
+                                }
                             }
                         }
                     }
                 }
+                .padding()
             }
-            .padding()
         }
-        .background(Theme.Colors.background)
         .navigationTitle("History")
         .searchable(text: $searchText, prompt: "Search workouts or exercises")
     }
@@ -56,6 +59,7 @@ struct WorkoutHistoryView: View {
 
 struct WorkoutHistoryRow: View {
     let workout: Workout
+    @EnvironmentObject var healthManager: HealthKitManager
     
     var body: some View {
         NavigationLink(destination: WorkoutDetailView(workout: workout)) {
@@ -63,7 +67,8 @@ struct WorkoutHistoryRow: View {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
                         Text(workout.name)
-                            .font(Theme.Typography.headline)
+                            .font(Theme.Typography.condensed)
+                            .tracking(-0.2)
                             .foregroundStyle(Theme.Colors.textPrimary)
                         
                         Spacer()
@@ -85,6 +90,11 @@ struct WorkoutHistoryRow: View {
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Colors.accent)
                     .padding(.top, 4)
+
+                    if let data = healthManager.getHealthData(for: workout.id) {
+                        HealthDataSummaryView(healthData: data)
+                            .padding(.top, Theme.Spacing.xs)
+                    }
                 }
                 
                 Spacer()
@@ -94,7 +104,7 @@ struct WorkoutHistoryRow: View {
                     .foregroundStyle(Theme.Colors.textTertiary)
             }
             .padding(Theme.Spacing.lg)
-            .glassBackground()
+            .glassBackground(elevation: 2)
         }
         .buttonStyle(PlainButtonStyle())
     }

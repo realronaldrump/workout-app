@@ -7,27 +7,29 @@ struct BackupFilesView: View {
     @State private var showingDeleteAlert = false
     
     var body: some View {
-        ScrollView {
-            LazyVStack(spacing: Theme.Spacing.md) {
-                if files.isEmpty {
-                     ContentUnavailableView(
-                        "No Backups",
-                        systemImage: "icloud.slash",
-                        description: Text("No backup files found in iCloud.")
-                    )
-                    .padding(.top, 50)
-                } else {
-                    ForEach(files, id: \.self) { file in
-                        BackupFileRow(file: file) {
-                             selectedFile = file
-                             showingDeleteAlert = true
+        ZStack {
+            AdaptiveBackground()
+            ScrollView {
+                LazyVStack(spacing: Theme.Spacing.md) {
+                    if files.isEmpty {
+                        ContentUnavailableView(
+                            "No Backups",
+                            systemImage: "icloud.slash",
+                            description: Text("No backup files found in iCloud.")
+                        )
+                        .padding(.top, 50)
+                    } else {
+                        ForEach(files, id: \.self) { file in
+                            BackupFileRow(file: file) {
+                                selectedFile = file
+                                showingDeleteAlert = true
+                            }
                         }
                     }
                 }
+                .padding()
             }
-            .padding()
         }
-        .background(Theme.Colors.background)
         .navigationTitle("Backup Files")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
@@ -85,6 +87,6 @@ struct BackupFileRow: View {
             .buttonStyle(PlainButtonStyle())
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground()
+        .glassBackground(elevation: 2)
     }
 }

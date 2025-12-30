@@ -4,6 +4,9 @@ struct ExerciseListView: View {
     @ObservedObject var dataManager: WorkoutDataManager
     @State private var searchText = ""
     @State private var sortOrder = SortOrder.alphabetical
+    @State private var selectedExercise: ExerciseSelection?
+    @State private var showingQuickStart = false
+    @State private var quickStartExercise: String?
     
     enum SortOrder: String, CaseIterable {
         case alphabetical = "Name"
@@ -56,11 +59,30 @@ struct ExerciseListView: View {
     }
     
     var body: some View {
-        List {
-            ForEach(exercises, id: \.name) { exercise in
-                NavigationLink(destination: ExerciseDetailView(exerciseName: exercise.name, dataManager: dataManager)) {
-                    ExerciseRowView(name: exercise.name, stats: exercise.stats)
+        ZStack {
+            AdaptiveBackground()
+            ScrollView(showsIndicators: false) {
+                LazyVStack(spacing: Theme.Spacing.md) {
+                    ForEach(exercises, id: \.name) { exercise in
+                        NavigationLink(destination: ExerciseDetailView(exerciseName: exercise.name, dataManager: dataManager)) {
+                            ExerciseRowView(name: exercise.name, stats: exercise.stats)
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        .contextMenu {
+                            Button("View History") {
+                                selectedExercise = ExerciseSelection(id: exercise.name)
+                            }
+                            Button("Compare Progress") {
+                                selectedExercise = ExerciseSelection(id: exercise.name)
+                            }
+                            Button("Quick Start") {
+                                quickStartExercise = exercise.name
+                                showingQuickStart = true
+                            }
+                        }
+                    }
                 }
+                .padding(Theme.Spacing.lg)
             }
         }
         .navigationTitle("All Exercises")
@@ -78,6 +100,12 @@ struct ExerciseListView: View {
                     Label("Sort", systemImage: "arrow.up.arrow.down")
                 }
             }
+        }
+        .navigationDestination(item: $selectedExercise) { selection in
+            ExerciseDetailView(exerciseName: selection.id, dataManager: dataManager)
+        }
+        .sheet(isPresented: $showingQuickStart) {
+            QuickStartView(exerciseName: quickStartExercise)
         }
     }
     
@@ -110,25 +138,28 @@ struct ExerciseRowView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(name)
-                .font(.headline)
+                .font(Theme.Typography.condensed)
+                .tracking(-0.2)
+                .foregroundColor(Theme.Colors.textPrimary)
             
             HStack(spacing: 16) {
                 Label("\(stats.frequency)x", systemImage: "repeat")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                    .font(Theme.Typography.caption)
+                    .foregroundColor(Theme.Colors.textSecondary)
                 
                 Label(formatWeight(stats.maxWeight), systemImage: "scalemass")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                    .font(Theme.Typography.caption)
+                    .foregroundColor(Theme.Colors.textSecondary)
                 
                 if let lastDate = stats.lastPerformed {
                     Label(relativeDateString(for: lastDate), systemImage: "clock")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                        .font(Theme.Typography.caption)
+                        .foregroundColor(Theme.Colors.textSecondary)
                 }
             }
         }
-        .padding(.vertical, 4)
+        .padding(Theme.Spacing.lg)
+        .glassBackground(elevation: 2)
     }
     
     private func formatWeight(_ weight: Double) -> String {

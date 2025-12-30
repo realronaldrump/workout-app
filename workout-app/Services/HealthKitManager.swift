@@ -11,6 +11,7 @@ class HealthKitManager: ObservableObject {
     
     @Published var authorizationStatus: HealthKitAuthorizationStatus = .notDetermined
     @Published var isSyncing = false
+    @Published var isAutoSyncing = false
     @Published var syncProgress: Double = 0
     @Published var lastSyncDate: Date?
     @Published var syncError: String?
@@ -279,6 +280,8 @@ class HealthKitManager: ObservableObject {
         // Store in local cache
         healthDataStore[workout.id] = healthData
         persistData()
+        lastSyncDate = Date()
+        userDefaults.set(lastSyncDate, forKey: lastSyncKey)
         
         return healthData
     }
@@ -324,6 +327,37 @@ class HealthKitManager: ObservableObject {
     // MARK: - Sync Methods
     
     @Published var syncedWorkoutsCount: Int = 0
+
+    /// Lightweight background sync for the most recent workouts that are missing data.
+    func syncRecentWorkoutsIfNeeded(_ workouts: [Workout]) async {
+        guard authorizationStatus == .authorized else { return }
+        guard isHealthKitAvailable() else { return }
+        guard !isAutoSyncing else { return }
+
+        let missing = workouts.filter { healthDataStore[$0.id] == nil }
+        let recentMissing = Array(missing.prefix(3))
+        guard !recentMissing.isEmpty else { return }
+
+        isAutoSyncing = true
+        syncProgress = 0
+        syncedWorkoutsCount = 0
+
+        for (index, workout) in recentMissing.enumerated() {
+            do {
+                let _ = try await syncHealthDataForWorkout(workout)
+            } catch {
+                print("Auto sync failed for workout \(workout.id): \(error)")
+            }
+
+            syncedWorkoutsCount = index + 1
+            syncProgress = Double(index + 1) / Double(recentMissing.count)
+        }
+
+        isAutoSyncing = false
+        lastSyncDate = Date()
+        userDefaults.set(lastSyncDate, forKey: lastSyncKey)
+        persistData()
+    }
     
     /// Sync health data for all workouts
     func syncAllWorkouts(_ workouts: [Workout]) async throws -> [WorkoutHealthData] {

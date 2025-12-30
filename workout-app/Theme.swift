@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Centralized theme system - Dark-ish, Bold, Minimalist with Glassmorphism
 enum Theme {
@@ -45,8 +46,8 @@ enum Theme {
     // MARK: - Typography
     
     enum Typography {
-        static let largeTitle = Font.system(size: 34, weight: .bold, design: .default)
-        static let title = Font.system(size: 28, weight: .bold, design: .default)
+        static let largeTitle = Font.system(size: 34, weight: .bold, design: .rounded)
+        static let title = Font.system(size: 28, weight: .bold, design: .rounded)
         static let title2 = Font.system(size: 22, weight: .bold, design: .default)
         static let title3 = Font.system(size: 20, weight: .semibold, design: .default)
         static let headline = Font.system(size: 17, weight: .bold, design: .default)
@@ -62,6 +63,10 @@ enum Theme {
         static let number = Font.system(size: 28, weight: .bold, design: .monospaced)
         static let numberLarge = Font.system(size: 42, weight: .bold, design: .monospaced)
         static let numberSmall = Font.system(size: 17, weight: .bold, design: .monospaced)
+        static let metricLarge = Font.system(size: 48, weight: .heavy, design: .monospaced)
+        static let metric = Font.system(size: 30, weight: .bold, design: .monospaced)
+        static let condensed = Font.system(size: 16, weight: .semibold, design: .rounded)
+        static let microcopy = Font.system(size: 13, weight: .regular, design: .rounded)
     }
     
     // MARK: - Animation
@@ -95,43 +100,141 @@ enum Theme {
     }
 }
 
+// MARK: - Adaptive Luminance
+
+struct AdaptiveLuminanceKey: EnvironmentKey {
+    static let defaultValue: Double = 0.3
+}
+
+extension EnvironmentValues {
+    var adaptiveLuminance: Double {
+        get { self[AdaptiveLuminanceKey.self] }
+        set { self[AdaptiveLuminanceKey.self] = newValue }
+    }
+}
+
+struct AdaptiveBackground: View {
+    @Environment(\.adaptiveLuminance) private var luminance
+    
+    var body: some View {
+        let base = Theme.Colors.background
+            .blended(with: .white, amount: 0.06 + (luminance * 0.08))
+        let highlight = Theme.Colors.elevated
+            .blended(with: Theme.Colors.accentSecondary, amount: 0.06 + (luminance * 0.1))
+        
+        ZStack {
+            LinearGradient(
+                colors: [base, highlight],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            
+            RadialGradient(
+                colors: [
+                    Theme.Colors.accent.opacity(0.18 + (luminance * 0.1)),
+                    Color.clear
+                ],
+                center: .topTrailing,
+                startRadius: 20,
+                endRadius: 320
+            )
+            
+            RadialGradient(
+                colors: [
+                    Theme.Colors.accentSecondary.opacity(0.12 + (luminance * 0.08)),
+                    Color.clear
+                ],
+                center: .bottomLeading,
+                startRadius: 40,
+                endRadius: 300
+            )
+        }
+        .ignoresSafeArea()
+    }
+}
+
 // MARK: - Glassmorphism Modifier
 
 struct GlassBackground: ViewModifier {
     var opacity: Double = 0.08
     var cornerRadius: CGFloat = Theme.CornerRadius.medium
+    var elevation: CGFloat = 1
+    @Environment(\.adaptiveLuminance) private var luminance
     
     func body(content: Content) -> some View {
+        let baseFill = Theme.Colors.glass
+            .blended(with: .white, amount: 0.08 + (luminance * 0.18))
+        let border = Theme.Colors.glassBorder
+            .blended(with: .white, amount: 0.05 + (luminance * 0.12))
+        let shadowOpacity = min(0.35, 0.12 + Double(elevation) * 0.06)
+        
         content
             .background(
                 RoundedRectangle(cornerRadius: cornerRadius)
                     .fill(.ultraThinMaterial)
-                    .opacity(0.8)
+                    .opacity(0.75)
             )
             .background(
                 RoundedRectangle(cornerRadius: cornerRadius)
-                    .fill(Color.white.opacity(opacity))
+                    .fill(baseFill.opacity(opacity))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: cornerRadius)
-                    .strokeBorder(Theme.Colors.glassBorder, lineWidth: 1)
+                    .strokeBorder(border, lineWidth: 1)
+            )
+            .shadow(
+                color: Color.black.opacity(shadowOpacity),
+                radius: 8 * elevation,
+                x: 0,
+                y: 6 * elevation
             )
     }
 }
 
 extension View {
-    func glassBackground(opacity: Double = 0.08, cornerRadius: CGFloat = Theme.CornerRadius.medium) -> some View {
-        modifier(GlassBackground(opacity: opacity, cornerRadius: cornerRadius))
+    func glassBackground(
+        opacity: Double = 0.08,
+        cornerRadius: CGFloat = Theme.CornerRadius.medium,
+        elevation: CGFloat = 1
+    ) -> some View {
+        modifier(GlassBackground(opacity: opacity, cornerRadius: cornerRadius, elevation: elevation))
     }
     
     func cardStyle() -> some View {
         self
             .padding(Theme.Spacing.lg)
-            .glassBackground()
+            .glassBackground(elevation: 2)
     }
     
     func animateOnAppear(delay: Double = 0) -> some View {
         modifier(AnimateOnAppearModifier(delay: delay))
+    }
+}
+
+// MARK: - Color Helpers
+
+extension Color {
+    func blended(with color: Color, amount: Double) -> Color {
+        let clamped = min(max(amount, 0), 1)
+        let (r1, g1, b1, a1) = rgbaComponents()
+        let (r2, g2, b2, a2) = color.rgbaComponents()
+        
+        return Color(
+            red: r1 + (r2 - r1) * clamped,
+            green: g1 + (g2 - g1) * clamped,
+            blue: b1 + (b2 - b1) * clamped,
+            opacity: a1 + (a2 - a1) * clamped
+        )
+    }
+    
+    private func rgbaComponents() -> (Double, Double, Double, Double) {
+        let uiColor = UIColor(self)
+        var red: CGFloat = 0
+        var green: CGFloat = 0
+        var blue: CGFloat = 0
+        var alpha: CGFloat = 0
+        uiColor.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        return (Double(red), Double(green), Double(blue), Double(alpha))
     }
 }
 

@@ -4,6 +4,7 @@ import Charts
 struct ExerciseDetailView: View {
     let exerciseName: String
     @ObservedObject var dataManager: WorkoutDataManager
+    @StateObject private var insightsEngine: InsightsEngine
     @State private var selectedChart = ChartType.weight
     
     enum ChartType: String, CaseIterable {
@@ -13,20 +14,33 @@ struct ExerciseDetailView: View {
         case reps = "Reps"
     }
     
+    init(exerciseName: String, dataManager: WorkoutDataManager) {
+        self.exerciseName = exerciseName
+        self.dataManager = dataManager
+        _insightsEngine = StateObject(wrappedValue: InsightsEngine(dataManager: dataManager))
+    }
+
     private var exerciseHistory: [(date: Date, sets: [WorkoutSet])] {
         dataManager.getExerciseHistory(for: exerciseName)
     }
+
+    private var exerciseInsights: [Insight] {
+        insightsEngine.insights.filter { $0.exerciseName == exerciseName }
+    }
     
     var body: some View {
-        ScrollView {
-            VStack(spacing: 20) {
+        ZStack {
+            AdaptiveBackground()
+
+            ScrollView {
+                VStack(spacing: Theme.Spacing.xl) {
                 ExerciseStatsCards(exerciseName: exerciseName, history: exerciseHistory)
                 
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         Text("Progress Chart")
-                            .font(.title2)
-                            .fontWeight(.bold)
+                            .font(Theme.Typography.title2)
+                            .foregroundColor(Theme.Colors.textPrimary)
                         
                         Spacer()
                         
@@ -40,20 +54,41 @@ struct ExerciseDetailView: View {
                     
                     ExerciseProgressChart(history: exerciseHistory, chartType: selectedChart)
                         .frame(height: 250)
-                        .padding()
-                        .background(Color(.systemGray6))
-                        .cornerRadius(12)
+                        .padding(Theme.Spacing.lg)
+                        .glassBackground(elevation: 2)
+                }
+
+                if !exerciseInsights.isEmpty {
+                    VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+                        Text("Insights")
+                            .font(Theme.Typography.title3)
+                            .foregroundColor(Theme.Colors.textPrimary)
+
+                        VStack(spacing: Theme.Spacing.md) {
+                            ForEach(exerciseInsights) { insight in
+                                InsightCardView(insight: insight)
+                            }
+                        }
+                    }
                 }
                 
                 PersonalRecordsView(history: exerciseHistory)
                 
                 RecentSetsView(history: exerciseHistory)
             }
-            .padding()
+            .padding(Theme.Spacing.xl)
         }
         .navigationTitle(exerciseName)
         .navigationBarTitleDisplayMode(.large)
+        .onAppear {
+            insightsEngine.generateInsights()
+        }
+        .onChange(of: selectedChart) { _ in
+            Haptics.selection()
+        }
     }
+}
+
 }
 
 struct ExerciseStatsCards: View {
@@ -118,6 +153,7 @@ struct ExerciseProgressChart: View {
     
     @State private var isAppearing = false
     @State private var selectedDataPoint: (date: Date, value: Double)?
+    @State private var lastPRHapticDate: Date?
     
     private var chartData: [(date: Date, value: Double)] {
         history.map { session in
@@ -174,11 +210,10 @@ struct ExerciseProgressChart: View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text(selected.date.formatted(date: .abbreviated, time: .omitted))
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                    .font(Theme.Typography.caption)
+                    .foregroundColor(Theme.Colors.textTertiary)
                 Text(formatValue(selected.value))
-                    .font(.title3)
-                    .fontWeight(.bold)
+                    .font(Theme.Typography.title3)
                     .foregroundColor(chartColor)
             }
             
@@ -227,6 +262,10 @@ struct ExerciseProgressChart: View {
                                         abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date))
                                     }) {
                                         selectedDataPoint = closest
+                                        if let prDate, prDate == closest.date, lastPRHapticDate != prDate {
+                                            Haptics.notify(.success)
+                                            lastPRHapticDate = prDate
+                                        }
                                     }
                                 }
                             }
@@ -399,31 +438,31 @@ struct PersonalRecordsView: View {
     }
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             Text("Personal Records")
-                .font(.title2)
-                .fontWeight(.bold)
+                .font(Theme.Typography.title2)
+                .foregroundColor(Theme.Colors.textPrimary)
             
-            VStack(spacing: 12) {
+            VStack(spacing: Theme.Spacing.md) {
                 ForEach(records, id: \.title) { record in
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(record.title)
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
+                                .font(Theme.Typography.subheadline)
+                                .foregroundColor(Theme.Colors.textSecondary)
                             Text(record.value)
-                                .font(.headline)
+                                .font(Theme.Typography.headline)
+                                .foregroundColor(Theme.Colors.textPrimary)
                         }
                         
                         Spacer()
                         
                         Text(record.date.formatted(date: .abbreviated, time: .omitted))
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                            .font(Theme.Typography.caption)
+                            .foregroundColor(Theme.Colors.textTertiary)
                     }
-                    .padding()
-                    .background(Color(.systemGray6))
-                    .cornerRadius(8)
+                    .padding(Theme.Spacing.lg)
+                    .glassBackground(elevation: 2)
                 }
             }
         }
@@ -443,39 +482,39 @@ struct RecentSetsView: View {
     }
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             Text("Recent Sessions")
-                .font(.title2)
-                .fontWeight(.bold)
+                .font(Theme.Typography.title2)
+                .foregroundColor(Theme.Colors.textPrimary)
             
-            VStack(spacing: 12) {
+            VStack(spacing: Theme.Spacing.md) {
                 ForEach(recentSessions, id: \.date) { session in
                     VStack(alignment: .leading, spacing: 8) {
                         Text(session.date.formatted(date: .abbreviated, time: .shortened))
-                            .font(.subheadline)
-                            .fontWeight(.medium)
+                            .font(Theme.Typography.subheadline)
+                            .foregroundColor(Theme.Colors.textSecondary)
                         
                         ForEach(Array(session.sets.enumerated()), id: \.offset) { index, set in
                             HStack {
                                 Text("Set \(index + 1)")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
+                                    .font(Theme.Typography.caption)
+                                    .foregroundColor(Theme.Colors.textTertiary)
                                     .frame(width: 50, alignment: .leading)
                                 
                                 Text("\(Int(set.weight)) lbs × \(set.reps)")
-                                    .font(.system(.body, design: .monospaced))
+                                    .font(Theme.Typography.body)
+                                    .monospacedDigit()
                                 
                                 Spacer()
                                 
                                 Text("\(Int(set.weight * Double(set.reps))) lbs")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
+                                    .font(Theme.Typography.caption)
+                                    .foregroundColor(Theme.Colors.textSecondary)
                             }
                         }
                     }
-                    .padding()
-                    .background(Color(.systemGray6))
-                    .cornerRadius(10)
+                    .padding(Theme.Spacing.lg)
+                    .glassBackground(elevation: 2)
                 }
             }
         }

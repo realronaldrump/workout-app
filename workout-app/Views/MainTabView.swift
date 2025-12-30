@@ -3,36 +3,33 @@ import SwiftUI
 struct MainTabView: View {
     @StateObject private var dataManager = WorkoutDataManager()
     @StateObject private var iCloudManager = iCloudDocumentManager()
+    @StateObject private var luminanceManager = AdaptiveLuminanceManager()
+    @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
+    @State private var showingOnboarding = false
     
     var body: some View {
-        TabView {
+        NavigationStack {
             DashboardView(dataManager: dataManager, iCloudManager: iCloudManager)
-                .tabItem {
-                    Label("Summary", systemImage: "chart.bar.fill")
-                }
-            
-            NavigationView {
-                WorkoutHistoryView(workouts: dataManager.workouts)
-            }
-            .tabItem {
-                Label("History", systemImage: "clock.fill")
-            }
-            
-            NavigationView {
-                SettingsView(dataManager: dataManager, iCloudManager: iCloudManager)
-            }
-            .tabItem {
-                Label("Settings", systemImage: "gear")
-            }
         }
+        .environmentObject(dataManager)
         .tint(Theme.Colors.accent)
-        .onAppear {
-            let appearance = UITabBarAppearance()
-            appearance.backgroundEffect = UIBlurEffect(style: .systemUltraThinMaterial)
-            appearance.backgroundColor = UIColor(Theme.Colors.background.opacity(0.5))
-            
-            UITabBar.appearance().standardAppearance = appearance
-            UITabBar.appearance().scrollEdgeAppearance = appearance
+        .environment(\.adaptiveLuminance, luminanceManager.luminance)
+        .preferredColorScheme(.dark)
+        .onAppear { refreshOnboardingState() }
+        .onChange(of: dataManager.workouts.count) { _ in
+            refreshOnboardingState()
         }
+        .fullScreenCover(isPresented: $showingOnboarding) {
+            OnboardingView(
+                isPresented: $showingOnboarding,
+                dataManager: dataManager,
+                iCloudManager: iCloudManager,
+                hasSeenOnboarding: $hasSeenOnboarding
+            )
+        }
+    }
+
+    private func refreshOnboardingState() {
+        showingOnboarding = !hasSeenOnboarding && dataManager.workouts.isEmpty
     }
 }

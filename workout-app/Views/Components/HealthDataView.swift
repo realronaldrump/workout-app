@@ -41,9 +41,8 @@ struct HealthDataView: View {
                 }
             }
         }
-        .padding()
-        .background(Theme.Colors.cardBackground)
-        .cornerRadius(Theme.CornerRadius.large)
+        .padding(Theme.Spacing.lg)
+        .glassBackground(elevation: 2)
     }
     
     // MARK: - No Data View
@@ -176,7 +175,7 @@ struct HealthDataView: View {
             
             HStack(alignment: .lastTextBaseline, spacing: 2) {
                 Text(value)
-                    .font(.system(size: 24, weight: .bold, design: .rounded))
+                    .font(Theme.Typography.number)
                     .foregroundColor(Theme.Colors.textPrimary)
                 
                 if !unit.isEmpty {
@@ -188,14 +187,20 @@ struct HealthDataView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
-        .background(Theme.Colors.background.opacity(0.5))
+        .background(Theme.Colors.surface.opacity(0.6))
         .cornerRadius(Theme.CornerRadius.medium)
     }
     
     // MARK: - Heart Rate Section
     
     private var heartRateSection: some View {
-        WorkoutHRChart(samples: healthData.heartRateSamples)
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            Text("Intensity Zones")
+                .font(Theme.Typography.subheadline)
+                .foregroundColor(Theme.Colors.textSecondary)
+            HeartRateZoneStrip(samples: healthData.heartRateSamples)
+            WorkoutHRChart(samples: healthData.heartRateSamples)
+        }
     }
     
     // MARK: - Additional Metrics
@@ -413,6 +418,67 @@ struct HealthSyncButton: View {
             }
             
             isSyncing = false
+        }
+    }
+}
+
+// MARK: - Heart Rate Zones
+
+struct HeartRateZoneStrip: View {
+    let samples: [HeartRateSample]
+
+    private var zones: [HeartRateZone] {
+        HeartRateZone.calculate(from: samples)
+    }
+
+    var body: some View {
+        GeometryReader { geometry in
+            HStack(spacing: 4) {
+                ForEach(zones) { zone in
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(zone.color.opacity(0.85))
+                        .frame(width: max(8, geometry.size.width * zone.fraction))
+                        .overlay(
+                            Text(zone.label)
+                                .font(Theme.Typography.caption)
+                                .foregroundColor(.white)
+                                .opacity(zone.fraction > 0.18 ? 1 : 0)
+                        )
+                }
+            }
+        }
+        .frame(height: 18)
+    }
+}
+
+struct HeartRateZone: Identifiable {
+    let id = UUID()
+    let label: String
+    let color: Color
+    let fraction: Double
+
+    static func calculate(from samples: [HeartRateSample]) -> [HeartRateZone] {
+        guard let maxSample = samples.map({ $0.value }).max(), maxSample > 0 else {
+            return []
+        }
+
+        let maxHR = maxSample
+        let thresholds: [(String, Double, Double, Color)] = [
+            ("Z1", 0.5, 0.6, Theme.Colors.info),
+            ("Z2", 0.6, 0.7, Theme.Colors.accentSecondary),
+            ("Z3", 0.7, 0.8, Theme.Colors.warning),
+            ("Z4", 0.8, 0.9, Theme.Colors.error),
+            ("Z5", 0.9, 1.1, Theme.Colors.gold)
+        ]
+
+        let total = Double(samples.count)
+
+        return thresholds.map { label, lower, upper, color in
+            let count = samples.filter { sample in
+                let ratio = sample.value / maxHR
+                return ratio >= lower && ratio < upper
+            }.count
+            return HeartRateZone(label: label, color: color, fraction: total > 0 ? Double(count) / total : 0)
         }
     }
 }

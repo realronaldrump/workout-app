@@ -18,10 +18,10 @@ struct ExerciseBreakdownView: View {
     }
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             Text("Top Exercises by Volume")
-                .font(.title2)
-                .fontWeight(.bold)
+                .font(Theme.Typography.title2)
+                .foregroundColor(Theme.Colors.textPrimary)
             
             if !exerciseData.isEmpty {
                 Chart(exerciseData, id: \.name) { exercise in
@@ -29,11 +29,11 @@ struct ExerciseBreakdownView: View {
                         x: .value("Volume", exercise.volume),
                         y: .value("Exercise", exercise.name)
                     )
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(Theme.Colors.accent)
                     .annotation(position: .trailing) {
                         Text(formatVolume(exercise.volume))
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
+                            .font(Theme.Typography.caption)
+                            .foregroundColor(Theme.Colors.textTertiary)
                     }
                 }
                 .frame(height: CGFloat(exerciseData.count) * 40)
@@ -47,9 +47,8 @@ struct ExerciseBreakdownView: View {
                         }
                     }
                 }
-                .padding()
-                .background(Color(.systemGray6))
-                .cornerRadius(12)
+                .padding(Theme.Spacing.lg)
+                .glassBackground(elevation: 2)
             }
         }
     }

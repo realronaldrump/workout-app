@@ -83,7 +83,7 @@ struct StatCard: View {
             // Value with optional subtitle
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Text(value)
-                    .font(Theme.Typography.number)
+                    .font(Theme.Typography.metric)
                     .foregroundColor(Theme.Colors.textPrimary)
                 
                 if let subtitle = subtitle {
@@ -101,7 +101,7 @@ struct StatCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Theme.Spacing.lg)
         .frame(height: 120)
-        .glassBackground()
+        .glassBackground(elevation: 2)
         .opacity(isAppearing ? 1 : 0)
         .offset(y: isAppearing ? 0 : 8)
         .onAppear {

@@ -20,64 +20,66 @@ struct ExerciseTaggingView: View {
     }
     
     var body: some View {
-        Form {
-            Section(header: Text("Assign Muscle Groups")) {
-                if filteredExercises.isEmpty {
-                    Text("No exercises found")
-                        .foregroundStyle(.secondary)
-                }
-                
-                ForEach(filteredExercises, id: \.self) { (exercise: String) in
-                    HStack {
-                        Text(exercise)
-                            .font(Theme.Typography.body)
-                            .foregroundStyle(Theme.Colors.textPrimary)
-                        
-                        Spacer()
-                        
-                        Menu {
-                            ForEach(MuscleGroup.allCases, id: \.self) { group in
-                                Button {
-                                    metadataManager.setMuscleGroup(for: exercise, to: group)
+        ZStack {
+            AdaptiveBackground()
+            Form {
+                Section(header: Text("Assign Muscle Groups")) {
+                    if filteredExercises.isEmpty {
+                        Text("No exercises found")
+                            .foregroundStyle(.secondary)
+                    }
+                    
+                    ForEach(filteredExercises, id: \.self) { (exercise: String) in
+                        HStack {
+                            Text(exercise)
+                                .font(Theme.Typography.body)
+                                .foregroundStyle(Theme.Colors.textPrimary)
+                            
+                            Spacer()
+                            
+                            Menu {
+                                ForEach(MuscleGroup.allCases, id: \.self) { group in
+                                    Button {
+                                        metadataManager.setMuscleGroup(for: exercise, to: group)
+                                    } label: {
+                                        Label(group.displayName, systemImage: getIcon(for: group))
+                                    }
+                                }
+                                
+                                Divider()
+                                
+                                Button(role: .destructive) {
+                                    metadataManager.setMuscleGroup(for: exercise, to: nil)
                                 } label: {
-                                    Label(group.displayName, systemImage: getIcon(for: group))
+                                    Label("None", systemImage: "xmark.circle")
                                 }
-                            }
-                            
-                            Divider()
-                            
-                            Button(role: .destructive) {
-                                metadataManager.setMuscleGroup(for: exercise, to: nil)
                             } label: {
-                                Label("None", systemImage: "xmark.circle")
-                            }
-                        } label: {
-                            HStack {
-                                if let group = metadataManager.getMuscleGroup(for: exercise) {
-                                    Text(group.displayName)
-                                        .font(Theme.Typography.caption)
-                                        .foregroundStyle(Theme.Colors.textSecondary)
-                                    Image(systemName: getIcon(for: group))
-                                        .foregroundStyle(Theme.Colors.accent)
-                                } else {
-                                    Text("Untagged")
-                                        .font(Theme.Typography.caption)
-                                        .foregroundStyle(Theme.Colors.textTertiary)
+                                HStack {
+                                    if let group = metadataManager.getMuscleGroup(for: exercise) {
+                                        Text(group.displayName)
+                                            .font(Theme.Typography.caption)
+                                            .foregroundStyle(Theme.Colors.textSecondary)
+                                        Image(systemName: getIcon(for: group))
+                                            .foregroundStyle(Theme.Colors.accent)
+                                    } else {
+                                        Text("Untagged")
+                                            .font(Theme.Typography.caption)
+                                            .foregroundStyle(Theme.Colors.textTertiary)
+                                    }
                                 }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(Theme.Colors.surface.opacity(0.6))
+                                .cornerRadius(8)
                             }
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 5)
-                            .background(Theme.Colors.background)
-                            .cornerRadius(8)
                         }
                     }
                 }
             }
+            .scrollContentBackground(.hidden)
         }
         .navigationTitle("Exercise Tags")
         .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always))
-        .background(Theme.Colors.background)
-        .scrollContentBackground(.hidden)
     }
     
     func getIcon(for group: MuscleGroup) -> String {

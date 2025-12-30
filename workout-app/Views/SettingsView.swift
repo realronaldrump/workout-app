@@ -14,8 +14,11 @@ struct SettingsView: View {
     @AppStorage("dateFormat") private var dateFormat = "relative"
     
     var body: some View {
-        ScrollView {
-            VStack(spacing: Theme.Spacing.xxl) {
+        ZStack {
+            AdaptiveBackground()
+            
+            ScrollView {
+                VStack(spacing: Theme.Spacing.xxl) {
                 // Header
                 VStack(spacing: Theme.Spacing.sm) {
                     Image(systemName: "gearshape.fill")
@@ -208,10 +211,10 @@ struct SettingsView: View {
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Colors.textTertiary)
                     .padding(.top)
+                }
+                .padding()
             }
-            .padding()
         }
-        .background(Theme.Colors.background)
         .navigationBarHidden(true)
         .sheet(isPresented: $showingImportWizard) {
             StrongImportWizard(
@@ -281,7 +284,7 @@ struct SettingsRow: View {
                     .foregroundStyle(Theme.Colors.textTertiary)
             }
             .padding()
-            .glassBackground()
+            .glassBackground(elevation: 1)
         }
     }
 }

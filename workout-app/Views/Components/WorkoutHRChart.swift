@@ -52,8 +52,7 @@ struct WorkoutHRChart: View {
             .chartYScale(domain: domainY)
             .frame(height: 200)
         }
-        .padding()
-        .background(Theme.Colors.cardBackground)
-        .cornerRadius(Theme.CornerRadius.medium)
+        .padding(Theme.Spacing.lg)
+        .glassBackground(elevation: 2)
     }
 }
