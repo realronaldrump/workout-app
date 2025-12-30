@@ -307,6 +307,7 @@ class HealthKitManager: ObservableObject {
     }
     
     private func loadPersistedData() {
+        cleanupLegacyUserDefaults()
         do {
             guard FileManager.default.fileExists(atPath: dataFileURL.path) else { return }
             let data = try Data(contentsOf: dataFileURL)
@@ -486,6 +487,10 @@ class HealthKitManager: ObservableObject {
                 options: .cumulativeSum
             ) { _, result, error in
                 if let error = error {
+                    if Self.isNoDataError(error) {
+                        continuation.resume(returning: nil)
+                        return
+                    }
                     continuation.resume(throwing: HealthKitError.queryFailed(error.localizedDescription))
                     return
                 }
@@ -523,6 +528,10 @@ class HealthKitManager: ObservableObject {
                 sortDescriptors: [sortDescriptor]
             ) { _, samples, error in
                 if let error = error {
+                    if Self.isNoDataError(error) {
+                        continuation.resume(returning: nil)
+                        return
+                    }
                     continuation.resume(throwing: HealthKitError.queryFailed(error.localizedDescription))
                     return
                 }
@@ -559,6 +568,10 @@ class HealthKitManager: ObservableObject {
                 sortDescriptors: [sortDescriptor]
             ) { _, samples, error in
                 if let error = error {
+                    if Self.isNoDataError(error) {
+                        continuation.resume(returning: [])
+                        return
+                    }
                     continuation.resume(throwing: HealthKitError.queryFailed(error.localizedDescription))
                     return
                 }
@@ -567,6 +580,18 @@ class HealthKitManager: ObservableObject {
             }
             healthStore.execute(query)
         }
+    }
+
+    private func cleanupLegacyUserDefaults() {
+        if userDefaults.data(forKey: healthDataKey) != nil {
+            userDefaults.removeObject(forKey: healthDataKey)
+        }
+    }
+
+    private nonisolated static func isNoDataError(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        return nsError.domain == HKErrorDomain &&
+            nsError.code == HKError.Code.errorNoData.rawValue
     }
 
 }
