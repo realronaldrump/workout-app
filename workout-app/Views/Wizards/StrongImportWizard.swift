@@ -5,6 +5,7 @@ struct StrongImportWizard: View {
     @Binding var isPresented: Bool
     @ObservedObject var dataManager: WorkoutDataManager
     @ObservedObject var iCloudManager: iCloudDocumentManager
+    @EnvironmentObject var healthManager: HealthKitManager
     
     @State private var step = 0
     @State private var isImporting = false
@@ -251,6 +252,8 @@ struct StrongImportWizard: View {
                             isImporting = false
                             step = 2
                         }
+
+                        startAutoHealthSyncIfNeeded()
                     }
                 } catch {
                     await MainActor.run {
@@ -262,6 +265,26 @@ struct StrongImportWizard: View {
             
         case .failure(let error):
             importError = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func startAutoHealthSyncIfNeeded() {
+        guard healthManager.isHealthKitAvailable() else { return }
+        guard !dataManager.workouts.isEmpty else { return }
+        guard !healthManager.isSyncing else { return }
+
+        Task { @MainActor in
+            do {
+                if healthManager.authorizationStatus == .notDetermined {
+                    try await healthManager.requestAuthorization()
+                }
+
+                guard healthManager.authorizationStatus == .authorized else { return }
+                _ = try await healthManager.syncAllWorkouts(dataManager.workouts)
+            } catch {
+                print("Auto health sync failed: \(error)")
+            }
         }
     }
 }
