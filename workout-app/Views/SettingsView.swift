@@ -162,6 +162,37 @@ struct SettingsView: View {
                         .padding()
                         .glassBackground()
                     }
+                    
+                    Divider().padding(.leading, 50)
+                    
+                    // Exercise Tags
+                    NavigationLink(destination: ExerciseTaggingView(dataManager: dataManager)) {
+                        HStack {
+                            Image(systemName: "tag.fill")
+                                .foregroundStyle(.white)
+                                .frame(width: 30, height: 30)
+                                .background(Color.purple)
+                                .cornerRadius(6)
+                            
+                            VStack(alignment: .leading) {
+                                Text("Exercise Tags")
+                                    .font(Theme.Typography.body)
+                                Text("Assign muscle groups")
+                                    .font(Theme.Typography.caption)
+                                    .foregroundStyle(Theme.Colors.textSecondary)
+                            }
+                            
+                            Spacer()
+                            
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(Theme.Colors.textTertiary)
+                        }
+                        .padding()
+                        .glassBackground()
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
                 }
                 
                 // Danger Zone

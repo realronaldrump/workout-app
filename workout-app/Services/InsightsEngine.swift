@@ -364,38 +364,7 @@ class InsightsEngine: ObservableObject {
     }
     
     private func categorizeMuscleGroups() -> [String: MuscleGroup] {
-        // Map common exercise names to muscle groups
-        return [
-            // Push
-            "Chest Press (Machine)": .push,
-            "Shoulder Press (Machine)": .push,
-            "Triceps Press Machine": .push,
-            "Triceps Extension (Machine)": .push,
-            "Chest Fly": .push,
-            "Lateral Raise (Machine)": .push,
-            
-            // Pull
-            "Lat Pulldown (Machine)": .pull,
-            "Seated Row (Machine)": .pull,
-            "MTS Row": .pull,
-            "Bicep Curl (Machine)": .pull,
-            "Preacher Curl (Machine)": .pull,
-            "Reverse Fly (Machine)": .pull,
-            
-            // Legs
-            "Leg Extension (Machine)": .legs,
-            "Seated Leg Curl (Machine)": .legs,
-            "Lying Leg Curl (Machine)": .legs,
-            "Seated Leg Press (Machine)": .legs,
-            "Calf Extension Machine": .legs,
-            "Hip Adductor (Machine)": .legs,
-            "Hip Abductor (Machine)": .legs,
-            "Glute Kickback (Machine)": .legs,
-            
-            // Cardio
-            "Running (Treadmill)": .cardio,
-            "Stair stepper": .cardio
-        ]
+        return ExerciseMetadataManager.shared.muscleGroupMappings
     }
 }
 

@@ -12,6 +12,12 @@ struct StrongImportWizard: View {
     @State private var importError: String?
     @State private var importStats: (workouts: Int, exercises: Int)?
     @State private var showingFileImporter = false
+    @State private var importPhase: ImportPhase = .idle
+    @State private var importedFileName: String?
+    @State private var importCompletedAt: Date?
+    @State private var storageStatusMessage: String?
+    @State private var healthSyncState: HealthSyncState = .idle
+    @State private var healthSyncNote: String?
     
     var body: some View {
         NavigationStack {
@@ -52,6 +58,41 @@ struct StrongImportWizard: View {
         ) { result in
             handleFileImport(result)
         }
+    }
+
+    private enum ImportPhase: Double {
+        case idle = 0
+        case reading = 0.2
+        case parsing = 0.4
+        case processing = 0.6
+        case saving = 0.8
+        case complete = 1.0
+
+        var message: String {
+            switch self {
+            case .idle:
+                return "Waiting for a file..."
+            case .reading:
+                return "Reading CSV file..."
+            case .parsing:
+                return "Parsing workout data..."
+            case .processing:
+                return "Building workouts..."
+            case .saving:
+                return "Saving file..."
+            case .complete:
+                return "Import complete."
+            }
+        }
+    }
+
+    private enum HealthSyncState {
+        case idle
+        case unavailable
+        case needsAuthorization
+        case syncing
+        case synced(Date)
+        case failed(String)
     }
     
     // MARK: - Steps
@@ -104,13 +145,24 @@ struct StrongImportWizard: View {
             Spacer()
             
             if isImporting {
-                ProgressView()
-                    .scaleEffect(1.5)
-                    .tint(Theme.Colors.accent)
-                
-                Text("Processing your data...")
-                    .font(Theme.Typography.body)
-                    .foregroundStyle(Theme.Colors.textSecondary)
+                VStack(spacing: Theme.Spacing.md) {
+                    ProgressView(value: importPhase.rawValue)
+                        .progressViewStyle(.linear)
+                        .tint(Theme.Colors.accent)
+                        .frame(maxWidth: 220)
+                    
+                    Text(importPhase.message)
+                        .font(Theme.Typography.body)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                        .multilineTextAlignment(.center)
+                    
+                    if let fileName = importedFileName {
+                        Text(fileName)
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Colors.textTertiary)
+                            .lineLimit(1)
+                    }
+                }
             } else {
                 VStack(spacing: Theme.Spacing.lg) {
                     Button(action: { showingFileImporter = true }) {
@@ -147,59 +199,233 @@ struct StrongImportWizard: View {
     }
     
     private var successStep: some View {
-        VStack(spacing: Theme.Spacing.xl) {
-            Spacer()
-            
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 80))
-                .foregroundStyle(Theme.Colors.success)
-                .symbolEffect(.bounce, value: step)
-            
-            if let stats = importStats {
-                VStack(spacing: Theme.Spacing.md) {
-                    Text("Import Complete!")
-                        .font(Theme.Typography.title)
-                    
-                    HStack(spacing: Theme.Spacing.xl) {
-                        VStack {
-                            Text("\(stats.workouts)")
-                                .font(Theme.Typography.title2)
-                                .foregroundStyle(Theme.Colors.accent)
-                            Text("Workouts")
-                                .font(Theme.Typography.caption)
-                                .foregroundStyle(Theme.Colors.textSecondary)
-                        }
+        ScrollView {
+            VStack(spacing: Theme.Spacing.xl) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 80))
+                    .foregroundStyle(Theme.Colors.success)
+                    .symbolEffect(.bounce, value: step)
+                
+                if let stats = importStats {
+                    VStack(spacing: Theme.Spacing.md) {
+                        Text("Import Complete!")
+                            .font(Theme.Typography.title)
                         
-                        Divider()
-                            .frame(height: 40)
-                        
-                        VStack {
-                            Text("\(stats.exercises)")
-                                .font(Theme.Typography.title2)
-                                .foregroundStyle(Theme.Colors.accent)
-                            Text("Exercises")
-                                .font(Theme.Typography.caption)
-                                .foregroundStyle(Theme.Colors.textSecondary)
+                        HStack(spacing: Theme.Spacing.xl) {
+                            VStack {
+                                Text("\(stats.workouts)")
+                                    .font(Theme.Typography.title2)
+                                    .foregroundStyle(Theme.Colors.accent)
+                                Text("Workouts")
+                                    .font(Theme.Typography.caption)
+                                    .foregroundStyle(Theme.Colors.textSecondary)
+                            }
+                            
+                            Divider()
+                                .frame(height: 40)
+                            
+                            VStack {
+                                Text("\(stats.exercises)")
+                                    .font(Theme.Typography.title2)
+                                    .foregroundStyle(Theme.Colors.accent)
+                                Text("Exercises")
+                                    .font(Theme.Typography.caption)
+                                    .foregroundStyle(Theme.Colors.textSecondary)
+                            }
                         }
+                        .padding()
+                        .glassBackground()
                     }
-                    .padding()
-                    .glassBackground()
                 }
-            }
-            
-            Spacer()
-            
-            Button(action: { isPresented = false }) {
-                Text("Done")
-                    .font(Theme.Typography.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Theme.Colors.success)
-                    .foregroundColor(.white)
-                    .cornerRadius(Theme.CornerRadius.large)
+                
+                importDetailsCard
+                healthSyncStatusCard
+                
+                Button(action: { isPresented = false }) {
+                    Text("Done")
+                        .font(Theme.Typography.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Theme.Colors.success)
+                        .foregroundColor(.white)
+                        .cornerRadius(Theme.CornerRadius.large)
+                }
+                
+                if healthManager.isSyncing {
+                    Text("Health sync continues in the background. You can close this screen.")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                }
             }
             .padding(Theme.Spacing.xl)
         }
+    }
+
+    private var importDetailsCard: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            HStack(spacing: Theme.Spacing.sm) {
+                Image(systemName: "doc.text.fill")
+                    .foregroundStyle(Theme.Colors.accent)
+                Text("Import Details")
+                    .font(Theme.Typography.headline)
+            }
+            
+            statusRow(title: "File", value: importedFileName ?? "CSV file")
+            statusRow(title: "Storage", value: storageStatusText, valueColor: storageStatusColor)
+            if let completedAt = importCompletedAt {
+                statusRow(title: "Completed", value: formatDate(completedAt))
+            }
+        }
+        .padding(Theme.Spacing.lg)
+        .glassBackground()
+    }
+    
+    private var healthSyncStatusCard: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            HStack(spacing: Theme.Spacing.sm) {
+                Image(systemName: "heart.fill")
+                    .foregroundStyle(Theme.Colors.error)
+                Text("Apple Health Sync")
+                    .font(Theme.Typography.headline)
+            }
+            
+            statusRow(title: "Status", value: healthSyncStatusText, valueColor: healthSyncStatusColor)
+            
+            Text(healthSyncStatusDetail)
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.Colors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            
+            if healthManager.isSyncing {
+                ProgressView(value: healthManager.syncProgress)
+                    .progressViewStyle(.linear)
+                    .tint(Theme.Colors.error)
+            }
+            
+            if dataManager.workouts.count > 0 {
+                statusRow(title: "Workouts", value: "\(healthManager.syncedWorkoutsCount) of \(dataManager.workouts.count)")
+            }
+            
+            if let note = healthSyncNote {
+                Text(note)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+            }
+            
+            if case .needsAuthorization = healthSyncState {
+                Text("Enable Health access in Settings > Health > Data Access & Devices > workout-app.")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            
+            if let lastSync = healthManager.lastSyncDate {
+                statusRow(title: "Last Sync", value: formatDate(lastSync))
+            }
+        }
+        .padding(Theme.Spacing.lg)
+        .glassBackground()
+    }
+    
+    private func statusRow(title: String, value: String, valueColor: Color = Theme.Colors.textPrimary) -> some View {
+        HStack {
+            Text(title)
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.Colors.textSecondary)
+            Spacer()
+            Text(value)
+                .font(Theme.Typography.captionBold)
+                .foregroundStyle(valueColor)
+                .multilineTextAlignment(.trailing)
+        }
+    }
+    
+    private var storageStatusText: String {
+        if let message = storageStatusMessage {
+            return message
+        }
+        return iCloudManager.isUsingLocalFallback
+            ? "Saved on-device (iCloud unavailable)"
+            : "Saved to iCloud Drive"
+    }
+    
+    private var storageStatusColor: Color {
+        if let message = storageStatusMessage, message.hasPrefix("Save failed") {
+            return Theme.Colors.error
+        }
+        if iCloudManager.isUsingLocalFallback {
+            return Theme.Colors.warning
+        }
+        return Theme.Colors.textPrimary
+    }
+    
+    private var healthSyncStatusText: String {
+        if healthManager.isSyncing {
+            return "Syncing"
+        }
+        switch healthSyncState {
+        case .idle:
+            return "Pending"
+        case .unavailable:
+            return "Unavailable"
+        case .needsAuthorization:
+            return "Permission Needed"
+        case .syncing:
+            return "Syncing"
+        case .synced:
+            return "Complete"
+        case .failed:
+            return "Failed"
+        }
+    }
+    
+    private var healthSyncStatusDetail: String {
+        if healthManager.isSyncing {
+            return "Fetching Apple Health data for your imported workouts."
+        }
+        switch healthSyncState {
+        case .idle:
+            return "Health sync will start automatically after import."
+        case .unavailable:
+            return "Health data is not available on this device."
+        case .needsAuthorization:
+            if healthManager.authorizationStatus == .denied {
+                return "Health access was denied."
+            }
+            return "Waiting for Health permission."
+        case .syncing:
+            return "Fetching Apple Health data for your imported workouts."
+        case .synced(let date):
+            return "Health sync completed \(formatDate(date))."
+        case .failed(let message):
+            return "Health sync failed: \(message)"
+        }
+    }
+    
+    private var healthSyncStatusColor: Color {
+        if healthManager.isSyncing {
+            return Theme.Colors.warning
+        }
+        switch healthSyncState {
+        case .idle:
+            return Theme.Colors.textTertiary
+        case .unavailable:
+            return Theme.Colors.warning
+        case .needsAuthorization:
+            return Theme.Colors.warning
+        case .syncing:
+            return Theme.Colors.warning
+        case .synced:
+            return Theme.Colors.success
+        case .failed:
+            return Theme.Colors.error
+        }
+    }
+    
+    private func formatDate(_ date: Date) -> String {
+        date.formatted(date: .abbreviated, time: .shortened)
     }
     
     // MARK: - Logic
@@ -208,6 +434,16 @@ struct StrongImportWizard: View {
         switch result {
         case .success(let urls):
             guard let url = urls.first else { return }
+
+            importError = nil
+            importStats = nil
+            importCompletedAt = nil
+            storageStatusMessage = nil
+            healthSyncState = .idle
+            healthSyncNote = nil
+            importedFileName = url.lastPathComponent
+            importPhase = .reading
+            isImporting = true
             
             // Security: access security scoped resource
             let hasAccess = url.startAccessingSecurityScopedResource()
@@ -222,6 +458,8 @@ struct StrongImportWizard: View {
                     url.stopAccessingSecurityScopedResource()
                 }
                 importError = "Could not read file: \(error.localizedDescription)"
+                isImporting = false
+                importPhase = .idle
                 return
             }
             
@@ -229,12 +467,14 @@ struct StrongImportWizard: View {
             if hasAccess {
                 url.stopAccessingSecurityScopedResource()
             }
-            
-            isImporting = true
+            importPhase = .parsing
             
             Task {
                 do {
                     let sets = try CSVParser.parseStrongWorkoutsCSV(from: fileData)
+                    await MainActor.run {
+                        importPhase = .processing
+                    }
                     
                     // Artificial delay for UX
                     try await Task.sleep(nanoseconds: 1_000_000_000)
@@ -243,10 +483,21 @@ struct StrongImportWizard: View {
                         dataManager.processWorkoutSets(sets)
                         let stats = dataManager.calculateStats()
                         importStats = (stats.totalWorkouts, stats.totalExercises)
+                        importPhase = .saving
                         
                         // Save to iCloud
                         let fileName = "strong_workouts_\(Date().timeIntervalSince1970).csv"
-                        try? iCloudManager.saveToiCloud(data: fileData, fileName: fileName)
+                        do {
+                            try iCloudManager.saveToiCloud(data: fileData, fileName: fileName)
+                            storageStatusMessage = iCloudManager.isUsingLocalFallback
+                                ? "Saved on-device (iCloud unavailable)"
+                                : "Saved to iCloud Drive"
+                        } catch {
+                            storageStatusMessage = "Save failed: \(error.localizedDescription)"
+                        }
+                        
+                        importPhase = .complete
+                        importCompletedAt = Date()
                         
                         withAnimation {
                             isImporting = false
@@ -259,6 +510,7 @@ struct StrongImportWizard: View {
                     await MainActor.run {
                         importError = error.localizedDescription
                         isImporting = false
+                        importPhase = .idle
                     }
                 }
             }
@@ -270,20 +522,46 @@ struct StrongImportWizard: View {
 
     @MainActor
     private func startAutoHealthSyncIfNeeded() {
-        guard healthManager.isHealthKitAvailable() else { return }
-        guard !dataManager.workouts.isEmpty else { return }
-        guard !healthManager.isSyncing else { return }
+        healthSyncNote = nil
+        
+        guard !dataManager.workouts.isEmpty else {
+            healthSyncState = .idle
+            return
+        }
+        guard healthManager.isHealthKitAvailable() else {
+            healthSyncState = .unavailable
+            return
+        }
+        if healthManager.authorizationStatus == .denied {
+            healthSyncState = .needsAuthorization
+            return
+        }
+        guard !healthManager.isSyncing else {
+            healthSyncState = .syncing
+            return
+        }
 
         Task { @MainActor in
             do {
                 if healthManager.authorizationStatus == .notDetermined {
+                    healthSyncState = .needsAuthorization
                     try await healthManager.requestAuthorization()
                 }
 
-                guard healthManager.authorizationStatus == .authorized else { return }
-                _ = try await healthManager.syncAllWorkouts(dataManager.workouts)
+                guard healthManager.authorizationStatus == .authorized else {
+                    healthSyncState = .needsAuthorization
+                    return
+                }
+
+                healthSyncState = .syncing
+                let results = try await healthManager.syncAllWorkouts(dataManager.workouts)
+                let hasData = results.contains { $0.hasHealthData }
+                if !hasData {
+                    healthSyncNote = "No Health data was found for those workout times."
+                }
+                healthSyncState = .synced(Date())
             } catch {
-                print("Auto health sync failed: \(error)")
+                healthSyncState = .failed(error.localizedDescription)
             }
         }
     }
