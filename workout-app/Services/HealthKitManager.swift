@@ -135,6 +135,11 @@ class HealthKitManager: ObservableObject {
     func refreshAuthorizationStatus() {
         checkAuthorizationStatus()
     }
+
+    /// Access cached health data for a workout
+    func getHealthData(for workoutId: UUID) -> WorkoutHealthData? {
+        healthDataStore[workoutId]
+    }
     
     /// Request authorization to read health data
     func requestAuthorization() async throws {
@@ -367,8 +372,8 @@ class HealthKitManager: ObservableObject {
         }
 
         healthStore.getRequestStatusForAuthorization(toShare: [], read: allReadTypes) { [weak self] status, error in
+            guard let self = self else { return }
             Task { @MainActor in
-                guard let self = self else { return }
                 if let error = error {
                     self.authorizationStatus = .denied
                     self.syncError = error.localizedDescription
