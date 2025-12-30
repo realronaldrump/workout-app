@@ -1,0 +1,180 @@
+import Foundation
+import SwiftUI
+import Combine
+
+@MainActor
+class WorkoutDataManager: ObservableObject {
+    @Published var workouts: [Workout] = []
+    @Published var isLoading = false
+    @Published var error: String?
+    
+    func processWorkoutSets(_ sets: [WorkoutSet]) {
+        // Group sets by date and workout name
+        let groupedByWorkout = Dictionary(grouping: sets) { set in
+            "\(set.date.timeIntervalSince1970)-\(set.workoutName)"
+        }
+        
+        var processedWorkouts: [Workout] = []
+        
+        for (_, workoutSets) in groupedByWorkout {
+            guard let firstSet = workoutSets.first else { continue }
+            
+            // Group by exercise within workout
+            let groupedByExercise = Dictionary(grouping: workoutSets) { $0.exerciseName }
+            
+            var exercises: [Exercise] = []
+            for (exerciseName, exerciseSets) in groupedByExercise {
+                let sortedSets = exerciseSets.sorted { $0.setOrder < $1.setOrder }
+                exercises.append(Exercise(name: exerciseName, sets: sortedSets))
+            }
+            
+            let workout = Workout(
+                date: workoutSets.map { $0.date }.min() ?? firstSet.date,
+                name: firstSet.workoutName,
+                duration: firstSet.duration,
+                exercises: exercises
+            )
+            processedWorkouts.append(workout)
+        }
+        
+        self.workouts = processedWorkouts.sorted { $0.date > $1.date }
+    }
+    
+    func getExerciseHistory(for exerciseName: String) -> [(date: Date, sets: [WorkoutSet])] {
+        var history: [(date: Date, sets: [WorkoutSet])] = []
+        
+        for workout in workouts {
+            if let exercise = workout.exercises.first(where: { $0.name == exerciseName }) {
+                history.append((date: workout.date, sets: exercise.sets))
+            }
+        }
+        
+        return history.sorted { $0.date < $1.date }
+    }
+    
+    func calculateStats() -> WorkoutStats {
+        let allExercises = workouts.flatMap { $0.exercises }
+        let exerciseGroups = Dictionary(grouping: allExercises) { $0.name }
+        
+        // Calculate favorite exercise (most performed)
+        let favoriteExercise = exerciseGroups
+            .map { (name: $0.key, count: $0.value.count) }
+            .max { $0.count < $1.count }?.name
+        
+        // Calculate strongest exercise
+        let strongestExercise = exerciseGroups
+            .map { (name: $0.key, maxWeight: $0.value.map { $0.maxWeight }.max() ?? 0) }
+            .max { $0.maxWeight < $1.maxWeight }
+            .map { (name: $0.name, weight: $0.maxWeight) }
+        
+        // Calculate improvement
+        var mostImprovedExercise: (name: String, improvement: Double)?
+        for (exerciseName, exercises) in exerciseGroups {
+            let sortedByDate = exercises.sorted { exercise1, exercise2 in
+                let date1 = workouts.first { $0.exercises.contains { $0.id == exercise1.id } }?.date ?? Date()
+                let date2 = workouts.first { $0.exercises.contains { $0.id == exercise2.id } }?.date ?? Date()
+                return date1 < date2
+            }
+            
+            if let first = sortedByDate.first?.oneRepMax,
+               let last = sortedByDate.last?.oneRepMax,
+               first > 0 {
+                let improvement = ((last - first) / first) * 100
+                if mostImprovedExercise == nil || improvement > mostImprovedExercise!.improvement {
+                    mostImprovedExercise = (name: exerciseName, improvement: improvement)
+                }
+            }
+        }
+        
+        // Calculate streaks and consistency
+        let (currentStreak, longestStreak) = calculateStreaks()
+        let workoutsPerWeek = calculateWorkoutsPerWeek()
+        
+        // Calculate average duration
+        let avgDuration = calculateAverageDuration()
+        
+        return WorkoutStats(
+            totalWorkouts: workouts.count,
+            totalExercises: allExercises.count,
+            totalVolume: workouts.reduce(0) { $0 + $1.totalVolume },
+            totalSets: workouts.reduce(0) { $0 + $1.totalSets },
+            avgWorkoutDuration: avgDuration,
+            favoriteExercise: favoriteExercise,
+            strongestExercise: strongestExercise,
+            mostImprovedExercise: mostImprovedExercise,
+            currentStreak: currentStreak,
+            longestStreak: longestStreak,
+            workoutsPerWeek: workoutsPerWeek,
+            lastWorkoutDate: workouts.first?.date
+        )
+    }
+    
+    private func calculateStreaks() -> (current: Int, longest: Int) {
+        guard !workouts.isEmpty else { return (0, 0) }
+        
+        let sortedWorkouts = workouts.sorted { $0.date < $1.date }
+        var currentStreak = 0
+        var longestStreak = 0
+        var tempStreak = 1
+        var lastDate = sortedWorkouts[0].date
+        
+        for i in 1..<sortedWorkouts.count {
+            let daysDiff = Calendar.current.dateComponents([.day], from: lastDate, to: sortedWorkouts[i].date).day ?? 0
+            
+            if daysDiff <= 2 { // Allow 1 rest day
+                tempStreak += 1
+            } else {
+                longestStreak = max(longestStreak, tempStreak)
+                tempStreak = 1
+            }
+            lastDate = sortedWorkouts[i].date
+        }
+        
+        longestStreak = max(longestStreak, tempStreak)
+        
+        // Calculate current streak
+        if let lastWorkout = sortedWorkouts.last {
+            let daysSinceLastWorkout = Calendar.current.dateComponents([.day], from: lastWorkout.date, to: Date()).day ?? 0
+            if daysSinceLastWorkout <= 2 {
+                currentStreak = tempStreak
+            }
+        }
+        
+        return (currentStreak, longestStreak)
+    }
+    
+    private func calculateWorkoutsPerWeek() -> Double {
+        guard !workouts.isEmpty else { return 0 }
+        
+        let sortedWorkouts = workouts.sorted { $0.date < $1.date }
+        guard let firstDate = sortedWorkouts.last?.date,
+              let lastDate = sortedWorkouts.first?.date else { return 0 }
+        
+        let weeksBetween = Calendar.current.dateComponents([.weekOfYear], from: firstDate, to: lastDate).weekOfYear ?? 1
+        let totalWeeks = max(Double(weeksBetween), 1)
+        
+        return Double(workouts.count) / totalWeeks
+    }
+    
+    private func calculateAverageDuration() -> String {
+        let durations = workouts.compactMap { workout -> Int? in
+            let components = workout.duration.replacingOccurrences(of: "m", with: "").split(separator: "h")
+            if components.count == 2,
+               let hours = Int(components[0]),
+               let minutes = Int(components[1]) {
+                return hours * 60 + minutes
+            } else if let minutes = Int(workout.duration.replacingOccurrences(of: "m", with: "")) {
+                return minutes
+            }
+            return nil
+        }
+        
+        guard !durations.isEmpty else { return "0m" }
+        
+        let avgMinutes = durations.reduce(0, +) / durations.count
+        if avgMinutes >= 60 {
+            return "\(avgMinutes / 60)h \(avgMinutes % 60)m"
+        }
+        return "\(avgMinutes)m"
+    }
+}

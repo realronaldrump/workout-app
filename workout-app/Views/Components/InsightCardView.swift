@@ -1,0 +1,189 @@
+import SwiftUI
+
+struct InsightCardView: View {
+    let insight: Insight
+    var onTap: (() -> Void)? = nil
+    
+    @State private var isAppearing = false
+    
+    private var iconColor: Color {
+        switch insight.type.color {
+        case "yellow": return .yellow
+        case "green": return .green
+        case "orange": return .orange
+        case "purple": return .purple
+        case "blue": return .blue
+        case "cyan": return .cyan
+        case "red": return .red
+        default: return .blue
+        }
+    }
+    
+    var body: some View {
+        Button(action: { onTap?() }) {
+            HStack(spacing: Theme.Spacing.lg) {
+                // Icon
+                Image(systemName: insight.type.iconName)
+                    .font(.system(size: 24, weight: .semibold))
+                    .foregroundColor(iconColor)
+                    .frame(width: 44, height: 44)
+                
+                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                    Text(insight.title)
+                        .font(Theme.Typography.headline)
+                        .foregroundColor(Theme.Colors.textPrimary)
+                    
+                    Text(insight.message)
+                        .font(Theme.Typography.subheadline)
+                        .foregroundColor(Theme.Colors.textSecondary)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                }
+                
+                Spacer()
+                
+                if insight.actionLabel != nil {
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundColor(Theme.Colors.textTertiary)
+                }
+            }
+            .padding(Theme.Spacing.lg)
+            .glassBackground()
+        }
+        .buttonStyle(ScaleButtonStyle())
+        .opacity(isAppearing ? 1 : 0)
+        .offset(y: isAppearing ? 0 : 10)
+        .onAppear {
+            withAnimation(Theme.Animation.spring) {
+                isAppearing = true
+            }
+        }
+    }
+}
+
+// Subtle scale effect on press
+struct ScaleButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+            .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
+    }
+}
+
+// MARK: - Insights Section View
+
+struct InsightsSectionView: View {
+    @ObservedObject var insightsEngine: InsightsEngine
+    let dataManager: WorkoutDataManager
+    var onInsightTap: ((Insight) -> Void)? = nil
+    
+    @State private var showAllInsights = false
+    
+    private var displayedInsights: [Insight] {
+        if showAllInsights {
+            return insightsEngine.insights
+        } else {
+            return Array(insightsEngine.insights.prefix(3))
+        }
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
+            HStack {
+                Text("Insights")
+                    .font(Theme.Typography.title2)
+                    .foregroundColor(Theme.Colors.textPrimary)
+                
+                Spacer()
+                
+                if insightsEngine.insights.count > 3 {
+                    Button(action: { 
+                        withAnimation(Theme.Animation.spring) {
+                            showAllInsights.toggle() 
+                        }
+                    }) {
+                        Text(showAllInsights ? "Less" : "All \(insightsEngine.insights.count)")
+                            .font(Theme.Typography.subheadline)
+                            .foregroundColor(.blue)
+                    }
+                }
+            }
+            
+            if insightsEngine.insights.isEmpty {
+                EmptyInsightsView()
+            } else {
+                VStack(spacing: Theme.Spacing.md) {
+                    ForEach(Array(displayedInsights.enumerated()), id: \.element.id) { index, insight in
+                        InsightCardView(insight: insight) {
+                            onInsightTap?(insight)
+                        }
+                    }
+                }
+            }
+        }
+        .onAppear {
+            insightsEngine.generateInsights()
+        }
+    }
+}
+
+struct EmptyInsightsView: View {
+    var body: some View {
+        HStack(spacing: Theme.Spacing.lg) {
+            Image(systemName: "sparkles")
+                .font(.title2)
+                .foregroundColor(Theme.Colors.textTertiary)
+            
+            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                Text("No Insights Yet")
+                    .font(Theme.Typography.headline)
+                    .foregroundColor(Theme.Colors.textSecondary)
+                
+                Text("Keep training to unlock personalized insights")
+                    .font(Theme.Typography.subheadline)
+                    .foregroundColor(Theme.Colors.textTertiary)
+            }
+            
+            Spacer()
+        }
+        .padding(Theme.Spacing.lg)
+        .glassBackground()
+    }
+}
+
+#Preview {
+    ZStack {
+        Theme.Colors.background.ignoresSafeArea()
+        
+        ScrollView {
+            VStack(spacing: 20) {
+                InsightCardView(insight: Insight(
+                    id: UUID(),
+                    type: .personalRecord,
+                    title: "New PR! 🎉",
+                    message: "Bench Press: 225 lbs (+10 lbs)",
+                    exerciseName: "Bench Press",
+                    date: Date(),
+                    priority: 10,
+                    actionLabel: "View Progress",
+                    metric: 225
+                ))
+                
+                InsightCardView(insight: Insight(
+                    id: UUID(),
+                    type: .plateau,
+                    title: "Plateau Detected",
+                    message: "Shoulder Press hasn't progressed in 4 sessions",
+                    exerciseName: "Shoulder Press",
+                    date: Date(),
+                    priority: 6,
+                    actionLabel: "View History",
+                    metric: 50
+                ))
+            }
+            .padding()
+        }
+    }
+    .preferredColorScheme(.dark)
+}
