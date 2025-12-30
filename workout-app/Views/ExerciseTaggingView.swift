@@ -27,7 +27,7 @@ struct ExerciseTaggingView: View {
                         .foregroundStyle(.secondary)
                 }
                 
-                ForEach(filteredExercises, id: \.self) { exercise in
+                ForEach(filteredExercises, id: \.self) { (exercise: String) in
                     HStack {
                         Text(exercise)
                             .font(Theme.Typography.body)

@@ -416,7 +416,7 @@ enum InsightType {
     }
 }
 
-enum MuscleGroup: String, CaseIterable {
+enum MuscleGroup: String, CaseIterable, Codable {
     case push
     case pull
     case legs
