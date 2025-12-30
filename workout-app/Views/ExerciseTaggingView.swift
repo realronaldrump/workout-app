@@ -58,7 +58,7 @@ struct ExerciseTaggingView: View {
                                         .font(Theme.Typography.caption)
                                         .foregroundStyle(Theme.Colors.textSecondary)
                                     Image(systemName: getIcon(for: group))
-                                        .foregroundStyle(Theme.Colors.tint)
+                                        .foregroundStyle(Theme.Colors.accent)
                                 } else {
                                     Text("Untagged")
                                         .font(Theme.Typography.caption)
