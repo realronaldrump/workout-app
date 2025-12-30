@@ -193,7 +193,6 @@ struct SettingsView: View {
                     }
                     .buttonStyle(PlainButtonStyle())
                 }
-                }
                 
                 // Danger Zone
                 Button(action: { showingDeleteAlert = true }) {
