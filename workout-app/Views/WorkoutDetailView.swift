@@ -17,8 +17,7 @@ struct WorkoutDetailView: View {
             
             ScrollView {
                 VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
-                // Workout summary card
-                VStack(alignment: .leading, spacing: 12) {
+                    // Workout summary card
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Duration")
@@ -53,35 +52,34 @@ struct WorkoutDetailView: View {
                     }
                     .padding(Theme.Spacing.lg)
                     .glassBackground(elevation: 2)
-                }
-                
-                // Health Data Section
-                if healthManager.isHealthKitAvailable() {
-                    healthDataSection
-                }
-                
-                // Exercises list
-                VStack(alignment: .leading, spacing: 16) {
-                    Text("Exercises")
-                        .font(Theme.Typography.title2)
-                        .foregroundColor(Theme.Colors.textPrimary)
                     
-                    ForEach(workout.exercises) { exercise in
-                        ExerciseCard(
-                            exercise: exercise,
-                            onViewHistory: { exerciseName in
-                                selectedExercise = ExerciseSelection(id: exerciseName)
-                            },
-                            onQuickStart: { exerciseName in
-                                quickStartExercise = exerciseName
-                                showingQuickStart = true
-                            }
-                        )
+                    // Health Data Section
+                    if healthManager.isHealthKitAvailable() {
+                        healthDataSection
                     }
+                    
+                    // Exercises list
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("Exercises")
+                            .font(Theme.Typography.title2)
+                            .foregroundColor(Theme.Colors.textPrimary)
+                        
+                        ForEach(workout.exercises) { exercise in
+                            ExerciseCard(
+                                exercise: exercise,
+                                onViewHistory: { exerciseName in
+                                    selectedExercise = ExerciseSelection(id: exerciseName)
+                                },
+                                onQuickStart: { exerciseName in
+                                    quickStartExercise = exerciseName
+                                    showingQuickStart = true
+                                }
+                            )
+                        }
                     }
                 }
+                .padding(Theme.Spacing.xl)
             }
-            .padding(Theme.Spacing.xl)
         }
         .navigationTitle(workout.name)
         .navigationBarTitleDisplayMode(.large)

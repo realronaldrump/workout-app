@@ -136,27 +136,35 @@ struct ExerciseRowView: View {
     let stats: ExerciseStats
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(name)
-                .font(Theme.Typography.condensed)
-                .tracking(-0.2)
-                .foregroundColor(Theme.Colors.textPrimary)
-            
-            HStack(spacing: 16) {
-                Label("\(stats.frequency)x", systemImage: "repeat")
-                    .font(Theme.Typography.caption)
-                    .foregroundColor(Theme.Colors.textSecondary)
+        HStack {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(name)
+                    .font(Theme.Typography.condensed)
+                    .tracking(-0.2)
+                    .foregroundColor(Theme.Colors.textPrimary)
                 
-                Label(formatWeight(stats.maxWeight), systemImage: "scalemass")
-                    .font(Theme.Typography.caption)
-                    .foregroundColor(Theme.Colors.textSecondary)
-                
-                if let lastDate = stats.lastPerformed {
-                    Label(relativeDateString(for: lastDate), systemImage: "clock")
+                HStack(spacing: 16) {
+                    Label("\(stats.frequency)x", systemImage: "repeat")
                         .font(Theme.Typography.caption)
                         .foregroundColor(Theme.Colors.textSecondary)
+                    
+                    Label(formatWeight(stats.maxWeight), systemImage: "scalemass")
+                        .font(Theme.Typography.caption)
+                        .foregroundColor(Theme.Colors.textSecondary)
+                    
+                    if let lastDate = stats.lastPerformed {
+                        Label(relativeDateString(for: lastDate), systemImage: "clock")
+                            .font(Theme.Typography.caption)
+                            .foregroundColor(Theme.Colors.textSecondary)
+                    }
                 }
             }
+            
+            Spacer()
+            
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundColor(Theme.Colors.textTertiary)
         }
         .padding(Theme.Spacing.lg)
         .glassBackground(elevation: 2)

@@ -34,49 +34,50 @@ struct ExerciseDetailView: View {
 
             ScrollView {
                 VStack(spacing: Theme.Spacing.xl) {
-                ExerciseStatsCards(exerciseName: exerciseName, history: exerciseHistory)
-                
-                VStack(alignment: .leading, spacing: 16) {
-                    HStack {
-                        Text("Progress Chart")
-                            .font(Theme.Typography.title2)
-                            .foregroundColor(Theme.Colors.textPrimary)
+                    ExerciseStatsCards(exerciseName: exerciseName, history: exerciseHistory)
+                    
+                    VStack(alignment: .leading, spacing: 16) {
+                        HStack {
+                            Text("Progress Chart")
+                                .font(Theme.Typography.title2)
+                                .foregroundColor(Theme.Colors.textPrimary)
+                            
+                            Spacer()
+                            
+                            Picker("Chart Type", selection: $selectedChart) {
+                                ForEach(ChartType.allCases, id: \.self) { type in
+                                    Text(type.rawValue).tag(type)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                        }
                         
-                        Spacer()
-                        
-                        Picker("Chart Type", selection: $selectedChart) {
-                            ForEach(ChartType.allCases, id: \.self) { type in
-                                Text(type.rawValue).tag(type)
+                        ExerciseProgressChart(history: exerciseHistory, chartType: selectedChart)
+                            .frame(height: 250)
+                            .padding(Theme.Spacing.lg)
+                            .glassBackground(elevation: 2)
+                    }
+
+                    if !exerciseInsights.isEmpty {
+                        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+                            Text("Insights")
+                                .font(Theme.Typography.title3)
+                                .foregroundColor(Theme.Colors.textPrimary)
+
+                            VStack(spacing: Theme.Spacing.md) {
+                                ForEach(exerciseInsights) { insight in
+                                    InsightCardView(insight: insight)
+                                }
                             }
                         }
-                        .pickerStyle(.menu)
                     }
                     
-                    ExerciseProgressChart(history: exerciseHistory, chartType: selectedChart)
-                        .frame(height: 250)
-                        .padding(Theme.Spacing.lg)
-                        .glassBackground(elevation: 2)
+                    PersonalRecordsView(history: exerciseHistory)
+                    
+                    RecentSetsView(history: exerciseHistory)
                 }
-
-                if !exerciseInsights.isEmpty {
-                    VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-                        Text("Insights")
-                            .font(Theme.Typography.title3)
-                            .foregroundColor(Theme.Colors.textPrimary)
-
-                        VStack(spacing: Theme.Spacing.md) {
-                            ForEach(exerciseInsights) { insight in
-                                InsightCardView(insight: insight)
-                            }
-                        }
-                    }
-                }
-                
-                PersonalRecordsView(history: exerciseHistory)
-                
-                RecentSetsView(history: exerciseHistory)
+                .padding(Theme.Spacing.xl)
             }
-            .padding(Theme.Spacing.xl)
         }
         .navigationTitle(exerciseName)
         .navigationBarTitleDisplayMode(.large)
@@ -87,8 +88,6 @@ struct ExerciseDetailView: View {
             Haptics.selection()
         }
     }
-}
-
 }
 
 struct ExerciseStatsCards: View {

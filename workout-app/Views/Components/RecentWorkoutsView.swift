@@ -35,8 +35,8 @@ struct WorkoutRowView: View {
     
     var body: some View {
         NavigationLink(destination: WorkoutDetailView(workout: workout)) {
-            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                HStack {
+            HStack {
+                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                     Text(workout.name)
                         .font(Theme.Typography.condensed)
                         .tracking(-0.2)
@@ -44,19 +44,25 @@ struct WorkoutRowView: View {
                     
                     Text(workout.date.formatted(date: .abbreviated, time: .shortened))
                         .font(Theme.Typography.caption)
-                        .foregroundColor(Theme.Colors.textTertiary)
+                        .foregroundColor(Theme.Colors.textSecondary)
+                    
+                    HStack(spacing: Theme.Spacing.md) {
+                        Label(workout.duration, systemImage: "clock")
+                        Label("\(workout.exercises.count) exercises", systemImage: "figure.strengthtraining.traditional")
+                    }
+                    .font(Theme.Typography.caption)
+                    .foregroundColor(Theme.Colors.textTertiary)
+                    
+                    if let data = healthManager.getHealthData(for: workout.id) {
+                        HealthDataSummaryView(healthData: data)
+                    }
                 }
                 
-                HStack(spacing: Theme.Spacing.md) {
-                    Label(workout.duration, systemImage: "clock")
-                    Label("\(workout.exercises.count) exercises", systemImage: "figure.strengthtraining.traditional")
-                }
-                .font(Theme.Typography.caption)
-                .foregroundColor(Theme.Colors.textSecondary)
+                Spacer()
                 
-                if let data = healthManager.getHealthData(for: workout.id) {
-                    HealthDataSummaryView(healthData: data)
-                }
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundColor(Theme.Colors.textTertiary)
             }
             .padding(Theme.Spacing.lg)
             .glassBackground(elevation: 2)

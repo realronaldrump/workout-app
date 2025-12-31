@@ -79,8 +79,6 @@ struct SettingsView: View {
                             Divider().padding(.leading, 50)
                         }
                         
-                        Divider().padding(.leading, 50)
-                        
                         NavigationLink(destination: BackupFilesView(iCloudManager: iCloudManager)) {
                             HStack {
                                 Image(systemName: "icloud.fill")
@@ -164,37 +162,38 @@ struct SettingsView: View {
                         }
                         .padding()
                         .glassBackground()
-                    }
-                    
-                    Divider().padding(.leading, 50)
-                    
-                    // Exercise Tags
-                    NavigationLink(destination: ExerciseTaggingView(dataManager: dataManager)) {
-                        HStack {
-                            Image(systemName: "tag.fill")
-                                .foregroundStyle(.white)
-                                .frame(width: 30, height: 30)
-                                .background(Color.purple)
-                                .cornerRadius(6)
-                            
-                            VStack(alignment: .leading) {
-                                Text("Exercise Tags")
-                                    .font(Theme.Typography.body)
-                                Text("Assign muscle groups")
-                                    .font(Theme.Typography.caption)
-                                    .foregroundStyle(Theme.Colors.textSecondary)
+                        
+                        Divider().padding(.leading, 50)
+                        
+                        // Exercise Tags
+                        NavigationLink(destination: ExerciseTaggingView(dataManager: dataManager)) {
+                            HStack {
+                                Image(systemName: "tag.fill")
+                                    .foregroundStyle(.white)
+                                    .frame(width: 30, height: 30)
+                                    .background(Color.purple)
+                                    .cornerRadius(6)
+                                
+                                VStack(alignment: .leading) {
+                                    Text("Exercise Tags")
+                                        .font(Theme.Typography.body)
+                                        .foregroundStyle(Theme.Colors.textPrimary)
+                                    Text("Assign muscle groups")
+                                        .font(Theme.Typography.caption)
+                                        .foregroundStyle(Theme.Colors.textSecondary)
+                                }
+                                
+                                Spacer()
+                                
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                                    .foregroundStyle(Theme.Colors.textTertiary)
                             }
-                            
-                            Spacer()
-                            
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundStyle(Theme.Colors.textTertiary)
+                            .padding()
+                            .glassBackground()
                         }
-                        .padding()
-                        .glassBackground()
+                        .buttonStyle(PlainButtonStyle())
                     }
-                    .buttonStyle(PlainButtonStyle())
                 }
                 
                 // Danger Zone
@@ -215,7 +214,8 @@ struct SettingsView: View {
                 .padding()
             }
         }
-        .navigationBarHidden(true)
+        .navigationTitle("Settings")
+        .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showingImportWizard) {
             StrongImportWizard(
                 isPresented: $showingImportWizard,

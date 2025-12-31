@@ -58,7 +58,8 @@ struct BackupFileRow: View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
                 Text(file.lastPathComponent)
-                    .font(Theme.Typography.headline)
+                    .font(Theme.Typography.condensed)
+                    .tracking(-0.2)
                     .foregroundStyle(Theme.Colors.textPrimary)
                 
                 if let attributes = try? FileManager.default.attributesOfItem(atPath: file.path),

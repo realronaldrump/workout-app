@@ -51,17 +51,9 @@ struct OnboardingView: View {
 
                 Spacer()
 
-                Text("Onboarding")
+                Text("Step \(step + 1) of \(totalSteps)")
                     .font(Theme.Typography.caption)
                     .foregroundColor(Theme.Colors.textTertiary)
-
-                Spacer()
-
-                Button("Close") {
-                    completeOnboarding()
-                }
-                .font(Theme.Typography.subheadline)
-                .foregroundColor(Theme.Colors.textSecondary)
             }
 
             HStack(spacing: 8) {

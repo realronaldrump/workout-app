@@ -16,7 +16,7 @@ struct HealthSyncWizard: View {
                 VStack {
                     // Progress Indicator
                     HStack(spacing: 8) {
-                        ForEach(0..<3) { index in
+                        ForEach(0..<4) { index in
                             Capsule()
                                 .fill(index <= step ? Theme.Colors.error : Theme.Colors.surface) // Red/pink for Health
                                 .frame(height: 4)

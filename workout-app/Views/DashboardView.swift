@@ -50,9 +50,9 @@ struct DashboardView: View {
                     } else {
                         timeRangeSection
 
-                        if let stats = stats {
+                        if let currentStats = filteredStats {
                             MissionMetricsSection(
-                                stats: stats,
+                                stats: currentStats,
                                 readiness: readinessSnapshot,
                                 streakDelta: streakDelta
                             )
@@ -95,13 +95,11 @@ struct DashboardView: View {
                 }
                 .padding(.vertical, Theme.Spacing.xxl)
             }
-
-            NavigationLink(destination: WorkoutHistoryView(workouts: dataManager.workouts), isActive: $showingHistory) {
-                EmptyView()
-            }
-            .hidden()
         }
         .navigationBarHidden(true)
+        .navigationDestination(isPresented: $showingHistory) {
+            WorkoutHistoryView(workouts: dataManager.workouts)
+        }
         .navigationDestination(item: $selectedExercise) { selection in
             ExerciseDetailView(exerciseName: selection.id, dataManager: dataManager)
         }
@@ -246,8 +244,8 @@ struct DashboardView: View {
             }
 
             VStack(spacing: Theme.Spacing.lg) {
-                if let stats = stats {
-                    ConsistencyView(stats: stats, workouts: filteredWorkouts)
+                if let currentStats = filteredStats {
+                    ConsistencyView(stats: currentStats, workouts: filteredWorkouts)
                 } else {
                     RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
                         .fill(Theme.Colors.surface.opacity(0.6))
@@ -332,6 +330,11 @@ struct DashboardView: View {
         case .allTime:
             return dataManager.workouts
         }
+    }
+
+    private var filteredStats: WorkoutStats? {
+        guard !filteredWorkouts.isEmpty else { return nil }
+        return dataManager.calculateStats(for: filteredWorkouts)
     }
 
     private var greeting: String {

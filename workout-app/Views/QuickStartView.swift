@@ -110,5 +110,6 @@ struct QuickStartView: View {
                 .padding(Theme.Spacing.xl)
             }
         }
+        .presentationDragIndicator(.visible)
     }
 }

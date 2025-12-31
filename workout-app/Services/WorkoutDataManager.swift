@@ -53,7 +53,11 @@ class WorkoutDataManager: ObservableObject {
     }
     
     func calculateStats() -> WorkoutStats {
-        let allExercises = workouts.flatMap { $0.exercises }
+        return calculateStats(for: workouts)
+    }
+    
+    func calculateStats(for filteredWorkouts: [Workout]) -> WorkoutStats {
+        let allExercises = filteredWorkouts.flatMap { $0.exercises }
         let exerciseGroups = Dictionary(grouping: allExercises) { $0.name }
         
         // Calculate favorite exercise (most performed)
@@ -71,8 +75,8 @@ class WorkoutDataManager: ObservableObject {
         var mostImprovedExercise: (name: String, improvement: Double)?
         for (exerciseName, exercises) in exerciseGroups {
             let sortedByDate = exercises.sorted { exercise1, exercise2 in
-                let date1 = workouts.first { $0.exercises.contains { $0.id == exercise1.id } }?.date ?? Date()
-                let date2 = workouts.first { $0.exercises.contains { $0.id == exercise2.id } }?.date ?? Date()
+                let date1 = filteredWorkouts.first { $0.exercises.contains { $0.id == exercise1.id } }?.date ?? Date()
+                let date2 = filteredWorkouts.first { $0.exercises.contains { $0.id == exercise2.id } }?.date ?? Date()
                 return date1 < date2
             }
             
@@ -86,18 +90,18 @@ class WorkoutDataManager: ObservableObject {
             }
         }
         
-        // Calculate streaks and consistency
+        // Calculate streaks and consistency (use all workouts for streaks, filtered for other stats)
         let (currentStreak, longestStreak) = calculateStreaks()
-        let workoutsPerWeek = calculateWorkoutsPerWeek()
+        let workoutsPerWeek = calculateWorkoutsPerWeek(for: filteredWorkouts)
         
         // Calculate average duration
-        let avgDuration = calculateAverageDuration()
+        let avgDuration = calculateAverageDuration(for: filteredWorkouts)
         
         return WorkoutStats(
-            totalWorkouts: workouts.count,
+            totalWorkouts: filteredWorkouts.count,
             totalExercises: allExercises.count,
-            totalVolume: workouts.reduce(0) { $0 + $1.totalVolume },
-            totalSets: workouts.reduce(0) { $0 + $1.totalSets },
+            totalVolume: filteredWorkouts.reduce(0) { $0 + $1.totalVolume },
+            totalSets: filteredWorkouts.reduce(0) { $0 + $1.totalSets },
             avgWorkoutDuration: avgDuration,
             favoriteExercise: favoriteExercise,
             strongestExercise: strongestExercise,
@@ -105,7 +109,7 @@ class WorkoutDataManager: ObservableObject {
             currentStreak: currentStreak,
             longestStreak: longestStreak,
             workoutsPerWeek: workoutsPerWeek,
-            lastWorkoutDate: workouts.first?.date
+            lastWorkoutDate: filteredWorkouts.first?.date
         )
     }
     
@@ -143,21 +147,21 @@ class WorkoutDataManager: ObservableObject {
         return (currentStreak, longestStreak)
     }
     
-    private func calculateWorkoutsPerWeek() -> Double {
-        guard !workouts.isEmpty else { return 0 }
+    private func calculateWorkoutsPerWeek(for filteredWorkouts: [Workout]) -> Double {
+        guard !filteredWorkouts.isEmpty else { return 0 }
         
-        let sortedWorkouts = workouts.sorted { $0.date < $1.date }
-        guard let firstDate = sortedWorkouts.last?.date,
-              let lastDate = sortedWorkouts.first?.date else { return 0 }
+        let sortedWorkouts = filteredWorkouts.sorted { $0.date < $1.date }
+        guard let firstDate = sortedWorkouts.first?.date,
+              let lastDate = sortedWorkouts.last?.date else { return 0 }
         
         let weeksBetween = Calendar.current.dateComponents([.weekOfYear], from: firstDate, to: lastDate).weekOfYear ?? 1
         let totalWeeks = max(Double(weeksBetween), 1)
         
-        return Double(workouts.count) / totalWeeks
+        return Double(filteredWorkouts.count) / totalWeeks
     }
     
-    private func calculateAverageDuration() -> String {
-        let durations = workouts.compactMap { workout -> Int? in
+    private func calculateAverageDuration(for filteredWorkouts: [Workout]) -> String {
+        let durations = filteredWorkouts.compactMap { workout -> Int? in
             let components = workout.duration.replacingOccurrences(of: "m", with: "").split(separator: "h")
             if components.count == 2,
                let hours = Int(components[0]),
