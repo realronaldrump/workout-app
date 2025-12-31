@@ -33,7 +33,14 @@ final class AdaptiveLuminanceManager: ObservableObject {
         timer?.invalidate()
     }
 
+    /// Calculates an adaptive luminance value based on the user's screen brightness
+    /// and time of day. Note: This uses the screen brightness slider value as a proxy
+    /// for ambient light conditions, not the actual ambient light sensor data (iOS
+    /// does not provide public API for raw ambient light). When the user has auto-
+    /// brightness enabled, this serves as a reasonable approximation.
     private func updateLuminance() {
+        // UIScreen.main.brightness is 0.0-1.0 representing the brightness slider
+        // This acts as a reasonable proxy when the user has auto-brightness enabled
         let ambient = Double(UIScreen.main.brightness)
         let timeFactor = timeOfDayFactor(for: Date())
         let blended = 0.18 + (ambient * 0.38) + (timeFactor * 0.32)

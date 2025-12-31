@@ -7,23 +7,44 @@ class iCloudDocumentManager: ObservableObject {
     @Published var isDocumentPickerPresented = false
     @Published var importedData: Data?
     @Published var isUsingLocalFallback = false
+    @Published var isInitializing = true
     
-    // Lazy property to determine the best available directory
-    private lazy var documentsURL: URL? = {
-        // Try iCloud first
-        if let url = FileManager.default.url(forUbiquityContainerIdentifier: nil)?.appendingPathComponent("Documents") {
-            print("Using iCloud container: \(url.path)")
-            return url
-        }
-        
-        // Fallback to local documents
-        print("iCloud not available, falling back to local Documents directory")
-        isUsingLocalFallback = true
-        return FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
-    }()
+    private var _documentsURL: URL?
+    
+    private var documentsURL: URL? {
+        return _documentsURL ?? localDocumentsURL
+    }
+    
+    private var localDocumentsURL: URL? {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+    }
     
     init() {
-        setupContainer()
+        // Use local fallback immediately for safety
+        _documentsURL = localDocumentsURL
+        // Start async iCloud check
+        Task { await initializeContainer() }
+    }
+    
+    private func initializeContainer() async {
+        // Perform iCloud check on background thread to avoid blocking main
+        let iCloudURL = await Task.detached(priority: .utility) {
+            FileManager.default.url(forUbiquityContainerIdentifier: nil)?
+                .appendingPathComponent("Documents")
+        }.value
+        
+        await MainActor.run {
+            if let url = iCloudURL {
+                _documentsURL = url
+                print("Using iCloud container: \(url.path)")
+                isUsingLocalFallback = false
+            } else {
+                print("iCloud not available, using local Documents directory")
+                isUsingLocalFallback = true
+            }
+            setupContainer()
+            isInitializing = false
+        }
     }
     
     private func setupContainer() {

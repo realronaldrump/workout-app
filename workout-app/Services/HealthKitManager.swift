@@ -441,6 +441,18 @@ class HealthKitManager: ObservableObject {
         let trimmed = duration.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !trimmed.isEmpty else { return nil }
 
+        // Handle HH:mm:ss or H:mm:ss format (e.g., "01:15:00" or "1:15:00")
+        if trimmed.contains(":") {
+            let parts = trimmed.split(separator: ":").compactMap { Int($0) }
+            if parts.count == 3 {
+                // HH:mm:ss
+                return parts[0] * 60 + parts[1]
+            } else if parts.count == 2 {
+                // mm:ss
+                return parts[0]
+            }
+        }
+
         var hours = 0
         var minutes = 0
         var matched = false
@@ -512,7 +524,7 @@ class HealthKitManager: ObservableObject {
             return nil
         }
 
-        let predicate = HKQuery.predicateForSamples(withStart: start, end: end, options: .strictStartDate)
+        let predicate = HKQuery.predicateForSamples(withStart: start, end: end, options: [])
 
         return try await withCheckedThrowingContinuation { continuation in
             let query = HKStatisticsQuery(
@@ -551,7 +563,7 @@ class HealthKitManager: ObservableObject {
             throw HealthKitError.notAvailable
         }
 
-        let predicate = HKQuery.predicateForSamples(withStart: start, end: end, options: .strictStartDate)
+        let predicate = HKQuery.predicateForSamples(withStart: start, end: end, options: [])
         let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
 
         return try await withCheckedThrowingContinuation { continuation in
@@ -591,7 +603,7 @@ class HealthKitManager: ObservableObject {
             return []
         }
 
-        let predicate = HKQuery.predicateForSamples(withStart: start, end: end, options: .strictStartDate)
+        let predicate = HKQuery.predicateForSamples(withStart: start, end: end, options: [])
         let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: ascending)
 
         return try await withCheckedThrowingContinuation { continuation in

@@ -24,16 +24,18 @@ class CSVParser {
         
         for line in dataLines {
             let components = parseCSVLine(line)
-            guard components.count >= 10 else { continue }
+            guard components.count >= 9 else { continue }
             
             guard let date = dateFormatter.date(from: components[0]),
                   let setOrder = Int(components[4]),
                   let weight = Double(components[5]),
-                  let reps = Int(components[6].replacingOccurrences(of: ".0", with: "")),
-                  let distance = Double(components[7]),
-                  let seconds = Double(components[8]) else {
+                  let reps = Int(components[6].replacingOccurrences(of: ".0", with: "")) else {
                 continue
             }
+            
+            // Distance and seconds are optional - default to 0 if empty or invalid
+            let distance = Double(components[7]) ?? 0.0
+            let seconds = Double(components[8]) ?? 0.0
             
             let workoutSet = WorkoutSet(
                 date: date,

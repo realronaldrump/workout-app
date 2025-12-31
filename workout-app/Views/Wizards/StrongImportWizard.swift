@@ -469,7 +469,7 @@ struct StrongImportWizard: View {
             }
             importPhase = .parsing
             
-            Task {
+            Task.detached(priority: .userInitiated) {
                 do {
                     let sets = try CSVParser.parseStrongWorkoutsCSV(from: fileData)
                     await MainActor.run {

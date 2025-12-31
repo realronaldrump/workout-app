@@ -9,9 +9,13 @@ class WorkoutDataManager: ObservableObject {
     @Published var error: String?
     
     func processWorkoutSets(_ sets: [WorkoutSet]) {
-        // Group sets by date and workout name
+        // Group sets by date (year-month-day-hour) and workout name
+        // This tolerates variations within the same hour window
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd-HH"
+        
         let groupedByWorkout = Dictionary(grouping: sets) { set in
-            "\(set.date.timeIntervalSince1970)-\(set.workoutName)"
+            "\(dateFormatter.string(from: set.date))-\(set.workoutName)"
         }
         
         var processedWorkouts: [Workout] = []
