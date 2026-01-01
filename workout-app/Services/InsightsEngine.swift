@@ -17,7 +17,7 @@ class InsightsEngine: ObservableObject {
     func generateInsights() async {
         // Capture snapshot of data to pass to background tasks
         let workoutsSnapshot = dataManager.workouts
-        let historySnapshot = workoutsSnapshot.flatMap { $0.exercises } // Simplified for specific usage if needed, or just pass workouts
+        let muscleGroupMappings = ExerciseMetadataManager.shared.muscleGroupMappings
         
         // Run analysis in parallel
         let newInsights = await Task.detached(priority: .userInitiated) {
@@ -34,7 +34,7 @@ class InsightsEngine: ObservableObject {
                 
                 // Muscle Balance
                 group.addTask {
-                    if let balance = self.analyzeMuscleBalance(in: workoutsSnapshot) {
+                    if let balance = self.analyzeMuscleBalance(in: workoutsSnapshot, mappings: muscleGroupMappings) {
                         return [balance]
                     }
                     return []
@@ -208,9 +208,8 @@ class InsightsEngine: ObservableObject {
     
     // MARK: - Muscle Balance Analysis
     
-    private nonisolated func analyzeMuscleBalance(in workouts: [Workout]) -> Insight? {
-        // ExerciseMetadataManager.shared is likely thread safe or we assume it is immutable for read
-        let muscleGroups = self.categorizeMuscleGroups()
+    private nonisolated func analyzeMuscleBalance(in workouts: [Workout], mappings: [String: MuscleGroup]) -> Insight? {
+        let muscleGroups = mappings
         
         guard !muscleGroups.isEmpty else { return nil }
         
@@ -405,10 +404,6 @@ class InsightsEngine: ObservableObject {
     private nonisolated func calculateOneRepMax(weight: Double, reps: Int) -> Double {
         guard reps > 0 else { return weight }
         return weight * (1 + 0.0333 * Double(reps))
-    }
-    
-    private nonisolated func categorizeMuscleGroups() -> [String: MuscleGroup] {
-        return ExerciseMetadataManager.shared.muscleGroupMappings
     }
 }
 

@@ -1,7 +1,7 @@
 import Foundation
 
 class CSVParser {
-    static func parseStrongWorkoutsCSV(from data: Data) throws -> [WorkoutSet] {
+    nonisolated static func parseStrongWorkoutsCSV(from data: Data) throws -> [WorkoutSet] {
         guard let csvString = String(data: data, encoding: .utf8) else {
             throw CSVParserError.invalidData
         }

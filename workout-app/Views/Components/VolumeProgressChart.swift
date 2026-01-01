@@ -90,7 +90,7 @@ struct VolumeProgressChart: View {
                     }
             )
         }
-        .onChange(of: selectedMetric) { _ in
+        .onChange(of: selectedMetric) { _, _ in
             Haptics.selection()
         }
     }

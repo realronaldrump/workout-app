@@ -34,7 +34,6 @@ struct ConsistencyView: View {
                 }
                 
                 CalendarHeatmap(workouts: workouts)
-                    .frame(height: 120)
             }
             .padding(Theme.Spacing.lg)
             .glassBackground(elevation: 2)

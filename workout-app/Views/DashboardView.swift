@@ -138,7 +138,7 @@ struct DashboardView: View {
         .refreshable {
             loadLatestWorkoutData()
         }
-        .onChange(of: dataManager.workouts.count) { _ in
+        .onChange(of: dataManager.workouts.count) { _, _ in
             refreshStats()
             triggerAutoHealthSync()
         }
@@ -526,7 +526,7 @@ struct DashboardView: View {
 
     private func loadLatestWorkoutData() {
         Task.detached(priority: .userInitiated) {
-            let files = iCloudManager.listWorkoutFiles()
+            let files = await iCloudManager.listWorkoutFiles()
                 .sorted { url1, url2 in
                     let date1 = (try? url1.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? Date.distantPast
                     let date2 = (try? url2.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? Date.distantPast
@@ -539,7 +539,7 @@ struct DashboardView: View {
                     let sets = try CSVParser.parseStrongWorkoutsCSV(from: data)
                     
                     // Switch back to MainActor to update the view model
-                    await MainActor.run {
+                    _ = await MainActor.run {
                         // We will make processWorkoutSets async next, but for now calling it inside a Task structure
                         // If processWorkoutSets becomes async, we'll await it.
                         // For this step, we are assuming it might still be synchronous or we will update it shortly.
