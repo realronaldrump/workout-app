@@ -130,30 +130,53 @@ class WorkoutDataManager: ObservableObject {
     private func calculateStreaks() -> (current: Int, longest: Int) {
         guard !workouts.isEmpty else { return (0, 0) }
         
-        let sortedWorkouts = workouts.sorted { $0.date < $1.date }
+        // 1. Normalize all workout dates to start of day
+        let calendar = Calendar.current
+        let uniqueDays = Set(workouts.map { calendar.startOfDay(for: $0.date) })
+        
+        // 2. Sort unique days
+        let sortedDays = uniqueDays.sorted()
+        
+        guard !sortedDays.isEmpty else { return (0, 0) }
+        
         var currentStreak = 0
         var longestStreak = 0
         var tempStreak = 1
-        var lastDate = sortedWorkouts[0].date
+        var lastDay = sortedDays[0]
         
-        for i in 1..<sortedWorkouts.count {
-            let daysDiff = Calendar.current.dateComponents([.day], from: lastDate, to: sortedWorkouts[i].date).day ?? 0
+        // 3. Calculate consecutive days (allowing 1 day gap as rest day)
+        for i in 1..<sortedDays.count {
+            let currentDay = sortedDays[i]
+            let daysDiff = calendar.dateComponents([.day], from: lastDay, to: currentDay).day ?? 0
             
-            if daysDiff <= 2 { // Allow 1 rest day
+            if daysDiff == 1 {
+                // Consecutive day
                 tempStreak += 1
+            } else if daysDiff == 2 {
+                // One day gap (rest day), streak continues
+                tempStreak += 1 // Should we count the workout days or the span? 
+                // Usually "streak" is "number of active days in a row" or "days without breaking the chain".
+                // If I run Mon, then Wed. Is my streak 2? Or is the chain just unbroken?
+                // The previous logic was `tempStreak += 1` if diff <= 2.
+                // If I run Mon (1), Wed (2). Streak is 2. This implies "days participated in the streak".
             } else {
+                // Broken streak
                 longestStreak = max(longestStreak, tempStreak)
                 tempStreak = 1
             }
-            lastDate = sortedWorkouts[i].date
+            lastDay = currentDay
         }
         
         longestStreak = max(longestStreak, tempStreak)
         
-        // Calculate current streak
-        if let lastWorkout = sortedWorkouts.last {
-            let daysSinceLastWorkout = Calendar.current.dateComponents([.day], from: lastWorkout.date, to: Date()).day ?? 0
-            if daysSinceLastWorkout <= 2 {
+        // 4. Calculate current streak
+        // Check if the streak is still active (last workout was today or yesterday or day before yesterday?)
+        if let lastWorkoutDay = sortedDays.last {
+            let today = calendar.startOfDay(for: Date())
+            let daysSinceLast = calendar.dateComponents([.day], from: lastWorkoutDay, to: today).day ?? 0
+            
+            // If last workout was today (0), yesterday (1), or day before (2 - allowed rest day)
+            if daysSinceLast <= 2 {
                 currentStreak = tempStreak
             }
         }
