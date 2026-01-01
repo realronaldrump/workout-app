@@ -8,40 +8,50 @@ class WorkoutDataManager: ObservableObject {
     @Published var isLoading = false
     @Published var error: String?
     
-    func processWorkoutSets(_ sets: [WorkoutSet]) {
-        // Group sets by date (year-month-day-hour) and workout name
-        // This tolerates variations within the same hour window
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd-HH"
-        
-        let groupedByWorkout = Dictionary(grouping: sets) { set in
-            "\(dateFormatter.string(from: set.date))-\(set.workoutName)"
-        }
-        
-        var processedWorkouts: [Workout] = []
-        
-        for (_, workoutSets) in groupedByWorkout {
-            guard let firstSet = workoutSets.first else { continue }
+    nonisolated func processWorkoutSets(_ sets: [WorkoutSet]) async {
+        // Run heavy grouping logic on a background thread
+        let processedWorkouts = await Task.detached(priority: .userInitiated) {
+            // Group sets by date (year-month-day-hour) using Calendar components
+            // This is significantly faster than DateFormatter
+            let calendar = Calendar.current
             
-            // Group by exercise within workout
-            let groupedByExercise = Dictionary(grouping: workoutSets) { $0.exerciseName }
-            
-            var exercises: [Exercise] = []
-            for (exerciseName, exerciseSets) in groupedByExercise {
-                let sortedSets = exerciseSets.sorted { $0.setOrder < $1.setOrder }
-                exercises.append(Exercise(name: exerciseName, sets: sortedSets))
+            let groupedByWorkout = Dictionary(grouping: sets) { set -> String in
+                let components = calendar.dateComponents([.year, .month, .day, .hour], from: set.date)
+                // Unique key: YYYY-MM-DD-HH-WorkoutName
+                return "\(components.year!)-\(components.month!)-\(components.day!)-\(components.hour!)-\(set.workoutName)"
             }
             
-            let workout = Workout(
-                date: workoutSets.map { $0.date }.min() ?? firstSet.date,
-                name: firstSet.workoutName,
-                duration: firstSet.duration,
-                exercises: exercises
-            )
-            processedWorkouts.append(workout)
-        }
+            var workouts: [Workout] = []
+            
+            for (_, workoutSets) in groupedByWorkout {
+                guard let firstSet = workoutSets.first else { continue }
+                
+                // Group by exercise within workout
+                let groupedByExercise = Dictionary(grouping: workoutSets) { $0.exerciseName }
+                
+                var exercises: [Exercise] = []
+                for (exerciseName, exerciseSets) in groupedByExercise {
+                    let sortedSets = exerciseSets.sorted { $0.setOrder < $1.setOrder }
+                    exercises.append(Exercise(name: exerciseName, sets: sortedSets))
+                }
+                
+                let workout = Workout(
+                    date: workoutSets.map { $0.date }.min() ?? firstSet.date,
+                    name: firstSet.workoutName,
+                    duration: firstSet.duration,
+                    exercises: exercises
+                )
+                workouts.append(workout)
+            }
+            
+            return workouts.sorted { $0.date > $1.date }
+        }.value
         
-        self.workouts = processedWorkouts.sorted { $0.date > $1.date }
+        // Update UI on MainActor
+        await MainActor.run {
+            self.workouts = processedWorkouts
+            self.isLoading = false
+        }
     }
     
     func getExerciseHistory(for exerciseName: String) -> [(date: Date, sets: [WorkoutSet])] {

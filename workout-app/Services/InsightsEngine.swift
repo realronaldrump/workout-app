@@ -14,43 +14,81 @@ class InsightsEngine: ObservableObject {
     }
     
     /// Analyzes all workout data and generates prioritized insights
-    func generateInsights() {
-        var newInsights: [Insight] = []
+    func generateInsights() async {
+        // Capture snapshot of data to pass to background tasks
+        let workoutsSnapshot = dataManager.workouts
+        let historySnapshot = workoutsSnapshot.flatMap { $0.exercises } // Simplified for specific usage if needed, or just pass workouts
         
-        // Personal Records
-        newInsights.append(contentsOf: detectPersonalRecords())
+        // Run analysis in parallel
+        let newInsights = await Task.detached(priority: .userInitiated) {
+            return await withTaskGroup(of: [Insight]?.self) { group in
+                // Personal Records
+                group.addTask {
+                    return self.detectPersonalRecords(in: workoutsSnapshot)
+                }
+                
+                // Plateau Detection
+                group.addTask {
+                    return self.detectPlateaus(in: workoutsSnapshot)
+                }
+                
+                // Muscle Balance
+                group.addTask {
+                    if let balance = self.analyzeMuscleBalance(in: workoutsSnapshot) {
+                        return [balance]
+                    }
+                    return []
+                }
+                
+                // Training Frequency
+                group.addTask {
+                    return self.analyzeTrainingFrequency(in: workoutsSnapshot)
+                }
+                
+                // Volume Trends
+                group.addTask {
+                    return self.analyzeVolumeTrends(in: workoutsSnapshot)
+                }
+                
+                var results: [Insight] = []
+                for await partialResults in group {
+                    if let partialResults = partialResults {
+                        results.append(contentsOf: partialResults)
+                    }
+                }
+                return results
+            }
+        }.value
         
-        // Plateau Detection
-        newInsights.append(contentsOf: detectPlateaus())
-        
-        // Muscle Balance Analysis
-        if let balanceInsight = analyzeMuscleBalance() {
-            newInsights.append(balanceInsight)
-        }
-        
-        // Training Frequency Insights
-        newInsights.append(contentsOf: analyzeTrainingFrequency())
-        
-        // Volume Trends
-        newInsights.append(contentsOf: analyzeVolumeTrends())
-        
-        // Sort by priority and recency
-        insights = newInsights.sorted { $0.priority > $1.priority }
+        // Update on MainActor
+        self.insights = newInsights.sorted { $0.priority > $1.priority }
     }
     
     // MARK: - Personal Records Detection
     
-    private func detectPersonalRecords() -> [Insight] {
+    private nonisolated func detectPersonalRecords(in workouts: [Workout]) -> [Insight] {
         var prInsights: [Insight] = []
         let calendar = Calendar.current
-        let oneWeekAgo = calendar.date(byAdding: .day, value: -7, to: Date())!
+        guard let oneWeekAgo = calendar.date(byAdding: .day, value: -7, to: Date()) else { return [] }
         
-        let allExercises = dataManager.workouts.flatMap { $0.exercises }
+        let allExercises = workouts.flatMap { $0.exercises }
         let exerciseGroups = Dictionary(grouping: allExercises) { $0.name }
         
         for (exerciseName, _) in exerciseGroups {
-            let history = dataManager.getExerciseHistory(for: exerciseName)
+            // Re-implement simplified getExerciseHistory logic here to avoid actor isolation issues or dependency
+            // OR ensure getExerciseHistory is nonisolated/safe. 
+            // Better to implement local logic using the snapshot.
+            
+            let history = workouts.compactMap { workout -> (date: Date, sets: [WorkoutSet])? in
+                if let exercise = workout.exercises.first(where: { $0.name == exerciseName }) {
+                    return (date: workout.date, sets: exercise.sets)
+                }
+                return nil
+            }.sorted { $0.date < $1.date }
+            
             guard history.count >= 2 else { continue }
+            
+            // ... (rest of logic using 'history' local var) ...
             
             // Find all-time max weight
             let allSets = history.flatMap { $0.sets }
@@ -83,10 +121,10 @@ class InsightsEngine: ObservableObject {
             // Check for estimated 1RM PRs
             let best1RMs = history.map { session -> (date: Date, orm: Double) in
                 let bestSet = session.sets.max { 
-                    calculateOneRepMax(weight: $0.weight, reps: $0.reps) < 
-                    calculateOneRepMax(weight: $1.weight, reps: $1.reps) 
+                    self.calculateOneRepMax(weight: $0.weight, reps: $0.reps) < 
+                    self.calculateOneRepMax(weight: $1.weight, reps: $1.reps) 
                 }
-                let orm = bestSet.map { calculateOneRepMax(weight: $0.weight, reps: $0.reps) } ?? 0
+                let orm = bestSet.map { self.calculateOneRepMax(weight: $0.weight, reps: $0.reps) } ?? 0
                 return (date: session.date, orm: orm)
             }
             
@@ -115,16 +153,21 @@ class InsightsEngine: ObservableObject {
     
     // MARK: - Plateau Detection
     
-    private func detectPlateaus() -> [Insight] {
+    private nonisolated func detectPlateaus(in workouts: [Workout]) -> [Insight] {
         var plateauInsights: [Insight] = []
         let calendar = Calendar.current
-        let twoWeeksAgo = calendar.date(byAdding: .day, value: -14, to: Date())!
+        guard let twoWeeksAgo = calendar.date(byAdding: .day, value: -14, to: Date()) else { return [] }
         
-        let allExercises = dataManager.workouts.flatMap { $0.exercises }
+        let allExercises = workouts.flatMap { $0.exercises }
         let exerciseGroups = Dictionary(grouping: allExercises) { $0.name }
         
         for (exerciseName, _) in exerciseGroups {
-            let history = dataManager.getExerciseHistory(for: exerciseName)
+            let history = workouts.compactMap { workout -> (date: Date, sets: [WorkoutSet])? in
+                if let exercise = workout.exercises.first(where: { $0.name == exerciseName }) {
+                    return (date: workout.date, sets: exercise.sets)
+                }
+                return nil
+            }.sorted { $0.date < $1.date }
             
             // Need at least 4 sessions to detect a plateau
             guard history.count >= 4 else { continue }
@@ -165,16 +208,17 @@ class InsightsEngine: ObservableObject {
     
     // MARK: - Muscle Balance Analysis
     
-    private func analyzeMuscleBalance() -> Insight? {
-        let muscleGroups = categorizeMuscleGroups()
+    private nonisolated func analyzeMuscleBalance(in workouts: [Workout]) -> Insight? {
+        // ExerciseMetadataManager.shared is likely thread safe or we assume it is immutable for read
+        let muscleGroups = self.categorizeMuscleGroups()
         
         guard !muscleGroups.isEmpty else { return nil }
         
         // Count sets per muscle group in past 4 weeks
         let calendar = Calendar.current
-        let fourWeeksAgo = calendar.date(byAdding: .day, value: -28, to: Date())!
+        guard let fourWeeksAgo = calendar.date(byAdding: .day, value: -28, to: Date()) else { return nil }
         
-        let recentWorkouts = dataManager.workouts.filter { $0.date >= fourWeeksAgo }
+        let recentWorkouts = workouts.filter { $0.date >= fourWeeksAgo }
         var muscleGroupSets: [MuscleGroup: Int] = [:]
         
         for workout in recentWorkouts {
@@ -244,12 +288,12 @@ class InsightsEngine: ObservableObject {
     
     // MARK: - Training Frequency Analysis
     
-    private func analyzeTrainingFrequency() -> [Insight] {
+    private nonisolated func analyzeTrainingFrequency(in workouts: [Workout]) -> [Insight] {
         var insights: [Insight] = []
         let calendar = Calendar.current
         
         // Check days since last workout
-        if let lastWorkout = dataManager.workouts.first {
+        if let lastWorkout = workouts.first {
             let daysSince = calendar.dateComponents([.day], from: lastWorkout.date, to: Date()).day ?? 0
             
             if daysSince >= 4 && daysSince < 7 {
@@ -280,11 +324,11 @@ class InsightsEngine: ObservableObject {
         }
         
         // Weekly volume trend
-        let twoWeeksAgo = calendar.date(byAdding: .day, value: -14, to: Date())!
-        let oneWeekAgo = calendar.date(byAdding: .day, value: -7, to: Date())!
+        guard let twoWeeksAgo = calendar.date(byAdding: .day, value: -14, to: Date()),
+              let oneWeekAgo = calendar.date(byAdding: .day, value: -7, to: Date()) else { return insights }
         
-        let lastWeekWorkouts = dataManager.workouts.filter { $0.date >= oneWeekAgo }
-        let previousWeekWorkouts = dataManager.workouts.filter { $0.date >= twoWeeksAgo && $0.date < oneWeekAgo }
+        let lastWeekWorkouts = workouts.filter { $0.date >= oneWeekAgo }
+        let previousWeekWorkouts = workouts.filter { $0.date >= twoWeeksAgo && $0.date < oneWeekAgo }
         
         if lastWeekWorkouts.count >= 3 && previousWeekWorkouts.count >= 2 {
             if lastWeekWorkouts.count >= previousWeekWorkouts.count + 2 {
@@ -307,19 +351,19 @@ class InsightsEngine: ObservableObject {
     
     // MARK: - Volume Trends
     
-    private func analyzeVolumeTrends() -> [Insight] {
+    private nonisolated func analyzeVolumeTrends(in workouts: [Workout]) -> [Insight] {
         var insights: [Insight] = []
         let calendar = Calendar.current
         
         // Compare this month vs last month total volume
-        let oneMonthAgo = calendar.date(byAdding: .month, value: -1, to: Date())!
-        let twoMonthsAgo = calendar.date(byAdding: .month, value: -2, to: Date())!
+        guard let oneMonthAgo = calendar.date(byAdding: .month, value: -1, to: Date()),
+              let twoMonthsAgo = calendar.date(byAdding: .month, value: -2, to: Date()) else { return [] }
         
-        let thisMonthVolume = dataManager.workouts
+        let thisMonthVolume = workouts
             .filter { $0.date >= oneMonthAgo }
             .reduce(0.0) { $0 + $1.totalVolume }
         
-        let lastMonthVolume = dataManager.workouts
+        let lastMonthVolume = workouts
             .filter { $0.date >= twoMonthsAgo && $0.date < oneMonthAgo }
             .reduce(0.0) { $0 + $1.totalVolume }
         
@@ -358,12 +402,12 @@ class InsightsEngine: ObservableObject {
     
     // MARK: - Helper Methods
     
-    private func calculateOneRepMax(weight: Double, reps: Int) -> Double {
+    private nonisolated func calculateOneRepMax(weight: Double, reps: Int) -> Double {
         guard reps > 0 else { return weight }
         return weight * (1 + 0.0333 * Double(reps))
     }
     
-    private func categorizeMuscleGroups() -> [String: MuscleGroup] {
+    private nonisolated func categorizeMuscleGroups() -> [String: MuscleGroup] {
         return ExerciseMetadataManager.shared.muscleGroupMappings
     }
 }

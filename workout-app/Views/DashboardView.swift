@@ -126,10 +126,14 @@ struct DashboardView: View {
             QuickStartView(exerciseName: quickStartExercise)
         }
         .onAppear {
-            loadLatestWorkoutData()
-            refreshStats()
-            healthManager.refreshAuthorizationStatus()
-            triggerAutoHealthSync()
+            if dataManager.workouts.isEmpty {
+                // Offload file reading to background to prevent main thread hitch
+                loadLatestWorkoutData()
+            } else {
+                // Just refresh these lightweight checks
+                healthManager.refreshAuthorizationStatus()
+                triggerAutoHealthSync()
+            }
         }
         .refreshable {
             loadLatestWorkoutData()
@@ -521,23 +525,35 @@ struct DashboardView: View {
     }
 
     private func loadLatestWorkoutData() {
-        let files = iCloudManager.listWorkoutFiles()
-            .sorted { url1, url2 in
-                let date1 = (try? url1.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? Date.distantPast
-                let date2 = (try? url2.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? Date.distantPast
-                return date1 > date2
-            }
-
-        if let latestFile = files.first {
-            do {
-                let data = try Data(contentsOf: latestFile)
-                let sets = try CSVParser.parseStrongWorkoutsCSV(from: data)
-                Task {
-                    dataManager.processWorkoutSets(sets)
-                    refreshStats()
+        Task.detached(priority: .userInitiated) {
+            let files = iCloudManager.listWorkoutFiles()
+                .sorted { url1, url2 in
+                    let date1 = (try? url1.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? Date.distantPast
+                    let date2 = (try? url2.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? Date.distantPast
+                    return date1 > date2
                 }
-            } catch {
-                print("Failed to load workout data: \(error)")
+
+            if let latestFile = files.first {
+                do {
+                    let data = try Data(contentsOf: latestFile)
+                    let sets = try CSVParser.parseStrongWorkoutsCSV(from: data)
+                    
+                    // Switch back to MainActor to update the view model
+                    await MainActor.run {
+                        // We will make processWorkoutSets async next, but for now calling it inside a Task structure
+                        // If processWorkoutSets becomes async, we'll await it.
+                        // For this step, we are assuming it might still be synchronous or we will update it shortly.
+                        // Actually, looking at the plan, we are making processWorkoutSets async next.
+                        // So let's prepare for that.
+                        
+                        Task {
+                             await dataManager.processWorkoutSets(sets)
+                             refreshStats()
+                        }
+                    }
+                } catch {
+                    print("Failed to load workout data: \(error)")
+                }
             }
         }
     }
@@ -548,7 +564,9 @@ struct DashboardView: View {
         } else {
             stats = dataManager.calculateStats()
         }
-        insightsEngine.generateInsights()
+        Task {
+            await insightsEngine.generateInsights()
+        }
     }
 
     private func triggerAutoHealthSync() {
