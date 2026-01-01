@@ -272,33 +272,6 @@ struct PRMarkerView: View {
     }
 }
 
-// MARK: - Drill Down Indicator
-
-struct DrillDownRow<Content: View>: View {
-    let content: Content
-    let action: () -> Void
-    
-    init(@ViewBuilder content: () -> Content, action: @escaping () -> Void) {
-        self.content = content()
-        self.action = action
-    }
-    
-    var body: some View {
-        Button(action: action) {
-            HStack {
-                content
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundColor(Theme.Colors.textTertiary)
-            }
-            .padding(Theme.Spacing.lg)
-            .glassBackground()
-        }
-        .buttonStyle(PlainButtonStyle())
-    }
-}
-
 // MARK: - MuscleGroup Extensions
 
 extension MuscleGroup {
