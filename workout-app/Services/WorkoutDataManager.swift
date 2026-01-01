@@ -195,4 +195,9 @@ class WorkoutDataManager: ObservableObject {
         }
         return "\(avgMinutes)m"
     }
+    func clearAllData() {
+        self.workouts = []
+        self.isLoading = false
+        self.error = nil
+    }
 }

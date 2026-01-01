@@ -324,6 +324,29 @@ class HealthKitManager: ObservableObject {
         lastSyncDate = userDefaults.object(forKey: lastSyncKey) as? Date
     }
     
+    /// Clears all health data from memory and disk
+    func clearAllData() {
+        // Clear memory
+        healthDataStore.removeAll()
+        lastSyncDate = nil
+        syncProgress = 0
+        syncedWorkoutsCount = 0
+        syncError = nil
+        
+        // Clear persistence
+        cleanupLegacyUserDefaults()
+        userDefaults.removeObject(forKey: lastSyncKey)
+        
+        do {
+            if FileManager.default.fileExists(atPath: dataFileURL.path) {
+                try FileManager.default.removeItem(at: dataFileURL)
+                print("Deleted health data store file")
+            }
+        } catch {
+            print("Failed to delete health data file: \(error)")
+        }
+    }
+    
     // MARK: - Sync Methods
     
     @Published var syncedWorkoutsCount: Int = 0

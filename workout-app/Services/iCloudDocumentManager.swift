@@ -96,6 +96,23 @@ class iCloudDocumentManager: ObservableObject {
     func deleteFile(at url: URL) throws {
         try FileManager.default.removeItem(at: url)
     }
+    
+    func deleteAllWorkoutFiles() async {
+        let files = listWorkoutFiles()
+        for file in files {
+            do {
+                try deleteFile(at: file)
+                print("Deleted file: \(file.lastPathComponent)")
+            } catch {
+                print("Failed to delete file \(file.lastPathComponent): \(error)")
+            }
+        }
+        
+        // Also clear imported data from memory if needed
+        await MainActor.run {
+            self.importedData = nil
+        }
+    }
 }
 
 enum iCloudError: LocalizedError {

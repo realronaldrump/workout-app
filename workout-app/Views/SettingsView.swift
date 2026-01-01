@@ -235,10 +235,16 @@ struct SettingsView: View {
         .alert("Clear All Data", isPresented: $showingDeleteAlert) {
             Button("Cancel", role: .cancel) {}
             Button("Clear", role: .destructive) {
-                dataManager.workouts.removeAll()
+                Task {
+                    await iCloudManager.deleteAllWorkoutFiles()
+                    await MainActor.run {
+                        healthManager.clearAllData()
+                        dataManager.clearAllData()
+                    }
+                }
             }
         } message: {
-            Text("This will remove all workout data from the app. Your CSV files in iCloud will not be affected.")
+            Text("WARNING: This will permanently delete all imported CSV files and health data from your device. This action cannot be undone.")
         }
         .onAppear {
             healthManager.refreshAuthorizationStatus()
