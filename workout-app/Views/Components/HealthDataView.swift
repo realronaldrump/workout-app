@@ -34,7 +34,19 @@ struct HealthDataView: View {
                 if !healthData.heartRateSamples.isEmpty {
                     heartRateSection
                 }
-                
+
+                if let sleep = healthData.sleepSummary {
+                    sleepSection(summary: sleep)
+                }
+
+                if hasDailyActivityMetrics {
+                    dailyActivitySection
+                }
+
+                if hasCardioMetrics {
+                    cardioFitnessSection
+                }
+
                 // Additional Metrics
                 if hasAdditionalMetrics {
                     additionalMetricsSection
@@ -209,7 +221,23 @@ struct HealthDataView: View {
         healthData.appleWorkoutType != nil ||
         healthData.bodyMass != nil ||
         healthData.restingHeartRate != nil ||
-        healthData.avgPower != nil
+        healthData.avgPower != nil ||
+        healthData.bodyFatPercentage != nil
+    }
+
+    private var hasDailyActivityMetrics: Bool {
+        healthData.dailyActiveEnergy != nil ||
+        healthData.dailyBasalEnergy != nil ||
+        healthData.dailySteps != nil ||
+        healthData.dailyExerciseMinutes != nil ||
+        healthData.dailyMoveMinutes != nil ||
+        healthData.dailyStandMinutes != nil
+    }
+
+    private var hasCardioMetrics: Bool {
+        healthData.vo2Max != nil ||
+        healthData.heartRateRecovery != nil ||
+        healthData.walkingHeartRateAverage != nil
     }
     
     private var additionalMetricsSection: some View {
@@ -265,6 +293,87 @@ struct HealthDataView: View {
                         value: String(format: "%.1f%%", bodyFat * 100),
                         icon: "percent"
                     )
+                }
+            }
+        }
+    }
+
+    private func sleepSection(summary: SleepSummary) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            Text("Sleep (Night Before)")
+                .font(Theme.Typography.subheadline)
+                .foregroundColor(Theme.Colors.textSecondary)
+
+            HStack(spacing: Theme.Spacing.xl) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(String(format: "%.1f", summary.totalHours))
+                        .font(Theme.Typography.number)
+                        .foregroundColor(Theme.Colors.textPrimary)
+                    Text("hours asleep")
+                        .font(Theme.Typography.caption)
+                        .foregroundColor(Theme.Colors.textSecondary)
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(formatDuration(summary.inBed))
+                        .font(Theme.Typography.subheadline)
+                        .foregroundColor(Theme.Colors.textPrimary)
+                    Text("time in bed")
+                        .font(Theme.Typography.caption)
+                        .foregroundColor(Theme.Colors.textSecondary)
+                }
+            }
+
+            SleepStageStrip(summary: summary)
+        }
+        .padding(Theme.Spacing.lg)
+        .glassBackground(elevation: 2)
+    }
+
+    private var dailyActivitySection: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            Text("Daily Activity")
+                .font(Theme.Typography.subheadline)
+                .foregroundColor(Theme.Colors.textSecondary)
+
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: Theme.Spacing.md) {
+                if let energy = healthData.dailyActiveEnergy {
+                    metricCard(title: "Active Energy", value: "\(Int(energy))", unit: "kcal", icon: "flame.fill", color: .orange)
+                }
+                if let basal = healthData.dailyBasalEnergy {
+                    metricCard(title: "Resting Energy", value: "\(Int(basal))", unit: "kcal", icon: "leaf.fill", color: .blue)
+                }
+                if let steps = healthData.dailySteps {
+                    metricCard(title: "Steps", value: "\(steps)", unit: "", icon: "shoeprints.fill", color: .teal)
+                }
+                if let exercise = healthData.dailyExerciseMinutes {
+                    metricCard(title: "Exercise", value: "\(Int(exercise))", unit: "min", icon: "figure.run", color: .green)
+                }
+                if let move = healthData.dailyMoveMinutes {
+                    metricCard(title: "Move", value: "\(Int(move))", unit: "min", icon: "figure.walk", color: .blue)
+                }
+                if let stand = healthData.dailyStandMinutes {
+                    metricCard(title: "Stand", value: "\(Int(stand))", unit: "min", icon: "figure.stand", color: .purple)
+                }
+            }
+        }
+    }
+
+    private var cardioFitnessSection: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            Text("Cardio Fitness")
+                .font(Theme.Typography.subheadline)
+                .foregroundColor(Theme.Colors.textSecondary)
+
+            VStack(spacing: Theme.Spacing.sm) {
+                if let vo2 = healthData.vo2Max {
+                    additionalMetricRow(label: "VO2 Max", value: String(format: "%.1f", vo2), icon: "wind")
+                }
+                if let recovery = healthData.heartRateRecovery {
+                    additionalMetricRow(label: "HR Recovery", value: "\(Int(recovery)) bpm", icon: "arrow.down.heart")
+                }
+                if let walking = healthData.walkingHeartRateAverage {
+                    additionalMetricRow(label: "Walking HR Avg", value: "\(Int(walking)) bpm", icon: "figure.walk")
                 }
             }
         }
@@ -479,6 +588,51 @@ struct HeartRateZone: Identifiable {
                 return ratio >= lower && ratio < upper
             }.count
             return HeartRateZone(label: label, color: color, fraction: total > 0 ? Double(count) / total : 0)
+        }
+    }
+}
+
+struct SleepStageStrip: View {
+    let summary: SleepSummary
+
+    private var stages: [(SleepStage, Double)] {
+        let stages = summary.stageDurations
+        let ordered: [SleepStage] = [.deep, .core, .rem, .awake]
+        let total = max(ordered.reduce(0) { $0 + (stages[$1] ?? 0) }, 1)
+        return ordered.map { stage in
+            let duration = stages[stage] ?? 0
+            return (stage, duration / total)
+        }
+    }
+
+    var body: some View {
+        GeometryReader { geometry in
+            HStack(spacing: 4) {
+                ForEach(stages, id: \.0) { stage, fraction in
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(stageColor(stage).opacity(0.85))
+                        .frame(width: max(6, geometry.size.width * fraction))
+                        .overlay(
+                            Text(stage.label)
+                                .font(Theme.Typography.caption)
+                                .foregroundColor(.white)
+                                .opacity(fraction > 0.18 ? 1 : 0),
+                            alignment: .center
+                        )
+                }
+            }
+        }
+        .frame(height: 18)
+    }
+
+    private func stageColor(_ stage: SleepStage) -> Color {
+        switch stage {
+        case .deep: return Theme.Colors.accent
+        case .core: return Theme.Colors.accentSecondary
+        case .rem: return Theme.Colors.warning
+        case .awake: return Theme.Colors.textSecondary
+        case .inBed: return Theme.Colors.textTertiary
+        case .unknown: return Theme.Colors.textTertiary
         }
     }
 }

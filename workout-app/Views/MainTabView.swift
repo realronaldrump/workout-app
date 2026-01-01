@@ -4,6 +4,7 @@ struct MainTabView: View {
     @StateObject private var dataManager = WorkoutDataManager()
     @StateObject private var iCloudManager = iCloudDocumentManager()
     @StateObject private var luminanceManager = AdaptiveLuminanceManager()
+    @StateObject private var annotationsManager = WorkoutAnnotationsManager()
     @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
     @State private var showingOnboarding = false
     
@@ -12,6 +13,7 @@ struct MainTabView: View {
             DashboardView(dataManager: dataManager, iCloudManager: iCloudManager)
         }
         .environmentObject(dataManager)
+        .environmentObject(annotationsManager)
         .tint(Theme.Colors.accent)
         .environment(\.adaptiveLuminance, luminanceManager.luminance)
         .preferredColorScheme(.dark)

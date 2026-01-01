@@ -49,6 +49,11 @@ class InsightsEngine: ObservableObject {
                 group.addTask {
                     return self.analyzeVolumeTrends(in: workoutsSnapshot)
                 }
+
+                // Effort Density
+                group.addTask {
+                    return self.analyzeEffortDensity(in: workoutsSnapshot)
+                }
                 
                 var results: [Insight] = []
                 for await partialResults in group {
@@ -156,7 +161,7 @@ class InsightsEngine: ObservableObject {
     private nonisolated func detectPlateaus(in workouts: [Workout]) -> [Insight] {
         var plateauInsights: [Insight] = []
         let calendar = Calendar.current
-        guard let twoWeeksAgo = calendar.date(byAdding: .day, value: -14, to: Date()) else { return [] }
+        guard let fourWeeksAgo = calendar.date(byAdding: .day, value: -28, to: Date()) else { return [] }
         
         let allExercises = workouts.flatMap { $0.exercises }
         let exerciseGroups = Dictionary(grouping: allExercises) { $0.name }
@@ -177,7 +182,7 @@ class InsightsEngine: ObservableObject {
             
             // Check if all sessions are within recent timeframe
             guard let oldestRecent = recentSessions.first?.date,
-                  oldestRecent >= twoWeeksAgo else { continue }
+                  oldestRecent >= fourWeeksAgo else { continue }
             
             // Calculate max weight for each session
             let maxWeights = recentSessions.map { session in
@@ -200,6 +205,32 @@ class InsightsEngine: ObservableObject {
                     actionLabel: "View History",
                     metric: firstMax
                 ))
+            }
+
+            // Estimated 1RM plateau check over 4 weeks
+            let recentHistory = history.filter { $0.date >= fourWeeksAgo }
+            let recentOrms = recentHistory.map { session -> Double in
+                let bestSet = session.sets.max {
+                    self.calculateOneRepMax(weight: $0.weight, reps: $0.reps) <
+                    self.calculateOneRepMax(weight: $1.weight, reps: $1.reps)
+                }
+                return bestSet.map { self.calculateOneRepMax(weight: $0.weight, reps: $0.reps) } ?? 0
+            }
+            if recentOrms.count >= 4, let first = recentOrms.first, let last = recentOrms.last, first > 0 {
+                let change = (last - first) / first
+                if abs(change) < 0.02 {
+                    plateauInsights.append(Insight(
+                        id: UUID(),
+                        type: .plateau,
+                        title: "1RM Flatline",
+                        message: "\(exerciseName) 1RM hasn't moved in the last month. Try a new rep range or technique tweak.",
+                        exerciseName: exerciseName,
+                        date: Date(),
+                        priority: 5,
+                        actionLabel: "View Trend",
+                        metric: last
+                    ))
+                }
             }
         }
         
@@ -397,6 +428,58 @@ class InsightsEngine: ObservableObject {
         }
         
         return insights
+    }
+
+    // MARK: - Effort Density Trends
+
+    private nonisolated func analyzeEffortDensity(in workouts: [Workout]) -> [Insight] {
+        var insights: [Insight] = []
+        let calendar = Calendar.current
+
+        guard let twoWeeksAgo = calendar.date(byAdding: .day, value: -14, to: Date()),
+              let oneWeekAgo = calendar.date(byAdding: .day, value: -7, to: Date()) else { return [] }
+
+        let lastWeek = workouts.filter { $0.date >= oneWeekAgo }
+        let previousWeek = workouts.filter { $0.date >= twoWeeksAgo && $0.date < oneWeekAgo }
+
+        let lastDensity = average(lastWeek.map { WorkoutAnalytics.effortDensity(for: $0) })
+        let previousDensity = average(previousWeek.map { WorkoutAnalytics.effortDensity(for: $0) })
+
+        guard lastDensity > 0, previousDensity > 0 else { return [] }
+
+        let change = (lastDensity - previousDensity) / previousDensity
+        if change >= 0.12 {
+            insights.append(Insight(
+                id: UUID(),
+                type: .strengthGain,
+                title: "More Efficient Sessions",
+                message: "Effort density is up \(Int(change * 100))% this week. You're packing more work into the same time.",
+                exerciseName: nil,
+                date: Date(),
+                priority: 5,
+                actionLabel: "View Breakdown",
+                metric: lastDensity
+            ))
+        } else if change <= -0.12 {
+            insights.append(Insight(
+                id: UUID(),
+                type: .warning,
+                title: "Efficiency Dip",
+                message: "Effort density fell \(Int(abs(change) * 100))% this week. Longer rest or fewer sets could be the cause.",
+                exerciseName: nil,
+                date: Date(),
+                priority: 4,
+                actionLabel: "Review Sessions",
+                metric: lastDensity
+            ))
+        }
+
+        return insights
+    }
+
+    private nonisolated func average(_ values: [Double]) -> Double {
+        guard !values.isEmpty else { return 0 }
+        return values.reduce(0, +) / Double(values.count)
     }
     
     // MARK: - Helper Methods

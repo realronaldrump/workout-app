@@ -100,6 +100,18 @@ enum SampleData {
         let workout = workouts.first ?? Workout(date: Date(), name: "Sample", duration: "45m", exercises: [])
         let start = Calendar.current.date(byAdding: .minute, value: -55, to: workout.date) ?? workout.date
         let end = workout.date
+        let sleepStart = Calendar.current.date(byAdding: .hour, value: -8, to: workout.date) ?? workout.date
+        let sleepSummary = SleepSummary(
+            totalSleep: 7.2 * 3600,
+            inBed: 8.0 * 3600,
+            stageDurations: [
+                .deep: 1.4 * 3600,
+                .core: 3.6 * 3600,
+                .rem: 2.2 * 3600
+            ],
+            start: sleepStart,
+            end: workout.date
+        )
 
         return WorkoutHealthData(
             workoutId: workout.id,
@@ -124,6 +136,16 @@ enum SampleData {
             bodyMass: 81.2,
             bodyFatPercentage: 0.18,
             bodyTemperature: 36.7,
+            sleepSummary: sleepSummary,
+            dailyActiveEnergy: 620,
+            dailyBasalEnergy: 1450,
+            dailySteps: 8400,
+            dailyExerciseMinutes: 48,
+            dailyMoveMinutes: 70,
+            dailyStandMinutes: 690,
+            vo2Max: 42.5,
+            heartRateRecovery: 28,
+            walkingHeartRateAverage: 88,
             appleWorkoutType: "Strength Training",
             appleWorkoutDuration: 3300
         )

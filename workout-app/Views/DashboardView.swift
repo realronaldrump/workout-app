@@ -18,6 +18,7 @@ struct DashboardView: View {
     @State private var showingQuickStart = false
     @State private var quickStartExercise: String?
     @State private var showingHistory = false
+    @State private var selectedMetric: MetricDrilldown?
 
     init(dataManager: WorkoutDataManager, iCloudManager: iCloudDocumentManager) {
         self.dataManager = dataManager
@@ -54,7 +55,10 @@ struct DashboardView: View {
                             MissionMetricsSection(
                                 stats: currentStats,
                                 readiness: readinessSnapshot,
-                                streakDelta: streakDelta
+                                streakDelta: streakDelta,
+                                onMetricTap: { metric in
+                                    selectedMetric = metric
+                                }
                             )
                             .padding(.horizontal, Theme.Spacing.lg)
                         } else {
@@ -105,6 +109,9 @@ struct DashboardView: View {
         }
         .navigationDestination(item: $selectedWorkout) { workout in
             WorkoutDetailView(workout: workout)
+        }
+        .navigationDestination(item: $selectedMetric) { metric in
+            MetricDetailView(type: metric, workouts: filteredWorkouts)
         }
         .sheet(isPresented: $showingImportWizard) {
             StrongImportWizard(
@@ -273,6 +280,18 @@ struct DashboardView: View {
                 .foregroundColor(Theme.Colors.textPrimary)
 
             VStack(spacing: Theme.Spacing.md) {
+                NavigationLink {
+                    PerformanceLabView(dataManager: dataManager)
+                } label: {
+                    ExplorationRow(
+                        title: "Performance Lab",
+                        subtitle: "Progress maps, correlations, drill-downs",
+                        icon: "viewfinder",
+                        tint: Theme.Colors.success
+                    )
+                }
+                .buttonStyle(PlainButtonStyle())
+
                 NavigationLink {
                     WorkoutHistoryView(workouts: dataManager.workouts)
                 } label: {
@@ -725,6 +744,7 @@ private struct MissionMetricsSection: View {
     let stats: WorkoutStats
     let readiness: ReadinessSnapshot?
     let streakDelta: String?
+    let onMetricTap: (MetricDrilldown) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
@@ -733,41 +753,65 @@ private struct MissionMetricsSection: View {
                 .foregroundColor(Theme.Colors.textPrimary)
 
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: Theme.Spacing.md) {
-                MetricCard(
-                    title: "Sessions",
-                    value: "\(stats.totalWorkouts)",
-                    subtitle: "this window",
-                    icon: "flag.checkered",
-                    accent: Theme.Colors.accent,
-                    badge: nil
-                )
+                Button(action: {
+                    Haptics.selection()
+                    onMetricTap(.sessions)
+                }) {
+                    MetricCard(
+                        title: "Sessions",
+                        value: "\(stats.totalWorkouts)",
+                        subtitle: "this window",
+                        icon: "flag.checkered",
+                        accent: Theme.Colors.accent,
+                        badge: nil
+                    )
+                }
+                .buttonStyle(ScaleButtonStyle())
 
-                MetricCard(
-                    title: "Streak",
-                    value: "\(stats.currentStreak)",
-                    subtitle: "days",
-                    icon: "flame.fill",
-                    accent: Theme.Colors.warning,
-                    badge: streakDelta
-                )
+                Button(action: {
+                    Haptics.selection()
+                    onMetricTap(.streak)
+                }) {
+                    MetricCard(
+                        title: "Streak",
+                        value: "\(stats.currentStreak)",
+                        subtitle: "days",
+                        icon: "flame.fill",
+                        accent: Theme.Colors.warning,
+                        badge: streakDelta
+                    )
+                }
+                .buttonStyle(ScaleButtonStyle())
 
-                MetricCard(
-                    title: "Total Volume",
-                    value: formatVolume(stats.totalVolume),
-                    subtitle: "lifted",
-                    icon: "scalemass.fill",
-                    accent: Theme.Colors.success,
-                    badge: nil
-                )
+                Button(action: {
+                    Haptics.selection()
+                    onMetricTap(.volume)
+                }) {
+                    MetricCard(
+                        title: "Total Volume",
+                        value: formatVolume(stats.totalVolume),
+                        subtitle: "lifted",
+                        icon: "scalemass.fill",
+                        accent: Theme.Colors.success,
+                        badge: nil
+                    )
+                }
+                .buttonStyle(ScaleButtonStyle())
 
-                MetricCard(
-                    title: readiness?.label ?? "Readiness",
-                    value: readiness?.score ?? "--",
-                    subtitle: readiness?.isCaution == true ? "recover" : "ready",
-                    icon: readiness?.icon ?? "heart.circle.fill",
-                    accent: readiness?.tint ?? Theme.Colors.accentSecondary,
-                    badge: nil
-                )
+                Button(action: {
+                    Haptics.selection()
+                    onMetricTap(.readiness)
+                }) {
+                    MetricCard(
+                        title: readiness?.label ?? "Readiness",
+                        value: readiness?.score ?? "--",
+                        subtitle: readiness?.isCaution == true ? "recover" : "ready",
+                        icon: readiness?.icon ?? "heart.circle.fill",
+                        accent: readiness?.tint ?? Theme.Colors.accentSecondary,
+                        badge: nil
+                    )
+                }
+                .buttonStyle(ScaleButtonStyle())
             }
         }
     }

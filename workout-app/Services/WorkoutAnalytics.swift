@@ -1,0 +1,708 @@
+import Foundation
+import SwiftUI
+
+struct WorkoutAnalytics {
+    static func durationMinutes(from duration: String) -> Double {
+        let trimmed = duration.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !trimmed.isEmpty else { return 0 }
+
+        if trimmed.contains(":") {
+            let parts = trimmed.split(separator: ":").compactMap { Int($0) }
+            if parts.count == 3 {
+                return Double(parts[0] * 60 + parts[1])
+            } else if parts.count == 2 {
+                return Double(parts[0])
+            }
+        }
+
+        var hours = 0
+        var minutes = 0
+        var matched = false
+
+        if let hourMatch = trimmed.range(of: "(\\d+)\\s*h", options: .regularExpression) {
+            let hourString = String(trimmed[hourMatch]).replacingOccurrences(of: "h", with: "")
+            hours = Int(hourString.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
+            matched = true
+        }
+
+        if let minuteMatch = trimmed.range(of: "(\\d+)\\s*m", options: .regularExpression) {
+            let minuteString = String(trimmed[minuteMatch]).replacingOccurrences(of: "m", with: "")
+            minutes = Int(minuteString.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
+            matched = true
+        }
+
+        if matched {
+            return Double(hours * 60 + minutes)
+        }
+
+        return Double(Int(trimmed) ?? 0)
+    }
+
+    static func effortDensity(for workout: Workout) -> Double {
+        let duration = max(durationMinutes(from: workout.duration), 1)
+        return workout.totalVolume / duration
+    }
+
+    static func effortDensitySeries(for workouts: [Workout]) -> [EffortDensityPoint] {
+        workouts.sorted { $0.date < $1.date }.map { workout in
+            EffortDensityPoint(
+                workoutId: workout.id,
+                date: workout.date,
+                value: effortDensity(for: workout),
+                durationMinutes: durationMinutes(from: workout.duration),
+                volume: workout.totalVolume
+            )
+        }
+    }
+
+    static func repRangeDistribution(for workouts: [Workout]) -> [RepRangeBucket] {
+        let allSets = workouts.flatMap { $0.exercises }.flatMap { $0.sets }
+        let buckets: [(label: String, range: ClosedRange<Int>, tint: Color)] = [
+            ("1-3", 1...3, Theme.Colors.error),
+            ("4-6", 4...6, Theme.Colors.warning),
+            ("7-10", 7...10, Theme.Colors.accent),
+            ("11-15", 11...15, Theme.Colors.accentSecondary),
+            ("16-20", 16...20, Theme.Colors.success),
+            ("21+", 21...100, Theme.Colors.textSecondary)
+        ]
+
+        let total = max(allSets.count, 1)
+        return buckets.map { bucket in
+            let count = allSets.filter { bucket.range.contains($0.reps) }.count
+            return RepRangeBucket(
+                label: bucket.label,
+                range: bucket.range,
+                count: count,
+                percent: Double(count) / Double(total),
+                tint: bucket.tint
+            )
+        }
+    }
+
+    static func intensityZones(for workouts: [Workout]) -> [IntensityZoneBucket] {
+        let allExercises = workouts.flatMap { $0.exercises }
+        let best1RMByExercise = Dictionary(grouping: allExercises, by: { $0.name }).compactMapValues { exercises in
+            let sets = exercises.flatMap { $0.sets }
+            return sets.map { estimateOneRepMax(weight: $0.weight, reps: $0.reps) }.max()
+        }
+
+        let allSets = workouts.flatMap { $0.exercises }.flatMap { $0.sets }
+        let zones: [(label: String, range: ClosedRange<Double>, tint: Color)] = [
+            ("<50%", 0.0...0.49, Theme.Colors.textSecondary),
+            ("50-65%", 0.50...0.65, Theme.Colors.accentSecondary),
+            ("65-75%", 0.66...0.75, Theme.Colors.accent),
+            ("75-85%", 0.76...0.85, Theme.Colors.warning),
+            ("85%+", 0.86...1.5, Theme.Colors.error)
+        ]
+
+        var zoneCounts = Array(repeating: 0, count: zones.count)
+        var total = 0
+
+        for set in allSets {
+            guard let reference = best1RMByExercise[set.exerciseName], reference > 0 else { continue }
+            let intensity = set.weight / reference
+            if let index = zones.firstIndex(where: { $0.range.contains(intensity) }) {
+                zoneCounts[index] += 1
+                total += 1
+            }
+        }
+
+        let totalCount = max(total, 1)
+        return zones.enumerated().map { index, zone in
+            IntensityZoneBucket(
+                label: zone.label,
+                range: zone.range,
+                count: zoneCounts[index],
+                percent: Double(zoneCounts[index]) / Double(totalCount),
+                tint: zone.tint
+            )
+        }
+    }
+
+    static func progressContributions(
+        workouts: [Workout],
+        weeks: Int,
+        mappings: [String: MuscleGroup]
+    ) -> [ProgressContribution] {
+        guard let endDate = workouts.map({ $0.date }).max() else { return [] }
+        let calendar = Calendar.current
+        let currentStart = calendar.date(byAdding: .day, value: -(weeks * 7), to: endDate) ?? endDate
+        let previousStart = calendar.date(byAdding: .day, value: -(weeks * 14), to: endDate) ?? endDate
+
+        let current = workouts.filter { $0.date >= currentStart }
+        let previous = workouts.filter { $0.date >= previousStart && $0.date < currentStart }
+
+        let exerciseDeltas = progressDeltaByExercise(current: current, previous: previous)
+
+        let exerciseContributions = exerciseDeltas.map { name, delta in
+            let previousValue = previousExerciseValue(previous, exerciseName: name)
+            let currentValue = currentExerciseValue(current, exerciseName: name)
+            let percent = percentChange(current: currentValue, previous: previousValue)
+            return ProgressContribution(
+                name: name,
+                delta: delta,
+                current: currentValue,
+                previous: previousValue,
+                percentChange: percent,
+                category: .exercise,
+                tint: Theme.Colors.accent
+            )
+        }
+
+        var muscleTotals: [MuscleGroup: Double] = [:]
+        for (exerciseName, delta) in exerciseDeltas {
+            if let group = mappings[exerciseName] {
+                muscleTotals[group, default: 0] += delta
+            }
+        }
+
+        let muscleContributions = muscleTotals.map { group, delta in
+            ProgressContribution(
+                name: group.shortName,
+                delta: delta,
+                current: delta,
+                previous: 0,
+                percentChange: 0,
+                category: .muscleGroup,
+                tint: group.color
+            )
+        }
+
+        let workoutTypeDeltas = progressDeltaByWorkoutName(current: current, previous: previous)
+        let workoutContributions = workoutTypeDeltas.map { name, delta in
+            ProgressContribution(
+                name: name,
+                delta: delta,
+                current: max(delta, 0),
+                previous: 0,
+                percentChange: 0,
+                category: .workoutType,
+                tint: Theme.Colors.accentSecondary
+            )
+        }
+
+        return (exerciseContributions + muscleContributions + workoutContributions)
+            .sorted { abs($0.delta) > abs($1.delta) }
+    }
+
+    static func changeMetrics(for workouts: [Workout], windowDays: Int) -> [ChangeMetric] {
+        guard let endDate = workouts.map({ $0.date }).max() else { return [] }
+        let calendar = Calendar.current
+        let currentStart = calendar.date(byAdding: .day, value: -windowDays, to: endDate) ?? endDate
+        let previousStart = calendar.date(byAdding: .day, value: -(windowDays * 2), to: endDate) ?? endDate
+
+        let current = workouts.filter { $0.date >= currentStart }
+        let previous = workouts.filter { $0.date >= previousStart && $0.date < currentStart }
+
+        let currentDuration = average(current.map { durationMinutes(from: $0.duration) })
+        let previousDuration = average(previous.map { durationMinutes(from: $0.duration) })
+
+        let currentDensity = average(current.map { effortDensity(for: $0) })
+        let previousDensity = average(previous.map { effortDensity(for: $0) })
+
+        let currentVolume = current.reduce(0) { $0 + $1.totalVolume }
+        let previousVolume = previous.reduce(0) { $0 + $1.totalVolume }
+
+        let currentSessions = Double(current.count)
+        let previousSessions = Double(previous.count)
+
+        let metrics = [
+            changeMetric(title: "Sessions", current: currentSessions, previous: previousSessions),
+            changeMetric(title: "Total Volume", current: currentVolume, previous: previousVolume),
+            changeMetric(title: "Avg Duration", current: currentDuration, previous: previousDuration),
+            changeMetric(title: "Effort Density", current: currentDensity, previous: previousDensity)
+        ]
+
+        return metrics
+    }
+
+    static func consistencyIssues(for workouts: [Workout]) -> [ConsistencyIssue] {
+        guard !workouts.isEmpty else { return [] }
+        let calendar = Calendar.current
+
+        let sorted = workouts.sorted { $0.date < $1.date }
+        let expectedPerWeek = max(1, Int(round(Double(sorted.count) / max(weeksBetween(sorted.first!.date, sorted.last!.date), 1))))
+
+        var issues: [ConsistencyIssue] = []
+
+        let recentWeeks = 8
+        for weekOffset in 0..<recentWeeks {
+            guard let weekStart = calendar.date(byAdding: .day, value: -(weekOffset * 7), to: Date()) else { continue }
+            let start = calendar.date(byAdding: .day, value: -6, to: weekStart) ?? weekStart
+            let end = weekStart
+            let count = workouts.filter { $0.date >= start && $0.date <= end }.count
+            if count < expectedPerWeek {
+                let missing = expectedPerWeek - count
+                issues.append(
+                    ConsistencyIssue(
+                        type: .missedDay,
+                        title: "Missed \(missing) session\(missing == 1 ? "" : "s")",
+                        detail: "Week of \(start.formatted(date: .abbreviated, time: .omitted)) fell below your usual rhythm.",
+                        workoutId: nil,
+                        date: start
+                    )
+                )
+            }
+        }
+
+        let durationsByName = Dictionary(grouping: workouts, by: { $0.name }).mapValues { items in
+            median(items.map { durationMinutes(from: $0.duration) })
+        }
+
+        for workout in workouts {
+            if let baseline = durationsByName[workout.name], baseline > 0 {
+                let duration = durationMinutes(from: workout.duration)
+                if duration < baseline * 0.7 {
+                    issues.append(
+                        ConsistencyIssue(
+                            type: .shortenedSession,
+                            title: "Short session: \(workout.name)",
+                            detail: "Finished in \(Int(duration)) min vs typical \(Int(baseline)) min.",
+                            workoutId: workout.id,
+                            date: workout.date
+                        )
+                    )
+                }
+            }
+        }
+
+        let groupedByName = Dictionary(grouping: workouts, by: { $0.name })
+        for (name, sessions) in groupedByName {
+            let exerciseCounts = Dictionary(grouping: sessions.flatMap { $0.exercises }) { $0.name }
+                .mapValues { $0.count }
+            let threshold = max(2, Int(Double(sessions.count) * 0.6))
+            let typical = exerciseCounts.filter { $0.value >= threshold }.map { $0.key }
+
+            guard !typical.isEmpty else { continue }
+
+            for session in sessions {
+                let present = Set(session.exercises.map { $0.name })
+                let missing = typical.filter { !present.contains($0) }
+                if !missing.isEmpty {
+                    issues.append(
+                        ConsistencyIssue(
+                            type: .skippedExercises,
+                            title: "Skipped in \(name)",
+                            detail: "Missing: \(missing.prefix(2).joined(separator: ", "))",
+                            workoutId: session.id,
+                            date: session.date
+                        )
+                    )
+                }
+            }
+        }
+
+        return issues
+    }
+
+    static func fatigueSummary(for workout: Workout, allWorkouts: [Workout]) -> FatigueSummary {
+        var entries: [FatigueEntry] = []
+        let rpeValues = workout.exercises.flatMap { $0.sets }.compactMap { Double($0.rpe ?? "") }
+        let avgRPE = rpeValues.isEmpty ? nil : rpeValues.reduce(0, +) / Double(rpeValues.count)
+
+        for exercise in workout.exercises {
+            let sets = exercise.sets.sorted { $0.setOrder < $1.setOrder }
+            guard let best = sets.map({ $0.weight * Double($0.reps) }).max(),
+                  let last = sets.last.map({ $0.weight * Double($0.reps) }),
+                  best > 0 else { continue }
+
+            let drop = max(0, (best - last) / best)
+            if drop >= 0.15 {
+                let note = drop >= 0.3 ? "Heavy drop" : "Moderate drop"
+                entries.append(
+                    FatigueEntry(
+                        exerciseName: exercise.name,
+                        dropPercent: drop,
+                        setCount: sets.count,
+                        note: note
+                    )
+                )
+            }
+        }
+
+        let duration = durationMinutes(from: workout.duration)
+        let restIndex = workout.totalSets > 0 ? duration / Double(workout.totalSets) : nil
+
+        let similar = allWorkouts.filter { $0.name == workout.name }
+        let baseline = median(similar.map { durationMinutes(from: $0.duration) / max(Double($0.totalSets), 1) })
+
+        let restTrend: String?
+        if let restIndex, baseline > 0 {
+            if restIndex > baseline * 1.2 {
+                restTrend = "Rest time creeping up"
+            } else if restIndex < baseline * 0.8 {
+                restTrend = "Rest time tighter"
+            } else {
+                restTrend = "Rest time steady"
+            }
+        } else {
+            restTrend = nil
+        }
+
+        return FatigueSummary(
+            workoutId: workout.id,
+            entries: entries.sorted { $0.dropPercent > $1.dropPercent },
+            restTimeIndex: restIndex,
+            restTimeTrend: restTrend,
+            effortDensity: effortDensity(for: workout),
+            averageRPE: avgRPE
+        )
+    }
+
+    static func habitImpactInsights(
+        workouts: [Workout],
+        annotations: [UUID: WorkoutAnnotation]
+    ) -> [HabitImpactInsight] {
+        var insights: [HabitImpactInsight] = []
+
+        let densityByStress = groupAverage(workouts: workouts, annotations: annotations) { $0.stress?.label }
+        if let (label, value) = topDifference(from: densityByStress) {
+            insights.append(
+                HabitImpactInsight(
+                    title: "Stress impact",
+                    detail: "Best effort density when stress is \(label).",
+                    value: value,
+                    tint: Theme.Colors.warning
+                )
+            )
+        }
+
+        let densityByCaffeine = groupAverage(workouts: workouts, annotations: annotations) { $0.caffeine?.label }
+        if let (label, value) = topDifference(from: densityByCaffeine) {
+            insights.append(
+                HabitImpactInsight(
+                    title: "Caffeine impact",
+                    detail: "Highest effort density with \(label) caffeine.",
+                    value: value,
+                    tint: Theme.Colors.accent
+                )
+            )
+        }
+
+        let densityBySoreness = groupAverage(workouts: workouts, annotations: annotations) { $0.soreness?.label }
+        if let (label, value) = topDifference(from: densityBySoreness) {
+            insights.append(
+                HabitImpactInsight(
+                    title: "Soreness impact",
+                    detail: "Best output when soreness is \(label).",
+                    value: value,
+                    tint: Theme.Colors.success
+                )
+            )
+        }
+
+        let densityByMood = groupAverage(workouts: workouts, annotations: annotations) { $0.mood?.label }
+        if let (label, value) = topDifference(from: densityByMood) {
+            insights.append(
+                HabitImpactInsight(
+                    title: "Mood impact",
+                    detail: "Best output when mood is \(label).",
+                    value: value,
+                    tint: Theme.Colors.accentSecondary
+                )
+            )
+        }
+
+        var timeBuckets: [String: [Double]] = [:]
+        for workout in workouts {
+            let label = timeOfDayLabel(for: workout.date)
+            timeBuckets[label, default: []].append(effortDensity(for: workout))
+        }
+        let densityByTime = timeBuckets.mapValues { average($0) }
+        if let (label, value) = topDifference(from: densityByTime) {
+            insights.append(
+                HabitImpactInsight(
+                    title: "Time of day",
+                    detail: "Most efficient sessions happen in the \(label).",
+                    value: value,
+                    tint: Theme.Colors.accentSecondary
+                )
+            )
+        }
+
+        return insights
+    }
+
+    static func correlationInsights(
+        workouts: [Workout],
+        healthData: [UUID: WorkoutHealthData]
+    ) -> [CorrelationInsight] {
+        var insights: [CorrelationInsight] = []
+
+        let points = workouts.compactMap { workout -> (sleep: Double, density: Double)? in
+            guard let sleep = healthData[workout.id]?.sleepSummary?.totalHours else { return nil }
+            return (sleep, effortDensity(for: workout))
+        }
+        if let correlation = correlation(points.map { $0.sleep }, points.map { $0.density }), points.count >= 4 {
+            let title = "Sleep vs output"
+            let detail = correlation > 0
+                ? "More sleep tends to align with higher effort density."
+                : "Less sleep lines up with higher effort density."
+            insights.append(
+                CorrelationInsight(
+                    title: title,
+                    detail: detail,
+                    correlation: correlation,
+                    supportingCount: points.count
+                )
+            )
+        }
+
+        let readinessPoints = workouts.compactMap { workout -> (readiness: Double, density: Double)? in
+            guard let readiness = readinessScore(for: healthData[workout.id]) else { return nil }
+            return (readiness, effortDensity(for: workout))
+        }
+        if let correlation = correlation(readinessPoints.map { $0.readiness }, readinessPoints.map { $0.density }), readinessPoints.count >= 4 {
+            let title = "Readiness vs output"
+            let detail = correlation > 0
+                ? "Higher readiness scores align with stronger sessions."
+                : "Lower readiness can still drive strong sessions."
+            insights.append(
+                CorrelationInsight(
+                    title: title,
+                    detail: detail,
+                    correlation: correlation,
+                    supportingCount: readinessPoints.count
+                )
+            )
+        }
+
+        if let topExercise = topExerciseName(in: workouts) {
+            let paired = workouts.compactMap { workout -> (sleep: Double, orm: Double)? in
+                guard let sleep = healthData[workout.id]?.sleepSummary?.totalHours else { return nil }
+                guard let exercise = workout.exercises.first(where: { $0.name == topExercise }) else { return nil }
+                let best = exercise.sets.map { estimateOneRepMax(weight: $0.weight, reps: $0.reps) }.max() ?? 0
+                return best > 0 ? (sleep, best) : nil
+            }
+
+            let goodSleep = paired.filter { $0.sleep >= 7 }.map { $0.orm }
+            let lowSleep = paired.filter { $0.sleep < 7 }.map { $0.orm }
+            if goodSleep.count >= 2, lowSleep.count >= 2 {
+                let avgGood = average(goodSleep)
+                let avgLow = average(lowSleep)
+                let delta = avgGood - avgLow
+                let sleeps = paired.map { $0.sleep }
+                let orms = paired.map { $0.orm }
+                if let corr = correlation(sleeps, orms), paired.count >= 4 {
+                    let detail = delta >= 0
+                        ? "Best \(topExercise) sessions follow 7+ hours sleep (+\(Int(delta)) lbs)."
+                        : "Short sleep still leads your \(topExercise) days (\(Int(delta)) lbs)."
+                    insights.append(
+                        CorrelationInsight(
+                            title: "Sleep vs \(topExercise)",
+                            detail: detail,
+                            correlation: corr,
+                            supportingCount: paired.count
+                        )
+                    )
+                }
+            }
+        }
+
+        return insights
+    }
+
+    static func recoveryDebtSnapshot(
+        workouts: [Workout],
+        healthData: [UUID: WorkoutHealthData]
+    ) -> RecoveryDebtSnapshot? {
+        guard !workouts.isEmpty else { return nil }
+
+        let calendar = Calendar.current
+        let last7Start = calendar.date(byAdding: .day, value: -7, to: Date()) ?? Date()
+        let last28Start = calendar.date(byAdding: .day, value: -28, to: Date()) ?? Date()
+
+        let recentWorkouts = workouts.filter { $0.date >= last7Start }
+        let baselineWorkouts = workouts.filter { $0.date >= last28Start && $0.date < last7Start }
+
+        let recentVolume = recentWorkouts.reduce(0) { $0 + $1.totalVolume }
+        let baselineVolume = max(baselineWorkouts.reduce(0) { $0 + $1.totalVolume }, 1)
+        let loadRatio = recentVolume / baselineVolume
+
+        let sleepHours = average(recentWorkouts.compactMap { healthData[$0.id]?.sleepSummary?.totalHours })
+        let readiness = average(recentWorkouts.compactMap { readinessScore(for: healthData[$0.id]) })
+
+        var score = 100.0
+        if loadRatio > 1.1 {
+            score -= min((loadRatio - 1) * 30, 40)
+        }
+        if sleepHours > 0 {
+            score -= max(0, (7 - sleepHours) * 8)
+        }
+        if readiness > 0 {
+            score -= max(0, (70 - readiness) * 0.6)
+        }
+
+        let clamped = Int(max(0, min(100, score)))
+        let label: String
+        let detail: String
+        let tint: Color
+
+        switch clamped {
+        case 80...100:
+            label = "Recovered"
+            detail = "Load and recovery are in sync."
+            tint = Theme.Colors.success
+        case 60..<80:
+            label = "Monitor"
+            detail = "Load is rising faster than recovery."
+            tint = Theme.Colors.warning
+        default:
+            label = "Recovery Debt"
+            detail = "Dial intensity down or prioritize sleep."
+            tint = Theme.Colors.error
+        }
+
+        return RecoveryDebtSnapshot(score: clamped, label: label, detail: detail, tint: tint)
+    }
+
+    static func readinessScore(for healthData: WorkoutHealthData?) -> Double? {
+        guard let hrv = healthData?.avgHRV, let resting = healthData?.restingHeartRate else { return nil }
+        return max(0, min(100, (hrv / max(resting, 1)) * 12))
+    }
+
+    // MARK: - Helpers
+
+    private static func estimateOneRepMax(weight: Double, reps: Int) -> Double {
+        guard reps > 0 else { return weight }
+        return weight * (1 + 0.0333 * Double(reps))
+    }
+
+    private static func progressDeltaByExercise(current: [Workout], previous: [Workout]) -> [String: Double] {
+        let exercises = Set(current.flatMap { $0.exercises.map { $0.name } } + previous.flatMap { $0.exercises.map { $0.name } })
+        var deltas: [String: Double] = [:]
+
+        for name in exercises {
+            let currentValue = currentExerciseValue(current, exerciseName: name)
+            let previousValue = previousExerciseValue(previous, exerciseName: name)
+            let delta = currentValue - previousValue
+            deltas[name] = delta
+        }
+
+        return deltas
+    }
+
+    private static func progressDeltaByWorkoutName(current: [Workout], previous: [Workout]) -> [String: Double] {
+        let names = Set(current.map { $0.name } + previous.map { $0.name })
+        var deltas: [String: Double] = [:]
+
+        for name in names {
+            let currentVolume = current.filter { $0.name == name }.reduce(0) { $0 + $1.totalVolume }
+            let previousVolume = previous.filter { $0.name == name }.reduce(0) { $0 + $1.totalVolume }
+            deltas[name] = currentVolume - previousVolume
+        }
+
+        return deltas
+    }
+
+    private static func currentExerciseValue(_ workouts: [Workout], exerciseName: String) -> Double {
+        let sets = workouts.flatMap { workout in
+            workout.exercises.filter { $0.name == exerciseName }.flatMap { $0.sets }
+        }
+        return sets.map { estimateOneRepMax(weight: $0.weight, reps: $0.reps) }.max() ?? 0
+    }
+
+    private static func previousExerciseValue(_ workouts: [Workout], exerciseName: String) -> Double {
+        currentExerciseValue(workouts, exerciseName: exerciseName)
+    }
+
+    private static func changeMetric(title: String, current: Double, previous: Double) -> ChangeMetric {
+        let delta = current - previous
+        let percent = percentChange(current: current, previous: previous)
+        return ChangeMetric(
+            title: title,
+            current: current,
+            previous: previous,
+            delta: delta,
+            percentChange: percent,
+            isPositive: delta >= 0
+        )
+    }
+
+    private static func percentChange(current: Double, previous: Double) -> Double {
+        guard previous != 0 else { return 0 }
+        return (current - previous) / previous * 100
+    }
+
+    private static func average(_ values: [Double]) -> Double {
+        guard !values.isEmpty else { return 0 }
+        return values.reduce(0, +) / Double(values.count)
+    }
+
+    private static func median(_ values: [Double]) -> Double {
+        guard !values.isEmpty else { return 0 }
+        let sorted = values.sorted()
+        let mid = sorted.count / 2
+        if sorted.count % 2 == 0 {
+            return (sorted[mid - 1] + sorted[mid]) / 2
+        }
+        return sorted[mid]
+    }
+
+    private static func weeksBetween(_ start: Date, _ end: Date) -> Double {
+        let weeks = Calendar.current.dateComponents([.weekOfYear], from: start, to: end).weekOfYear ?? 0
+        return max(Double(weeks), 1)
+    }
+
+    private static func groupAverage(
+        workouts: [Workout],
+        annotations: [UUID: WorkoutAnnotation],
+        key: (WorkoutAnnotation) -> String?
+    ) -> [String: Double] {
+        var buckets: [String: [Double]] = [:]
+        for workout in workouts {
+            guard let annotation = annotations[workout.id], let label = key(annotation) else { continue }
+            let density = effortDensity(for: workout)
+            buckets[label, default: []].append(density)
+        }
+        return buckets.mapValues { average($0) }
+    }
+
+    private static func topDifference(from map: [String: Double]) -> (String, String)? {
+        guard let best = map.max(by: { $0.value < $1.value }) else { return nil }
+        let formatted = String(format: "%.1f", best.value)
+        return (best.key.lowercased(), formatted)
+    }
+
+    private static func timeOfDayLabel(for date: Date) -> String {
+        let hour = Calendar.current.component(.hour, from: date)
+        switch hour {
+        case 5..<12:
+            return "morning"
+        case 12..<17:
+            return "afternoon"
+        case 17..<22:
+            return "evening"
+        default:
+            return "late"
+        }
+    }
+
+    private static func correlation(_ xs: [Double], _ ys: [Double]) -> Double? {
+        guard xs.count == ys.count, xs.count >= 2 else { return nil }
+        let meanX = average(xs)
+        let meanY = average(ys)
+        var numerator = 0.0
+        var denominatorX = 0.0
+        var denominatorY = 0.0
+
+        for (x, y) in zip(xs, ys) {
+            let dx = x - meanX
+            let dy = y - meanY
+            numerator += dx * dy
+            denominatorX += dx * dx
+            denominatorY += dy * dy
+        }
+
+        let denom = sqrt(denominatorX * denominatorY)
+        guard denom > 0 else { return nil }
+        return numerator / denom
+    }
+
+    private static func topExerciseName(in workouts: [Workout]) -> String? {
+        let counts = workouts.flatMap { $0.exercises }.reduce(into: [String: Int]()) { counts, exercise in
+            counts[exercise.name, default: 0] += 1
+        }
+        return counts.max(by: { $0.value < $1.value })?.key
+    }
+}

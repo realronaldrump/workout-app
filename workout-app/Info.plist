@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>NSHealthShareUsageDescription</key>
-	<string>This app reads your health data to display heart rate, calories, and other metrics recorded during your workouts. This helps you track your fitness progress and recovery.</string>
+	<string>This app reads your health data (including sleep, activity, cardio, and recovery metrics) to personalize workout insights and progress tracking.</string>
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>This app does not write health data, but this permission is required by iOS.</string>
 	<key>CFBundleIdentifier</key>

@@ -248,19 +248,98 @@ class HealthKitManager: ObservableObject {
         // Fetch body measurements (from around workout time)
         let dayStart = Calendar.current.startOfDay(for: workout.date)
         let dayEnd = Calendar.current.date(byAdding: .day, value: 1, to: dayStart)!
-        
+
         healthData.bodyMass = try await fetchLatestQuantity(
             type: .bodyMass,
             from: dayStart,
             to: dayEnd,
             unit: .gramUnit(with: .kilo)
         )
-        
+
         healthData.bodyFatPercentage = try await fetchLatestQuantity(
             type: .bodyFatPercentage,
             from: dayStart,
             to: dayEnd,
             unit: .percent()
+        )
+
+        healthData.bodyTemperature = try await fetchLatestQuantity(
+            type: .bodyTemperature,
+            from: dayStart,
+            to: dayEnd,
+            unit: .degreeCelsius()
+        )
+
+        // Fetch sleep summary (night before workout)
+        let sleepWindowStart = Calendar.current.date(byAdding: .hour, value: -18, to: dayStart) ?? dayStart
+        healthData.sleepSummary = try await fetchSleepSummary(from: sleepWindowStart, to: dayEnd)
+
+        // Daily activity totals
+        healthData.dailyActiveEnergy = try await fetchQuantitySum(
+            type: .activeEnergyBurned,
+            from: dayStart,
+            to: dayEnd,
+            unit: .kilocalorie()
+        )
+
+        healthData.dailyBasalEnergy = try await fetchQuantitySum(
+            type: .basalEnergyBurned,
+            from: dayStart,
+            to: dayEnd,
+            unit: .kilocalorie()
+        )
+
+        if let steps = try await fetchQuantitySum(
+            type: .stepCount,
+            from: dayStart,
+            to: dayEnd,
+            unit: .count()
+        ) {
+            healthData.dailySteps = Int(steps)
+        }
+
+        healthData.dailyExerciseMinutes = try await fetchQuantitySum(
+            type: .appleExerciseTime,
+            from: dayStart,
+            to: dayEnd,
+            unit: .minute()
+        )
+
+        healthData.dailyMoveMinutes = try await fetchQuantitySum(
+            type: .appleMoveTime,
+            from: dayStart,
+            to: dayEnd,
+            unit: .minute()
+        )
+
+        healthData.dailyStandMinutes = try await fetchQuantitySum(
+            type: .appleStandTime,
+            from: dayStart,
+            to: dayEnd,
+            unit: .minute()
+        )
+
+        // Cardio fitness metrics near workout day
+        let vo2WindowStart = Calendar.current.date(byAdding: .day, value: -45, to: dayStart) ?? dayStart
+        healthData.vo2Max = try await fetchLatestQuantity(
+            type: .vo2Max,
+            from: vo2WindowStart,
+            to: dayEnd,
+            unit: HKUnit(from: "ml/(kg*min)")
+        )
+
+        healthData.heartRateRecovery = try await fetchLatestQuantity(
+            type: .heartRateRecoveryOneMinute,
+            from: vo2WindowStart,
+            to: dayEnd,
+            unit: HKUnit(from: "count/min")
+        )
+
+        healthData.walkingHeartRateAverage = try await fetchLatestQuantity(
+            type: .walkingHeartRateAverage,
+            from: vo2WindowStart,
+            to: dayEnd,
+            unit: HKUnit(from: "count/min")
         )
         
         // Fetch Apple workout if it exists for this window
@@ -648,6 +727,102 @@ class HealthKitManager: ObservableObject {
                 continuation.resume(returning: samples as? [HKQuantitySample] ?? [])
             }
             healthStore.execute(query)
+        }
+    }
+
+    private func fetchSleepSummary(from start: Date, to end: Date) async throws -> SleepSummary? {
+        guard let healthStore = healthStore else {
+            throw HealthKitError.notAvailable
+        }
+        guard let sleepType = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) else {
+            return nil
+        }
+
+        let predicate = HKQuery.predicateForSamples(withStart: start, end: end, options: [])
+        let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
+
+        return try await withCheckedThrowingContinuation { continuation in
+            let query = HKSampleQuery(
+                sampleType: sleepType,
+                predicate: predicate,
+                limit: HKObjectQueryNoLimit,
+                sortDescriptors: [sortDescriptor]
+            ) { _, samples, error in
+                if let error = error {
+                    if Self.isNoDataError(error) {
+                        continuation.resume(returning: nil)
+                        return
+                    }
+                    continuation.resume(throwing: HealthKitError.queryFailed(error.localizedDescription))
+                    return
+                }
+
+                let sleepSamples = samples as? [HKCategorySample] ?? []
+                guard !sleepSamples.isEmpty else {
+                    continuation.resume(returning: nil)
+                    return
+                }
+
+                var stageDurations: [SleepStage: TimeInterval] = [:]
+                var totalSleep: TimeInterval = 0
+                var inBed: TimeInterval = 0
+                var startTime = sleepSamples.first?.startDate ?? start
+                var endTime = sleepSamples.first?.endDate ?? end
+
+                for sample in sleepSamples {
+                    let duration = max(sample.endDate.timeIntervalSince(sample.startDate), 0)
+                    startTime = min(startTime, sample.startDate)
+                    endTime = max(endTime, sample.endDate)
+
+                    let stage = Self.mapSleepStage(sample.value)
+                    stageDurations[stage, default: 0] += duration
+
+                    switch stage {
+                    case .inBed:
+                        inBed += duration
+                    case .core, .deep, .rem:
+                        totalSleep += duration
+                    default:
+                        break
+                    }
+                }
+
+                let summary = SleepSummary(
+                    totalSleep: totalSleep,
+                    inBed: inBed,
+                    stageDurations: stageDurations,
+                    start: startTime,
+                    end: endTime
+                )
+
+                continuation.resume(returning: summary)
+            }
+            healthStore.execute(query)
+        }
+    }
+
+    private nonisolated static func mapSleepStage(_ value: Int) -> SleepStage {
+        guard let stage = HKCategoryValueSleepAnalysis(rawValue: value) else {
+            return .unknown
+        }
+
+        switch stage {
+        case .awake:
+            return .awake
+        case .inBed:
+            return .inBed
+        case .asleepREM:
+            return .rem
+        case .asleepDeep:
+            return .deep
+        case .asleepCore:
+            return .core
+        case .asleepUnspecified:
+            return .core
+        case .asleep:
+            return .core
+        @unknown default:
+            return .unknown
         }
     }
 

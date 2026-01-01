@@ -57,6 +57,10 @@ struct WorkoutDetailView: View {
                     if healthManager.isHealthKitAvailable() {
                         healthDataSection
                     }
+
+                    WorkoutAnnotationCard(workout: workout)
+
+                    FatigueLensView(summary: WorkoutAnalytics.fatigueSummary(for: workout, allWorkouts: dataManager.workouts))
                     
                     // Exercises list
                     VStack(alignment: .leading, spacing: 16) {

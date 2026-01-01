@@ -58,6 +58,22 @@ struct WorkoutHealthData: Identifiable, Codable {
     var bodyMass: Double? // in kg
     var bodyFatPercentage: Double?
     var bodyTemperature: Double? // in Celsius
+
+    // MARK: - Sleep Summary
+    var sleepSummary: SleepSummary?
+
+    // MARK: - Daily Activity
+    var dailyActiveEnergy: Double?
+    var dailyBasalEnergy: Double?
+    var dailySteps: Int?
+    var dailyExerciseMinutes: Double?
+    var dailyMoveMinutes: Double?
+    var dailyStandMinutes: Double?
+
+    // MARK: - Cardio Fitness
+    var vo2Max: Double?
+    var heartRateRecovery: Double?
+    var walkingHeartRateAverage: Double?
     
     // MARK: - Workout from Apple Health
     var appleWorkoutType: String?
@@ -88,6 +104,16 @@ struct WorkoutHealthData: Identifiable, Codable {
         bodyMass: Double? = nil,
         bodyFatPercentage: Double? = nil,
         bodyTemperature: Double? = nil,
+        sleepSummary: SleepSummary? = nil,
+        dailyActiveEnergy: Double? = nil,
+        dailyBasalEnergy: Double? = nil,
+        dailySteps: Int? = nil,
+        dailyExerciseMinutes: Double? = nil,
+        dailyMoveMinutes: Double? = nil,
+        dailyStandMinutes: Double? = nil,
+        vo2Max: Double? = nil,
+        heartRateRecovery: Double? = nil,
+        walkingHeartRateAverage: Double? = nil,
         appleWorkoutType: String? = nil,
         appleWorkoutDuration: TimeInterval? = nil
     ) {
@@ -115,6 +141,16 @@ struct WorkoutHealthData: Identifiable, Codable {
         self.bodyMass = bodyMass
         self.bodyFatPercentage = bodyFatPercentage
         self.bodyTemperature = bodyTemperature
+        self.sleepSummary = sleepSummary
+        self.dailyActiveEnergy = dailyActiveEnergy
+        self.dailyBasalEnergy = dailyBasalEnergy
+        self.dailySteps = dailySteps
+        self.dailyExerciseMinutes = dailyExerciseMinutes
+        self.dailyMoveMinutes = dailyMoveMinutes
+        self.dailyStandMinutes = dailyStandMinutes
+        self.vo2Max = vo2Max
+        self.heartRateRecovery = heartRateRecovery
+        self.walkingHeartRateAverage = walkingHeartRateAverage
         self.appleWorkoutType = appleWorkoutType
         self.appleWorkoutDuration = appleWorkoutDuration
     }
@@ -125,6 +161,10 @@ struct WorkoutHealthData: Identifiable, Codable {
         !heartRateSamples.isEmpty ||
         activeCalories != nil ||
         distance != nil ||
+        sleepSummary != nil ||
+        dailyActiveEnergy != nil ||
+        dailyBasalEnergy != nil ||
+        vo2Max != nil ||
         !hrvSamples.isEmpty ||
         !bloodOxygenSamples.isEmpty ||
         appleWorkoutType != nil
