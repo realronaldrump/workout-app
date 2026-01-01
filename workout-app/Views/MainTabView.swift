@@ -16,7 +16,7 @@ struct MainTabView: View {
         .environment(\.adaptiveLuminance, luminanceManager.luminance)
         .preferredColorScheme(.dark)
         .onAppear { refreshOnboardingState() }
-        .onChange(of: dataManager.workouts.count) { _ in
+        .onChange(of: dataManager.workouts.count) { _, _ in
             refreshOnboardingState()
         }
         .fullScreenCover(isPresented: $showingOnboarding) {

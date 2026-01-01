@@ -126,7 +126,9 @@ struct InsightsSectionView: View {
             }
         }
         .onAppear {
-            insightsEngine.generateInsights()
+            Task {
+                await insightsEngine.generateInsights()
+            }
         }
     }
 }

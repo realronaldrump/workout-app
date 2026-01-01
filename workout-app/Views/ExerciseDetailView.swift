@@ -82,9 +82,11 @@ struct ExerciseDetailView: View {
         .navigationTitle(exerciseName)
         .navigationBarTitleDisplayMode(.large)
         .onAppear {
-            insightsEngine.generateInsights()
+            Task {
+                await insightsEngine.generateInsights()
+            }
         }
-        .onChange(of: selectedChart) { _ in
+        .onChange(of: selectedChart) { _, _ in
             Haptics.selection()
         }
     }

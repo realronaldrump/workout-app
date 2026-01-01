@@ -469,9 +469,11 @@ struct StrongImportWizard: View {
             }
             importPhase = .parsing
             
-            Task.detached(priority: .userInitiated) {
+            Task.detached(priority: .userInitiated) { [fileData] in
                 do {
-                    let sets = try CSVParser.parseStrongWorkoutsCSV(from: fileData)
+                    let sets = try await MainActor.run {
+                        try CSVParser.parseStrongWorkoutsCSV(from: fileData)
+                    }
                     await MainActor.run {
                         importPhase = .processing
                     }
@@ -479,8 +481,10 @@ struct StrongImportWizard: View {
                     // Artificial delay for UX
                     try await Task.sleep(nanoseconds: 1_000_000_000)
                     
+                    // Process workout sets (nonisolated async)
+                    await dataManager.processWorkoutSets(sets)
+                    
                     await MainActor.run {
-                        dataManager.processWorkoutSets(sets)
                         let stats = dataManager.calculateStats()
                         importStats = (stats.totalWorkouts, stats.totalExercises)
                         importPhase = .saving

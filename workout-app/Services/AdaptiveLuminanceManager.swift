@@ -39,9 +39,17 @@ final class AdaptiveLuminanceManager: ObservableObject {
     /// does not provide public API for raw ambient light). When the user has auto-
     /// brightness enabled, this serves as a reasonable approximation.
     private func updateLuminance() {
-        // UIScreen.main.brightness is 0.0-1.0 representing the brightness slider
-        // This acts as a reasonable proxy when the user has auto-brightness enabled
-        let ambient = Double(UIScreen.main.brightness)
+        // Get brightness from the first connected window scene's screen
+        // Fallback to 0.5 if no scenes are available
+        let brightness: CGFloat
+        if let windowScene = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .first {
+            brightness = windowScene.screen.brightness
+        } else {
+            brightness = 0.5
+        }
+        let ambient = Double(brightness)
         let timeFactor = timeOfDayFactor(for: Date())
         let blended = 0.18 + (ambient * 0.38) + (timeFactor * 0.32)
         let clamped = min(max(blended, 0.12), 0.7)
