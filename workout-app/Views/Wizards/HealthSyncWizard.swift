@@ -65,11 +65,11 @@ struct HealthSyncWizard: View {
                 )
             
             VStack(spacing: Theme.Spacing.md) {
-                Text("Sync Health Data")
+                Text("Health Sync")
                     .font(Theme.Typography.title)
                     .foregroundStyle(Theme.Colors.textPrimary)
-                
-                Text("Enhance your workout logs with heart rate, calories, and other metrics from Apple Health.")
+
+                Text("read-only metrics")
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Colors.textSecondary)
                     .multilineTextAlignment(.center)
@@ -102,10 +102,10 @@ struct HealthSyncWizard: View {
                 .foregroundStyle(Theme.Colors.accent)
             
             VStack(spacing: Theme.Spacing.md) {
-                Text("Privacy First")
+                Text("Read Access")
                     .font(Theme.Typography.title2)
-                
-                Text("We only request read access to match health metrics with your existing workout times. Your data stays on your device.")
+
+                Text("read-only | on-device")
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Colors.textSecondary)
                     .multilineTextAlignment(.center)
@@ -115,7 +115,7 @@ struct HealthSyncWizard: View {
             Spacer()
             
             Button(action: requestAuthorization) {
-                Text("Continue to Authorization")
+                Text("Authorize")
                     .font(Theme.Typography.headline)
                     .frame(maxWidth: .infinity)
                     .padding()
@@ -149,10 +149,10 @@ struct HealthSyncWizard: View {
             }
             
             VStack(spacing: Theme.Spacing.sm) {
-                Text("Syncing Workouts")
+                Text("Syncing")
                     .font(Theme.Typography.headline)
-                
-                Text("\(healthManager.syncedWorkoutsCount) / \(workouts.count) processed")
+
+                Text("n \(healthManager.syncedWorkoutsCount) / \(workouts.count)")
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Colors.textSecondary)
             }
@@ -173,10 +173,10 @@ struct HealthSyncWizard: View {
                 .foregroundStyle(Theme.Colors.success)
                 .symbolEffect(.bounce)
             
-            Text("Health Sync Complete")
+            Text("Sync Complete")
                 .font(Theme.Typography.title)
             
-            Text("Your workouts have been enriched with health data.")
+            Text("health data ready")
                 .font(Theme.Typography.body)
                 .foregroundStyle(Theme.Colors.textSecondary)
                 .multilineTextAlignment(.center)

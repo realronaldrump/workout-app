@@ -18,6 +18,7 @@ struct StrongImportWizard: View {
     @State private var storageStatusMessage: String?
     @State private var healthSyncState: HealthSyncState = .idle
     @State private var healthSyncNote: String?
+    @State private var syncTargetCount: Int?
     
     var body: some View {
         NavigationStack {
@@ -71,17 +72,17 @@ struct StrongImportWizard: View {
         var message: String {
             switch self {
             case .idle:
-                return "Waiting for a file..."
+                return "awaiting file"
             case .reading:
-                return "Reading CSV file..."
+                return "reading csv"
             case .parsing:
-                return "Parsing workout data..."
+                return "parsing"
             case .processing:
-                return "Building workouts..."
+                return "processing"
             case .saving:
-                return "Saving file..."
+                return "saving"
             case .complete:
-                return "Import complete."
+                return "complete"
             }
         }
     }
@@ -116,7 +117,7 @@ struct StrongImportWizard: View {
                     .font(Theme.Typography.title)
                     .foregroundStyle(Theme.Colors.textPrimary)
                 
-                Text("Bring your workout history to life. We support the standard CSV export from the Strong app.")
+                Text("CSV export (Strong)")
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Colors.textSecondary)
                     .multilineTextAlignment(.center)
@@ -128,7 +129,7 @@ struct StrongImportWizard: View {
             Button(action: { 
                 withAnimation { step = 1 }
             }) {
-                Text("Get Started")
+                Text("Next")
                     .font(Theme.Typography.headline)
                     .frame(maxWidth: .infinity)
                     .padding()
@@ -208,8 +209,8 @@ struct StrongImportWizard: View {
                 
                 if let stats = importStats {
                     VStack(spacing: Theme.Spacing.md) {
-                        Text("Import Complete!")
-                            .font(Theme.Typography.title)
+                            Text("Import Complete")
+                                .font(Theme.Typography.title)
                         
                         HStack(spacing: Theme.Spacing.xl) {
                             VStack {
@@ -252,7 +253,7 @@ struct StrongImportWizard: View {
                 }
                 
                 if healthManager.isSyncing {
-                    Text("Health sync continues in the background. You can close this screen.")
+                    Text("sync background")
                         .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.Colors.textSecondary)
                         .multilineTextAlignment(.center)
@@ -304,8 +305,9 @@ struct StrongImportWizard: View {
                     .tint(Theme.Colors.error)
             }
             
-            if dataManager.workouts.count > 0 {
-                statusRow(title: "Workouts", value: "\(healthManager.syncedWorkoutsCount) of \(dataManager.workouts.count)")
+            let syncTotal = healthSyncTotalCount
+            if syncTotal > 0 {
+                statusRow(title: "Workouts", value: "\(healthManager.syncedWorkoutsCount) of \(syncTotal)")
             }
             
             if let note = healthSyncNote {
@@ -315,7 +317,7 @@ struct StrongImportWizard: View {
             }
             
             if case .needsAuthorization = healthSyncState {
-                Text("Enable Health access in Settings > Health > Data Access & Devices > workout-app.")
+                Text("Settings > Health > Data Access > workout-app")
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Colors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -347,8 +349,8 @@ struct StrongImportWizard: View {
             return message
         }
         return iCloudManager.isUsingLocalFallback
-            ? "Saved on-device (iCloud unavailable)"
-            : "Saved to iCloud Drive"
+            ? "local"
+            : "iCloud"
     }
     
     private var storageStatusColor: Color {
@@ -371,7 +373,7 @@ struct StrongImportWizard: View {
         case .unavailable:
             return "Unavailable"
         case .needsAuthorization:
-            return "Permission Needed"
+            return "auth"
         case .syncing:
             return "Syncing"
         case .synced:
@@ -383,24 +385,24 @@ struct StrongImportWizard: View {
     
     private var healthSyncStatusDetail: String {
         if healthManager.isSyncing {
-            return "Fetching Apple Health data for your imported workouts."
+            return "syncing"
         }
         switch healthSyncState {
         case .idle:
-            return "Health sync will start automatically after import."
+            return "pending"
         case .unavailable:
-            return "Health data is not available on this device."
+            return "unavailable"
         case .needsAuthorization:
             if healthManager.authorizationStatus == .denied {
-                return "Health access was denied."
+                return "denied"
             }
-            return "Waiting for Health permission."
+            return "auth"
         case .syncing:
-            return "Fetching Apple Health data for your imported workouts."
+            return "syncing"
         case .synced(let date):
-            return "Health sync completed \(formatDate(date))."
+            return "complete \(formatDate(date))"
         case .failed(let message):
-            return "Health sync failed: \(message)"
+            return "failed \(message)"
         }
     }
     
@@ -423,6 +425,10 @@ struct StrongImportWizard: View {
             return Theme.Colors.error
         }
     }
+
+    private var healthSyncTotalCount: Int {
+        syncTargetCount ?? dataManager.workouts.count
+    }
     
     private func formatDate(_ date: Date) -> String {
         date.formatted(date: .abbreviated, time: .shortened)
@@ -441,6 +447,7 @@ struct StrongImportWizard: View {
             storageStatusMessage = nil
             healthSyncState = .idle
             healthSyncNote = nil
+            syncTargetCount = nil
             importedFileName = url.lastPathComponent
             importPhase = .reading
             isImporting = true
@@ -481,8 +488,12 @@ struct StrongImportWizard: View {
                     // Artificial delay for UX
                     try await Task.sleep(nanoseconds: 1_000_000_000)
                     
+                    let healthSnapshot = await MainActor.run {
+                        Array(healthManager.healthDataStore.values)
+                    }
+
                     // Process workout sets (nonisolated async)
-                    await dataManager.processWorkoutSets(sets)
+                    await dataManager.processWorkoutSets(sets, healthDataSnapshot: healthSnapshot)
                     
                     await MainActor.run {
                         let stats = dataManager.calculateStats()
@@ -546,6 +557,14 @@ struct StrongImportWizard: View {
             return
         }
 
+        let missing = dataManager.workouts.filter { healthManager.getHealthData(for: $0.id) == nil }
+        syncTargetCount = missing.count
+        guard !missing.isEmpty else {
+            healthSyncState = .synced(Date())
+            healthSyncNote = "No new workouts to sync"
+            return
+        }
+
         Task { @MainActor in
             do {
                 if healthManager.authorizationStatus == .notDetermined {
@@ -559,10 +578,10 @@ struct StrongImportWizard: View {
                 }
 
                 healthSyncState = .syncing
-                let results = try await healthManager.syncAllWorkouts(dataManager.workouts)
+                let results = try await healthManager.syncAllWorkouts(missing)
                 let hasData = results.contains { $0.hasHealthData }
                 if !hasData {
-                    healthSyncNote = "No Health data was found for those workout times."
+                    healthSyncNote = "health samples 0"
                 }
                 healthSyncState = .synced(Date())
             } catch {

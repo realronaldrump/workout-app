@@ -44,7 +44,7 @@ struct OverviewCardsView: View {
                 HStack(spacing: Theme.Spacing.sm) {
                     Image(systemName: "calendar")
                         .font(.caption)
-                    Text("Last workout: \(lastWorkout.formatted(date: .abbreviated, time: .omitted))")
+                    Text("last \(lastWorkout.formatted(date: .abbreviated, time: .omitted))")
                         .font(Theme.Typography.caption)
                 }
                 .foregroundColor(Theme.Colors.textTertiary)

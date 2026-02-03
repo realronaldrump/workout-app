@@ -66,11 +66,11 @@ struct HealthDashboardView: View {
                 .foregroundStyle(Theme.Colors.textTertiary)
                 .padding(.top, 40)
 
-            Text("No Health Data Yet")
+            Text("health data 0")
                 .font(Theme.Typography.title2)
                 .foregroundStyle(Theme.Colors.textPrimary)
 
-            Text("Sync your workouts with Apple Health to see aggregated insights here.")
+            Text("workouts synced 0")
                 .font(Theme.Typography.body)
                 .foregroundStyle(Theme.Colors.textSecondary)
                 .multilineTextAlignment(.center)
@@ -165,7 +165,7 @@ struct HealthDashboardView: View {
                 .padding(Theme.Spacing.lg)
                 .glassBackground(elevation: 2)
             } else {
-                Text("Sync Health data to calculate recovery debt.")
+                Text("health data 0")
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Colors.textSecondary)
                     .padding(Theme.Spacing.lg)
@@ -288,30 +288,46 @@ struct HealthDashboardView: View {
                 }
 
                 let chartData = sortedHealthData.suffix(20).reversed()
+                let avgPoints = chartData.compactMap { data -> HealthTrendPoint? in
+                    guard let avg = data.avgHeartRate else { return nil }
+                    return HealthTrendPoint(date: data.workoutDate, value: avg, label: "Avg HR")
+                }
+                let maxPoints = chartData.compactMap { data -> HealthTrendPoint? in
+                    guard let max = data.maxHeartRate else { return nil }
+                    return HealthTrendPoint(date: data.workoutDate, value: max, label: "Max HR")
+                }
                 Chart {
-                    ForEach(Array(chartData), id: \.workoutId) { data in
-                        if let avg = data.avgHeartRate {
-                            LineMark(
-                                x: .value("Date", data.workoutDate),
-                                y: .value("Avg HR", avg)
-                            )
-                            .foregroundStyle(Color.red)
-                            .symbol(Circle())
-                        }
+                    ForEach(avgPoints) { point in
+                        LineMark(
+                            x: .value("Date", point.date),
+                            y: .value("Avg HR", point.value)
+                        )
+                        .foregroundStyle(by: .value("Metric", point.label))
+                        .symbol(Circle())
+                    }
 
-                        if let max = data.maxHeartRate {
-                            LineMark(
-                                x: .value("Date", data.workoutDate),
-                                y: .value("Max HR", max)
-                            )
-                            .foregroundStyle(Color.pink.opacity(0.5))
-                            .lineStyle(StrokeStyle(dash: [5, 5]))
-                        }
+                    ForEach(maxPoints) { point in
+                        LineMark(
+                            x: .value("Date", point.date),
+                            y: .value("Max HR", point.value)
+                        )
+                        .foregroundStyle(by: .value("Metric", point.label))
+                        .lineStyle(StrokeStyle(dash: [5, 5]))
                     }
                 }
                 .chartYScale(domain: .automatic(includesZero: false))
-                .chartLegend(position: .bottom)
+                .chartForegroundStyleScale([
+                    "Avg HR": Color.red,
+                    "Max HR": Color.pink.opacity(0.5)
+                ])
+                .chartPlotStyle { plotArea in
+                    plotArea
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .clipped()
+                }
+                .frame(maxWidth: .infinity)
                 .frame(height: 180)
+                .clipped()
 
                 HStack(spacing: Theme.Spacing.lg) {
                     HStack(spacing: 4) {
@@ -345,12 +361,15 @@ struct HealthDashboardView: View {
                 .foregroundStyle(Theme.Colors.textSecondary)
 
             if sleepPoints.isEmpty {
-                Text("Sleep data isn't available yet. Enable sleep tracking in Apple Health.")
+                Text("sleep samples 0")
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Colors.textSecondary)
                     .padding(Theme.Spacing.lg)
                     .glassBackground(elevation: 2)
             } else {
+                let maxSleep = sleepPoints.map { $0.value }.max() ?? 0
+                let upperBound = max(10, ceil(maxSleep))
+
                 Chart(sleepPoints) { point in
                     LineMark(
                         x: .value("Date", point.date),
@@ -363,13 +382,18 @@ struct HealthDashboardView: View {
                     )
                     .foregroundStyle(Theme.Colors.accentSecondary)
                 }
-                .chartYScale(domain: 0...10)
+                .chartYScale(domain: 0...upperBound)
+                .chartPlotStyle { plotArea in
+                    plotArea.clipped()
+                }
+                .frame(maxWidth: .infinity)
                 .frame(height: 160)
+                .clipped()
                 .padding(Theme.Spacing.lg)
                 .glassBackground(elevation: 2)
 
                 let avgSleep = average(sleepPoints.map { $0.value }) ?? 0
-                Text(avgSleep >= 7 ? "Sleep is supporting your training." : "Sleep is trending below 7 hours. Recovery could improve.")
+                Text("avg \(String(format: "%.1f", avgSleep))h | target 7h")
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Colors.textSecondary)
             }
@@ -399,7 +423,7 @@ struct HealthDashboardView: View {
                 .foregroundStyle(Theme.Colors.textSecondary)
 
             if points.isEmpty {
-                Text("Daily activity metrics are missing. Check Apple Health permissions.")
+                Text("activity samples 0")
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Colors.textSecondary)
                     .padding(Theme.Spacing.lg)
@@ -447,7 +471,7 @@ struct HealthDashboardView: View {
                 .foregroundStyle(Theme.Colors.textSecondary)
 
             if vo2Points.isEmpty {
-                Text("VO2 Max isn't available yet. Cardio fitness data appears after runs or walks.")
+                Text("vo2 samples 0")
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Colors.textSecondary)
                     .padding(Theme.Spacing.lg)
@@ -518,12 +542,20 @@ struct HealthDashboardView: View {
                 .foregroundStyle(Theme.Colors.textSecondary)
 
             if weightPoints.isEmpty {
-                Text("Body mass data isn't available. Enable weight tracking in Apple Health.")
+                Text("body mass samples 0")
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Colors.textSecondary)
                     .padding(Theme.Spacing.lg)
                     .glassBackground(elevation: 2)
             } else {
+                let weights = weightPoints.map { $0.value }
+                let minWeight = weights.min() ?? 0
+                let maxWeight = weights.max() ?? 0
+                let span = max(maxWeight - minWeight, 1)
+                let padding = max(span * 0.12, 2)
+                let lowerBound = max(1, minWeight - padding)
+                let upperBound = maxWeight + padding
+
                 Chart(weightPoints) { point in
                     LineMark(
                         x: .value("Date", point.date),
@@ -536,6 +568,7 @@ struct HealthDashboardView: View {
                     )
                     .foregroundStyle(Theme.Colors.accent)
                 }
+                .chartYScale(domain: lowerBound...upperBound)
                 .frame(height: 160)
                 .padding(Theme.Spacing.lg)
                 .glassBackground(elevation: 2)
@@ -547,7 +580,7 @@ struct HealthDashboardView: View {
                 let avgVolume = average(volumePoints) ?? 0
                 let avgBodyFat = average(sortedHealthData.compactMap { $0.bodyFatPercentage }) ?? 0
 
-                Text("Average volume at current weight: \(formatNumber(avgVolume))")
+                Text("avg volume @ weight \(formatNumber(avgVolume))")
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Colors.textSecondary)
 
@@ -564,7 +597,7 @@ struct HealthDashboardView: View {
 
     private var recentWorkoutsSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Recent Workout Health Data")
+            Text("Recent Health Sessions")
                 .font(Theme.Typography.headline)
                 .foregroundStyle(Theme.Colors.textSecondary)
 
@@ -579,7 +612,7 @@ struct HealthDashboardView: View {
     private func calculateRecoveryScore() -> (score: Int, label: String, message: String, color: Color) {
         let recentData = Array(sortedHealthData.prefix(3))
         guard !recentData.isEmpty else {
-            return (50, "Unknown", "Not enough data to assess recovery.", Theme.Colors.textTertiary)
+            return (50, "avgHR", "n 0", Theme.Colors.textTertiary)
         }
 
         let avgHRs = recentData.compactMap { $0.avgHeartRate }
@@ -592,25 +625,20 @@ struct HealthDashboardView: View {
 
         if overallAvgHR < 120 {
             score = 90
-            label = "Excellent"
-            message = "Your recent workout heart rates are low, indicating great cardiovascular fitness."
             color = Theme.Colors.success
         } else if overallAvgHR < 140 {
             score = 75
-            label = "Good"
-            message = "Your heart rate efficiency is solid. Keep up the consistent training."
             color = Color.green
         } else if overallAvgHR < 155 {
             score = 60
-            label = "Moderate"
-            message = "Your workout intensity has been high. Consider adding recovery sessions."
             color = Theme.Colors.warning
         } else {
             score = 45
-            label = "Recovery Needed"
-            message = "High workout heart rates detected. Take rest days to allow proper recovery."
             color = Theme.Colors.error
         }
+
+        label = "avgHR"
+        message = "avg \(Int(overallAvgHR)) bpm | n \(avgHRs.count)"
 
         return (score, label, message, color)
     }
@@ -625,12 +653,13 @@ struct HealthDashboardView: View {
 
         let diff = thisAvg - lastAvg
 
+        let message = "delta avgHR \(String(format: "%+.0f", diff)) bpm | n \(thisWeekData.count)/\(lastWeekData.count)"
         if abs(diff) < 3 {
-            return ("arrow.forward", "Your heart rate is stable compared to last week.", Theme.Colors.textSecondary)
+            return ("arrow.forward", message, Theme.Colors.textSecondary)
         } else if diff < 0 {
-            return ("arrow.down.circle.fill", "Your workout heart rate dropped \(Int(abs(diff))) bpm from last week. Great progress!", Theme.Colors.success)
+            return ("arrow.down.circle.fill", message, Theme.Colors.success)
         } else {
-            return ("arrow.up.circle.fill", "Your workout heart rate increased \(Int(diff)) bpm. This could indicate fatigue or higher intensity.", Theme.Colors.warning)
+            return ("arrow.up.circle.fill", message, Theme.Colors.warning)
         }
     }
 

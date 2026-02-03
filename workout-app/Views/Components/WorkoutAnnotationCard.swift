@@ -14,7 +14,7 @@ struct WorkoutAnnotationCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             HStack {
-                Text("Session Notes")
+                Text("Notes")
                     .font(Theme.Typography.title3)
                     .foregroundColor(Theme.Colors.textPrimary)
 
@@ -69,7 +69,7 @@ struct WorkoutAnnotationCard: View {
                 .cornerRadius(Theme.CornerRadius.medium)
                 .foregroundColor(Theme.Colors.textPrimary)
                 .overlay(
-                    Text(notes.isEmpty ? "Add notes about stress, soreness, caffeine, or energy." : "")
+                    Text(notes.isEmpty ? "Notes" : "")
                         .font(Theme.Typography.caption)
                         .foregroundColor(Theme.Colors.textTertiary)
                         .padding(.horizontal, Theme.Spacing.md)

@@ -12,13 +12,13 @@ struct HealthDataView: View {
             HStack {
                 Image(systemName: "heart.fill")
                     .foregroundColor(.red)
-                Text("Apple Health Data")
+                Text("Health Metrics")
                     .font(Theme.Typography.headline)
                 
                 Spacer()
                 
                 if let syncedAt = healthData.syncedAt as Date? {
-                    Text("Synced \(syncedAt.formatted(.relative(presentation: .named)))")
+                    Text("sync \(syncedAt.formatted(.relative(presentation: .named)))")
                         .font(Theme.Typography.caption)
                         .foregroundColor(Theme.Colors.textTertiary)
                 }
@@ -65,11 +65,11 @@ struct HealthDataView: View {
                 .font(.system(size: 40))
                 .foregroundColor(Theme.Colors.textTertiary)
             
-            Text("No Health Data Found")
+            Text("health data 0")
                 .font(Theme.Typography.subheadline)
                 .foregroundColor(Theme.Colors.textSecondary)
             
-            Text("No Apple Health data was recorded during this workout window.")
+            Text("samples 0")
                 .font(Theme.Typography.caption)
                 .foregroundColor(Theme.Colors.textTertiary)
                 .multilineTextAlignment(.center)
@@ -207,7 +207,7 @@ struct HealthDataView: View {
     
     private var heartRateSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Intensity Zones")
+            Text("Zones")
                 .font(Theme.Typography.subheadline)
                 .foregroundColor(Theme.Colors.textSecondary)
             HeartRateZoneStrip(samples: healthData.heartRateSamples)
@@ -242,7 +242,7 @@ struct HealthDataView: View {
     
     private var additionalMetricsSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Additional Data")
+            Text("Other Metrics")
                 .font(Theme.Typography.subheadline)
                 .foregroundColor(Theme.Colors.textSecondary)
             
@@ -300,7 +300,7 @@ struct HealthDataView: View {
 
     private func sleepSection(summary: SleepSummary) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Sleep (Night Before)")
+            Text("Sleep (Prev)")
                 .font(Theme.Typography.subheadline)
                 .foregroundColor(Theme.Colors.textSecondary)
 
@@ -309,7 +309,7 @@ struct HealthDataView: View {
                     Text(String(format: "%.1f", summary.totalHours))
                         .font(Theme.Typography.number)
                         .foregroundColor(Theme.Colors.textPrimary)
-                    Text("hours asleep")
+                    Text("h asleep")
                         .font(Theme.Typography.caption)
                         .foregroundColor(Theme.Colors.textSecondary)
                 }
@@ -318,7 +318,7 @@ struct HealthDataView: View {
                     Text(formatDuration(summary.inBed))
                         .font(Theme.Typography.subheadline)
                         .foregroundColor(Theme.Colors.textPrimary)
-                    Text("time in bed")
+                    Text("in bed")
                         .font(Theme.Typography.caption)
                         .foregroundColor(Theme.Colors.textSecondary)
                 }
@@ -485,7 +485,7 @@ struct HealthSyncButton: View {
                     Image(systemName: "heart.text.square")
                 }
                 
-                Text(isSyncing ? "Syncing..." : "Sync Health Data")
+                Text(isSyncing ? "syncing" : "sync")
                     .font(Theme.Typography.subheadline)
             }
             .foregroundColor(.white)

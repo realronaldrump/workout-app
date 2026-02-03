@@ -47,7 +47,7 @@ struct SettingsView: View {
                             icon: "square.and.arrow.down",
                             color: .blue,
                             title: "Import Data",
-                            subtitle: "Import CSV from Strong app"
+                            subtitle: "Import CSV"
                         ) {
                             showingImportWizard = true
                         }
@@ -58,7 +58,7 @@ struct SettingsView: View {
                             icon: "heart.fill",
                             color: .red,
                             title: "Apple Health",
-                            subtitle: healthManager.authorizationStatus == .authorized ? "Connected" : "Sync health metrics",
+                            subtitle: healthManager.authorizationStatus == .authorized ? "Connected" : "Health off",
                             value: healthManager.authorizationStatus == .authorized ? "On" : "Off"
                         ) {
                             showingHealthWizard = true
@@ -71,7 +71,7 @@ struct SettingsView: View {
                                 icon: "chart.xyaxis.line",
                                 color: .pink,
                                 title: "Health Insights",
-                                subtitle: "Trends & Analysis"
+                                subtitle: "Trends"
                             ) {
                                 showingHealthDashboard = true
                             }
@@ -90,7 +90,7 @@ struct SettingsView: View {
                                 VStack(alignment: .leading) {
                                     Text("Backups")
                                         .font(Theme.Typography.body)
-                                    Text("Manage iCloud files")
+                                    Text("iCloud")
                                         .font(Theme.Typography.caption)
                                         .foregroundStyle(Theme.Colors.textSecondary)
                                 }

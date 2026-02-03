@@ -13,9 +13,9 @@ struct BackupFilesView: View {
                 LazyVStack(spacing: Theme.Spacing.md) {
                     if files.isEmpty {
                         ContentUnavailableView(
-                            "No Backups",
+                            "files 0",
                             systemImage: "icloud.slash",
-                            description: Text("No backup files found in iCloud.")
+                            description: Text("iCloud 0")
                         )
                         .padding(.top, 50)
                     } else {
@@ -67,7 +67,7 @@ struct BackupFileRow: View {
                    let creationDate = attributes[.creationDate] as? Date {
                     HStack {
                         Text(ByteCountFormatter.string(fromByteCount: Int64(fileSize), countStyle: .file))
-                        Text("·")
+                        Text("|")
                         Text(creationDate.formatted(date: .abbreviated, time: .shortened))
                     }
                     .font(Theme.Typography.caption)

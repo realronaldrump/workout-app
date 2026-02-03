@@ -23,7 +23,7 @@ struct QuickStartView: View {
                             Text("Quick Start")
                                 .font(Theme.Typography.title)
                                 .foregroundColor(Theme.Colors.textPrimary)
-                            Text(exerciseName == nil ? "Pick a focus and move" : "Start with \(exerciseName ?? "")")
+                            Text(exerciseName == nil ? "focus select" : "exercise \(exerciseName ?? "")")
                                 .font(Theme.Typography.subheadline)
                                 .foregroundColor(Theme.Colors.textSecondary)
                         }
@@ -84,7 +84,7 @@ struct QuickStartView: View {
                     .glassBackground(elevation: 2)
 
                     VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                        Text("This is a quick launchpad. Start your session, and we will capture the details as you go.")
+                        Text("session target only")
                             .font(Theme.Typography.body)
                             .foregroundColor(Theme.Colors.textSecondary)
                     }

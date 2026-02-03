@@ -15,15 +15,21 @@ struct WorkoutSet: Identifiable, Codable, Hashable {
 }
 
 struct Exercise: Identifiable, Hashable {
-    let id = UUID()
+    let id: UUID
     let name: String
     var sets: [WorkoutSet]
+
+    nonisolated init(id: UUID = UUID(), name: String, sets: [WorkoutSet]) {
+        self.id = id
+        self.name = name
+        self.sets = sets
+    }
     
     var maxWeight: Double {
         sets.map { $0.weight }.max() ?? 0
     }
     
-    var totalVolume: Double {
+    nonisolated var totalVolume: Double {
         sets.reduce(0) { $0 + ($1.weight * Double($1.reps)) }
     }
     
@@ -47,13 +53,27 @@ struct Exercise: Identifiable, Hashable {
 }
 
 struct Workout: Identifiable, Hashable {
-    let id = UUID()
+    let id: UUID
     let date: Date
     let name: String
     let duration: String
     var exercises: [Exercise]
+
+    nonisolated init(
+        id: UUID = UUID(),
+        date: Date,
+        name: String,
+        duration: String,
+        exercises: [Exercise]
+    ) {
+        self.id = id
+        self.date = date
+        self.name = name
+        self.duration = duration
+        self.exercises = exercises
+    }
     
-    var totalVolume: Double {
+    nonisolated var totalVolume: Double {
         exercises.reduce(0) { $0 + $1.totalVolume }
     }
     

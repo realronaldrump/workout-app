@@ -43,7 +43,7 @@ struct DashboardView: View {
                     headerSection
 
                     if dataManager.workouts.isEmpty {
-                        EmptyMissionView(
+                        EmptyDataView(
                             onImport: { showingImportWizard = true },
                             onConnectHealth: { showingHealthWizard = true }
                         )
@@ -52,7 +52,7 @@ struct DashboardView: View {
                         timeRangeSection
 
                         if let currentStats = filteredStats {
-                            MissionMetricsSection(
+                            KeyMetricsSection(
                                 stats: currentStats,
                                 readiness: readinessSnapshot,
                                 streakDelta: streakDelta,
@@ -66,7 +66,7 @@ struct DashboardView: View {
                                 .padding(.horizontal, Theme.Spacing.lg)
                         }
 
-                        briefingSection
+                        windowDeltaSection
                             .padding(.horizontal, Theme.Spacing.lg)
 
                         InsightsStreamView(
@@ -155,12 +155,12 @@ struct DashboardView: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                    Text(greeting)
-                        .font(Theme.Typography.microcopy)
-                        .foregroundColor(Theme.Colors.textSecondary)
-                    Text("Mission Control")
+                    Text("Analytics")
                         .font(Theme.Typography.largeTitle)
                         .foregroundColor(Theme.Colors.textPrimary)
+                    Text(headerSummary)
+                        .font(Theme.Typography.microcopy)
+                        .foregroundColor(Theme.Colors.textSecondary)
                 }
 
                 Spacer()
@@ -174,7 +174,7 @@ struct DashboardView: View {
             }
 
             HStack(spacing: Theme.Spacing.md) {
-                MissionActionButton(
+                ActionButton(
                     title: "Import",
                     icon: "arrow.down.to.line",
                     tint: Theme.Colors.accent
@@ -182,8 +182,8 @@ struct DashboardView: View {
                     showingImportWizard = true
                 }
 
-                MissionActionButton(
-                    title: healthManager.authorizationStatus == .authorized ? "Health" : "Connect",
+                ActionButton(
+                    title: "Health",
                     icon: "heart.fill",
                     tint: .red
                 ) {
@@ -194,8 +194,8 @@ struct DashboardView: View {
                     }
                 }
 
-                MissionActionButton(
-                    title: "Quick Start",
+                ActionButton(
+                    title: "Start",
                     icon: "bolt.fill",
                     tint: Theme.Colors.accentSecondary
                 ) {
@@ -209,7 +209,7 @@ struct DashboardView: View {
 
     private var timeRangeSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text("Focus Window")
+            Text("Window")
                 .font(Theme.Typography.caption)
                 .foregroundColor(Theme.Colors.textTertiary)
                 .padding(.horizontal, Theme.Spacing.lg)
@@ -218,25 +218,18 @@ struct DashboardView: View {
         }
     }
 
-    private var briefingSection: some View {
-        let briefing = contextualBriefing
-
-        return ContextualBriefingCard(
-            title: briefing.title,
-            message: briefing.message,
-            accent: briefing.tint,
-            icon: briefing.icon,
-            actionLabel: briefing.actionLabel,
-            action: {
-                handleBriefingAction(briefing.action)
-            }
+    private var windowDeltaSection: some View {
+        WindowDeltaCard(
+            metrics: windowChangeMetrics,
+            windowLabel: selectedTimeRange.rawValue,
+            windowDays: windowDays
         )
     }
 
     private var trainingSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             HStack {
-                Text("Training Pulse")
+                Text("Training Load")
                     .font(Theme.Typography.title2)
                     .foregroundColor(Theme.Colors.textPrimary)
 
@@ -248,7 +241,7 @@ struct DashboardView: View {
                     }
                     Haptics.selection()
                 }) {
-                    Text(isTrainingExpanded ? "Less" : "More")
+                    Text(isTrainingExpanded ? "Collapse" : "Expand")
                         .font(Theme.Typography.subheadline)
                         .foregroundColor(Theme.Colors.accent)
                 }
@@ -275,7 +268,7 @@ struct DashboardView: View {
 
     private var explorationSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Explore")
+            Text("Drilldowns")
                 .font(Theme.Typography.title3)
                 .foregroundColor(Theme.Colors.textPrimary)
 
@@ -284,8 +277,8 @@ struct DashboardView: View {
                     PerformanceLabView(dataManager: dataManager)
                 } label: {
                     ExplorationRow(
-                        title: "Performance Lab",
-                        subtitle: "Progress maps, correlations, drill-downs",
+                        title: "Performance",
+                        subtitle: "Deltas | ratios | r",
                         icon: "viewfinder",
                         tint: Theme.Colors.success
                     )
@@ -296,8 +289,8 @@ struct DashboardView: View {
                     WorkoutHistoryView(workouts: dataManager.workouts)
                 } label: {
                     ExplorationRow(
-                        title: "Workout History",
-                        subtitle: "Every session, filtered",
+                        title: "History",
+                        subtitle: "Sessions | filters",
                         icon: "clock.fill",
                         tint: Theme.Colors.accent
                     )
@@ -308,10 +301,22 @@ struct DashboardView: View {
                     ExerciseListView(dataManager: dataManager)
                 } label: {
                     ExplorationRow(
-                        title: "Exercise Library",
-                        subtitle: "Trends, PRs, plateaus",
+                        title: "Exercises",
+                        subtitle: "PR | volume | freq",
                         icon: "figure.strengthtraining.traditional",
                         tint: Theme.Colors.accentSecondary
+                    )
+                }
+                .buttonStyle(PlainButtonStyle())
+
+                NavigationLink {
+                    ProfileView(dataManager: dataManager, iCloudManager: iCloudManager)
+                } label: {
+                    ExplorationRow(
+                        title: "Profile",
+                        subtitle: "Stats | links | prefs",
+                        icon: "person.crop.circle",
+                        tint: Theme.Colors.accent
                     )
                 }
                 .buttonStyle(PlainButtonStyle())
@@ -321,7 +326,7 @@ struct DashboardView: View {
                 } label: {
                     ExplorationRow(
                         title: "Settings",
-                        subtitle: "Sync, units, and tags",
+                        subtitle: "Sync | units | tags",
                         icon: "gearshape.fill",
                         tint: Theme.Colors.textSecondary
                     )
@@ -360,36 +365,32 @@ struct DashboardView: View {
         return dataManager.calculateStats(for: filteredWorkouts)
     }
 
-    private var greeting: String {
-        let hour = Calendar.current.component(.hour, from: Date())
-        switch hour {
-        case 5..<12:
-            return "Good morning"
-        case 12..<17:
-            return "Good afternoon"
-        case 17..<22:
-            return "Good evening"
-        default:
-            return "Welcome back"
+    private var headerSummary: String {
+        guard let stats = filteredStats else {
+            return "sessions 0 | volume 0 | density 0"
         }
+
+        let densities = filteredWorkouts.map { WorkoutAnalytics.effortDensity(for: $0) }
+        let avgDensity = average(densities) ?? 0
+        return "sessions \(stats.totalWorkouts) | volume \(formatVolume(stats.totalVolume)) | density \(String(format: "%.1f", avgDensity))"
     }
 
     private var syncStatusText: String {
         if healthManager.isAutoSyncing {
-            return "Refreshing health data"
+            return "syncing"
         }
         switch healthManager.authorizationStatus {
         case .authorized:
             if let lastSync = healthManager.lastSyncDate {
-                return "Health updated \(lastSync.formatted(.relative(presentation: .named)))"
+                return "sync \(lastSync.formatted(.relative(presentation: .named)))"
             }
-            return "Health connected"
+            return "sync ready"
         case .notDetermined:
-            return "Health not connected"
+            return "health off"
         case .denied:
-            return "Health permission denied"
+            return "health denied"
         case .unavailable:
-            return "Health unavailable"
+            return "health n/a"
         }
     }
 
@@ -424,26 +425,31 @@ struct DashboardView: View {
 
     private var streakDelta: String? {
         guard let stats = stats else { return nil }
-        if stats.currentStreak >= stats.longestStreak {
-            return "New best"
-        }
-        if stats.currentStreak >= 3 {
-            return "On a roll"
-        }
-        return nil
+        return "best \(stats.longestStreak)"
     }
 
     private var insightMoments: [InsightMoment] {
         var items: [InsightMoment] = []
 
         if let stats = stats {
+            let densities = filteredWorkouts.map { WorkoutAnalytics.effortDensity(for: $0) }
+            let avgDensity = average(densities) ?? 0
             items.append(
                 InsightMoment(
-                    title: "Momentum",
-                    message: "\(stats.totalWorkouts) sessions logged this window.",
-                    icon: "sparkles",
+                    title: "Sessions",
+                    message: "window \(selectedTimeRange.rawValue)",
+                    icon: "flag.checkered",
                     tint: Theme.Colors.accent,
-                    value: "\(stats.currentStreak) day streak"
+                    value: "\(stats.totalWorkouts)"
+                )
+            )
+            items.append(
+                InsightMoment(
+                    title: "Density",
+                    message: "avg",
+                    icon: "chart.line.uptrend.xyaxis",
+                    tint: Theme.Colors.accentSecondary,
+                    value: String(format: "%.1f", avgDensity)
                 )
             )
         }
@@ -463,7 +469,7 @@ struct DashboardView: View {
         if let recentWorkout = filteredWorkouts.first {
             items.append(
                 InsightMoment(
-                    title: "Latest Session",
+                    title: "Latest",
                     message: recentWorkout.name,
                     icon: "clock.fill",
                     tint: Theme.Colors.accentSecondary,
@@ -475,72 +481,26 @@ struct DashboardView: View {
         return items
     }
 
-    private var contextualBriefing: DashboardBriefing {
-        let now = Date()
-        let weekday = Calendar.current.component(.weekday, from: now)
-        let hour = Calendar.current.component(.hour, from: now)
-        let lastWorkout = stats?.lastWorkoutDate
-
-        if let lastWorkout, now.timeIntervalSince(lastWorkout) < 3600 * 6 {
-            return DashboardBriefing(
-                title: "Recovery first",
-                message: "Your last session was just \(lastWorkout.formatted(.relative(presentation: .named))). Keep intensity low or focus on mobility.",
-                icon: "waveform.path.ecg",
-                tint: Theme.Colors.warning,
-                actionLabel: "Check recovery",
-                action: .health
-            )
+    private var windowDays: Int {
+        switch selectedTimeRange {
+        case .week:
+            return 7
+        case .month:
+            return 30
+        case .threeMonths:
+            return 90
+        case .year:
+            return 365
+        case .allTime:
+            guard let oldest = dataManager.workouts.map({ $0.date }).min(),
+                  let newest = dataManager.workouts.map({ $0.date }).max() else { return 30 }
+            let days = Calendar.current.dateComponents([.day], from: oldest, to: newest).day ?? 30
+            return max(days, 30)
         }
-
-        if weekday == 2 && hour < 12 {
-            return DashboardBriefing(
-                title: "Set the week",
-                message: "Monday morning focus. Map your training windows based on your strongest sessions.",
-                icon: "calendar.badge.clock",
-                tint: Theme.Colors.accent,
-                actionLabel: "View history",
-                action: .history
-            )
-        }
-
-        if let readiness = readinessSnapshot, readiness.isCaution {
-            return DashboardBriefing(
-                title: "Dial it back",
-                message: readiness.detail,
-                icon: readiness.icon,
-                tint: readiness.tint,
-                actionLabel: "Recovery",
-                action: .health
-            )
-        }
-
-        return DashboardBriefing(
-            title: "Ready to push",
-            message: "Your consistency is building. Plan a focused session to keep momentum.",
-            icon: "bolt.fill",
-            tint: Theme.Colors.success,
-            actionLabel: "Quick start",
-            action: .quickStart
-        )
     }
 
-    private func handleBriefingAction(_ action: DashboardBriefing.Action) {
-        Haptics.selection()
-        switch action {
-        case .history:
-            showingHistory = true
-        case .health:
-            if healthManager.authorizationStatus == .authorized {
-                showingHealthDashboard = true
-            } else {
-                showingHealthWizard = true
-            }
-        case .quickStart:
-            quickStartExercise = nil
-            showingQuickStart = true
-        case .importData:
-            showingImportWizard = true
-        }
+    private var windowChangeMetrics: [ChangeMetric] {
+        WorkoutAnalytics.changeMetrics(for: dataManager.workouts, windowDays: windowDays)
     }
 
     private func loadLatestWorkoutData() {
@@ -556,19 +516,14 @@ struct DashboardView: View {
                 do {
                     let data = try Data(contentsOf: latestFile)
                     let sets = try CSVParser.parseStrongWorkoutsCSV(from: data)
-                    
-                    // Switch back to MainActor to update the view model
-                    _ = await MainActor.run {
-                        // We will make processWorkoutSets async next, but for now calling it inside a Task structure
-                        // If processWorkoutSets becomes async, we'll await it.
-                        // For this step, we are assuming it might still be synchronous or we will update it shortly.
-                        // Actually, looking at the plan, we are making processWorkoutSets async next.
-                        // So let's prepare for that.
-                        
-                        Task {
-                             await dataManager.processWorkoutSets(sets)
-                             refreshStats()
-                        }
+
+                    let healthSnapshot = await MainActor.run {
+                        Array(healthManager.healthDataStore.values)
+                    }
+
+                    await dataManager.processWorkoutSets(sets, healthDataSnapshot: healthSnapshot)
+                    await MainActor.run {
+                        refreshStats()
                     }
                 } catch {
                     print("Failed to load workout data: \(error)")
@@ -599,22 +554,15 @@ struct DashboardView: View {
         guard !values.isEmpty else { return nil }
         return values.reduce(0, +) / Double(values.count)
     }
-}
 
-private struct DashboardBriefing {
-    enum Action {
-        case history
-        case health
-        case quickStart
-        case importData
+    private func formatVolume(_ volume: Double) -> String {
+        if volume >= 1000000 {
+            return String(format: "%.1fM", volume / 1000000)
+        } else if volume >= 1000 {
+            return String(format: "%.0fk", volume / 1000)
+        }
+        return "\(Int(volume))"
     }
-
-    let title: String
-    let message: String
-    let icon: String
-    let tint: Color
-    let actionLabel: String
-    let action: Action
 }
 
 private struct HealthSnapshot {
@@ -626,13 +574,12 @@ private struct HealthSnapshot {
 
     var readiness: ReadinessSnapshot? {
         guard let hrv = avgHRV, let resting = avgRestingHR else { return nil }
-        let scoreValue = max(0, min(100, Int((hrv / max(resting, 1)) * 12)))
+        let ratio = hrv / max(resting, 1)
+        let scoreValue = max(0, min(100, Int(ratio * 12)))
         let isCaution = scoreValue < 60
         let tint: Color = isCaution ? Theme.Colors.warning : Theme.Colors.success
-        let label = isCaution ? "Recovery" : "Ready"
-        let detail = isCaution
-            ? "HRV and resting HR suggest a lighter session today."
-            : "HRV and resting HR look strong. You can push intensity."
+        let label = "Readiness"
+        let detail = "hrv \(Int(hrv)) ms | rhr \(Int(resting)) bpm | r \(String(format: "%.2f", ratio))"
 
         return ReadinessSnapshot(
             score: "\(scoreValue)",
@@ -640,7 +587,8 @@ private struct HealthSnapshot {
             detail: detail,
             icon: isCaution ? "bed.double.fill" : "figure.strengthtraining.traditional",
             tint: tint,
-            isCaution: isCaution
+            isCaution: isCaution,
+            ratioLabel: "r \(String(format: "%.2f", ratio))"
         )
     }
 }
@@ -652,6 +600,7 @@ private struct ReadinessSnapshot {
     let icon: String
     let tint: Color
     let isCaution: Bool
+    let ratioLabel: String
 }
 
 private struct SyncStatusPill: View {
@@ -673,7 +622,7 @@ private struct SyncStatusPill: View {
     }
 }
 
-private struct MissionActionButton: View {
+private struct ActionButton: View {
     let title: String
     let icon: String
     let tint: Color
@@ -740,7 +689,7 @@ private struct TimeRangePicker: View {
     }
 }
 
-private struct MissionMetricsSection: View {
+private struct KeyMetricsSection: View {
     let stats: WorkoutStats
     let readiness: ReadinessSnapshot?
     let streakDelta: String?
@@ -748,7 +697,7 @@ private struct MissionMetricsSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-            Text("Critical Metrics")
+            Text("Key Metrics")
                 .font(Theme.Typography.title3)
                 .foregroundColor(Theme.Colors.textPrimary)
 
@@ -760,7 +709,7 @@ private struct MissionMetricsSection: View {
                     MetricCard(
                         title: "Sessions",
                         value: "\(stats.totalWorkouts)",
-                        subtitle: "this window",
+                        subtitle: "window",
                         icon: "flag.checkered",
                         accent: Theme.Colors.accent,
                         badge: nil
@@ -788,9 +737,9 @@ private struct MissionMetricsSection: View {
                     onMetricTap(.volume)
                 }) {
                     MetricCard(
-                        title: "Total Volume",
+                        title: "Volume",
                         value: formatVolume(stats.totalVolume),
-                        subtitle: "lifted",
+                        subtitle: "total",
                         icon: "scalemass.fill",
                         accent: Theme.Colors.success,
                         badge: nil
@@ -803,10 +752,10 @@ private struct MissionMetricsSection: View {
                     onMetricTap(.readiness)
                 }) {
                     MetricCard(
-                        title: readiness?.label ?? "Readiness",
+                        title: "Readiness",
                         value: readiness?.score ?? "--",
-                        subtitle: readiness?.isCaution == true ? "recover" : "ready",
-                        icon: readiness?.icon ?? "heart.circle.fill",
+                        subtitle: readiness?.ratioLabel ?? "ratio --",
+                        icon: "waveform.path.ecg",
                         accent: readiness?.tint ?? Theme.Colors.accentSecondary,
                         badge: nil
                     )
@@ -865,37 +814,115 @@ private struct MetricCard: View {
     }
 }
 
-private struct ContextualBriefingCard: View {
-    let title: String
-    let message: String
-    let accent: Color
-    let icon: String
-    let actionLabel: String
-    let action: () -> Void
+private struct WindowDeltaCard: View {
+    let metrics: [ChangeMetric]
+    let windowLabel: String
+    let windowDays: Int
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             HStack {
-                Image(systemName: icon)
-                    .foregroundColor(accent)
-                Text(title)
-                    .font(Theme.Typography.headline)
+                Text("Window Delta")
+                    .font(Theme.Typography.title3)
                     .foregroundColor(Theme.Colors.textPrimary)
                 Spacer()
+                Text("\(windowLabel) | \(windowDays)d")
+                    .font(Theme.Typography.caption)
+                    .foregroundColor(Theme.Colors.textTertiary)
             }
 
-            Text(message)
-                .font(Theme.Typography.body)
-                .foregroundColor(Theme.Colors.textSecondary)
-
-            Button(action: action) {
-                Text(actionLabel)
-                    .font(Theme.Typography.subheadline)
-                    .foregroundColor(accent)
+            if metrics.isEmpty {
+                Text("metrics 0")
+                    .font(Theme.Typography.caption)
+                    .foregroundColor(Theme.Colors.textSecondary)
+                    .padding(Theme.Spacing.lg)
+                    .glassBackground(elevation: 2)
+            } else {
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: Theme.Spacing.md) {
+                    ForEach(metrics) { metric in
+                        DeltaMetricCard(metric: metric)
+                    }
+                }
             }
         }
         .padding(Theme.Spacing.lg)
         .glassBackground(elevation: 2)
+    }
+}
+
+private struct DeltaMetricCard: View {
+    let metric: ChangeMetric
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            Text(metric.title)
+                .font(Theme.Typography.caption)
+                .foregroundColor(Theme.Colors.textSecondary)
+            Text(formatValue(metric.current))
+                .font(Theme.Typography.title3)
+                .foregroundColor(Theme.Colors.textPrimary)
+            Text(deltaLabel)
+                .font(Theme.Typography.caption)
+                .foregroundColor(metric.isPositive ? Theme.Colors.success : Theme.Colors.error)
+        }
+        .padding(Theme.Spacing.md)
+        .glassBackground(elevation: 1)
+    }
+
+    private var deltaLabel: String {
+        let sign = metric.delta >= 0 ? "+" : "-"
+        let percentSign = metric.percentChange >= 0 ? "+" : ""
+        return "delta \(sign)\(formatDelta(abs(metric.delta))) | \(percentSign)\(String(format: "%.0f", metric.percentChange))%"
+    }
+
+    private func formatValue(_ value: Double) -> String {
+        if metric.title.contains("Sessions") {
+            return String(format: "%.0f", value)
+        }
+        if metric.title.contains("Duration") {
+            return formatDurationMinutes(value)
+        }
+        if metric.title.contains("Volume") {
+            return formatVolume(value)
+        }
+        if metric.title.contains("Density") {
+            return String(format: "%.1f", value)
+        }
+        return String(format: "%.1f", value)
+    }
+
+    private func formatDelta(_ value: Double) -> String {
+        if metric.title.contains("Sessions") {
+            return String(format: "%.0f", value)
+        }
+        if metric.title.contains("Duration") {
+            return String(format: "%.0f m", value)
+        }
+        if metric.title.contains("Volume") {
+            return formatVolume(value)
+        }
+        if metric.title.contains("Density") {
+            return String(format: "%.1f", value)
+        }
+        return String(format: "%.1f", value)
+    }
+
+    private func formatVolume(_ volume: Double) -> String {
+        if volume >= 1000000 {
+            return String(format: "%.1fM", volume / 1000000)
+        }
+        if volume >= 1000 {
+            return String(format: "%.1fk", volume / 1000)
+        }
+        return String(format: "%.0f", volume)
+    }
+
+    private func formatDurationMinutes(_ minutes: Double) -> String {
+        let value = Int(round(minutes))
+        if value >= 60 {
+            return "\(value / 60)h \(value % 60)m"
+        }
+        return "\(value)m"
     }
 }
 
@@ -907,7 +934,7 @@ private struct HealthPulseSection: View {
         Button(action: onTap) {
             VStack(alignment: .leading, spacing: Theme.Spacing.md) {
                 HStack {
-                    Text("Health Pulse")
+                    Text("Health Snapshot")
                         .font(Theme.Typography.title3)
                         .foregroundColor(Theme.Colors.textPrimary)
 
@@ -925,7 +952,7 @@ private struct HealthPulseSection: View {
                 }
 
                 if let lastSynced = snapshot.lastSynced {
-                    Text("Updated \(lastSynced.formatted(.relative(presentation: .named)))")
+                    Text("sync \(lastSynced.formatted(.relative(presentation: .named)))")
                         .font(Theme.Typography.caption)
                         .foregroundColor(Theme.Colors.textTertiary)
                 }
@@ -996,25 +1023,24 @@ private struct ExplorationRow: View {
     }
 }
 
-private struct EmptyMissionView: View {
+private struct EmptyDataView: View {
     let onImport: () -> Void
     let onConnectHealth: () -> Void
 
     var body: some View {
         VStack(spacing: Theme.Spacing.lg) {
-            Image(systemName: "sparkles")
+            Image(systemName: "chart.xyaxis.line")
                 .font(.system(size: 44))
                 .foregroundColor(Theme.Colors.textTertiary)
 
             VStack(spacing: Theme.Spacing.sm) {
-                Text("Your mission control is waiting")
+                Text("workouts 0")
                     .font(Theme.Typography.title2)
                     .foregroundColor(Theme.Colors.textPrimary)
 
-                Text("Import your Strong history to unlock insights, recovery guidance, and adaptive recommendations.")
-                    .font(Theme.Typography.body)
+                Text("exercises 0 | volume 0 | streak 0")
+                    .font(Theme.Typography.caption)
                     .foregroundColor(Theme.Colors.textSecondary)
-                    .multilineTextAlignment(.center)
             }
 
             HStack(spacing: Theme.Spacing.md) {
@@ -1029,7 +1055,7 @@ private struct EmptyMissionView: View {
                 }
 
                 Button(action: onConnectHealth) {
-                    Text("Connect Health")
+                    Text("Health")
                         .font(Theme.Typography.subheadline)
                         .foregroundColor(Theme.Colors.textPrimary)
                         .padding(.horizontal, Theme.Spacing.lg)

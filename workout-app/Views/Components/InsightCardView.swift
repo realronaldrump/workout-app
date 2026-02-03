@@ -141,11 +141,11 @@ struct EmptyInsightsView: View {
                 .foregroundColor(Theme.Colors.textTertiary)
             
             VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                Text("No Insights Yet")
+                Text("insights 0")
                     .font(Theme.Typography.headline)
                     .foregroundColor(Theme.Colors.textSecondary)
                 
-                Text("Keep training to unlock personalized insights")
+                Text("min sessions 4")
                     .font(Theme.Typography.subheadline)
                     .foregroundColor(Theme.Colors.textTertiary)
             }
@@ -166,24 +166,24 @@ struct EmptyInsightsView: View {
                 InsightCardView(insight: Insight(
                     id: UUID(),
                     type: .personalRecord,
-                    title: "New PR! 🎉",
-                    message: "Bench Press: 225 lbs (+10 lbs)",
+                    title: "PR",
+                    message: "Bench Press 225 lbs | delta +10",
                     exerciseName: "Bench Press",
                     date: Date(),
                     priority: 10,
-                    actionLabel: "View Progress",
+                    actionLabel: "Trend",
                     metric: 225
                 ))
                 
                 InsightCardView(insight: Insight(
                     id: UUID(),
                     type: .plateau,
-                    title: "Plateau Detected",
-                    message: "Shoulder Press hasn't progressed in 4 sessions",
+                    title: "Plateau",
+                    message: "Shoulder Press max 50 lbs | delta 0 | n=4",
                     exerciseName: "Shoulder Press",
                     date: Date(),
                     priority: 6,
-                    actionLabel: "View History",
+                    actionLabel: "History",
                     metric: 50
                 ))
             }

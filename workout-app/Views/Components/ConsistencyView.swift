@@ -13,7 +13,7 @@ struct ConsistencyView: View {
             VStack(spacing: Theme.Spacing.lg) {
                 HStack {
                     VStack(alignment: .leading) {
-                        Text("Workouts per Week")
+                        Text("Sessions/Wk")
                             .font(Theme.Typography.subheadline)
                             .foregroundColor(Theme.Colors.textSecondary)
                         Text(String(format: "%.1f", stats.workoutsPerWeek))
@@ -24,7 +24,7 @@ struct ConsistencyView: View {
                     Spacer()
                     
                     VStack(alignment: .trailing) {
-                        Text("Longest Streak")
+                        Text("Longest")
                             .font(Theme.Typography.subheadline)
                             .foregroundColor(Theme.Colors.textSecondary)
                         Text("\(stats.longestStreak) days")
@@ -78,7 +78,7 @@ struct CalendarHeatmap: View {
         
         // Legend
         HStack(spacing: 8) {
-            Text("Less")
+            Text("0")
                 .font(.caption2)
                 .foregroundColor(Theme.Colors.textTertiary)
             
@@ -88,7 +88,7 @@ struct CalendarHeatmap: View {
                     .frame(width: 12, height: 12)
             }
             
-            Text("More")
+            Text(formatVolume(maxVolume))
                 .font(.caption2)
                 .foregroundColor(Theme.Colors.textTertiary)
         }
@@ -140,21 +140,34 @@ struct CalendarHeatmap: View {
     }
     
     private func colorForDate(_ date: Date) -> Color {
-        // Optimization: Create a set or dictionary if workouts array is large, 
-        // but for <1000 items linear scan for this display is okay-ish, 
-        // though `filter` inside `ForEach` is O(N*M).
-        // Better: Pre-process workouts into a Set<DateComponents> or Dictionary [Date: Count].
-        // For now preventing over-optimization unless needed, but let's at least compare standard days.
-        
         let calendar = Calendar.current
-        // Simple optimization: check if any workout matches day
-        let hasWorkout = workouts.contains { calendar.isDate($0.date, inSameDayAs: date) }
-        
-        if !hasWorkout {
-            return Theme.Colors.surface.opacity(0.3) // Empty slot
-        } else {
-            // Intensity calculation could be added here
-             return Theme.Colors.success // Filled slot
+        let day = calendar.startOfDay(for: date)
+        let volume = dailyVolume[day, default: 0]
+        guard volume > 0, maxVolume > 0 else {
+            return Theme.Colors.surface.opacity(0.3)
         }
+        let intensity = min(max(volume / maxVolume, 0.1), 1)
+        return Theme.Colors.success.opacity(0.15 + intensity * 0.85)
+    }
+
+    private var dailyVolume: [Date: Double] {
+        let calendar = Calendar.current
+        return workouts.reduce(into: [Date: Double]()) { totals, workout in
+            let day = calendar.startOfDay(for: workout.date)
+            totals[day, default: 0] += workout.totalVolume
+        }
+    }
+
+    private var maxVolume: Double {
+        dailyVolume.values.max() ?? 0
+    }
+
+    private func formatVolume(_ volume: Double) -> String {
+        if volume >= 1000000 {
+            return String(format: "%.1fM", volume / 1000000)
+        } else if volume >= 1000 {
+            return String(format: "%.0fk", volume / 1000)
+        }
+        return String(format: "%.0f", volume)
     }
 }

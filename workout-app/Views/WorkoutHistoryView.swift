@@ -29,9 +29,9 @@ struct WorkoutHistoryView: View {
                 LazyVStack(spacing: Theme.Spacing.xl) {
                     if workouts.isEmpty {
                         ContentUnavailableView(
-                            "No History",
+                            "history 0",
                             systemImage: "clock.badge.exclamationmark",
-                            description: Text("Complete workouts to see them here.")
+                            description: Text("workouts 0")
                         )
                         .padding(.top, 50)
                     } else {

@@ -64,34 +64,34 @@ enum SampleData {
         Insight(
             id: UUID(),
             type: .personalRecord,
-            title: "New PR!",
-            message: "Bench Press: 195 lbs (+10 lbs)",
+            title: "PR",
+            message: "Bench Press 195 lbs | delta +10",
             exerciseName: "Bench Press",
             date: workouts.first?.date ?? Date(),
             priority: 10,
-            actionLabel: "View Progress",
+            actionLabel: "Trend",
             metric: 195
         ),
         Insight(
             id: UUID(),
             type: .recommendation,
-            title: "Recovery Window",
-            message: "HRV dipped after heavy squats. Consider an easier session tomorrow.",
+            title: "Readiness",
+            message: "hrv 42 ms | rhr 58 bpm",
             exerciseName: nil,
             date: workouts.first?.date ?? Date(),
             priority: 7,
-            actionLabel: "See Recovery",
+            actionLabel: nil,
             metric: 42
         ),
         Insight(
             id: UUID(),
             type: .plateau,
-            title: "Plateau Detected",
-            message: "Lat Pulldown has stalled for 4 sessions. Try higher reps or pauses.",
+            title: "Plateau",
+            message: "Lat Pulldown max 150 lbs | delta 0 | n=4",
             exerciseName: "Lat Pulldown",
             date: workouts.last?.date ?? Date(),
             priority: 6,
-            actionLabel: "View History",
+            actionLabel: "History",
             metric: 150
         )
     ]

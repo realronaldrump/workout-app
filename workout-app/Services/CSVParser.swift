@@ -56,7 +56,7 @@ class CSVParser {
         return workoutSets
     }
     
-    private static func parseCSVLine(_ line: String) -> [String] {
+    private nonisolated static func parseCSVLine(_ line: String) -> [String] {
         var result: [String] = []
         var currentField = ""
         var inQuotes = false

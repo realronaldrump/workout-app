@@ -30,7 +30,7 @@ struct FatigueLensView: View {
             }
 
             if summary.entries.isEmpty {
-                Text("No major drop-offs detected in this session.")
+                Text("drops 0")
                     .font(Theme.Typography.body)
                     .foregroundColor(Theme.Colors.textSecondary)
                     .padding(.top, Theme.Spacing.sm)

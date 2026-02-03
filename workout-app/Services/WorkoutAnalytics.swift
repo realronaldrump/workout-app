@@ -2,7 +2,7 @@ import Foundation
 import SwiftUI
 
 struct WorkoutAnalytics {
-    static func durationMinutes(from duration: String) -> Double {
+    nonisolated static func durationMinutes(from duration: String) -> Double {
         let trimmed = duration.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !trimmed.isEmpty else { return 0 }
 
@@ -38,7 +38,7 @@ struct WorkoutAnalytics {
         return Double(Int(trimmed) ?? 0)
     }
 
-    static func effortDensity(for workout: Workout) -> Double {
+    nonisolated static func effortDensity(for workout: Workout) -> Double {
         let duration = max(durationMinutes(from: workout.duration), 1)
         return workout.totalVolume / duration
     }
@@ -236,8 +236,8 @@ struct WorkoutAnalytics {
                 issues.append(
                     ConsistencyIssue(
                         type: .missedDay,
-                        title: "Missed \(missing) session\(missing == 1 ? "" : "s")",
-                        detail: "Week of \(start.formatted(date: .abbreviated, time: .omitted)) fell below your usual rhythm.",
+                        title: "missed \(missing)",
+                        detail: "week \(start.formatted(date: .abbreviated, time: .omitted)) | expected \(expectedPerWeek) | actual \(count)",
                         workoutId: nil,
                         date: start
                     )
@@ -256,8 +256,8 @@ struct WorkoutAnalytics {
                     issues.append(
                         ConsistencyIssue(
                             type: .shortenedSession,
-                            title: "Short session: \(workout.name)",
-                            detail: "Finished in \(Int(duration)) min vs typical \(Int(baseline)) min.",
+                            title: "short \(workout.name)",
+                            detail: "duration \(Int(duration))m | baseline \(Int(baseline))m",
                             workoutId: workout.id,
                             date: workout.date
                         )
@@ -282,8 +282,8 @@ struct WorkoutAnalytics {
                     issues.append(
                         ConsistencyIssue(
                             type: .skippedExercises,
-                            title: "Skipped in \(name)",
-                            detail: "Missing: \(missing.prefix(2).joined(separator: ", "))",
+                            title: "skipped \(name)",
+                            detail: "missing \(missing.prefix(2).joined(separator: ", "))",
                             workoutId: session.id,
                             date: session.date
                         )
@@ -308,7 +308,7 @@ struct WorkoutAnalytics {
 
             let drop = max(0, (best - last) / best)
             if drop >= 0.15 {
-                let note = drop >= 0.3 ? "Heavy drop" : "Moderate drop"
+                let note = String(format: "drop %.0f%%", drop * 100)
                 entries.append(
                     FatigueEntry(
                         exerciseName: exercise.name,
@@ -328,13 +328,8 @@ struct WorkoutAnalytics {
 
         let restTrend: String?
         if let restIndex, baseline > 0 {
-            if restIndex > baseline * 1.2 {
-                restTrend = "Rest time creeping up"
-            } else if restIndex < baseline * 0.8 {
-                restTrend = "Rest time tighter"
-            } else {
-                restTrend = "Rest time steady"
-            }
+            let delta = (restIndex - baseline) / baseline
+            restTrend = String(format: "rest idx %+0.f%%", delta * 100)
         } else {
             restTrend = nil
         }
@@ -360,7 +355,7 @@ struct WorkoutAnalytics {
             insights.append(
                 HabitImpactInsight(
                     title: "Stress impact",
-                    detail: "Best effort density when stress is \(label).",
+                    detail: "density \(value) | stress \(label)",
                     value: value,
                     tint: Theme.Colors.warning
                 )
@@ -372,7 +367,7 @@ struct WorkoutAnalytics {
             insights.append(
                 HabitImpactInsight(
                     title: "Caffeine impact",
-                    detail: "Highest effort density with \(label) caffeine.",
+                    detail: "density \(value) | caffeine \(label)",
                     value: value,
                     tint: Theme.Colors.accent
                 )
@@ -384,7 +379,7 @@ struct WorkoutAnalytics {
             insights.append(
                 HabitImpactInsight(
                     title: "Soreness impact",
-                    detail: "Best output when soreness is \(label).",
+                    detail: "density \(value) | soreness \(label)",
                     value: value,
                     tint: Theme.Colors.success
                 )
@@ -396,7 +391,7 @@ struct WorkoutAnalytics {
             insights.append(
                 HabitImpactInsight(
                     title: "Mood impact",
-                    detail: "Best output when mood is \(label).",
+                    detail: "density \(value) | mood \(label)",
                     value: value,
                     tint: Theme.Colors.accentSecondary
                 )
@@ -413,7 +408,7 @@ struct WorkoutAnalytics {
             insights.append(
                 HabitImpactInsight(
                     title: "Time of day",
-                    detail: "Most efficient sessions happen in the \(label).",
+                    detail: "density \(value) | \(label)",
                     value: value,
                     tint: Theme.Colors.accentSecondary
                 )
@@ -435,9 +430,11 @@ struct WorkoutAnalytics {
         }
         if let correlation = correlation(points.map { $0.sleep }, points.map { $0.density }), points.count >= 4 {
             let title = "Sleep vs output"
-            let detail = correlation > 0
-                ? "More sleep tends to align with higher effort density."
-                : "Less sleep lines up with higher effort density."
+            let highSleep = points.filter { $0.sleep >= 7 }.map { $0.density }
+            let lowSleep = points.filter { $0.sleep < 7 }.map { $0.density }
+            let avgHigh = average(highSleep)
+            let avgLow = average(lowSleep)
+            let detail = "avg>=7h \(String(format: "%.1f", avgHigh)) | <7h \(String(format: "%.1f", avgLow))"
             insights.append(
                 CorrelationInsight(
                     title: title,
@@ -454,9 +451,11 @@ struct WorkoutAnalytics {
         }
         if let correlation = correlation(readinessPoints.map { $0.readiness }, readinessPoints.map { $0.density }), readinessPoints.count >= 4 {
             let title = "Readiness vs output"
-            let detail = correlation > 0
-                ? "Higher readiness scores align with stronger sessions."
-                : "Lower readiness can still drive strong sessions."
+            let highReadiness = readinessPoints.filter { $0.readiness >= 70 }.map { $0.density }
+            let lowReadiness = readinessPoints.filter { $0.readiness < 70 }.map { $0.density }
+            let avgHigh = average(highReadiness)
+            let avgLow = average(lowReadiness)
+            let detail = "avg>=70 \(String(format: "%.1f", avgHigh)) | <70 \(String(format: "%.1f", avgLow))"
             insights.append(
                 CorrelationInsight(
                     title: title,
@@ -484,9 +483,7 @@ struct WorkoutAnalytics {
                 let sleeps = paired.map { $0.sleep }
                 let orms = paired.map { $0.orm }
                 if let corr = correlation(sleeps, orms), paired.count >= 4 {
-                    let detail = delta >= 0
-                        ? "Best \(topExercise) sessions follow 7+ hours sleep (+\(Int(delta)) lbs)."
-                        : "Short sleep still leads your \(topExercise) days (\(Int(delta)) lbs)."
+                    let detail = "avg1RM 7h+ \(Int(avgGood)) | <7h \(Int(avgLow)) | delta \(Int(delta))"
                     insights.append(
                         CorrelationInsight(
                             title: "Sleep vs \(topExercise)",
@@ -538,18 +535,22 @@ struct WorkoutAnalytics {
         let detail: String
         let tint: Color
 
+        let sleepLabel = sleepHours > 0 ? String(format: "%.1f", sleepHours) : "--"
+        let readinessLabel = readiness > 0 ? String(format: "%.0f", readiness) : "--"
+        let detailBase = "load \(String(format: "%.2f", loadRatio)) | sleep \(sleepLabel)h | ready \(readinessLabel)"
+
         switch clamped {
         case 80...100:
-            label = "Recovered"
-            detail = "Load and recovery are in sync."
+            label = "Index A"
+            detail = detailBase
             tint = Theme.Colors.success
         case 60..<80:
-            label = "Monitor"
-            detail = "Load is rising faster than recovery."
+            label = "Index B"
+            detail = detailBase
             tint = Theme.Colors.warning
         default:
-            label = "Recovery Debt"
-            detail = "Dial intensity down or prioritize sleep."
+            label = "Index C"
+            detail = detailBase
             tint = Theme.Colors.error
         }
 

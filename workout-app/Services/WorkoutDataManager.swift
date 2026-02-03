@@ -7,50 +7,110 @@ class WorkoutDataManager: ObservableObject {
     @Published var workouts: [Workout] = []
     @Published var isLoading = false
     @Published var error: String?
-    
-    nonisolated func processWorkoutSets(_ sets: [WorkoutSet]) async {
+
+    private let identityStore = WorkoutIdentityStore()
+
+    nonisolated func processWorkoutSets(
+        _ sets: [WorkoutSet],
+        healthDataSnapshot: [WorkoutHealthData] = []
+    ) async {
+        let (existingWorkouts, identitySnapshot) = await MainActor.run {
+            (self.workouts, self.identityStore.snapshot())
+        }
         // Run heavy grouping logic on a background thread
-        let processedWorkouts = await Task.detached(priority: .userInitiated) {
+        let (processedWorkouts, newIdentityEntries) = await Task.detached(priority: .userInitiated) {
             // Group sets by date (year-month-day-hour) using Calendar components
             // This is significantly faster than DateFormatter
             let calendar = Calendar.current
-            
+
             let groupedByWorkout = Dictionary(grouping: sets) { set -> String in
-                let components = calendar.dateComponents([.year, .month, .day, .hour], from: set.date)
-                // Unique key: YYYY-MM-DD-HH-WorkoutName
-                return "\(components.year!)-\(components.month!)-\(components.day!)-\(components.hour!)-\(set.workoutName)"
+                WorkoutIdentity.workoutKey(date: set.date, workoutName: set.workoutName, calendar: calendar)
             }
-            
+
+            var existingIdsByKey: [String: UUID] = [:]
+            for workout in existingWorkouts {
+                let key = WorkoutIdentity.workoutKey(date: workout.date, workoutName: workout.name, calendar: calendar)
+                existingIdsByKey[key] = workout.id
+            }
+
+            var legacyCandidatesByHour: [String: [(id: UUID, date: Date)]] = [:]
+            for health in healthDataSnapshot {
+                let bucket = WorkoutIdentity.hourBucket(for: health.workoutDate, calendar: calendar)
+                legacyCandidatesByHour[bucket, default: []].append((health.workoutId, health.workoutDate))
+            }
+
             var workouts: [Workout] = []
-            
-            for (_, workoutSets) in groupedByWorkout {
+            var newIdentityEntries: [String: UUID] = [:]
+
+            for (workoutKey, workoutSets) in groupedByWorkout {
                 guard let firstSet = workoutSets.first else { continue }
-                
+
                 // Group by exercise within workout
                 let groupedByExercise = Dictionary(grouping: workoutSets) { $0.exerciseName }
-                
+
                 var exercises: [Exercise] = []
                 for (exerciseName, exerciseSets) in groupedByExercise {
                     let sortedSets = exerciseSets.sorted { $0.setOrder < $1.setOrder }
                     exercises.append(Exercise(name: exerciseName, sets: sortedSets))
                 }
-                
+
+                let workoutDate = workoutSets.map { $0.date }.min() ?? firstSet.date
+                let workoutName = firstSet.workoutName.trimmingCharacters(in: .whitespacesAndNewlines)
+
+                let resolvedId: UUID
+                if let existingId = existingIdsByKey[workoutKey] {
+                    resolvedId = existingId
+                } else if let mappedId = identitySnapshot[workoutKey] {
+                    resolvedId = mappedId
+                } else {
+                    let hourBucket = WorkoutIdentity.hourBucket(for: workoutDate, calendar: calendar)
+                    if var candidates = legacyCandidatesByHour[hourBucket], !candidates.isEmpty {
+                        var bestIndex = 0
+                        var bestDistance = abs(candidates[0].date.timeIntervalSince(workoutDate))
+                        if candidates.count > 1 {
+                            for index in 1..<candidates.count {
+                                let distance = abs(candidates[index].date.timeIntervalSince(workoutDate))
+                                if distance < bestDistance {
+                                    bestDistance = distance
+                                    bestIndex = index
+                                }
+                            }
+                        }
+                        let chosen = candidates.remove(at: bestIndex)
+                        if candidates.isEmpty {
+                            legacyCandidatesByHour.removeValue(forKey: hourBucket)
+                        } else {
+                            legacyCandidatesByHour[hourBucket] = candidates
+                        }
+                        resolvedId = chosen.id
+                    } else {
+                        resolvedId = UUID()
+                    }
+                }
+
+                if identitySnapshot[workoutKey] != resolvedId {
+                    newIdentityEntries[workoutKey] = resolvedId
+                }
+
                 let workout = Workout(
-                    date: workoutSets.map { $0.date }.min() ?? firstSet.date,
-                    name: firstSet.workoutName,
+                    id: resolvedId,
+                    date: workoutDate,
+                    name: workoutName,
                     duration: firstSet.duration,
                     exercises: exercises
                 )
                 workouts.append(workout)
             }
-            
-            return workouts.sorted { $0.date > $1.date }
+
+            let sortedWorkouts = workouts.sorted { $0.date > $1.date }
+            return (sortedWorkouts, newIdentityEntries)
         }.value
         
         // Update UI on MainActor
         await MainActor.run {
             self.workouts = processedWorkouts
             self.isLoading = false
+            self.identityStore.merge(newIdentityEntries)
         }
     }
     
@@ -222,5 +282,6 @@ class WorkoutDataManager: ObservableObject {
         self.workouts = []
         self.isLoading = false
         self.error = nil
+        self.identityStore.clear()
     }
 }

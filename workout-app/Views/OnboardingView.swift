@@ -91,7 +91,7 @@ struct OnboardingView: View {
             Button(action: {
                 handlePrimaryAction()
             }) {
-                Text(step == totalSteps - 1 ? "Launch Mission Control" : "Continue")
+                Text(step == totalSteps - 1 ? "Launch Analytics" : "Continue")
                     .font(Theme.Typography.headline)
                     .foregroundColor(.white)
                     .padding(.horizontal, Theme.Spacing.xl)
@@ -106,11 +106,11 @@ struct OnboardingView: View {
     private var missionControlStep: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-                Text("Your Fitness Mission Control")
+                Text("Dashboard Preview")
                     .font(Theme.Typography.title)
                     .foregroundColor(Theme.Colors.textPrimary)
 
-                Text("See the most critical metrics in one continuous flow, with details that expand only when you need them.")
+                Text("sessions \(SampleData.stats.totalWorkouts) | volume \(Int(SampleData.stats.totalVolume))")
                     .font(Theme.Typography.body)
                     .foregroundColor(Theme.Colors.textSecondary)
 
@@ -124,11 +124,11 @@ struct OnboardingView: View {
     private var insightsStep: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-                Text("Insights That Follow You")
+                Text("Signals Preview")
                     .font(Theme.Typography.title)
                     .foregroundColor(Theme.Colors.textPrimary)
 
-                Text("Insights appear inline with your data so you never have to hunt for what matters.")
+                Text("n \(SampleData.insights.count)")
                     .font(Theme.Typography.body)
                     .foregroundColor(Theme.Colors.textSecondary)
 
@@ -145,11 +145,11 @@ struct OnboardingView: View {
     private var healthStep: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-                Text("Health Data, Integrated")
+                Text("Health Metrics Preview")
                     .font(Theme.Typography.title)
                     .foregroundColor(Theme.Colors.textPrimary)
 
-                Text("Heart rate zones and recovery metrics surface right next to your workouts.")
+                Text("avgHRV 48 | resting 58 | sync live")
                     .font(Theme.Typography.body)
                     .foregroundColor(Theme.Colors.textSecondary)
 
@@ -174,11 +174,11 @@ struct OnboardingView: View {
     private var importStep: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-                Text("The Magical Moment")
+                Text("Import")
                     .font(Theme.Typography.title)
                     .foregroundColor(Theme.Colors.textPrimary)
 
-                Text("Import your Strong history, and the mission control instantly reshapes itself around your real data.")
+                Text("CSV import")
                     .font(Theme.Typography.body)
                     .foregroundColor(Theme.Colors.textSecondary)
 
@@ -197,7 +197,7 @@ struct OnboardingView: View {
                     .cornerRadius(Theme.CornerRadius.large)
                 }
 
-                Text("We never store your data outside your device or iCloud.")
+                Text("storage on-device/iCloud")
                     .font(Theme.Typography.caption)
                     .foregroundColor(Theme.Colors.textTertiary)
             }

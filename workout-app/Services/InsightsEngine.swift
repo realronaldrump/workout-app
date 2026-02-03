@@ -112,12 +112,12 @@ class InsightsEngine: ObservableObject {
                     prInsights.append(Insight(
                         id: UUID(),
                         type: .personalRecord,
-                        title: "New PR! 🎉",
-                        message: "\(exerciseName): \(Int(maxWeightSet.weight)) lbs (+\(Int(improvement)) lbs)",
+                        title: "PR",
+                        message: "\(exerciseName) \(Int(maxWeightSet.weight)) lbs | delta +\(Int(improvement))",
                         exerciseName: exerciseName,
                         date: recentSession.date,
                         priority: 10,
-                        actionLabel: "View Progress",
+                        actionLabel: "Trend",
                         metric: maxWeightSet.weight
                     ))
                 }
@@ -142,12 +142,12 @@ class InsightsEngine: ObservableObject {
                 prInsights.append(Insight(
                     id: UUID(),
                     type: .strengthGain,
-                    title: "Estimated 1RM Up! 💪",
-                    message: "\(exerciseName): \(Int(latestORM.orm)) lbs (+\(Int(improvement)) lbs estimated)",
+                    title: "1RM",
+                    message: "\(exerciseName) \(Int(latestORM.orm)) lbs | delta +\(Int(improvement))",
                     exerciseName: exerciseName,
                     date: latestORM.date,
                     priority: 8,
-                    actionLabel: "View Trend",
+                    actionLabel: "Trend",
                     metric: latestORM.orm
                 ))
             }
@@ -197,12 +197,12 @@ class InsightsEngine: ObservableObject {
                 plateauInsights.append(Insight(
                     id: UUID(),
                     type: .plateau,
-                    title: "Plateau Detected",
-                    message: "\(exerciseName) hasn't progressed in \(recentSessions.count) sessions. Consider varying rep ranges or adding volume.",
+                    title: "Plateau",
+                    message: "\(exerciseName) max \(Int(firstMax)) lbs | delta 0 | n=\(recentSessions.count)",
                     exerciseName: exerciseName,
                     date: Date(),
                     priority: 6,
-                    actionLabel: "View History",
+                    actionLabel: "History",
                     metric: firstMax
                 ))
             }
@@ -222,12 +222,12 @@ class InsightsEngine: ObservableObject {
                     plateauInsights.append(Insight(
                         id: UUID(),
                         type: .plateau,
-                        title: "1RM Flatline",
-                        message: "\(exerciseName) 1RM hasn't moved in the last month. Try a new rep range or technique tweak.",
+                        title: "1RM delta",
+                        message: "\(exerciseName) delta \(String(format: "%+.1f", change * 100))% | n=\(recentOrms.count)",
                         exerciseName: exerciseName,
                         date: Date(),
                         priority: 5,
-                        actionLabel: "View Trend",
+                        actionLabel: "Trend",
                         metric: last
                     ))
                 }
@@ -272,24 +272,24 @@ class InsightsEngine: ObservableObject {
                 return Insight(
                     id: UUID(),
                     type: .muscleBalance,
-                    title: "Push/Pull Imbalance ⚖️",
-                    message: "You're doing \(Int(ratio * 100 - 100))% more pushing than pulling. Consider adding more rows and pulldowns.",
+                    title: "Push/Pull",
+                    message: "push \(pushSets) | pull \(pullSets) | r \(String(format: "%.2f", ratio))",
                     exerciseName: nil,
                     date: Date(),
                     priority: 5,
-                    actionLabel: "See Breakdown",
+                    actionLabel: "Breakdown",
                     metric: ratio
                 )
             } else if ratio < 0.67 {
                 return Insight(
                     id: UUID(),
                     type: .muscleBalance,
-                    title: "Push/Pull Imbalance ⚖️",
-                    message: "You're doing more pulling than pushing. Consider adding more chest and shoulder work.",
+                    title: "Push/Pull",
+                    message: "push \(pushSets) | pull \(pullSets) | r \(String(format: "%.2f", ratio))",
                     exerciseName: nil,
                     date: Date(),
                     priority: 5,
-                    actionLabel: "See Breakdown",
+                    actionLabel: "Breakdown",
                     metric: ratio
                 )
             }
@@ -302,8 +302,8 @@ class InsightsEngine: ObservableObject {
                 return Insight(
                     id: UUID(),
                     type: .recommendation,
-                    title: "Undertrained: \(group.displayName)",
-                    message: "Only \(sets) sets in the past 4 weeks. Consider adding more \(group.displayName.lowercased()) exercises.",
+                    title: "Low Volume",
+                    message: "\(group.displayName) sets \(sets) | avg \(Int(averageSets))",
                     exerciseName: nil,
                     date: Date(),
                     priority: 4,
@@ -330,20 +330,20 @@ class InsightsEngine: ObservableObject {
                 insights.append(Insight(
                     id: UUID(),
                     type: .reminder,
-                    title: "Time to Train! 🏋️",
-                    message: "It's been \(daysSince) days since your last workout. Ready to get back at it?",
+                    title: "Gap",
+                    message: "days \(daysSince)",
                     exerciseName: nil,
                     date: Date(),
                     priority: 7,
-                    actionLabel: "Log Workout",
+                    actionLabel: "Log",
                     metric: Double(daysSince)
                 ))
             } else if daysSince >= 7 {
                 insights.append(Insight(
                     id: UUID(),
                     type: .warning,
-                    title: "Extended Break",
-                    message: "It's been \(daysSince) days. Consider a lighter session to ease back in.",
+                    title: "Gap",
+                    message: "days \(daysSince)",
                     exerciseName: nil,
                     date: Date(),
                     priority: 7,
@@ -365,8 +365,8 @@ class InsightsEngine: ObservableObject {
                 insights.append(Insight(
                     id: UUID(),
                     type: .recommendation,
-                    title: "Great Consistency! 🔥",
-                    message: "\(lastWeekWorkouts.count) workouts this week vs \(previousWeekWorkouts.count) last week. Keep it up!",
+                    title: "Sessions",
+                    message: "this \(lastWeekWorkouts.count) | prev \(previousWeekWorkouts.count)",
                     exerciseName: nil,
                     date: Date(),
                     priority: 6,
@@ -404,20 +404,20 @@ class InsightsEngine: ObservableObject {
                 insights.append(Insight(
                     id: UUID(),
                     type: .strengthGain,
-                    title: "Volume Increasing! 📈",
-                    message: "Total volume up \(Int(percentChange))% this month. You're building capacity!",
+                    title: "Volume delta",
+                    message: "delta \(String(format: "%+.0f", percentChange))% | total \(Int(thisMonthVolume))",
                     exerciseName: nil,
                     date: Date(),
                     priority: 5,
-                    actionLabel: "View Stats",
+                    actionLabel: "Stats",
                     metric: thisMonthVolume
                 ))
             } else if percentChange <= -15 {
                 insights.append(Insight(
                     id: UUID(),
                     type: .warning,
-                    title: "Volume Dropping",
-                    message: "Total volume down \(Int(abs(percentChange)))% this month. Consider adding more sets if recovery allows.",
+                    title: "Volume delta",
+                    message: "delta \(String(format: "%+.0f", percentChange))% | total \(Int(thisMonthVolume))",
                     exerciseName: nil,
                     date: Date(),
                     priority: 4,
@@ -452,24 +452,24 @@ class InsightsEngine: ObservableObject {
             insights.append(Insight(
                 id: UUID(),
                 type: .strengthGain,
-                title: "More Efficient Sessions",
-                message: "Effort density is up \(Int(change * 100))% this week. You're packing more work into the same time.",
+                title: "Density delta",
+                message: "delta \(String(format: "%+.0f", change * 100))% | avg \(String(format: "%.1f", lastDensity))",
                 exerciseName: nil,
                 date: Date(),
                 priority: 5,
-                actionLabel: "View Breakdown",
+                actionLabel: "Breakdown",
                 metric: lastDensity
             ))
         } else if change <= -0.12 {
             insights.append(Insight(
                 id: UUID(),
                 type: .warning,
-                title: "Efficiency Dip",
-                message: "Effort density fell \(Int(abs(change) * 100))% this week. Longer rest or fewer sets could be the cause.",
+                title: "Density delta",
+                message: "delta \(String(format: "%+.0f", change * 100))% | avg \(String(format: "%.1f", lastDensity))",
                 exerciseName: nil,
                 date: Date(),
                 priority: 4,
-                actionLabel: "Review Sessions",
+                actionLabel: "Sessions",
                 metric: lastDensity
             ))
         }
@@ -545,7 +545,7 @@ enum MuscleGroup: String, CaseIterable, Codable {
     case core
     case cardio
     
-    var displayName: String {
+    nonisolated var displayName: String {
         switch self {
         case .push: return "Push (Chest/Shoulders/Triceps)"
         case .pull: return "Pull (Back/Biceps)"

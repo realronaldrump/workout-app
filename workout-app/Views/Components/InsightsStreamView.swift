@@ -33,14 +33,14 @@ struct InsightsStreamView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             HStack {
-                Text("Insights Stream")
+                Text("Insights")
                     .font(Theme.Typography.title3)
                     .foregroundColor(Theme.Colors.textPrimary)
 
                 Spacer()
 
                 if !insights.isEmpty {
-                    Text("Live")
+                    Text("n \(insights.count)")
                         .font(Theme.Typography.caption)
                         .foregroundColor(Theme.Colors.accent)
                         .padding(.horizontal, Theme.Spacing.sm)

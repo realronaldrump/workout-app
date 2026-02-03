@@ -25,7 +25,7 @@ struct ExerciseTaggingView: View {
             Form {
                 Section(header: Text("Assign Muscle Groups")) {
                     if filteredExercises.isEmpty {
-                        Text("No exercises found")
+                        Text("0")
                             .foregroundStyle(.secondary)
                     }
                     

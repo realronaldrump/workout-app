@@ -52,7 +52,7 @@ struct MetricDetailView: View {
                 NavigationLink(destination: WorkoutDetailView(workout: workout)) {
                     MetricWorkoutRow(
                         workout: workout,
-                        subtitle: timeOfDayLabel(for: workout.date)
+                        subtitle: "\(workout.date.formatted(date: .abbreviated, time: .omitted)) | \(timeOfDayLabel(for: workout.date))"
                     )
                 }
                 .buttonStyle(PlainButtonStyle())
@@ -72,7 +72,7 @@ struct MetricDetailView: View {
                 .padding(Theme.Spacing.lg)
                 .glassBackground(elevation: 2)
 
-            Text("Tap any workout below to see sets and time-of-day.")
+            Text("sessions \(sortedWorkouts.count)")
                 .font(Theme.Typography.caption)
                 .foregroundColor(Theme.Colors.textTertiary)
 
@@ -96,7 +96,7 @@ struct MetricDetailView: View {
                     NavigationLink(destination: WorkoutDetailView(workout: workout)) {
                         MetricWorkoutRow(
                             workout: workout,
-                            subtitle: "\(formatVolume(workout.totalVolume)) volume · \(timeOfDayLabel(for: workout.date))"
+                            subtitle: "\(formatVolume(workout.totalVolume)) volume | \(timeOfDayLabel(for: workout.date))"
                         )
                     }
                     .buttonStyle(PlainButtonStyle())
@@ -144,7 +144,7 @@ struct MetricDetailView: View {
 
         return VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             if points.isEmpty {
-                Text("Sync Apple Health to see readiness trends.")
+                Text("health samples 0")
                     .font(Theme.Typography.body)
                     .foregroundColor(Theme.Colors.textSecondary)
                     .padding(Theme.Spacing.lg)
@@ -172,7 +172,7 @@ struct MetricDetailView: View {
                         NavigationLink(destination: WorkoutDetailView(workout: workout)) {
                             MetricWorkoutRow(
                                 workout: workout,
-                                subtitle: "Readiness \(Int(readiness)) · \(timeOfDayLabel(for: workout.date))"
+                                subtitle: "Readiness \(Int(readiness)) | \(timeOfDayLabel(for: workout.date))"
                             )
                         }
                         .buttonStyle(PlainButtonStyle())
@@ -206,13 +206,14 @@ struct MetricDetailView: View {
     private var subtitle: String {
         switch type {
         case .sessions:
-            return "Every logged workout with time-of-day context."
+            return "sessions \(workouts.count)"
         case .streak:
-            return "Consistency streaks and missed days."
+            return "sessions \(workouts.count)"
         case .volume:
-            return "Workouts and exercises driving your volume."
+            let total = workouts.reduce(0) { $0 + $1.totalVolume }
+            return "sessions \(workouts.count) | total \(formatVolume(total))"
         case .readiness:
-            return "HRV + resting HR trend per workout."
+            return "health samples \(healthManager.healthDataStore.count)"
         }
     }
 

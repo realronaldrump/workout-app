@@ -167,11 +167,11 @@ struct WorkoutDetailView: View {
                 .font(.system(size: 40))
                 .foregroundColor(Theme.Colors.textTertiary)
             
-            Text("No Health Data Synced")
+            Text("health data 0")
                 .font(Theme.Typography.headline)
                 .foregroundColor(Theme.Colors.textSecondary)
             
-            Text("Tap 'Sync' to fetch Apple Health data recorded during this workout.")
+            Text("sync required")
                 .font(Theme.Typography.caption)
                 .foregroundColor(Theme.Colors.textTertiary)
                 .multilineTextAlignment(.center)
@@ -305,14 +305,15 @@ struct RecoveryInsightCard: View {
     @State private var didTriggerHaptic = false
 
     private var insight: (title: String, message: String, tint: Color, icon: String) {
-        let hrv = healthData.avgHRV ?? 0
-        let resting = healthData.restingHeartRate ?? 0
-        let workload = healthData.avgHeartRate ?? 0
+        let hrv = Int(healthData.avgHRV ?? 0)
+        let resting = Int(healthData.restingHeartRate ?? 0)
+        let workload = Int(healthData.avgHeartRate ?? 0)
+        let message = "hrv \(hrv) ms | rhr \(resting) bpm | avgHR \(workload) bpm"
 
         if resting > 70 || hrv < 35 {
             return (
-                title: "Recovery Needed",
-                message: "Resting HR is elevated and HRV is lower than usual. Favor mobility or low-intensity work.",
+                title: "Index C",
+                message: message,
                 tint: Theme.Colors.warning,
                 icon: "bed.double.fill"
             )
@@ -320,16 +321,16 @@ struct RecoveryInsightCard: View {
 
         if workload > 150 {
             return (
-                title: "High-Intensity Session",
-                message: "You spent most of the workout in higher zones. Prioritize sleep and hydration tonight.",
+                title: "Index B",
+                message: message,
                 tint: Theme.Colors.accentSecondary,
                 icon: "bolt.heart"
             )
         }
 
         return (
-            title: "Ready for More",
-            message: "Recovery metrics look steady. You can push again if energy feels good.",
+            title: "Index A",
+            message: message,
             tint: Theme.Colors.success,
             icon: "checkmark.seal.fill"
         )
@@ -352,7 +353,7 @@ struct RecoveryInsightCard: View {
         .padding(Theme.Spacing.lg)
         .glassBackground(elevation: 2)
         .onAppear {
-            if insight.title == "Recovery Needed", !didTriggerHaptic {
+            if insight.title == "Index C", !didTriggerHaptic {
                 Haptics.notify(.warning)
                 didTriggerHaptic = true
             }

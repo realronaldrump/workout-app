@@ -54,7 +54,7 @@ struct PerformanceLabView: View {
                 .padding(Theme.Spacing.xl)
             }
         }
-        .navigationTitle("Performance Lab")
+        .navigationTitle("Performance")
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(item: $selectedWorkout) { workout in
             WorkoutDetailView(workout: workout)
@@ -66,13 +66,17 @@ struct PerformanceLabView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text("Performance Lab")
+            Text("Performance Analytics")
                 .font(Theme.Typography.largeTitle)
                 .foregroundColor(Theme.Colors.textPrimary)
-            Text("Deep dives, correlations, and drill-downs to guide your next phase.")
+            Text(headerSummary)
                 .font(Theme.Typography.body)
                 .foregroundColor(Theme.Colors.textSecondary)
         }
+    }
+
+    private var headerSummary: String {
+        "sessions \(workouts.count) | health \(healthManager.healthDataStore.count) | notes \(annotationsManager.annotations.count)"
     }
 
     private var progressMapSection: some View {
@@ -86,7 +90,7 @@ struct PerformanceLabView: View {
 
         return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             HStack {
-                Text("Progress Map")
+                Text("Progress Delta")
                     .font(Theme.Typography.title2)
                     .foregroundColor(Theme.Colors.textPrimary)
                 Spacer()
@@ -107,7 +111,7 @@ struct PerformanceLabView: View {
             .pickerStyle(.segmented)
 
             if top.isEmpty {
-                Text("Not enough data to map progress yet.")
+                Text("n < 2")
                     .font(Theme.Typography.body)
                     .foregroundColor(Theme.Colors.textSecondary)
                     .padding(Theme.Spacing.lg)
@@ -135,7 +139,7 @@ struct PerformanceLabView: View {
                                     Text(item.name)
                                         .font(Theme.Typography.headline)
                                         .foregroundColor(Theme.Colors.textPrimary)
-                                    Text("\(formatDelta(item.delta)) est 1RM")
+                                    Text("delta \(formatDelta(item.delta)) 1RM")
                                         .font(Theme.Typography.caption)
                                         .foregroundColor(Theme.Colors.textSecondary)
                                 }
@@ -192,7 +196,7 @@ struct PerformanceLabView: View {
 
         return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             HStack {
-                Text("What Changed")
+                Text("Change")
                     .font(Theme.Typography.title2)
                     .foregroundColor(Theme.Colors.textPrimary)
                 Spacer()
@@ -211,7 +215,7 @@ struct PerformanceLabView: View {
             }
 
             if !exerciseImprovements.isEmpty {
-                Text("Top Movers")
+                Text("Top Delta")
                     .font(Theme.Typography.title3)
                     .foregroundColor(Theme.Colors.textPrimary)
 
@@ -224,7 +228,7 @@ struct PerformanceLabView: View {
                                 Text(item.name)
                                     .font(Theme.Typography.headline)
                                     .foregroundColor(Theme.Colors.textPrimary)
-                                Text("+\(Int(item.delta)) est 1RM")
+                                Text("delta +\(Int(item.delta)) 1RM")
                                     .font(Theme.Typography.caption)
                                     .foregroundColor(Theme.Colors.textSecondary)
                             }
@@ -247,12 +251,12 @@ struct PerformanceLabView: View {
         let grouped = Dictionary(grouping: issues, by: { $0.type })
 
         return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Consistency Lens")
+            Text("Consistency")
                 .font(Theme.Typography.title2)
                 .foregroundColor(Theme.Colors.textPrimary)
 
             if issues.isEmpty {
-                Text("Your recent sessions are consistent. No missed or shortened workouts detected.")
+                Text("issues 0")
                     .font(Theme.Typography.body)
                     .foregroundColor(Theme.Colors.textSecondary)
                     .padding(Theme.Spacing.lg)
@@ -276,12 +280,12 @@ struct PerformanceLabView: View {
         let topWorkouts = series.sorted { $0.value > $1.value }.prefix(5)
 
         return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Effort Density")
+            Text("Density")
                 .font(Theme.Typography.title2)
                 .foregroundColor(Theme.Colors.textPrimary)
 
             if series.isEmpty {
-                Text("Log workouts to see effort density trends.")
+                Text("density n 0")
                     .font(Theme.Typography.body)
                     .foregroundColor(Theme.Colors.textSecondary)
                     .padding(Theme.Spacing.lg)
@@ -303,7 +307,7 @@ struct PerformanceLabView: View {
                 .padding(Theme.Spacing.lg)
                 .glassBackground(elevation: 2)
 
-                Text("Most Efficient Sessions")
+                Text("Top Density")
                     .font(Theme.Typography.title3)
                     .foregroundColor(Theme.Colors.textPrimary)
 
@@ -317,7 +321,7 @@ struct PerformanceLabView: View {
                                     Text(workout.name)
                                         .font(Theme.Typography.headline)
                                         .foregroundColor(Theme.Colors.textPrimary)
-                                    Text("\(formatDensity(point.value)) · \(workout.duration)")
+                                    Text("\(formatDensity(point.value)) | \(workout.duration)")
                                         .font(Theme.Typography.caption)
                                         .foregroundColor(Theme.Colors.textSecondary)
                                 }
@@ -396,12 +400,12 @@ struct PerformanceLabView: View {
         )
 
         return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Habit Impact")
+            Text("Habit Factors")
                 .font(Theme.Typography.title2)
                 .foregroundColor(Theme.Colors.textPrimary)
 
             if insights.isEmpty {
-                Text("Add session notes to uncover what drives your best workouts.")
+                Text("notes 0")
                     .font(Theme.Typography.body)
                     .foregroundColor(Theme.Colors.textSecondary)
                     .padding(Theme.Spacing.lg)
@@ -444,7 +448,7 @@ struct PerformanceLabView: View {
                 .foregroundColor(Theme.Colors.textPrimary)
 
             if insights.isEmpty {
-                Text("Sync Apple Health to reveal correlations between recovery and output.")
+                Text("health samples 0")
                     .font(Theme.Typography.body)
                     .foregroundColor(Theme.Colors.textSecondary)
                     .padding(Theme.Spacing.lg)
@@ -458,7 +462,7 @@ struct PerformanceLabView: View {
                         Text(insight.detail)
                             .font(Theme.Typography.caption)
                             .foregroundColor(Theme.Colors.textSecondary)
-                        Text("r = \(String(format: "%.2f", insight.correlation)) · \(insight.supportingCount) sessions")
+                        Text("r=\(String(format: "%.2f", insight.correlation)) | n=\(insight.supportingCount)")
                             .font(Theme.Typography.caption)
                             .foregroundColor(Theme.Colors.textTertiary)
                     }
@@ -479,12 +483,12 @@ struct PerformanceLabView: View {
         .sorted { $0.delta > $1.delta }
 
         return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Most Improved")
+            Text("Top delta")
                 .font(Theme.Typography.title2)
                 .foregroundColor(Theme.Colors.textPrimary)
 
             if improvements.isEmpty {
-                Text("Keep logging sessions to surface improvements.")
+                Text("n 0")
                     .font(Theme.Typography.body)
                     .foregroundColor(Theme.Colors.textSecondary)
                     .padding(Theme.Spacing.lg)
@@ -499,7 +503,7 @@ struct PerformanceLabView: View {
                                 Text(item.name)
                                     .font(Theme.Typography.headline)
                                     .foregroundColor(Theme.Colors.textPrimary)
-                                Text("+\(Int(item.delta)) est 1RM over \(progressWindow)w")
+                                Text("delta +\(Int(item.delta)) 1RM | \(progressWindow)w")
                                     .font(Theme.Typography.caption)
                                     .foregroundColor(Theme.Colors.textSecondary)
                             }
@@ -641,7 +645,7 @@ private struct WeeklyMuscleVolumeChart: View {
 
     var body: some View {
         if points.isEmpty {
-            Text("Tag exercises to see muscle group volume trends.")
+            Text("tags 0")
                 .font(Theme.Typography.body)
                 .foregroundColor(Theme.Colors.textSecondary)
                 .padding(Theme.Spacing.lg)
@@ -705,7 +709,7 @@ private struct WeeklyExerciseVolumeChart: View {
 
     var body: some View {
         if points.isEmpty {
-            Text("Weekly exercise volume will appear once you log more sessions.")
+            Text("volume n 0")
                 .font(Theme.Typography.body)
                 .foregroundColor(Theme.Colors.textSecondary)
                 .padding(Theme.Spacing.lg)
