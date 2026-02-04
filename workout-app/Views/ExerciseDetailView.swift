@@ -636,9 +636,18 @@ struct PersonalRecordsView: View {
 
 struct RecentSetsView: View {
     let history: [(date: Date, sets: [WorkoutSet])]
+    @State private var visibleCount: Int = 5
     
+    private var sortedSessions: [(date: Date, sets: [WorkoutSet])] {
+        history.sorted { $0.date > $1.date }
+    }
+
     private var recentSessions: [(date: Date, sets: [WorkoutSet])] {
-        Array(history.sorted { $0.date > $1.date }.prefix(5))
+        Array(sortedSessions.prefix(visibleCount))
+    }
+
+    private var canShowMore: Bool {
+        sortedSessions.count > visibleCount
     }
     
     var body: some View {
@@ -675,6 +684,21 @@ struct RecentSetsView: View {
                     }
                     .padding(Theme.Spacing.lg)
                     .glassBackground(elevation: 2)
+                }
+
+                if canShowMore {
+                    Button {
+                        withAnimation(.easeInOut) {
+                            visibleCount = min(visibleCount + 5, sortedSessions.count)
+                        }
+                    } label: {
+                        Text("Show more")
+                            .font(Theme.Typography.subheadline)
+                            .foregroundColor(Theme.Colors.accent)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, Theme.Spacing.md)
+                    }
+                    .glassBackground(elevation: 1)
                 }
             }
         }
