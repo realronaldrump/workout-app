@@ -2,6 +2,8 @@ import SwiftUI
 
 struct ExerciseListView: View {
     @ObservedObject var dataManager: WorkoutDataManager
+    @EnvironmentObject var annotationsManager: WorkoutAnnotationsManager
+    @EnvironmentObject var gymProfilesManager: GymProfilesManager
     @State private var searchText = ""
     @State private var sortOrder = SortOrder.alphabetical
     @State private var selectedExercise: ExerciseSelection?
@@ -64,7 +66,14 @@ struct ExerciseListView: View {
             ScrollView(showsIndicators: false) {
                 LazyVStack(spacing: Theme.Spacing.md) {
                     ForEach(exercises, id: \.name) { exercise in
-                        NavigationLink(destination: ExerciseDetailView(exerciseName: exercise.name, dataManager: dataManager)) {
+                        NavigationLink(
+                            destination: ExerciseDetailView(
+                                exerciseName: exercise.name,
+                                dataManager: dataManager,
+                                annotationsManager: annotationsManager,
+                                gymProfilesManager: gymProfilesManager
+                            )
+                        ) {
                             ExerciseRowView(name: exercise.name, stats: exercise.stats)
                         }
                         .buttonStyle(PlainButtonStyle())
@@ -102,7 +111,12 @@ struct ExerciseListView: View {
             }
         }
         .navigationDestination(item: $selectedExercise) { selection in
-            ExerciseDetailView(exerciseName: selection.id, dataManager: dataManager)
+            ExerciseDetailView(
+                exerciseName: selection.id,
+                dataManager: dataManager,
+                annotationsManager: annotationsManager,
+                gymProfilesManager: gymProfilesManager
+            )
         }
         .sheet(isPresented: $showingQuickStart) {
             QuickStartView(exerciseName: quickStartExercise)

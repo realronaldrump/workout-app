@@ -60,6 +60,8 @@ struct WorkoutHistoryView: View {
 struct WorkoutHistoryRow: View {
     let workout: Workout
     @EnvironmentObject var healthManager: HealthKitManager
+    @EnvironmentObject var annotationsManager: WorkoutAnnotationsManager
+    @EnvironmentObject var gymProfilesManager: GymProfilesManager
     
     var body: some View {
         NavigationLink(destination: WorkoutDetailView(workout: workout)) {
@@ -81,6 +83,8 @@ struct WorkoutHistoryRow: View {
                     Text(workout.date.formatted(.dateTime.weekday(.wide)) + ", " + workout.date.formatted(.dateTime.day()))
                         .font(Theme.Typography.subheadline)
                         .foregroundStyle(Theme.Colors.textSecondary)
+
+                    GymBadge(text: gymLabel, style: gymBadgeStyle)
                     
                     HStack(spacing: 12) {
                         Label(workout.duration, systemImage: "clock")
@@ -114,5 +118,21 @@ struct WorkoutHistoryRow: View {
             return String(format: "%.1fk lbs", volume / 1000)
         }
         return "\(Int(volume)) lbs"
+    }
+
+    private var gymLabel: String {
+        let gymId = annotationsManager.annotation(for: workout.id)?.gymProfileId
+        if let name = gymProfilesManager.gymName(for: gymId) {
+            return name
+        }
+        return gymId == nil ? "Unassigned" : "Deleted gym"
+    }
+
+    private var gymBadgeStyle: GymBadgeStyle {
+        let gymId = annotationsManager.annotation(for: workout.id)?.gymProfileId
+        if gymId == nil {
+            return .unassigned
+        }
+        return gymProfilesManager.gymName(for: gymId) == nil ? .deleted : .assigned
     }
 }

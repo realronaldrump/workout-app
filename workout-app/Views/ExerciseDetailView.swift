@@ -4,8 +4,11 @@ import Charts
 struct ExerciseDetailView: View {
     let exerciseName: String
     @ObservedObject var dataManager: WorkoutDataManager
+    @ObservedObject var annotationsManager: WorkoutAnnotationsManager
+    @ObservedObject var gymProfilesManager: GymProfilesManager
     @StateObject private var insightsEngine: InsightsEngine
     @State private var selectedChart = ChartType.weight
+    @State private var selectedGymScope: GymScope = .all
     
     enum ChartType: String, CaseIterable {
         case weight = "Max Weight"
@@ -13,19 +16,84 @@ struct ExerciseDetailView: View {
         case oneRepMax = "1RM"
         case reps = "Reps"
     }
+
+    enum GymScope: Hashable {
+        case all
+        case unassigned
+        case gym(UUID)
+    }
     
-    init(exerciseName: String, dataManager: WorkoutDataManager) {
+    init(
+        exerciseName: String,
+        dataManager: WorkoutDataManager,
+        annotationsManager: WorkoutAnnotationsManager,
+        gymProfilesManager: GymProfilesManager
+    ) {
         self.exerciseName = exerciseName
         self.dataManager = dataManager
-        _insightsEngine = StateObject(wrappedValue: InsightsEngine(dataManager: dataManager))
+        self.annotationsManager = annotationsManager
+        self.gymProfilesManager = gymProfilesManager
+        _insightsEngine = StateObject(
+            wrappedValue: InsightsEngine(
+                dataManager: dataManager,
+                annotationsProvider: { annotationsManager.annotations },
+                gymNameProvider: { gymProfilesManager.gymNameSnapshot() }
+            )
+        )
     }
 
-    private var exerciseHistory: [(date: Date, sets: [WorkoutSet])] {
-        dataManager.getExerciseHistory(for: exerciseName)
+    private var scopedHistory: [(date: Date, sets: [WorkoutSet])] {
+        var history: [(date: Date, sets: [WorkoutSet])] = []
+        for workout in dataManager.workouts {
+            guard let exercise = workout.exercises.first(where: { $0.name == exerciseName }) else { continue }
+            let gymId = annotationsManager.annotation(for: workout.id)?.gymProfileId
+            let matches: Bool
+            switch selectedGymScope {
+            case .all:
+                matches = true
+            case .unassigned:
+                matches = gymId == nil
+            case .gym(let targetId):
+                matches = gymId == targetId
+            }
+            if matches {
+                history.append((date: workout.date, sets: exercise.sets))
+            }
+        }
+        return history.sorted { $0.date < $1.date }
     }
 
     private var exerciseInsights: [Insight] {
         insightsEngine.insights.filter { $0.exerciseName == exerciseName }
+    }
+
+    private var locationLabel: String {
+        switch selectedGymScope {
+        case .all:
+            return "All gyms"
+        case .unassigned:
+            return "Unassigned"
+        case .gym(let id):
+            return gymProfilesManager.gymName(for: id) ?? "Deleted gym"
+        }
+    }
+
+    private var isDeletedScope: Bool {
+        if case .gym(let id) = selectedGymScope {
+            return gymProfilesManager.gymName(for: id) == nil
+        }
+        return false
+    }
+
+    private var locationBadgeStyle: GymBadgeStyle {
+        switch selectedGymScope {
+        case .all:
+            return .assigned
+        case .unassigned:
+            return .unassigned
+        case .gym(let id):
+            return gymProfilesManager.gymName(for: id) == nil ? .deleted : .assigned
+        }
     }
     
     var body: some View {
@@ -34,7 +102,7 @@ struct ExerciseDetailView: View {
 
             ScrollView {
                 VStack(spacing: Theme.Spacing.xl) {
-                    ExerciseStatsCards(exerciseName: exerciseName, history: exerciseHistory)
+                    ExerciseStatsCards(exerciseName: exerciseName, history: scopedHistory)
                     
                     VStack(alignment: .leading, spacing: 16) {
                         HStack {
@@ -43,6 +111,8 @@ struct ExerciseDetailView: View {
                                 .foregroundColor(Theme.Colors.textPrimary)
                             
                             Spacer()
+
+                            locationMenu
                             
                             Picker("Chart Type", selection: $selectedChart) {
                                 ForEach(ChartType.allCases, id: \.self) { type in
@@ -51,14 +121,20 @@ struct ExerciseDetailView: View {
                             }
                             .pickerStyle(.menu)
                         }
+
+                        if isDeletedScope {
+                            Text("Deleted gym. Select a valid location.")
+                                .font(Theme.Typography.caption)
+                                .foregroundColor(Theme.Colors.warning)
+                        }
                         
-                        ExerciseProgressChart(history: exerciseHistory, chartType: selectedChart)
+                        ExerciseProgressChart(history: scopedHistory, chartType: selectedChart)
                             .frame(height: 250)
                             .padding(Theme.Spacing.lg)
                             .glassBackground(elevation: 2)
                     }
 
-                    ExerciseRangeBreakdown(history: exerciseHistory)
+                    ExerciseRangeBreakdown(history: scopedHistory)
 
                     if !exerciseInsights.isEmpty {
                         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
@@ -74,9 +150,9 @@ struct ExerciseDetailView: View {
                         }
                     }
                     
-                    PersonalRecordsView(history: exerciseHistory)
+                    PersonalRecordsView(history: scopedHistory)
                     
-                    RecentSetsView(history: exerciseHistory)
+                    RecentSetsView(history: scopedHistory)
                 }
                 .padding(Theme.Spacing.xl)
             }
@@ -90,6 +166,23 @@ struct ExerciseDetailView: View {
         }
         .onChange(of: selectedChart) { _, _ in
             Haptics.selection()
+        }
+    }
+
+    private var locationMenu: some View {
+        Menu {
+            Button("All gyms") { selectedGymScope = .all }
+            Button("Unassigned") { selectedGymScope = .unassigned }
+
+            if !gymProfilesManager.sortedGyms.isEmpty {
+                Divider()
+            }
+
+            ForEach(gymProfilesManager.sortedGyms) { gym in
+                Button(gym.name) { selectedGymScope = .gym(gym.id) }
+            }
+        } label: {
+            GymBadge(text: locationLabel, style: locationBadgeStyle)
         }
     }
 }

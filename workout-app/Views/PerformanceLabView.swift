@@ -5,6 +5,7 @@ struct PerformanceLabView: View {
     @ObservedObject var dataManager: WorkoutDataManager
     @EnvironmentObject var healthManager: HealthKitManager
     @EnvironmentObject var annotationsManager: WorkoutAnnotationsManager
+    @EnvironmentObject var gymProfilesManager: GymProfilesManager
 
     @State private var progressWindow = 8
     @State private var changeWindow = 14
@@ -60,7 +61,12 @@ struct PerformanceLabView: View {
             WorkoutDetailView(workout: workout)
         }
         .navigationDestination(item: $selectedExercise) { selection in
-            ExerciseDetailView(exerciseName: selection.id, dataManager: dataManager)
+            ExerciseDetailView(
+                exerciseName: selection.id,
+                dataManager: dataManager,
+                annotationsManager: annotationsManager,
+                gymProfilesManager: gymProfilesManager
+            )
         }
     }
 

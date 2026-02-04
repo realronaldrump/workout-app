@@ -166,6 +166,36 @@ struct SettingsView: View {
                         Divider().padding(.leading, 50)
                         
                         // Exercise Tags
+                        NavigationLink(destination: GymProfilesView()) {
+                            HStack {
+                                Image(systemName: "mappin.and.ellipse")
+                                    .foregroundStyle(.white)
+                                    .frame(width: 30, height: 30)
+                                    .background(Color.indigo)
+                                    .cornerRadius(6)
+                                
+                                VStack(alignment: .leading) {
+                                    Text("Gym Profiles")
+                                        .font(Theme.Typography.body)
+                                        .foregroundStyle(Theme.Colors.textPrimary)
+                                    Text("Tag workouts by location")
+                                        .font(Theme.Typography.caption)
+                                        .foregroundStyle(Theme.Colors.textSecondary)
+                                }
+                                
+                                Spacer()
+                                
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                                    .foregroundStyle(Theme.Colors.textTertiary)
+                            }
+                            .padding()
+                            .glassBackground()
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        
+                        Divider().padding(.leading, 50)
+                        
                         NavigationLink(destination: ExerciseTaggingView(dataManager: dataManager)) {
                             HStack {
                                 Image(systemName: "tag.fill")

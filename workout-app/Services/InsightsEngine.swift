@@ -8,9 +8,17 @@ class InsightsEngine: ObservableObject {
     @Published var insights: [Insight] = []
     
     private let dataManager: WorkoutDataManager
+    private let annotationsProvider: () -> [UUID: WorkoutAnnotation]
+    private let gymNameProvider: () -> [UUID: String]
     
-    init(dataManager: WorkoutDataManager) {
+    init(
+        dataManager: WorkoutDataManager,
+        annotationsProvider: @escaping () -> [UUID: WorkoutAnnotation],
+        gymNameProvider: @escaping () -> [UUID: String]
+    ) {
         self.dataManager = dataManager
+        self.annotationsProvider = annotationsProvider
+        self.gymNameProvider = gymNameProvider
     }
     
     /// Analyzes all workout data and generates prioritized insights
@@ -18,6 +26,8 @@ class InsightsEngine: ObservableObject {
         // Capture snapshot of data to pass to background tasks
         let workoutsSnapshot = dataManager.workouts
         let muscleGroupMappings = ExerciseMetadataManager.shared.muscleGroupMappings
+        let annotationsSnapshot = annotationsProvider()
+        let gymNameSnapshot = gymNameProvider()
         
         // Run analysis in parallel
         let newInsights = await Task.detached(priority: .userInitiated) {
@@ -29,7 +39,16 @@ class InsightsEngine: ObservableObject {
                 
                 // Plateau Detection
                 group.addTask {
-                    return self.detectPlateaus(in: workoutsSnapshot)
+                    return self.detectPlateaus(in: workoutsSnapshot, annotations: annotationsSnapshot)
+                }
+
+                // New Equipment Baseline
+                group.addTask {
+                    return self.detectNewEquipmentBaseline(
+                        in: workoutsSnapshot,
+                        annotations: annotationsSnapshot,
+                        gymNames: gymNameSnapshot
+                    )
                 }
                 
                 // Muscle Balance
@@ -158,7 +177,10 @@ class InsightsEngine: ObservableObject {
     
     // MARK: - Plateau Detection
     
-    private nonisolated func detectPlateaus(in workouts: [Workout]) -> [Insight] {
+    private nonisolated func detectPlateaus(
+        in workouts: [Workout],
+        annotations: [UUID: WorkoutAnnotation]
+    ) -> [Insight] {
         var plateauInsights: [Insight] = []
         let calendar = Calendar.current
         guard let fourWeeksAgo = calendar.date(byAdding: .day, value: -28, to: Date()) else { return [] }
@@ -167,9 +189,10 @@ class InsightsEngine: ObservableObject {
         let exerciseGroups = Dictionary(grouping: allExercises) { $0.name }
         
         for (exerciseName, _) in exerciseGroups {
-            let history = workouts.compactMap { workout -> (date: Date, sets: [WorkoutSet])? in
+            let history = workouts.compactMap { workout -> (date: Date, sets: [WorkoutSet], gymId: UUID?)? in
                 if let exercise = workout.exercises.first(where: { $0.name == exerciseName }) {
-                    return (date: workout.date, sets: exercise.sets)
+                    let gymId = annotations[workout.id]?.gymProfileId
+                    return (date: workout.date, sets: exercise.sets, gymId: gymId)
                 }
                 return nil
             }.sorted { $0.date < $1.date }
@@ -179,6 +202,8 @@ class InsightsEngine: ObservableObject {
             
             // Check recent sessions (last 4)
             let recentSessions = Array(history.suffix(4))
+            let recentGymKeys = Set(recentSessions.map { $0.gymId })
+            guard recentGymKeys.count <= 1 else { continue }
             
             // Check if all sessions are within recent timeframe
             guard let oldestRecent = recentSessions.first?.date,
@@ -209,6 +234,9 @@ class InsightsEngine: ObservableObject {
 
             // Estimated 1RM plateau check over 4 weeks
             let recentHistory = history.filter { $0.date >= fourWeeksAgo }
+            let recentHistoryGymKeys = Set(recentHistory.map { $0.gymId })
+            guard recentHistoryGymKeys.count <= 1 else { continue }
+
             let recentOrms = recentHistory.map { session -> Double in
                 let bestSet = session.sets.max {
                     self.calculateOneRepMax(weight: $0.weight, reps: $0.reps) <
@@ -235,6 +263,56 @@ class InsightsEngine: ObservableObject {
         }
         
         return plateauInsights
+    }
+
+    // MARK: - New Equipment Baseline
+
+    private nonisolated func detectNewEquipmentBaseline(
+        in workouts: [Workout],
+        annotations: [UUID: WorkoutAnnotation],
+        gymNames: [UUID: String]
+    ) -> [Insight] {
+        var baselineInsights: [Insight] = []
+
+        let allExercises = workouts.flatMap { $0.exercises }
+        let exerciseGroups = Dictionary(grouping: allExercises) { $0.name }
+
+        for (exerciseName, _) in exerciseGroups {
+            let sessions = workouts.compactMap { workout -> (date: Date, gymId: UUID?)? in
+                if workout.exercises.contains(where: { $0.name == exerciseName }) {
+                    let gymId = annotations[workout.id]?.gymProfileId
+                    return (date: workout.date, gymId: gymId)
+                }
+                return nil
+            }.sorted { $0.date < $1.date }
+
+            guard sessions.count >= 2 else { continue }
+
+            var seenGymKeys: Set<UUID?> = []
+            for session in sessions {
+                let gymKey = session.gymId
+                if !seenGymKeys.contains(gymKey) {
+                    if let gymId = gymKey,
+                       !seenGymKeys.isEmpty {
+                        let gymLabel = gymNames[gymId] ?? "Deleted gym"
+                        baselineInsights.append(Insight(
+                            id: UUID(),
+                            type: .baseline,
+                            title: "New Equipment Baseline",
+                            message: "\(exerciseName) | \(gymLabel)",
+                            exerciseName: exerciseName,
+                            date: session.date,
+                            priority: 4,
+                            actionLabel: "History",
+                            metric: nil
+                        ))
+                    }
+                    seenGymKeys.insert(gymKey)
+                }
+            }
+        }
+
+        return baselineInsights
     }
     
     // MARK: - Muscle Balance Analysis
@@ -508,6 +586,7 @@ enum InsightType {
     case personalRecord
     case strengthGain
     case plateau
+    case baseline
     case muscleBalance
     case recommendation
     case reminder
@@ -518,6 +597,7 @@ enum InsightType {
         case .personalRecord: return "trophy.fill"
         case .strengthGain: return "arrow.up.right.circle.fill"
         case .plateau: return "equal.circle.fill"
+        case .baseline: return "flag.fill"
         case .muscleBalance: return "scalemass.fill"
         case .recommendation: return "lightbulb.fill"
         case .reminder: return "bell.fill"
@@ -530,6 +610,7 @@ enum InsightType {
         case .personalRecord: return "yellow"
         case .strengthGain: return "green"
         case .plateau: return "orange"
+        case .baseline: return "cyan"
         case .muscleBalance: return "purple"
         case .recommendation: return "blue"
         case .reminder: return "cyan"

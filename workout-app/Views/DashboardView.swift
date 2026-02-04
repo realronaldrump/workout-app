@@ -4,6 +4,8 @@ import Charts
 struct DashboardView: View {
     @ObservedObject var dataManager: WorkoutDataManager
     @ObservedObject var iCloudManager: iCloudDocumentManager
+    let annotationsManager: WorkoutAnnotationsManager
+    let gymProfilesManager: GymProfilesManager
     @EnvironmentObject var healthManager: HealthKitManager
 
     @StateObject private var insightsEngine: InsightsEngine
@@ -20,10 +22,23 @@ struct DashboardView: View {
     @State private var showingHistory = false
     @State private var selectedMetric: MetricDrilldown?
 
-    init(dataManager: WorkoutDataManager, iCloudManager: iCloudDocumentManager) {
+    init(
+        dataManager: WorkoutDataManager,
+        iCloudManager: iCloudDocumentManager,
+        annotationsManager: WorkoutAnnotationsManager,
+        gymProfilesManager: GymProfilesManager
+    ) {
         self.dataManager = dataManager
         self.iCloudManager = iCloudManager
-        _insightsEngine = StateObject(wrappedValue: InsightsEngine(dataManager: dataManager))
+        self.annotationsManager = annotationsManager
+        self.gymProfilesManager = gymProfilesManager
+        _insightsEngine = StateObject(
+            wrappedValue: InsightsEngine(
+                dataManager: dataManager,
+                annotationsProvider: { annotationsManager.annotations },
+                gymNameProvider: { gymProfilesManager.gymNameSnapshot() }
+            )
+        )
     }
 
     enum TimeRange: String, CaseIterable {
@@ -105,7 +120,12 @@ struct DashboardView: View {
             WorkoutHistoryView(workouts: dataManager.workouts)
         }
         .navigationDestination(item: $selectedExercise) { selection in
-            ExerciseDetailView(exerciseName: selection.id, dataManager: dataManager)
+            ExerciseDetailView(
+                exerciseName: selection.id,
+                dataManager: dataManager,
+                annotationsManager: annotationsManager,
+                gymProfilesManager: gymProfilesManager
+            )
         }
         .navigationDestination(item: $selectedWorkout) { workout in
             WorkoutDetailView(workout: workout)

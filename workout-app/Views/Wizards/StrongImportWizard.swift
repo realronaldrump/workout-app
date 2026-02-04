@@ -6,6 +6,8 @@ struct StrongImportWizard: View {
     @ObservedObject var dataManager: WorkoutDataManager
     @ObservedObject var iCloudManager: iCloudDocumentManager
     @EnvironmentObject var healthManager: HealthKitManager
+    @EnvironmentObject var annotationsManager: WorkoutAnnotationsManager
+    @EnvironmentObject var gymProfilesManager: GymProfilesManager
     
     @State private var step = 0
     @State private var isImporting = false
@@ -241,6 +243,31 @@ struct StrongImportWizard: View {
                 
                 importDetailsCard
                 healthSyncStatusCard
+
+                NavigationLink(destination: GymBulkAssignView()) {
+                    HStack(spacing: Theme.Spacing.md) {
+                        Image(systemName: "mappin.and.ellipse")
+                            .font(.system(size: 28))
+                            .foregroundStyle(Theme.Colors.accent)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Tag Imported Workouts")
+                                .font(Theme.Typography.headline)
+                                .foregroundColor(Theme.Colors.textPrimary)
+                            Text("Use Bulk Assign Gyms to keep progress clean across locations.")
+                                .font(Theme.Typography.caption)
+                                .foregroundColor(Theme.Colors.textSecondary)
+                        }
+
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundStyle(Theme.Colors.textTertiary)
+                    }
+                    .padding(Theme.Spacing.lg)
+                    .glassBackground(elevation: 2)
+                }
+                .buttonStyle(PlainButtonStyle())
                 
                 Button(action: { isPresented = false }) {
                     Text("Done")

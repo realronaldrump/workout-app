@@ -93,6 +93,7 @@ struct WorkoutAnnotation: Identifiable, Codable {
     let id: UUID
     let workoutId: UUID
     let createdAt: Date
+    var gymProfileId: UUID?
     var stress: StressLevel?
     var soreness: SorenessLevel?
     var caffeine: CaffeineIntake?
@@ -103,6 +104,7 @@ struct WorkoutAnnotation: Identifiable, Codable {
         id: UUID = UUID(),
         workoutId: UUID,
         createdAt: Date = Date(),
+        gymProfileId: UUID? = nil,
         stress: StressLevel? = nil,
         soreness: SorenessLevel? = nil,
         caffeine: CaffeineIntake? = nil,
@@ -112,6 +114,7 @@ struct WorkoutAnnotation: Identifiable, Codable {
         self.id = id
         self.workoutId = workoutId
         self.createdAt = createdAt
+        self.gymProfileId = gymProfileId
         self.stress = stress
         self.soreness = soreness
         self.caffeine = caffeine

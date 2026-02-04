@@ -7,6 +7,8 @@ struct MetricDetailView: View {
 
     @EnvironmentObject var healthManager: HealthKitManager
     @EnvironmentObject var dataManager: WorkoutDataManager
+    @EnvironmentObject var annotationsManager: WorkoutAnnotationsManager
+    @EnvironmentObject var gymProfilesManager: GymProfilesManager
 
     var body: some View {
         ZStack {
@@ -115,7 +117,14 @@ struct MetricDetailView: View {
                     .foregroundColor(Theme.Colors.textPrimary)
 
                 ForEach(exerciseTotals.prefix(6), id: \.name) { exercise in
-                    NavigationLink(destination: ExerciseDetailView(exerciseName: exercise.name, dataManager: dataManager)) {
+                    NavigationLink(
+                        destination: ExerciseDetailView(
+                            exerciseName: exercise.name,
+                            dataManager: dataManager,
+                            annotationsManager: annotationsManager,
+                            gymProfilesManager: gymProfilesManager
+                        )
+                    ) {
                         HStack {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(exercise.name)

@@ -4,6 +4,8 @@ struct WorkoutDetailView: View {
     let workout: Workout
     @EnvironmentObject var healthManager: HealthKitManager
     @EnvironmentObject var dataManager: WorkoutDataManager
+    @EnvironmentObject var annotationsManager: WorkoutAnnotationsManager
+    @EnvironmentObject var gymProfilesManager: GymProfilesManager
     // Removed local healthData state to use source of truth
     @State private var showingSyncError = false
     @State private var syncErrorMessage = ""
@@ -52,6 +54,8 @@ struct WorkoutDetailView: View {
                     }
                     .padding(Theme.Spacing.lg)
                     .glassBackground(elevation: 2)
+
+                    GymAssignmentCard(workout: workout)
                     
                     // Health Data Section
                     if healthManager.isHealthKitAvailable() {
@@ -103,7 +107,12 @@ struct WorkoutDetailView: View {
             Text(syncErrorMessage)
         }
         .navigationDestination(item: $selectedExercise) { selection in
-            ExerciseDetailView(exerciseName: selection.id, dataManager: dataManager)
+            ExerciseDetailView(
+                exerciseName: selection.id,
+                dataManager: dataManager,
+                annotationsManager: annotationsManager,
+                gymProfilesManager: gymProfilesManager
+            )
         }
         .sheet(isPresented: $showingQuickStart) {
             QuickStartView(exerciseName: quickStartExercise)

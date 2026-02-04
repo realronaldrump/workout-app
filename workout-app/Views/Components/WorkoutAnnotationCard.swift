@@ -26,7 +26,7 @@ struct WorkoutAnnotationCard: View {
                     caffeine = nil
                     mood = nil
                     notes = ""
-                    annotationsManager.removeAnnotation(for: workout.id)
+                    annotationsManager.clearNonGymFields(for: workout.id)
                 }
                 .font(Theme.Typography.caption)
                 .foregroundColor(Theme.Colors.textTertiary)
@@ -101,8 +101,21 @@ struct WorkoutAnnotationCard: View {
 
     private func save() {
         let trimmed = notes.trimmingCharacters(in: .whitespacesAndNewlines)
-        if stress == nil && soreness == nil && caffeine == nil && mood == nil && trimmed.isEmpty {
-            annotationsManager.removeAnnotation(for: workout.id)
+        let hasNonGymFields = stress != nil || soreness != nil || caffeine != nil || mood != nil || !trimmed.isEmpty
+        let existingGym = annotationsManager.annotation(for: workout.id)?.gymProfileId
+        if !hasNonGymFields {
+            if existingGym == nil {
+                annotationsManager.removeAnnotation(for: workout.id)
+            } else {
+                annotationsManager.upsertAnnotation(
+                    for: workout.id,
+                    stress: nil,
+                    soreness: nil,
+                    caffeine: nil,
+                    mood: nil,
+                    notes: nil
+                )
+            }
             return
         }
 
