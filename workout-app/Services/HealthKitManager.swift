@@ -271,8 +271,9 @@ class HealthKitManager: ObservableObject {
         )
 
         // Fetch sleep summary (night before workout)
-        let sleepWindowStart = Calendar.current.date(byAdding: .hour, value: -18, to: dayStart) ?? dayStart
-        healthData.sleepSummary = try await fetchSleepSummary(from: sleepWindowStart, to: dayEnd)
+        let sleepWindowEnd = startTime
+        let sleepWindowStart = Calendar.current.date(byAdding: .hour, value: -24, to: sleepWindowEnd) ?? dayStart
+        healthData.sleepSummary = try await fetchSleepSummary(from: sleepWindowStart, to: sleepWindowEnd)
 
         // Daily activity totals
         healthData.dailyActiveEnergy = try await fetchQuantitySum(
@@ -763,42 +764,98 @@ class HealthKitManager: ObservableObject {
                     return
                 }
 
-                var stageDurations: [SleepStage: TimeInterval] = [:]
-                var totalSleep: TimeInterval = 0
-                var inBed: TimeInterval = 0
-                var startTime = sleepSamples.first?.startDate ?? start
-                var endTime = sleepSamples.first?.endDate ?? end
+                var stageIntervals: [SleepStage: [DateInterval]] = [:]
+                var asleepIntervals: [DateInterval] = []
+                var inBedIntervals: [DateInterval] = []
+                var startTime: Date?
+                var endTime: Date?
 
                 for sample in sleepSamples {
-                    let duration = max(sample.endDate.timeIntervalSince(sample.startDate), 0)
-                    startTime = min(startTime, sample.startDate)
-                    endTime = max(endTime, sample.endDate)
+                    let rawInterval = DateInterval(start: sample.startDate, end: sample.endDate)
+                    guard let interval = Self.clampedInterval(rawInterval, to: start, end: end) else {
+                        continue
+                    }
+
+                    if let existingStart = startTime {
+                        startTime = min(existingStart, interval.start)
+                    } else {
+                        startTime = interval.start
+                    }
+
+                    if let existingEnd = endTime {
+                        endTime = max(existingEnd, interval.end)
+                    } else {
+                        endTime = interval.end
+                    }
 
                     let stage = Self.mapSleepStage(sample.value)
-                    stageDurations[stage, default: 0] += duration
+                    stageIntervals[stage, default: []].append(interval)
 
                     switch stage {
                     case .inBed:
-                        inBed += duration
+                        inBedIntervals.append(interval)
                     case .core, .deep, .rem:
-                        totalSleep += duration
+                        asleepIntervals.append(interval)
                     default:
                         break
                     }
                 }
 
+                guard let summaryStart = startTime, let summaryEnd = endTime else {
+                    continuation.resume(returning: nil)
+                    return
+                }
+
+                var stageDurations: [SleepStage: TimeInterval] = [:]
+                for (stage, intervals) in stageIntervals {
+                    let merged = Self.mergeIntervals(intervals)
+                    stageDurations[stage] = merged.reduce(0) { $0 + $1.duration }
+                }
+
+                let totalSleep = Self.mergeIntervals(asleepIntervals).reduce(0) { $0 + $1.duration }
+                let inBed = Self.mergeIntervals(inBedIntervals).reduce(0) { $0 + $1.duration }
+
                 let summary = SleepSummary(
                     totalSleep: totalSleep,
                     inBed: inBed,
                     stageDurations: stageDurations,
-                    start: startTime,
-                    end: endTime
+                    start: summaryStart,
+                    end: summaryEnd
                 )
 
                 continuation.resume(returning: summary)
             }
             healthStore.execute(query)
         }
+    }
+
+    private nonisolated static func clampedInterval(_ interval: DateInterval, to start: Date, end: Date) -> DateInterval? {
+        let clampedStart = max(interval.start, start)
+        let clampedEnd = min(interval.end, end)
+        guard clampedEnd > clampedStart else { return nil }
+        return DateInterval(start: clampedStart, end: clampedEnd)
+    }
+
+    private nonisolated static func mergeIntervals(_ intervals: [DateInterval]) -> [DateInterval] {
+        guard !intervals.isEmpty else { return [] }
+        let sorted = intervals.sorted { $0.start < $1.start }
+        var merged: [DateInterval] = [sorted[0]]
+
+        for interval in sorted.dropFirst() {
+            guard let last = merged.last else {
+                merged.append(interval)
+                continue
+            }
+
+            if interval.start <= last.end {
+                let newInterval = DateInterval(start: last.start, end: max(last.end, interval.end))
+                merged[merged.count - 1] = newInterval
+            } else {
+                merged.append(interval)
+            }
+        }
+
+        return merged
     }
 
     private nonisolated static func mapSleepStage(_ value: Int) -> SleepStage {
