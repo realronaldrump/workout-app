@@ -220,6 +220,18 @@ struct ProfileView: View {
                     )
                 }
                 .buttonStyle(PlainButtonStyle())
+
+                Divider().padding(.leading, 50)
+
+                NavigationLink(destination: SettingsView(dataManager: dataManager, iCloudManager: iCloudManager)) {
+                    ProfileLinkRow(
+                        icon: "gearshape.fill",
+                        color: .gray,
+                        title: "Settings",
+                        subtitle: "Sync, units, tags"
+                    )
+                }
+                .buttonStyle(PlainButtonStyle())
             }
         }
     }

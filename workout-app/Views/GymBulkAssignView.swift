@@ -11,6 +11,7 @@ struct GymBulkAssignView: View {
     @State private var showUnassignedOnly = false
     @State private var selectedWorkouts: Set<UUID> = []
     @State private var didInitializeRange = false
+    @State private var showingAssignPicker = false
 
     var body: some View {
         ZStack {
@@ -103,20 +104,8 @@ struct GymBulkAssignView: View {
             }
             .font(Theme.Typography.caption)
 
-            Menu {
-                Button("Unassigned") {
-                    applySelection(gymProfileId: nil)
-                }
-
-                if !gymProfilesManager.sortedGyms.isEmpty {
-                    Divider()
-                }
-
-                ForEach(gymProfilesManager.sortedGyms) { gym in
-                    Button(gym.name) {
-                        applySelection(gymProfileId: gym.id)
-                    }
-                }
+            Button {
+                showingAssignPicker = true
             } label: {
                 Label("Assign", systemImage: "mappin.and.ellipse")
                     .font(Theme.Typography.caption)
@@ -126,6 +115,31 @@ struct GymBulkAssignView: View {
         .padding(.horizontal, Theme.Spacing.md)
         .padding(.vertical, Theme.Spacing.sm)
         .glassBackground(elevation: 1)
+        .sheet(isPresented: $showingAssignPicker) {
+            GymSelectionSheet(
+                title: "Assign Gym",
+                gyms: gymProfilesManager.sortedGyms,
+                selected: .unassigned,
+                showAllGyms: false,
+                showUnassigned: true,
+                lastUsedGymId: nil,
+                showLastUsed: false,
+                showAddNew: false,
+                onSelect: handleBulkSelection,
+                onAddNew: nil
+            )
+        }
+    }
+
+    private func handleBulkSelection(_ selection: GymSelection) {
+        switch selection {
+        case .unassigned:
+            applySelection(gymProfileId: nil)
+        case .gym(let id):
+            applySelection(gymProfileId: id)
+        case .allGyms:
+            break
+        }
     }
 
     private func workoutRow(for workout: Workout) -> some View {

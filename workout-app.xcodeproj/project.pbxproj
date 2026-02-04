@@ -65,6 +65,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 720441DC2F04516C00817762 /* Build configuration list for PBXNativeTarget "workout-app" */;
 			buildPhases = (
+				72A1B2C32F0A1B2C00817762 /* SwiftLint */,
 				720441CD2F04516A00817762 /* Sources */,
 				720441CE2F04516A00817762 /* Frameworks */,
 				720441CF2F04516A00817762 /* Resources */,
@@ -126,6 +127,27 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		72A1B2C32F0A1B2C00817762 /* SwiftLint */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = SwiftLint;
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "if command -v swiftlint >/dev/null 2>&1; then\n  swiftlint --config \"${SRCROOT}/.swiftlint.yml\"\nelse\n  echo \"warning: SwiftLint not installed. Install from https://github.com/realm/SwiftLint\"\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		720441CD2F04516A00817762 /* Sources */ = {

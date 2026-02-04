@@ -16,13 +16,44 @@ struct MainTabView: View {
     }
     
     var body: some View {
-        NavigationStack {
-            DashboardView(
-                dataManager: dataManager,
-                iCloudManager: iCloudManager,
-                annotationsManager: annotationsManager,
-                gymProfilesManager: gymProfilesManager
-            )
+        TabView {
+            NavigationStack {
+                HomeView(
+                    dataManager: dataManager,
+                    iCloudManager: iCloudManager,
+                    annotationsManager: annotationsManager,
+                    gymProfilesManager: gymProfilesManager
+                )
+            }
+            .tabItem {
+                Label("Home", systemImage: "house.fill")
+            }
+
+            NavigationStack {
+                DashboardView(
+                    dataManager: dataManager,
+                    iCloudManager: iCloudManager,
+                    annotationsManager: annotationsManager,
+                    gymProfilesManager: gymProfilesManager
+                )
+            }
+            .tabItem {
+                Label("Progress", systemImage: "chart.line.uptrend.xyaxis")
+            }
+
+            NavigationStack {
+                WorkoutHistoryView(workouts: dataManager.workouts)
+            }
+            .tabItem {
+                Label("History", systemImage: "clock.fill")
+            }
+
+            NavigationStack {
+                ProfileView(dataManager: dataManager, iCloudManager: iCloudManager)
+            }
+            .tabItem {
+                Label("Profile", systemImage: "person.crop.circle")
+            }
         }
         .environmentObject(dataManager)
         .environmentObject(annotationsManager)

@@ -2,7 +2,13 @@ import SwiftUI
 
 struct RecentWorkoutsView: View {
     let workouts: [Workout]
+    let allWorkouts: [Workout]
     @EnvironmentObject var healthManager: HealthKitManager
+
+    init(workouts: [Workout], allWorkouts: [Workout]? = nil) {
+        self.workouts = workouts
+        self.allWorkouts = allWorkouts ?? workouts
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
@@ -13,7 +19,7 @@ struct RecentWorkoutsView: View {
                 
                 Spacer()
                 
-                NavigationLink(destination: WorkoutHistoryView(workouts: workouts)) {
+                NavigationLink(destination: WorkoutHistoryView(workouts: allWorkouts)) {
                     Text("See All")
                         .font(Theme.Typography.subheadline)
                         .foregroundColor(Theme.Colors.accent)

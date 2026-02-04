@@ -9,6 +9,7 @@ struct ExerciseDetailView: View {
     @StateObject private var insightsEngine: InsightsEngine
     @State private var selectedChart = ChartType.weight
     @State private var selectedGymScope: GymScope = .all
+    @State private var showingLocationPicker = false
     
     enum ChartType: String, CaseIterable {
         case weight = "Max Weight"
@@ -170,19 +171,52 @@ struct ExerciseDetailView: View {
     }
 
     private var locationMenu: some View {
-        Menu {
-            Button("All gyms") { selectedGymScope = .all }
-            Button("Unassigned") { selectedGymScope = .unassigned }
-
-            if !gymProfilesManager.sortedGyms.isEmpty {
-                Divider()
-            }
-
-            ForEach(gymProfilesManager.sortedGyms) { gym in
-                Button(gym.name) { selectedGymScope = .gym(gym.id) }
-            }
+        Button {
+            showingLocationPicker = true
         } label: {
-            GymBadge(text: locationLabel, style: locationBadgeStyle)
+            HStack(spacing: 6) {
+                GymBadge(text: locationLabel, style: locationBadgeStyle)
+                Image(systemName: "chevron.down")
+                    .font(.caption)
+                    .foregroundColor(Theme.Colors.textTertiary)
+            }
+        }
+        .buttonStyle(.plain)
+        .sheet(isPresented: $showingLocationPicker) {
+            GymSelectionSheet(
+                title: "Location Scope",
+                gyms: gymProfilesManager.sortedGyms,
+                selected: currentScopeSelection,
+                showAllGyms: true,
+                showUnassigned: true,
+                lastUsedGymId: nil,
+                showLastUsed: false,
+                showAddNew: false,
+                onSelect: handleScopeSelection,
+                onAddNew: nil
+            )
+        }
+    }
+
+    private var currentScopeSelection: GymSelection {
+        switch selectedGymScope {
+        case .all:
+            return .allGyms
+        case .unassigned:
+            return .unassigned
+        case .gym(let id):
+            return .gym(id)
+        }
+    }
+
+    private func handleScopeSelection(_ selection: GymSelection) {
+        switch selection {
+        case .allGyms:
+            selectedGymScope = .all
+        case .unassigned:
+            selectedGymScope = .unassigned
+        case .gym(let id):
+            selectedGymScope = .gym(id)
         }
     }
 }

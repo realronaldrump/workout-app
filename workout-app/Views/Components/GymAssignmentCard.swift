@@ -6,6 +6,7 @@ struct GymAssignmentCard: View {
     @EnvironmentObject var gymProfilesManager: GymProfilesManager
 
     @State private var showingAddGym = false
+    @State private var showingGymPicker = false
 
     private var currentGymId: UUID? {
         annotationsManager.annotation(for: workout.id)?.gymProfileId
@@ -52,36 +53,17 @@ struct GymAssignmentCard: View {
 
                 Spacer()
 
-                Menu {
-                    Button("Unassigned") {
-                        assignGym(nil)
-                    }
-
-                    if let lastUsed = gymProfilesManager.lastUsedGymProfileId,
-                       let lastName = gymProfilesManager.gymName(for: lastUsed) {
-                        Button("Last used: \(lastName)") {
-                            assignGym(lastUsed)
-                        }
-                    }
-
-                    if !gymProfilesManager.sortedGyms.isEmpty {
-                        Divider()
-                    }
-
-                    ForEach(gymProfilesManager.sortedGyms) { gym in
-                        Button(gym.name) {
-                            assignGym(gym.id)
-                        }
-                    }
-
-                    Divider()
-
-                    Button("Add New Gym") {
-                        showingAddGym = true
-                    }
+                Button {
+                    showingGymPicker = true
                 } label: {
-                    GymBadge(text: selectionLabel, style: badgeStyle)
+                    HStack(spacing: 6) {
+                        GymBadge(text: selectionLabel, style: badgeStyle)
+                        Image(systemName: "chevron.down")
+                            .font(.caption)
+                            .foregroundColor(Theme.Colors.textTertiary)
+                    }
                 }
+                .buttonStyle(.plain)
             }
 
             Text(helperText)
@@ -90,11 +72,43 @@ struct GymAssignmentCard: View {
         }
         .padding(Theme.Spacing.lg)
         .glassBackground(elevation: 2)
+        .sheet(isPresented: $showingGymPicker) {
+            GymSelectionSheet(
+                title: "Select Gym",
+                gyms: gymProfilesManager.sortedGyms,
+                selected: currentSelection,
+                showAllGyms: false,
+                showUnassigned: true,
+                lastUsedGymId: gymProfilesManager.lastUsedGymProfileId,
+                showLastUsed: true,
+                showAddNew: true,
+                onSelect: handleSelection,
+                onAddNew: { showingAddGym = true }
+            )
+        }
         .sheet(isPresented: $showingAddGym) {
             GymQuickAddSheet { name in
                 let newGym = gymProfilesManager.addGym(name: name)
                 assignGym(newGym.id)
             }
+        }
+    }
+
+    private var currentSelection: GymSelection {
+        if let id = currentGymId {
+            return .gym(id)
+        }
+        return .unassigned
+    }
+
+    private func handleSelection(_ selection: GymSelection) {
+        switch selection {
+        case .unassigned:
+            assignGym(nil)
+        case .gym(let id):
+            assignGym(id)
+        case .allGyms:
+            break
         }
     }
 

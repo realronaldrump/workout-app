@@ -91,7 +91,7 @@ struct OnboardingView: View {
             Button(action: {
                 handlePrimaryAction()
             }) {
-                Text(step == totalSteps - 1 ? "Launch Analytics" : "Continue")
+                Text(step == totalSteps - 1 ? "Launch App" : "Continue")
                     .font(Theme.Typography.headline)
                     .foregroundColor(.white)
                     .padding(.horizontal, Theme.Spacing.xl)
@@ -106,7 +106,7 @@ struct OnboardingView: View {
     private var missionControlStep: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-                Text("Dashboard Preview")
+                Text("Home Preview")
                     .font(Theme.Typography.title)
                     .foregroundColor(Theme.Colors.textPrimary)
 
@@ -124,7 +124,7 @@ struct OnboardingView: View {
     private var insightsStep: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-                Text("Signals Preview")
+                Text("Highlights Preview")
                     .font(Theme.Typography.title)
                     .foregroundColor(Theme.Colors.textPrimary)
 
