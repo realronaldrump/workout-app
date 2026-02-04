@@ -11,7 +11,6 @@ struct ProfileView: View {
 
     @AppStorage("profileName") private var profileName = ""
     @AppStorage("profileEmail") private var profileEmail = ""
-    @AppStorage("profileGoal") private var profileGoal = ""
     @AppStorage("weightUnit") private var weightUnit = "lbs"
     @AppStorage("dateFormat") private var dateFormat = "relative"
 
@@ -65,10 +64,6 @@ struct ProfileView: View {
                 Text(displayName)
                     .font(Theme.Typography.title2)
                     .foregroundStyle(Theme.Colors.textPrimary)
-
-                Text(profileGoal.isEmpty ? "focus --" : profileGoal)
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textSecondary)
             }
 
             HStack(spacing: Theme.Spacing.lg) {
@@ -104,14 +99,6 @@ struct ProfileView: View {
                     placeholder: "Email",
                     text: $profileEmail,
                     keyboardType: .emailAddress
-                )
-
-                ProfileFieldRow(
-                    icon: "target",
-                    color: .orange,
-                    title: "Training Focus",
-                    placeholder: "Focus",
-                    text: $profileGoal
                 )
             }
         }
