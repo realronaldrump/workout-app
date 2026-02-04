@@ -10,7 +10,6 @@ struct ProfileView: View {
     @State private var showingHealthDashboard = false
 
     @AppStorage("profileName") private var profileName = ""
-    @AppStorage("profileEmail") private var profileEmail = ""
     @AppStorage("weightUnit") private var weightUnit = "lbs"
     @AppStorage("dateFormat") private var dateFormat = "relative"
 
@@ -92,14 +91,6 @@ struct ProfileView: View {
                     text: $profileName
                 )
 
-                ProfileFieldRow(
-                    icon: "envelope.fill",
-                    color: .blue,
-                    title: "Email",
-                    placeholder: "Email",
-                    text: $profileEmail,
-                    keyboardType: .emailAddress
-                )
             }
         }
     }
