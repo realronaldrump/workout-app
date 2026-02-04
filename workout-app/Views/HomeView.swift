@@ -6,11 +6,11 @@ struct HomeView: View {
     let annotationsManager: WorkoutAnnotationsManager
     let gymProfilesManager: GymProfilesManager
     @EnvironmentObject var healthManager: HealthKitManager
+    @Binding var selectedTab: AppTab
 
     @StateObject private var insightsEngine: InsightsEngine
     @State private var showingImportWizard = false
     @State private var showingHealthWizard = false
-    @State private var showingHealthDashboard = false
     @State private var showingQuickStart = false
     @State private var quickStartExercise: String?
     @State private var selectedExercise: ExerciseSelection?
@@ -20,12 +20,14 @@ struct HomeView: View {
         dataManager: WorkoutDataManager,
         iCloudManager: iCloudDocumentManager,
         annotationsManager: WorkoutAnnotationsManager,
-        gymProfilesManager: GymProfilesManager
+        gymProfilesManager: GymProfilesManager,
+        selectedTab: Binding<AppTab>
     ) {
         self.dataManager = dataManager
         self.iCloudManager = iCloudManager
         self.annotationsManager = annotationsManager
         self.gymProfilesManager = gymProfilesManager
+        _selectedTab = selectedTab
         _insightsEngine = StateObject(
             wrappedValue: InsightsEngine(
                 dataManager: dataManager,
@@ -90,9 +92,6 @@ struct HomeView: View {
                 workouts: dataManager.workouts
             )
         }
-        .sheet(isPresented: $showingHealthDashboard) {
-            HealthDashboardView()
-        }
         .sheet(isPresented: $showingQuickStart) {
             QuickStartView(exerciseName: quickStartExercise)
         }
@@ -140,7 +139,7 @@ struct HomeView: View {
 
                 ActionChip(title: "Health", icon: "heart.fill", tint: .red) {
                     if healthManager.authorizationStatus == .authorized {
-                        showingHealthDashboard = true
+                        selectedTab = .health
                     } else {
                         showingHealthWizard = true
                     }
@@ -160,7 +159,7 @@ struct HomeView: View {
 
                 ActionChip(title: "Health", icon: "heart.fill", tint: .red) {
                     if healthManager.authorizationStatus == .authorized {
-                        showingHealthDashboard = true
+                        selectedTab = .health
                     } else {
                         showingHealthWizard = true
                     }

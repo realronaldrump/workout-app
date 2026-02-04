@@ -69,7 +69,7 @@ struct HealthSyncWizard: View {
                     .font(Theme.Typography.title)
                     .foregroundStyle(Theme.Colors.textPrimary)
 
-                Text("read-only metrics")
+                Text("All health data, read-only")
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Colors.textSecondary)
                     .multilineTextAlignment(.center)
@@ -105,7 +105,7 @@ struct HealthSyncWizard: View {
                 Text("Read Access")
                     .font(Theme.Typography.title2)
 
-                Text("read-only | on-device")
+                Text("read-only | on-device | private")
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Colors.textSecondary)
                     .multilineTextAlignment(.center)
@@ -149,12 +149,18 @@ struct HealthSyncWizard: View {
             }
             
             VStack(spacing: Theme.Spacing.sm) {
-                Text("Syncing")
+                Text("Syncing Health Data")
                     .font(Theme.Typography.headline)
 
-                Text("n \(healthManager.syncedWorkoutsCount) / \(workouts.count)")
+                Text("Workouts \(healthManager.syncedWorkoutsCount) / \(workouts.count)")
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Colors.textSecondary)
+            }
+
+            if healthManager.isDailySyncing {
+                Text("Daily Health \(Int(healthManager.dailySyncProgress * 100))%")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.textTertiary)
             }
             
             Spacer()
@@ -215,6 +221,12 @@ struct HealthSyncWizard: View {
                 // The syncAllWorkouts method now updates published properties on healthManager
                 // We don't need to manually poll, but we do need to wait for it to finish
                 let _ = try await healthManager.syncAllWorkouts(workouts)
+
+                let end = Date()
+                let start = Calendar.current.date(byAdding: .month, value: -12, to: end) ?? end.addingTimeInterval(-31_536_000)
+                let rangeStart = Calendar.current.startOfDay(for: start)
+                let rangeEnd = Calendar.current.date(bySettingHour: 23, minute: 59, second: 59, of: end) ?? end
+                try await healthManager.syncDailyHealthData(range: DateInterval(start: rangeStart, end: rangeEnd))
                 
                 // Slight delay to show completion before moving to success
                 try await Task.sleep(nanoseconds: 500_000_000)

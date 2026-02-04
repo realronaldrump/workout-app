@@ -16,6 +16,10 @@ class HealthKitManager: ObservableObject {
     @Published var lastSyncDate: Date?
     @Published var syncError: String?
     @Published var healthDataStore: [UUID: WorkoutHealthData] = [:] // keyed by workout ID
+    @Published var dailyHealthStore: [Date: DailyHealthData] = [:] // keyed by day start
+    @Published var isDailySyncing = false
+    @Published var dailySyncProgress: Double = 0
+    @Published var lastDailySyncDate: Date?
     
     // MARK: - Private Properties
     
@@ -23,6 +27,8 @@ class HealthKitManager: ObservableObject {
     private let userDefaults = UserDefaults.standard
     private let lastSyncKey = "lastHealthSyncDate"
     private let healthDataKey = "syncedHealthData"
+    private let lastDailySyncKey = "lastDailyHealthSyncDate"
+    private let dailyHealthDataKey = "dailyHealthDataStore"
     
     // MARK: - Health Data Types to Read
     
@@ -118,6 +124,7 @@ class HealthKitManager: ObservableObject {
         if HKHealthStore.isHealthDataAvailable() {
             self.healthStore = HKHealthStore()
             loadPersistedData()
+            loadPersistedDailyHealthData()
             checkAuthorizationStatus()
         } else {
             self.healthStore = nil
@@ -376,6 +383,10 @@ class HealthKitManager: ObservableObject {
     private var dataFileURL: URL {
         getDocumentsDirectory().appendingPathComponent("health_data_store.json")
     }
+
+    private var dailyDataFileURL: URL {
+        getDocumentsDirectory().appendingPathComponent("daily_health_store.json")
+    }
     
     private func persistData() {
         Task {
@@ -385,6 +396,18 @@ class HealthKitManager: ObservableObject {
                 print("Successfully saved \(data.count) bytes of health data to \(dataFileURL.path)")
             } catch {
                 print("Failed to persist health data: \(error)")
+            }
+        }
+    }
+
+    private func persistDailyHealthData() {
+        Task {
+            do {
+                let data = try JSONEncoder().encode(Array(dailyHealthStore.values))
+                try data.write(to: dailyDataFileURL, options: [.atomic, .completeFileProtection])
+                print("Successfully saved \(data.count) bytes of daily health data to \(dailyDataFileURL.path)")
+            } catch {
+                print("Failed to persist daily health data: \(error)")
             }
         }
     }
@@ -403,6 +426,21 @@ class HealthKitManager: ObservableObject {
         
         lastSyncDate = userDefaults.object(forKey: lastSyncKey) as? Date
     }
+
+    private func loadPersistedDailyHealthData() {
+        cleanupLegacyUserDefaults()
+        do {
+            guard FileManager.default.fileExists(atPath: dailyDataFileURL.path) else { return }
+            let data = try Data(contentsOf: dailyDataFileURL)
+            let dailyArray = try JSONDecoder().decode([DailyHealthData].self, from: data)
+            dailyHealthStore = Dictionary(uniqueKeysWithValues: dailyArray.map { ($0.dayStart, $0) })
+            print("Loaded \(dailyHealthStore.count) daily health records")
+        } catch {
+            print("Failed to load persisted daily health data: \(error)")
+        }
+
+        lastDailySyncDate = userDefaults.object(forKey: lastDailySyncKey) as? Date
+    }
     
     /// Clears all health data from memory and disk
     func clearAllData() {
@@ -412,15 +450,24 @@ class HealthKitManager: ObservableObject {
         syncProgress = 0
         syncedWorkoutsCount = 0
         syncError = nil
+        dailyHealthStore.removeAll()
+        lastDailySyncDate = nil
+        dailySyncProgress = 0
+        isDailySyncing = false
         
         // Clear persistence
         cleanupLegacyUserDefaults()
         userDefaults.removeObject(forKey: lastSyncKey)
+        userDefaults.removeObject(forKey: lastDailySyncKey)
         
         do {
             if FileManager.default.fileExists(atPath: dataFileURL.path) {
                 try FileManager.default.removeItem(at: dataFileURL)
                 print("Deleted health data store file")
+            }
+            if FileManager.default.fileExists(atPath: dailyDataFileURL.path) {
+                try FileManager.default.removeItem(at: dailyDataFileURL)
+                print("Deleted daily health data store file")
             }
         } catch {
             print("Failed to delete health data file: \(error)")
@@ -499,6 +546,117 @@ class HealthKitManager: ObservableObject {
         persistData()
         
         return results
+    }
+
+    // MARK: - Daily Health Sync
+
+    /// Sync daily aggregate health data for the given range
+    func syncDailyHealthData(range: DateInterval) async throws {
+        guard let _ = healthStore else {
+            throw HealthKitError.notAvailable
+        }
+        guard authorizationStatus == .authorized else {
+            throw HealthKitError.authorizationFailed("Health access is not authorized.")
+        }
+        guard !isDailySyncing else { return }
+        guard range.start < range.end else { return }
+
+        isDailySyncing = true
+        dailySyncProgress = 0
+
+        defer {
+            isDailySyncing = false
+        }
+
+        let metrics = HealthMetric.dailyQuantityMetrics
+        let totalSteps = Double(metrics.count + 1)
+        var completedSteps = 0.0
+
+        var metricValues: [HealthMetric: [Date: Double]] = [:]
+
+        for metric in metrics {
+            guard let type = metric.quantityType,
+                  let unit = metric.unit,
+                  let options = metric.statisticsOption else {
+                continue
+            }
+
+            let rawValues = try await fetchDailyStatistics(
+                type: type,
+                from: range.start,
+                to: range.end,
+                unit: unit,
+                options: options
+            )
+
+            let normalized = rawValues.mapValues { metric.storedValue(from: $0) }
+            metricValues[metric] = normalized
+
+            completedSteps += 1
+            dailySyncProgress = completedSteps / totalSteps
+        }
+
+        let sleepSummaries = try await fetchDailySleepSummaries(from: range.start, to: range.end)
+        completedSteps += 1
+        dailySyncProgress = completedSteps / totalSteps
+
+        var updatedStore = dailyHealthStore
+        let days = enumerateDays(in: range)
+
+        for day in days {
+            var entry = updatedStore[day] ?? DailyHealthData(dayStart: day)
+
+            for metric in metrics {
+                if let value = metricValues[metric]?[day] {
+                    entry.setValue(value, for: metric)
+                }
+            }
+
+            if let summary = sleepSummaries[day] {
+                entry.sleepSummary = summary
+            }
+
+            if entryHasData(entry) {
+                updatedStore[day] = entry
+            }
+        }
+
+        dailyHealthStore = updatedStore
+        lastDailySyncDate = Date()
+        userDefaults.set(lastDailySyncDate, forKey: lastDailySyncKey)
+        persistDailyHealthData()
+    }
+
+    /// Sync only if the range has missing daily data
+    func ensureDailyHealthData(range: DateInterval) async {
+        guard authorizationStatus == .authorized else { return }
+        guard !isDailySyncing else { return }
+
+        let days = enumerateDays(in: range)
+        let isMissing = days.contains { dailyHealthStore[$0] == nil }
+        guard isMissing else { return }
+
+        do {
+            try await syncDailyHealthData(range: range)
+        } catch {
+            print("Failed to sync daily health data: \(error)")
+        }
+    }
+
+    /// Fetch raw samples for a metric (used in drilldowns)
+    func fetchMetricSamples(metric: HealthMetric, range: DateInterval) async throws -> [HealthMetricSample] {
+        guard metric.supportsSamples else { return [] }
+        guard authorizationStatus == .authorized else { return [] }
+        guard let type = metric.quantityType,
+              let unit = metric.unit else {
+            return []
+        }
+
+        let samples = try await fetchQuantitySamples(type: type, from: range.start, to: range.end, limit: HKObjectQueryNoLimit, ascending: true)
+        return samples.map { sample in
+            let raw = sample.quantity.doubleValue(for: unit)
+            return HealthMetricSample(timestamp: sample.startDate, value: metric.storedValue(from: raw))
+        }
     }
 
     // MARK: - Authorization
@@ -829,6 +987,193 @@ class HealthKitManager: ObservableObject {
         }
     }
 
+    private func fetchDailyStatistics(
+        type: HKQuantityTypeIdentifier,
+        from start: Date,
+        to end: Date,
+        unit: HKUnit,
+        options: HKStatisticsOptions
+    ) async throws -> [Date: Double] {
+        guard let healthStore = healthStore else {
+            throw HealthKitError.notAvailable
+        }
+        guard let quantityType = HKQuantityType.quantityType(forIdentifier: type) else {
+            return [:]
+        }
+
+        let calendar = Calendar.current
+        let dayStart = calendar.startOfDay(for: start)
+        let anchorDate = calendar.startOfDay(for: dayStart)
+        let interval = DateComponents(day: 1)
+        let predicate = HKQuery.predicateForSamples(withStart: dayStart, end: end, options: [])
+
+        return try await withCheckedThrowingContinuation { continuation in
+            let query = HKStatisticsCollectionQuery(
+                quantityType: quantityType,
+                quantitySamplePredicate: predicate,
+                options: options,
+                anchorDate: anchorDate,
+                intervalComponents: interval
+            )
+
+            query.initialResultsHandler = { _, results, error in
+                if let error = error {
+                    if Self.isNoDataError(error) {
+                        continuation.resume(returning: [:])
+                        return
+                    }
+                    continuation.resume(throwing: HealthKitError.queryFailed(error.localizedDescription))
+                    return
+                }
+
+                var values: [Date: Double] = [:]
+                let endDate = max(end, dayStart)
+                results?.enumerateStatistics(from: dayStart, to: endDate) { stats, _ in
+                    let value: Double?
+                    if options.contains(.cumulativeSum) {
+                        value = stats.sumQuantity()?.doubleValue(for: unit)
+                    } else if options.contains(.discreteAverage) {
+                        value = stats.averageQuantity()?.doubleValue(for: unit)
+                    } else {
+                        value = nil
+                    }
+
+                    if let value {
+                        values[stats.startDate] = value
+                    }
+                }
+
+                continuation.resume(returning: values)
+            }
+
+            healthStore.execute(query)
+        }
+    }
+
+    private func fetchDailySleepSummaries(from start: Date, to end: Date) async throws -> [Date: SleepSummary] {
+        guard let healthStore = healthStore else {
+            throw HealthKitError.notAvailable
+        }
+        guard let sleepType = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) else {
+            return [:]
+        }
+
+        let predicate = HKQuery.predicateForSamples(withStart: start, end: end, options: [])
+        let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
+
+        return try await withCheckedThrowingContinuation { continuation in
+            let query = HKSampleQuery(
+                sampleType: sleepType,
+                predicate: predicate,
+                limit: HKObjectQueryNoLimit,
+                sortDescriptors: [sortDescriptor]
+            ) { _, samples, error in
+                if let error = error {
+                    if Self.isNoDataError(error) {
+                        continuation.resume(returning: [:])
+                        return
+                    }
+                    continuation.resume(throwing: HealthKitError.queryFailed(error.localizedDescription))
+                    return
+                }
+
+                let sleepSamples = samples as? [HKCategorySample] ?? []
+                guard !sleepSamples.isEmpty else {
+                    continuation.resume(returning: [:])
+                    return
+                }
+
+                let calendar = Calendar.current
+                var stageDurationsByDay: [Date: [SleepStage: TimeInterval]] = [:]
+                var totalSleepByDay: [Date: TimeInterval] = [:]
+                var inBedByDay: [Date: TimeInterval] = [:]
+                var startByDay: [Date: Date] = [:]
+                var endByDay: [Date: Date] = [:]
+
+                for sample in sleepSamples {
+                    let day = calendar.startOfDay(for: sample.startDate)
+                    let duration = max(sample.endDate.timeIntervalSince(sample.startDate), 0)
+                    let stage = Self.mapSleepStage(sample.value)
+
+                    stageDurationsByDay[day, default: [:]][stage, default: 0] += duration
+
+                    switch stage {
+                    case .inBed:
+                        inBedByDay[day, default: 0] += duration
+                    case .core, .deep, .rem:
+                        totalSleepByDay[day, default: 0] += duration
+                    default:
+                        break
+                    }
+
+                    if let existing = startByDay[day] {
+                        startByDay[day] = min(existing, sample.startDate)
+                    } else {
+                        startByDay[day] = sample.startDate
+                    }
+
+                    if let existing = endByDay[day] {
+                        endByDay[day] = max(existing, sample.endDate)
+                    } else {
+                        endByDay[day] = sample.endDate
+                    }
+                }
+
+                var summaries: [Date: SleepSummary] = [:]
+                for (day, stages) in stageDurationsByDay {
+                    let summary = SleepSummary(
+                        totalSleep: totalSleepByDay[day] ?? 0,
+                        inBed: inBedByDay[day] ?? 0,
+                        stageDurations: stages,
+                        start: startByDay[day] ?? day,
+                        end: endByDay[day] ?? day
+                    )
+                    summaries[day] = summary
+                }
+
+                continuation.resume(returning: summaries)
+            }
+            healthStore.execute(query)
+        }
+    }
+
+    private func enumerateDays(in range: DateInterval) -> [Date] {
+        let calendar = Calendar.current
+        var days: [Date] = []
+        var current = calendar.startOfDay(for: range.start)
+        let end = calendar.startOfDay(for: range.end)
+
+        while current <= end {
+            days.append(current)
+            guard let next = calendar.date(byAdding: .day, value: 1, to: current) else { break }
+            current = next
+        }
+
+        return days
+    }
+
+    private func entryHasData(_ entry: DailyHealthData) -> Bool {
+        entry.steps != nil ||
+        entry.activeEnergy != nil ||
+        entry.basalEnergy != nil ||
+        entry.exerciseMinutes != nil ||
+        entry.moveMinutes != nil ||
+        entry.standMinutes != nil ||
+        entry.distanceWalkingRunning != nil ||
+        entry.flightsClimbed != nil ||
+        entry.sleepSummary != nil ||
+        entry.restingHeartRate != nil ||
+        entry.walkingHeartRateAverage != nil ||
+        entry.heartRateVariability != nil ||
+        entry.heartRateRecovery != nil ||
+        entry.bloodOxygen != nil ||
+        entry.respiratoryRate != nil ||
+        entry.bodyTemperature != nil ||
+        entry.vo2Max != nil ||
+        entry.bodyMass != nil ||
+        entry.bodyFatPercentage != nil
+    }
+
     private nonisolated static func clampedInterval(_ interval: DateInterval, to start: Date, end: Date) -> DateInterval? {
         let clampedStart = max(interval.start, start)
         let clampedEnd = min(interval.end, end)
@@ -886,6 +1231,9 @@ class HealthKitManager: ObservableObject {
     private func cleanupLegacyUserDefaults() {
         if userDefaults.data(forKey: healthDataKey) != nil {
             userDefaults.removeObject(forKey: healthDataKey)
+        }
+        if userDefaults.data(forKey: dailyHealthDataKey) != nil {
+            userDefaults.removeObject(forKey: dailyHealthDataKey)
         }
     }
 

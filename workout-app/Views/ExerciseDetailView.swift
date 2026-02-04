@@ -284,6 +284,11 @@ struct ExerciseProgressChart: View {
     @State private var isAppearing = false
     @State private var selectedDataPoint: (date: Date, value: Double)?
     @State private var lastPRHapticDate: Date?
+
+    private enum ChartSeries: String {
+        case progress = "Progress"
+        case trend = "Trend"
+    }
     
     private var chartData: [(date: Date, value: Double)] {
         history.map { session in
@@ -305,6 +310,12 @@ struct ExerciseProgressChart: View {
             return (date: session.date, value: value)
         }
     }
+
+    private var indexedChartData: [(id: Int, date: Date, value: Double)] {
+        chartData.enumerated().map { index, point in
+            (id: index, date: point.date, value: point.value)
+        }
+    }
     
     private var prDate: Date? {
         chartData.max(by: { $0.value < $1.value })?.date
@@ -317,6 +328,13 @@ struct ExerciseProgressChart: View {
         case .oneRepMax: return Theme.Colors.gold
         case .reps: return Theme.Colors.pull
         }
+    }
+
+    private var seriesColors: [String: Color] {
+        [
+            ChartSeries.progress.rawValue: chartColor,
+            ChartSeries.trend.rawValue: Color.secondary.opacity(0.5)
+        ]
     }
     
     var body: some View {
@@ -366,6 +384,7 @@ struct ExerciseProgressChart: View {
             trendLineMarks
             selectionRuleMark
         }
+        .chartForegroundStyleScale(seriesColors)
         .chartXAxis {
             AxisMarks { _ in
                 AxisGridLine()
@@ -430,7 +449,7 @@ struct ExerciseProgressChart: View {
 
     @ChartContentBuilder
     private var areaMarks: some ChartContent {
-        ForEach(chartData, id: \.date) { dataPoint in
+        ForEach(indexedChartData, id: \.id) { dataPoint in
             AreaMark(
                 x: .value("Date", dataPoint.date),
                 y: .value(chartType.rawValue, isAppearing ? dataPoint.value : 0)
@@ -442,12 +461,12 @@ struct ExerciseProgressChart: View {
     
     @ChartContentBuilder
     private var lineMarks: some ChartContent {
-        ForEach(chartData, id: \.date) { dataPoint in
+        ForEach(indexedChartData, id: \.id) { dataPoint in
             LineMark(
                 x: .value("Date", dataPoint.date),
                 y: .value(chartType.rawValue, isAppearing ? dataPoint.value : 0)
             )
-            .foregroundStyle(chartColor)
+            .foregroundStyle(by: .value("Series", ChartSeries.progress.rawValue))
             .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round))
             .interpolationMethod(.catmullRom)
         }
@@ -455,7 +474,7 @@ struct ExerciseProgressChart: View {
     
     @ChartContentBuilder
     private var pointMarks: some ChartContent {
-        ForEach(chartData, id: \.date) { dataPoint in
+        ForEach(indexedChartData, id: \.id) { dataPoint in
             PointMark(
                 x: .value("Date", dataPoint.date),
                 y: .value(chartType.rawValue, isAppearing ? dataPoint.value : 0)
@@ -480,14 +499,14 @@ struct ExerciseProgressChart: View {
                 x: .value("Date", trend.start.date),
                 y: .value("Trend", trend.start.value)
             )
-            .foregroundStyle(Color.secondary.opacity(0.5))
+            .foregroundStyle(by: .value("Series", ChartSeries.trend.rawValue))
             .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 5]))
             
             LineMark(
                 x: .value("Date", trend.end.date),
                 y: .value("Trend", trend.end.value)
             )
-            .foregroundStyle(Color.secondary.opacity(0.5))
+            .foregroundStyle(by: .value("Series", ChartSeries.trend.rawValue))
             .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 5]))
         }
     }
