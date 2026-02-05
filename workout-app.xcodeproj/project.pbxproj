@@ -129,11 +129,12 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
-		72A1B2C32F0A1B2C00817762 /* SwiftLint */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
+			72A1B2C32F0A1B2C00817762 /* SwiftLint */ = {
+				isa = PBXShellScriptBuildPhase;
+				basedOnDependencyAnalysis = 0;
+				buildActionMask = 2147483647;
+				files = (
+				);
 			inputFileListPaths = (
 			);
 			inputPaths = (

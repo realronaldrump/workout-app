@@ -1026,9 +1026,6 @@ private struct CustomRangeSheet: View {
                     Button("Done") { dismiss() }
                 }
             }
-            .onDisappear {
-                selectionClearTask?.cancel()
-            }
         }
     }
 }
@@ -1093,6 +1090,9 @@ private struct HealthMetricDetailSheet: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Done") { dismiss() }
                 }
+            }
+            .onDisappear {
+                selectionClearTask?.cancel()
             }
         }
     }

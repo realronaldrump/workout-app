@@ -6,7 +6,8 @@ import UniformTypeIdentifiers
 class iCloudDocumentManager: ObservableObject {
     @Published var isDocumentPickerPresented = false
     @Published var importedData: Data?
-    @Published var isUsingLocalFallback = false
+    // We start in local-storage mode, then flip to iCloud if the container becomes available.
+    @Published var isUsingLocalFallback = true
     @Published var isInitializing = true
     
     private var _documentsURL: URL?
@@ -22,6 +23,7 @@ class iCloudDocumentManager: ObservableObject {
     init() {
         // Use local fallback immediately for safety
         _documentsURL = localDocumentsURL
+        isUsingLocalFallback = true
         // Start async iCloud check
         Task { await initializeContainer() }
     }
