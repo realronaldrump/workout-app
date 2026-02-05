@@ -170,22 +170,28 @@ struct HomeView: View {
     }
 
     private var weeklySummarySection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+        let workouts = weeklyWorkouts
+        let stats = workouts.isEmpty ? nil : dataManager.calculateStats(for: workouts)
+        let sessions = stats.map { "\($0.totalWorkouts)" } ?? "0"
+        let avgDuration = stats?.avgWorkoutDuration ?? "--"
+        let favorite = stats?.favoriteExercise ?? "--"
+
+        return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             Text("This Week")
                 .font(Theme.Typography.title3)
                 .foregroundColor(Theme.Colors.textPrimary)
 
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: Theme.Spacing.md) {
-                    SummaryPill(title: "Sessions", value: weeklySessions)
-                    SummaryPill(title: "Avg Duration", value: weeklyAvgDuration)
-                    SummaryPill(title: "Favorite", value: weeklyFavorite)
+                    SummaryPill(title: "Sessions", value: sessions)
+                    SummaryPill(title: "Avg Duration", value: avgDuration)
+                    SummaryPill(title: "Favorite", value: favorite)
                 }
 
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: Theme.Spacing.md) {
-                    SummaryPill(title: "Sessions", value: weeklySessions)
-                    SummaryPill(title: "Avg Duration", value: weeklyAvgDuration)
-                    SummaryPill(title: "Favorite", value: weeklyFavorite)
+                    SummaryPill(title: "Sessions", value: sessions)
+                    SummaryPill(title: "Avg Duration", value: avgDuration)
+                    SummaryPill(title: "Favorite", value: favorite)
                 }
             }
         }
@@ -265,32 +271,6 @@ struct HomeView: View {
         return dataManager.workouts.filter { $0.date >= weekAgo }
     }
 
-    private var weeklyStats: WorkoutStats? {
-        guard !weeklyWorkouts.isEmpty else { return nil }
-        return dataManager.calculateStats(for: weeklyWorkouts)
-    }
-
-    private var weeklySessions: String {
-        if let stats = weeklyStats {
-            return "\(stats.totalWorkouts)"
-        }
-        return "0"
-    }
-
-    private var weeklyAvgDuration: String {
-        if let stats = weeklyStats {
-            return stats.avgWorkoutDuration
-        }
-        return "--"
-    }
-
-    private var weeklyFavorite: String {
-        if let stats = weeklyStats, let favorite = stats.favoriteExercise {
-            return favorite
-        }
-        return "--"
-    }
-
     private var homeHighlights: [HighlightItem] {
         var items: [HighlightItem] = []
 
@@ -334,7 +314,7 @@ struct HomeView: View {
 
     private func loadLatestWorkoutData() {
         Task.detached(priority: .userInitiated) {
-            let files = await iCloudManager.listWorkoutFiles()
+            let files = iCloudManager.listWorkoutFiles()
                 .sorted { url1, url2 in
                     let date1 = (try? url1.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? Date.distantPast
                     let date2 = (try? url2.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? Date.distantPast

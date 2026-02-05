@@ -166,7 +166,7 @@ class HealthKitManager: ObservableObject {
     }
     
     /// Sync health data for a single workout
-    func syncHealthDataForWorkout(_ workout: Workout) async throws -> WorkoutHealthData {
+    func syncHealthDataForWorkout(_ workout: Workout, persist: Bool = true) async throws -> WorkoutHealthData {
         guard healthStore != nil else {
             throw HealthKitError.notAvailable
         }
@@ -254,7 +254,8 @@ class HealthKitManager: ObservableObject {
         
         // Fetch body measurements (from around workout time)
         let dayStart = Calendar.current.startOfDay(for: workout.date)
-        let dayEnd = Calendar.current.date(byAdding: .day, value: 1, to: dayStart)!
+        let dayEnd = Calendar.current.date(byAdding: .day, value: 1, to: dayStart)
+            ?? dayStart.addingTimeInterval(60 * 60 * 24)
 
         healthData.bodyMass = try await fetchLatestQuantity(
             type: .bodyMass,
@@ -366,9 +367,11 @@ class HealthKitManager: ObservableObject {
         
         // Store in local cache
         healthDataStore[workout.id] = healthData
-        persistData()
-        lastSyncDate = Date()
-        userDefaults.set(lastSyncDate, forKey: lastSyncKey)
+        if persist {
+            persistData()
+            lastSyncDate = Date()
+            userDefaults.set(lastSyncDate, forKey: lastSyncKey)
+        }
         
         return healthData
     }
@@ -389,11 +392,12 @@ class HealthKitManager: ObservableObject {
     }
     
     private func persistData() {
-        Task {
+        let entries = Array(healthDataStore.values)
+        let url = dataFileURL
+        Task.detached(priority: .utility) {
             do {
-                let data = try JSONEncoder().encode(Array(healthDataStore.values))
-                try data.write(to: dataFileURL, options: [.atomic, .completeFileProtection])
-                print("Successfully saved \(data.count) bytes of health data to \(dataFileURL.path)")
+                let data = try JSONEncoder().encode(entries)
+                try data.write(to: url, options: [.atomic, .completeFileProtection])
             } catch {
                 print("Failed to persist health data: \(error)")
             }
@@ -401,11 +405,12 @@ class HealthKitManager: ObservableObject {
     }
 
     private func persistDailyHealthData() {
-        Task {
+        let entries = Array(dailyHealthStore.values)
+        let url = dailyDataFileURL
+        Task.detached(priority: .utility) {
             do {
-                let data = try JSONEncoder().encode(Array(dailyHealthStore.values))
-                try data.write(to: dailyDataFileURL, options: [.atomic, .completeFileProtection])
-                print("Successfully saved \(data.count) bytes of daily health data to \(dailyDataFileURL.path)")
+                let data = try JSONEncoder().encode(entries)
+                try data.write(to: url, options: [.atomic, .completeFileProtection])
             } catch {
                 print("Failed to persist daily health data: \(error)")
             }
@@ -489,12 +494,13 @@ class HealthKitManager: ObservableObject {
         guard !recentMissing.isEmpty else { return }
 
         isAutoSyncing = true
+        defer { isAutoSyncing = false }
         syncProgress = 0
         syncedWorkoutsCount = 0
 
         for (index, workout) in recentMissing.enumerated() {
             do {
-                let _ = try await syncHealthDataForWorkout(workout)
+                let _ = try await syncHealthDataForWorkout(workout, persist: false)
             } catch {
                 print("Auto sync failed for workout \(workout.id): \(error)")
             }
@@ -503,7 +509,6 @@ class HealthKitManager: ObservableObject {
             syncProgress = Double(index + 1) / Double(recentMissing.count)
         }
 
-        isAutoSyncing = false
         lastSyncDate = Date()
         userDefaults.set(lastSyncDate, forKey: lastSyncKey)
         persistData()
@@ -516,6 +521,7 @@ class HealthKitManager: ObservableObject {
         }
         
         isSyncing = true
+        defer { isSyncing = false }
         syncProgress = 0
         syncedWorkoutsCount = 0
         syncError = nil
@@ -525,7 +531,7 @@ class HealthKitManager: ObservableObject {
         
         for (index, workout) in workouts.enumerated() {
             do {
-                let healthData = try await syncHealthDataForWorkout(workout)
+                let healthData = try await syncHealthDataForWorkout(workout, persist: false)
                 results.append(healthData)
             } catch {
                 print("Failed to sync workout \(workout.id): \(error)")
@@ -538,7 +544,6 @@ class HealthKitManager: ObservableObject {
             }
         }
         
-        isSyncing = false
         lastSyncDate = Date()
         userDefaults.set(lastSyncDate, forKey: lastSyncKey)
         

@@ -284,6 +284,7 @@ struct ExerciseProgressChart: View {
     @State private var isAppearing = false
     @State private var selectedDataPoint: (date: Date, value: Double)?
     @State private var lastPRHapticDate: Date?
+    @State private var selectionClearTask: Task<Void, Never>?
 
     private enum ChartSeries: String {
         case progress = "Progress"
@@ -351,6 +352,9 @@ struct ExerciseProgressChart: View {
                 isAppearing = true
             }
         }
+        .onDisappear {
+            selectionClearTask?.cancel()
+        }
     }
     
     @ViewBuilder
@@ -405,7 +409,10 @@ struct ExerciseProgressChart: View {
                     .gesture(
                         DragGesture(minimumDistance: 0)
                             .onChanged { value in
-                                let x = value.location.x - geometry[proxy.plotFrame!].origin.x
+                                selectionClearTask?.cancel()
+                                guard let plotFrame = proxy.plotFrame else { return }
+                                let frame = geometry[plotFrame]
+                                let x = value.location.x - frame.origin.x
                                 if let date: Date = proxy.value(atX: x) {
                                     // Find closest data point
                                     if let closest = chartData.min(by: {
@@ -420,8 +427,11 @@ struct ExerciseProgressChart: View {
                                 }
                             }
                             .onEnded { _ in
-                                // Keep selection visible for a moment
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                                // Keep selection visible briefly (cancelled if the user starts dragging again).
+                                selectionClearTask?.cancel()
+                                selectionClearTask = Task { @MainActor in
+                                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                                    guard !Task.isCancelled else { return }
                                     withAnimation {
                                         selectedDataPoint = nil
                                     }
@@ -554,10 +564,12 @@ struct ExerciseProgressChart: View {
         
         let startValue = intercept
         let endValue = slope * (n - 1) + intercept
-        
+
+        let startDate = chartData[0].date
+        let endDate = chartData[chartData.count - 1].date
         return (
-            start: (date: chartData.first!.date, value: startValue),
-            end: (date: chartData.last!.date, value: endValue)
+            start: (date: startDate, value: startValue),
+            end: (date: endDate, value: endValue)
         )
     }
 

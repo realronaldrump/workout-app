@@ -361,7 +361,7 @@ struct HealthDashboardView: View {
         return [
             HighlightCardModel(
                 title: "Recovery Status",
-                value: recovery != nil ? "\(recovery!.score)%" : "--",
+                value: recovery.map { "\($0.score)%" } ?? "--",
                 subtitle: recovery?.message ?? "Sync more sessions to calculate",
                 icon: "waveform.path.ecg",
                 tint: recovery?.color ?? Theme.Colors.textTertiary,
@@ -369,7 +369,7 @@ struct HealthDashboardView: View {
             ),
             HighlightCardModel(
                 title: "Avg Sleep",
-                value: avgSleep != nil ? String(format: "%.1fh", avgSleep!) : "--",
+                value: avgSleep.map { String(format: "%.1fh", $0) } ?? "--",
                 subtitle: "Rest quality in this range",
                 icon: "moon.zzz.fill",
                 tint: Theme.Colors.accentSecondary,
@@ -377,7 +377,7 @@ struct HealthDashboardView: View {
             ),
             HighlightCardModel(
                 title: "Daily Energy",
-                value: avgEnergy != nil ? "\(Int(avgEnergy!)) cal" : "--",
+                value: avgEnergy.map { "\(Int($0)) cal" } ?? "--",
                 subtitle: "Average active energy",
                 icon: "flame.fill",
                 tint: Theme.Colors.warning,
@@ -418,7 +418,7 @@ struct HealthDashboardView: View {
             ),
             MetricSummaryModel(
                 title: "Avg Workout HR",
-                value: avgHR != nil ? "\(Int(avgHR!)) bpm" : "--",
+                value: avgHR.map { "\(Int($0)) bpm" } ?? "--",
                 subtitle: "Lower can mean better recovery",
                 icon: "heart.fill",
                 tint: Theme.Colors.error,
@@ -436,7 +436,7 @@ struct HealthDashboardView: View {
             ),
             MetricSummaryModel(
                 title: "Peak HR",
-                value: peakHR != nil ? "\(Int(peakHR!)) bpm" : "--",
+                value: peakHR.map { "\(Int($0)) bpm" } ?? "--",
                 subtitle: "Highest workout heart rate",
                 icon: "bolt.heart.fill",
                 tint: Theme.Colors.accentSecondary,
@@ -445,7 +445,7 @@ struct HealthDashboardView: View {
             ),
             MetricSummaryModel(
                 title: "Recovery Debt",
-                value: recoveryDebt != nil ? "\(recoveryDebt!.score)" : "--",
+                value: recoveryDebt.map { "\($0.score)" } ?? "--",
                 subtitle: recoveryDebt?.label ?? "Not enough data yet",
                 icon: "sparkles",
                 tint: recoveryDebt?.tint ?? Theme.Colors.textTertiary,
@@ -454,7 +454,7 @@ struct HealthDashboardView: View {
             ),
             MetricSummaryModel(
                 title: "Recovery Score",
-                value: recovery != nil ? "\(recovery!.score)%" : "--",
+                value: recovery.map { "\($0.score)%" } ?? "--",
                 subtitle: recovery?.label ?? "Sync more sessions",
                 icon: "figure.cooldown",
                 tint: recovery?.color ?? Theme.Colors.textTertiary,
@@ -587,8 +587,8 @@ struct HealthDashboardView: View {
         guard let primarySeries = detail.series.first(where: { !$0.points.isEmpty }) else { return nil }
         let latest = primarySeries.points.sorted { $0.date > $1.date }.first
         let average = average(primarySeries.points.map { $0.value })
-        let primaryValue = latest != nil ? formatValue(latest!.value, unit: primarySeries.unit) : "--"
-        let secondaryValue = average != nil ? "Avg \(formatValue(average!, unit: primarySeries.unit))" : "No average"
+        let primaryValue = latest.map { formatValue($0.value, unit: primarySeries.unit) } ?? "--"
+        let secondaryValue = average.map { "Avg \(formatValue($0, unit: primarySeries.unit))" } ?? "No average"
         return (primaryValue, secondaryValue, primarySeries.points)
     }
 
@@ -1026,6 +1026,9 @@ private struct CustomRangeSheet: View {
                     Button("Done") { dismiss() }
                 }
             }
+            .onDisappear {
+                selectionClearTask?.cancel()
+            }
         }
     }
 }
@@ -1037,6 +1040,7 @@ private struct HealthMetricDetailSheet: View {
     @Environment(\.dismiss) var dismiss
     @State private var selectedSeriesLabel: String
     @State private var selectedPoint: HealthTrendPoint?
+    @State private var selectionClearTask: Task<Void, Never>?
 
     init(detail: HealthMetricDetail, rangeLabel: String) {
         self.detail = detail
@@ -1150,6 +1154,7 @@ private struct HealthMetricDetailSheet: View {
                         .gesture(
                             DragGesture(minimumDistance: 0)
                                 .onChanged { value in
+                                    selectionClearTask?.cancel()
                                     guard let plotFrame = proxy.plotFrame else { return }
                                     let frame = geometry[plotFrame]
                                     let x = value.location.x - frame.origin.x
@@ -1162,7 +1167,10 @@ private struct HealthMetricDetailSheet: View {
                                     }
                                 }
                                 .onEnded { _ in
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                                    selectionClearTask?.cancel()
+                                    selectionClearTask = Task { @MainActor in
+                                        try? await Task.sleep(nanoseconds: 2_000_000_000)
+                                        guard !Task.isCancelled else { return }
                                         withAnimation {
                                             selectedPoint = nil
                                         }
@@ -1190,9 +1198,9 @@ private struct HealthMetricDetailSheet: View {
                 .foregroundStyle(Theme.Colors.textPrimary)
 
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: Theme.Spacing.md) {
-                MetricStatCard(title: "Average", value: avg != nil ? formatValue(avg!, unit: series.unit) : "--")
-                MetricStatCard(title: "Min", value: minValue != nil ? formatValue(minValue!, unit: series.unit) : "--")
-                MetricStatCard(title: "Max", value: maxValue != nil ? formatValue(maxValue!, unit: series.unit) : "--")
+                MetricStatCard(title: "Average", value: avg.map { formatValue($0, unit: series.unit) } ?? "--")
+                MetricStatCard(title: "Min", value: minValue.map { formatValue($0, unit: series.unit) } ?? "--")
+                MetricStatCard(title: "Max", value: maxValue.map { formatValue($0, unit: series.unit) } ?? "--")
                 MetricStatCard(title: "Change", value: change ?? "--")
             }
         }

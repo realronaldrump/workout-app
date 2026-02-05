@@ -429,7 +429,7 @@ struct DashboardView: View {
 
     private func loadLatestWorkoutData() {
         Task.detached(priority: .userInitiated) {
-            let files = await iCloudManager.listWorkoutFiles()
+            let files = iCloudManager.listWorkoutFiles()
                 .sorted { url1, url2 in
                     let date1 = (try? url1.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? Date.distantPast
                     let date2 = (try? url2.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? Date.distantPast

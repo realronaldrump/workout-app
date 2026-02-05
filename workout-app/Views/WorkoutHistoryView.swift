@@ -12,8 +12,9 @@ struct WorkoutHistoryView: View {
         }
         
         let grouped = Dictionary(grouping: filtered) { workout in
-            let components = Calendar.current.dateComponents([.year, .month], from: workout.date)
-            return Calendar.current.date(from: components)!
+            let calendar = Calendar.current
+            return calendar.dateInterval(of: .month, for: workout.date)?.start
+                ?? calendar.startOfDay(for: workout.date)
         }
         
         return grouped

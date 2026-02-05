@@ -64,7 +64,7 @@ struct MuscleHeatmapView: View {
     
     private func calculateMuscleStats() -> [MuscleGroup: MuscleStats] {
         let calendar = Calendar.current
-        let fourWeeksAgo = calendar.date(byAdding: .day, value: -28, to: Date())!
+        let fourWeeksAgo = calendar.date(byAdding: .day, value: -28, to: Date()) ?? Date()
         
         let recentWorkouts = dataManager.workouts.filter { $0.date >= fourWeeksAgo }
         var muscleGroupData: [MuscleGroup: (sets: Int, exercises: Set<String>, lastDate: Date?)] = [:]
@@ -73,17 +73,13 @@ struct MuscleHeatmapView: View {
             muscleGroupData[group] = (sets: 0, exercises: [], lastDate: nil)
         }
         
-        let exerciseMapping = getExerciseMapping()
-        
         for workout in recentWorkouts {
             for exercise in workout.exercises {
-                if let group = exerciseMapping[exercise.name] {
-                    var current = muscleGroupData[group]!
+                guard let group = ExerciseMetadataManager.shared.getMuscleGroup(for: exercise.name) else { continue }
+                if var current = muscleGroupData[group] {
                     current.sets += exercise.sets.count
                     current.exercises.insert(exercise.name)
-                    if current.lastDate == nil || workout.date > current.lastDate! {
-                        current.lastDate = workout.date
-                    }
+                    if current.lastDate.map({ workout.date > $0 }) ?? true { current.lastDate = workout.date }
                     muscleGroupData[group] = current
                 }
             }
@@ -104,33 +100,6 @@ struct MuscleHeatmapView: View {
         }
         
         return result
-    }
-    
-    private func getExerciseMapping() -> [String: MuscleGroup] {
-        [
-            "Chest Press (Machine)": .push,
-            "Shoulder Press (Machine)": .push,
-            "Triceps Press Machine": .push,
-            "Triceps Extension (Machine)": .push,
-            "Chest Fly": .push,
-            "Lateral Raise (Machine)": .push,
-            "Lat Pulldown (Machine)": .pull,
-            "Seated Row (Machine)": .pull,
-            "MTS Row": .pull,
-            "Bicep Curl (Machine)": .pull,
-            "Preacher Curl (Machine)": .pull,
-            "Reverse Fly (Machine)": .pull,
-            "Leg Extension (Machine)": .legs,
-            "Seated Leg Curl (Machine)": .legs,
-            "Lying Leg Curl (Machine)": .legs,
-            "Seated Leg Press (Machine)": .legs,
-            "Calf Extension Machine": .legs,
-            "Hip Adductor (Machine)": .legs,
-            "Hip Abductor (Machine)": .legs,
-            "Glute Kickback (Machine)": .legs,
-            "Running (Treadmill)": .cardio,
-            "Stair stepper": .cardio
-        ]
     }
 }
 

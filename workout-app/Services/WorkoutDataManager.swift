@@ -15,6 +15,8 @@ class WorkoutDataManager: ObservableObject {
         healthDataSnapshot: [WorkoutHealthData] = []
     ) async {
         let (existingWorkouts, identitySnapshot) = await MainActor.run {
+            self.isLoading = true
+            self.error = nil
             (self.workouts, self.identityStore.snapshot())
         }
         // Run heavy grouping logic on a background thread
@@ -149,8 +151,8 @@ class WorkoutDataManager: ObservableObject {
         var mostImprovedExercise: (name: String, improvement: Double)?
         for (exerciseName, exercises) in exerciseGroups {
             let sortedByDate = exercises.sorted { exercise1, exercise2 in
-                let date1 = filteredWorkouts.first { $0.exercises.contains { $0.id == exercise1.id } }?.date ?? Date()
-                let date2 = filteredWorkouts.first { $0.exercises.contains { $0.id == exercise2.id } }?.date ?? Date()
+                let date1 = exercise1.sets.map(\.date).min() ?? Date.distantPast
+                let date2 = exercise2.sets.map(\.date).min() ?? Date.distantPast
                 return date1 < date2
             }
             
@@ -158,7 +160,11 @@ class WorkoutDataManager: ObservableObject {
                let last = sortedByDate.last?.oneRepMax,
                first > 0 {
                 let improvement = ((last - first) / first) * 100
-                if mostImprovedExercise == nil || improvement > mostImprovedExercise!.improvement {
+                if let current = mostImprovedExercise {
+                    if improvement > current.improvement {
+                        mostImprovedExercise = (name: exerciseName, improvement: improvement)
+                    }
+                } else {
                     mostImprovedExercise = (name: exerciseName, improvement: improvement)
                 }
             }
@@ -183,7 +189,7 @@ class WorkoutDataManager: ObservableObject {
             currentStreak: currentStreak,
             longestStreak: longestStreak,
             workoutsPerWeek: workoutsPerWeek,
-            lastWorkoutDate: filteredWorkouts.first?.date
+            lastWorkoutDate: filteredWorkouts.map(\.date).max()
         )
     }
     
@@ -258,25 +264,18 @@ class WorkoutDataManager: ObservableObject {
     }
     
     private func calculateAverageDuration(for filteredWorkouts: [Workout]) -> String {
-        let durations = filteredWorkouts.compactMap { workout -> Int? in
-            let components = workout.duration.replacingOccurrences(of: "m", with: "").split(separator: "h")
-            if components.count == 2,
-               let hours = Int(components[0]),
-               let minutes = Int(components[1]) {
-                return hours * 60 + minutes
-            } else if let minutes = Int(workout.duration.replacingOccurrences(of: "m", with: "")) {
-                return minutes
-            }
-            return nil
-        }
-        
+        let durations = filteredWorkouts
+            .map { WorkoutAnalytics.durationMinutes(from: $0.duration) }
+            .filter { $0 > 0 }
+
         guard !durations.isEmpty else { return "0m" }
-        
-        let avgMinutes = durations.reduce(0, +) / durations.count
-        if avgMinutes >= 60 {
-            return "\(avgMinutes / 60)h \(avgMinutes % 60)m"
+
+        let avgMinutes = durations.reduce(0, +) / Double(durations.count)
+        let rounded = Int(round(avgMinutes))
+        if rounded >= 60 {
+            return "\(rounded / 60)h \(rounded % 60)m"
         }
-        return "\(avgMinutes)m"
+        return "\(rounded)m"
     }
     func clearAllData() {
         self.workouts = []

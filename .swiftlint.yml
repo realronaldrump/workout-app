@@ -46,8 +46,10 @@ opt_in_rules:
   - sorted_first_last
   - redundant_nil_coalescing
   - trailing_newline
-  - unused_import
   - weak_delegate
+
+analyzer_rules:
+  - unused_import
 
 disabled_rules:
   - force_cast

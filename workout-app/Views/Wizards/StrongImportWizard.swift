@@ -481,79 +481,87 @@ struct StrongImportWizard: View {
             
             // Security: access security scoped resource
             let hasAccess = url.startAccessingSecurityScopedResource()
-            
-            // Read file data synchronously while we have security scope access
-            // This MUST happen before any async code, as defer would release access too early
-            let fileData: Data
-            do {
-                fileData = try Data(contentsOf: url)
-            } catch {
+
+            // Read file data off the main thread while we hold security scope access.
+            DispatchQueue.global(qos: .userInitiated).async {
+                let fileData: Data
+                do {
+                    fileData = try Data(contentsOf: url)
+                } catch {
+                    if hasAccess {
+                        url.stopAccessingSecurityScopedResource()
+                    }
+                    DispatchQueue.main.async {
+                        importError = "Could not read file: \(error.localizedDescription)"
+                        isImporting = false
+                        importPhase = .idle
+                    }
+                    return
+                }
+
                 if hasAccess {
                     url.stopAccessingSecurityScopedResource()
                 }
-                importError = "Could not read file: \(error.localizedDescription)"
-                isImporting = false
-                importPhase = .idle
-                return
-            }
-            
-            // Release security scope now that we have the data
-            if hasAccess {
-                url.stopAccessingSecurityScopedResource()
-            }
-            importPhase = .parsing
-            
-            Task.detached(priority: .userInitiated) { [fileData] in
-                do {
-                    let sets = try await MainActor.run {
-                        try CSVParser.parseStrongWorkoutsCSV(from: fileData)
-                    }
-                    await MainActor.run {
-                        importPhase = .processing
-                    }
-                    
-                    // Artificial delay for UX
-                    try await Task.sleep(nanoseconds: 1_000_000_000)
-                    
-                    let healthSnapshot = await MainActor.run {
-                        Array(healthManager.healthDataStore.values)
-                    }
 
-                    // Process workout sets (nonisolated async)
-                    await dataManager.processWorkoutSets(sets, healthDataSnapshot: healthSnapshot)
-                    
-                    await MainActor.run {
-                        let stats = dataManager.calculateStats()
-                        importStats = (stats.totalWorkouts, stats.totalExercises)
-                        importPhase = .saving
-                        
-                        // Save to iCloud
+                DispatchQueue.main.async {
+                    importPhase = .parsing
+                }
+
+                Task.detached(priority: .userInitiated) { [fileData] in
+                    do {
+                        // Parse off the main thread to avoid UI hitches on large exports.
+                        let sets = try CSVParser.parseStrongWorkoutsCSV(from: fileData)
+                        await MainActor.run {
+                            importPhase = .processing
+                        }
+
+                        // Artificial delay for UX
+                        try await Task.sleep(nanoseconds: 1_000_000_000)
+
+                        let healthSnapshot = await MainActor.run {
+                            Array(healthManager.healthDataStore.values)
+                        }
+
+                        // Process workout sets (nonisolated async)
+                        await dataManager.processWorkoutSets(sets, healthDataSnapshot: healthSnapshot)
+
+                        await MainActor.run {
+                            let stats = dataManager.calculateStats()
+                            importStats = (stats.totalWorkouts, stats.totalExercises)
+                            importPhase = .saving
+                        }
+
+                        // Save the original file data off the main thread.
                         let fileName = "strong_workouts_\(Date().timeIntervalSince1970).csv"
+                        let storageMessage: String
                         do {
                             try iCloudManager.saveToiCloud(data: fileData, fileName: fileName)
-                            storageStatusMessage = iCloudManager.isUsingLocalFallback
+                            storageMessage = iCloudManager.isUsingLocalFallback
                                 ? "Saved on-device (iCloud unavailable)"
                                 : "Saved to iCloud Drive"
                         } catch {
-                            storageStatusMessage = "Save failed: \(error.localizedDescription)"
+                            storageMessage = "Save failed: \(error.localizedDescription)"
                         }
-                        
-                        importPhase = .complete
-                        importCompletedAt = Date()
-                        
-                        withAnimation {
-                            isImporting = false
-                            step = 2
-                        }
-                        Haptics.notify(.success)
 
-                        startAutoHealthSyncIfNeeded()
-                    }
-                } catch {
-                    await MainActor.run {
-                        importError = error.localizedDescription
-                        isImporting = false
-                        importPhase = .idle
+                        await MainActor.run {
+                            storageStatusMessage = storageMessage
+                            importPhase = .complete
+                            importCompletedAt = Date()
+
+                            withAnimation {
+                                isImporting = false
+                                step = 2
+                            }
+                            Haptics.notify(.success)
+
+                            startAutoHealthSyncIfNeeded()
+                        }
+                    } catch {
+                        await MainActor.run {
+                            importError = error.localizedDescription
+                            isImporting = false
+                            importPhase = .idle
+                        }
                     }
                 }
             }

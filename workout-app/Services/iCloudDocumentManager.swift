@@ -69,7 +69,7 @@ class iCloudDocumentManager: ObservableObject {
         }
         
         let fileURL = containerURL.appendingPathComponent(fileName)
-        try data.write(to: fileURL)
+        try data.write(to: fileURL, options: [.atomic, .completeFileProtection])
     }
     
     func loadFromiCloud(fileName: String) throws -> Data {
@@ -98,15 +98,27 @@ class iCloudDocumentManager: ObservableObject {
     }
     
     func deleteAllWorkoutFiles() async {
-        let files = listWorkoutFiles()
-        for file in files {
+        guard let containerURL = documentsURL else { return }
+
+        await Task.detached(priority: .utility) {
             do {
-                try deleteFile(at: file)
-                print("Deleted file: \(file.lastPathComponent)")
+                let files = try FileManager.default.contentsOfDirectory(
+                    at: containerURL,
+                    includingPropertiesForKeys: [.nameKey],
+                    options: .skipsHiddenFiles
+                )
+                for file in files where file.pathExtension == "csv" {
+                    do {
+                        try FileManager.default.removeItem(at: file)
+                        print("Deleted file: \(file.lastPathComponent)")
+                    } catch {
+                        print("Failed to delete file \(file.lastPathComponent): \(error)")
+                    }
+                }
             } catch {
-                print("Failed to delete file \(file.lastPathComponent): \(error)")
+                print("Failed to list files for deletion: \(error)")
             }
-        }
+        }.value
         
         // Also clear imported data from memory if needed
         await MainActor.run {
@@ -152,12 +164,23 @@ struct DocumentPicker: UIViewControllerRepresentable {
         func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
             guard let url = urls.first else { return }
             
-            do {
-                let data = try Data(contentsOf: url)
-                parent.importedData = data
-                parent.onImport?(data)
-            } catch {
-                print("Failed to import file: \(error)")
+            let hasAccess = url.startAccessingSecurityScopedResource()
+            DispatchQueue.global(qos: .userInitiated).async {
+                defer {
+                    if hasAccess {
+                        url.stopAccessingSecurityScopedResource()
+                    }
+                }
+
+                do {
+                    let data = try Data(contentsOf: url)
+                    DispatchQueue.main.async {
+                        self.parent.importedData = data
+                        self.parent.onImport?(data)
+                    }
+                } catch {
+                    print("Failed to import file: \(error)")
+                }
             }
         }
     }

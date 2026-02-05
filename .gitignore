@@ -1,1 +1,26 @@
+# Data exports / local artifacts
 strong_workouts.csv
+
+# Environment / secrets
+.env
+.env.*
+
+# macOS
+.DS_Store
+
+# Xcode / SwiftPM
+DerivedData/
+build/
+*.xcuserstate
+*.xccheckout
+*.xcscmblueprint
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM
+*.dSYM.zip
+*.swp
+*.tmp
+*.xcuserdata/
+.build/
+Packages/

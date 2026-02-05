@@ -6,8 +6,10 @@ class CSVParser {
             throw CSVParserError.invalidData
         }
         
-        let lines = csvString.components(separatedBy: .newlines)
-            .filter { !$0.isEmpty }
+        // Handle \n and \r\n safely, and skip empty trailing lines.
+        let lines = csvString
+            .split(whereSeparator: \.isNewline)
+            .map(String.init)
         
         guard lines.count > 1 else {
             throw CSVParserError.emptyFile
@@ -23,7 +25,7 @@ class CSVParser {
         dateFormatter.locale = Locale(identifier: "en_US_POSIX")
         
         for line in dataLines {
-            let components = parseCSVLine(line)
+            let components = parseCSVLine(line).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             guard components.count >= 9 else { continue }
             
             guard let date = dateFormatter.date(from: components[0]),
@@ -39,9 +41,9 @@ class CSVParser {
             
             let workoutSet = WorkoutSet(
                 date: date,
-                workoutName: components[1].trimmingCharacters(in: .whitespaces),
+                workoutName: components[1],
                 duration: components[2],
-                exerciseName: components[3].trimmingCharacters(in: .whitespaces),
+                exerciseName: components[3],
                 setOrder: setOrder,
                 weight: weight,
                 reps: reps,
@@ -57,22 +59,42 @@ class CSVParser {
     }
     
     private nonisolated static func parseCSVLine(_ line: String) -> [String] {
+        // Minimal RFC 4180-ish parser for a single line.
+        // Supports quoted fields, commas inside quotes, and escaped quotes via "".
         var result: [String] = []
         var currentField = ""
         var inQuotes = false
-        
-        for char in line {
+
+        var index = line.startIndex
+        while index < line.endIndex {
+            let char = line[index]
+
             if char == "\"" {
-                inQuotes.toggle()
+                if inQuotes {
+                    let nextIndex = line.index(after: index)
+                    if nextIndex < line.endIndex, line[nextIndex] == "\"" {
+                        // Escaped quote within a quoted field.
+                        currentField.append("\"")
+                        index = nextIndex
+                    } else {
+                        // Closing quote.
+                        inQuotes = false
+                    }
+                } else {
+                    // Opening quote.
+                    inQuotes = true
+                }
             } else if char == "," && !inQuotes {
                 result.append(currentField)
                 currentField = ""
             } else {
                 currentField.append(char)
             }
+
+            index = line.index(after: index)
         }
+
         result.append(currentField)
-        
         return result
     }
 }

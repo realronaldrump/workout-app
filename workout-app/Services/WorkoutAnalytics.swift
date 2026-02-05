@@ -219,9 +219,11 @@ struct WorkoutAnalytics {
     static func consistencyIssues(for workouts: [Workout]) -> [ConsistencyIssue] {
         guard !workouts.isEmpty else { return [] }
         let calendar = Calendar.current
-
+        
         let sorted = workouts.sorted { $0.date < $1.date }
-        let expectedPerWeek = max(1, Int(round(Double(sorted.count) / max(weeksBetween(sorted.first!.date, sorted.last!.date), 1))))
+        let firstDate = sorted.first?.date ?? Date()
+        let lastDate = sorted.last?.date ?? firstDate
+        let expectedPerWeek = max(1, Int(round(Double(sorted.count) / weeksBetween(firstDate, lastDate))))
 
         var issues: [ConsistencyIssue] = []
 

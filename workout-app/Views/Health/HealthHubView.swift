@@ -335,7 +335,7 @@ struct HealthHubView: View {
             HealthSummaryCardModel(
                 id: "avgSteps",
                 title: "Avg Steps",
-                value: avgSteps != nil ? "\(Int(avgSteps!))" : "--",
+                value: avgSteps.map { "\(Int($0))" } ?? "--",
                 unit: "steps",
                 icon: "figure.walk",
                 tint: Theme.Colors.warning
@@ -343,7 +343,7 @@ struct HealthHubView: View {
             HealthSummaryCardModel(
                 id: "avgSleep",
                 title: "Avg Sleep",
-                value: avgSleep != nil ? String(format: "%.1f", avgSleep!) : "--",
+                value: avgSleep.map { String(format: "%.1f", $0) } ?? "--",
                 unit: "h",
                 icon: "moon.zzz.fill",
                 tint: Theme.Colors.accentSecondary
@@ -351,7 +351,7 @@ struct HealthHubView: View {
             HealthSummaryCardModel(
                 id: "avgRestingHr",
                 title: "Resting HR",
-                value: avgRestingHR != nil ? "\(Int(avgRestingHR!))" : "--",
+                value: avgRestingHR.map { "\(Int($0))" } ?? "--",
                 unit: "bpm",
                 icon: "heart",
                 tint: Theme.Colors.error
@@ -359,7 +359,7 @@ struct HealthHubView: View {
             HealthSummaryCardModel(
                 id: "avgHrv",
                 title: "Avg HRV",
-                value: avgHRV != nil ? "\(Int(avgHRV!))" : "--",
+                value: avgHRV.map { "\(Int($0))" } ?? "--",
                 unit: "ms",
                 icon: "waveform.path.ecg",
                 tint: Theme.Colors.accent
@@ -367,7 +367,7 @@ struct HealthHubView: View {
             HealthSummaryCardModel(
                 id: "avgEnergy",
                 title: "Active Energy",
-                value: avgEnergy != nil ? "\(Int(avgEnergy!))" : "--",
+                value: avgEnergy.map { "\(Int($0))" } ?? "--",
                 unit: "cal",
                 icon: "flame.fill",
                 tint: Theme.Colors.warning
