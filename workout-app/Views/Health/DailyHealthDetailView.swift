@@ -130,6 +130,12 @@ struct DailyHealthDetailView: View {
                     }
                 }
             }
+
+            if let sourceName = summary.primarySourceName, !sourceName.isEmpty {
+                Text("Source: \(sourceName)")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.textTertiary)
+            }
         }
         .padding(Theme.Spacing.lg)
         .glassBackground(elevation: 1)

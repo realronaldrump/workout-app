@@ -238,6 +238,9 @@ struct SleepSummary: Codable {
     var stageDurations: [SleepStage: TimeInterval]
     var start: Date
     var end: Date
+    // Populated for daily summaries when we select a single source to avoid multi-source double counting.
+    var primarySourceName: String? = nil
+    var primarySourceBundleIdentifier: String? = nil
 
     var totalHours: Double {
         totalSleep / 3600

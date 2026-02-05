@@ -294,6 +294,55 @@ enum HealthMetric: String, CaseIterable, Identifiable {
         raw * valueMultiplier
     }
 
+    /// Converts a stored value into the units shown in the UI (matches `displayUnit`).
+    /// - Important: This is used for chart axes/interaction so the user sees the same units everywhere.
+    func displayValue(from stored: Double) -> Double {
+        switch self {
+        case .distanceWalkingRunning:
+            return stored / 1609.34
+        case .bodyMass:
+            return stored * 2.20462
+        case .bodyFatPercentage:
+            return stored * 100
+        default:
+            return stored
+        }
+    }
+
+    /// Formats a value that is already in display units (matches `displayValue(from:)`).
+    func formatDisplay(_ displayValue: Double) -> String {
+        switch self {
+        case .steps:
+            return "\(Int(displayValue))"
+        case .activeEnergy, .basalEnergy:
+            return "\(Int(displayValue))"
+        case .exerciseMinutes, .moveMinutes, .standMinutes:
+            return "\(Int(displayValue))"
+        case .distanceWalkingRunning:
+            return String(format: "%.2f", displayValue)
+        case .flightsClimbed:
+            return "\(Int(displayValue))"
+        case .sleep:
+            return String(format: "%.1f", displayValue)
+        case .restingHeartRate, .walkingHeartRateAverage, .heartRateRecovery:
+            return "\(Int(displayValue))"
+        case .heartRateVariability:
+            return "\(Int(displayValue))"
+        case .bloodOxygen:
+            return String(format: "%.0f", displayValue)
+        case .respiratoryRate:
+            return String(format: "%.1f", displayValue)
+        case .bodyTemperature:
+            return String(format: "%.1f", displayValue)
+        case .vo2Max:
+            return String(format: "%.1f", displayValue)
+        case .bodyMass:
+            return String(format: "%.1f", displayValue)
+        case .bodyFatPercentage:
+            return String(format: "%.1f", displayValue)
+        }
+    }
+
     func format(_ value: Double) -> String {
         switch self {
         case .steps:

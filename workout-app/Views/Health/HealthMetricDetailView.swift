@@ -26,6 +26,16 @@ struct HealthMetricDetailView: View {
         }
     }
 
+    private var chartPoints: [HealthTrendPoint] {
+        points.map { point in
+            HealthTrendPoint(
+                date: point.date,
+                value: metric.displayValue(from: point.value),
+                label: point.label
+            )
+        }
+    }
+
     private var values: [Double] {
         points.map { $0.value }
     }
@@ -106,19 +116,14 @@ struct HealthMetricDetailView: View {
                 .font(Theme.Typography.title3)
                 .foregroundStyle(Theme.Colors.textPrimary)
 
-            Chart(points) { point in
-                LineMark(
-                    x: .value("Date", point.date),
-                    y: .value("Value", point.value)
-                )
-                .foregroundStyle(metric.chartColor)
-                AreaMark(
-                    x: .value("Date", point.date),
-                    y: .value("Value", point.value)
-                )
-                .foregroundStyle(metric.chartColor.opacity(0.2))
-            }
-            .frame(height: 180)
+            InteractiveTimeSeriesChart(
+                points: chartPoints,
+                color: metric.chartColor,
+                areaFill: true,
+                height: 180,
+                fullDomain: range.start...range.end,
+                valueText: { tooltipValueText(displayValue: $0) }
+            )
         }
         .padding(Theme.Spacing.lg)
         .glassBackground(elevation: 1)
@@ -196,19 +201,40 @@ struct HealthMetricDetailView: View {
                         .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.Colors.textSecondary)
                 } else {
-                    Chart(rawSamples) { sample in
-                        LineMark(
-                            x: .value("Date", sample.timestamp),
-                            y: .value("Value", sample.value)
+                    let samplePoints = rawSamples.map {
+                        HealthTrendPoint(
+                            date: $0.timestamp,
+                            value: metric.displayValue(from: $0.value),
+                            label: metric.title
                         )
-                        .foregroundStyle(metric.chartColor)
                     }
-                    .frame(height: 180)
+
+                    InteractiveTimeSeriesChart(
+                        points: samplePoints,
+                        color: metric.chartColor,
+                        areaFill: false,
+                        height: 180,
+                        fullDomain: range.start...range.end,
+                        valueText: { tooltipValueText(displayValue: $0) },
+                        dateText: { $0.formatted(date: .abbreviated, time: .shortened) }
+                    )
                 }
             }
         }
         .padding(Theme.Spacing.lg)
         .glassBackground(elevation: 1)
+    }
+
+    private func tooltipValueText(displayValue: Double) -> String {
+        let formatted = metric.formatDisplay(displayValue)
+        switch metric.displayUnit {
+        case "%":
+            return "\(formatted)\(metric.displayUnit)"
+        case "":
+            return formatted
+        default:
+            return "\(formatted) \(metric.displayUnit)"
+        }
     }
 
     private func averageSleepStages(summaries: [SleepSummary]) -> [SleepStage: Double] {

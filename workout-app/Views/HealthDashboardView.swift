@@ -1036,8 +1036,6 @@ private struct HealthMetricDetailSheet: View {
 
     @Environment(\.dismiss) var dismiss
     @State private var selectedSeriesLabel: String
-    @State private var selectedPoint: HealthTrendPoint?
-    @State private var selectionClearTask: Task<Void, Never>?
 
     init(detail: HealthMetricDetail, rangeLabel: String) {
         self.detail = detail
@@ -1091,9 +1089,6 @@ private struct HealthMetricDetailSheet: View {
                     Button("Done") { dismiss() }
                 }
             }
-            .onDisappear {
-                selectionClearTask?.cancel()
-            }
         }
     }
 
@@ -1111,78 +1106,17 @@ private struct HealthMetricDetailSheet: View {
 
     private func chartSection(for series: HealthMetricSeries) -> some View {
         let points = series.points
-        let domain = chartDomain(for: points.map { $0.value })
 
-        return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            if let selectedPoint {
-                Text("\(selectedPoint.date.formatted(date: .abbreviated, time: .omitted)) • \(formatValue(selectedPoint.value, unit: series.unit))")
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textSecondary)
-            }
-
-            Chart {
-                ForEach(points) { point in
-                    LineMark(
-                        x: .value("Date", point.date),
-                        y: .value("Value", point.value)
-                    )
-                    .foregroundStyle(series.color)
-                    .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round))
-
-                    if selectedPoint?.date == point.date {
-                        PointMark(
-                            x: .value("Date", point.date),
-                            y: .value("Value", point.value)
-                        )
-                        .foregroundStyle(series.color)
-                        .symbolSize(80)
-                    }
-                }
-
-                if let selectedPoint {
-                    RuleMark(x: .value("Selected", selectedPoint.date))
-                        .foregroundStyle(series.color.opacity(0.4))
-                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
-                }
-            }
-            .chartYScale(domain: domain)
-            .chartOverlay { proxy in
-                GeometryReader { geometry in
-                    Rectangle()
-                        .fill(Color.clear)
-                        .contentShape(Rectangle())
-                        .gesture(
-                            DragGesture(minimumDistance: 0)
-                                .onChanged { value in
-                                    selectionClearTask?.cancel()
-                                    guard let plotFrame = proxy.plotFrame else { return }
-                                    let frame = geometry[plotFrame]
-                                    let x = value.location.x - frame.origin.x
-                                    if let date: Date = proxy.value(atX: x) {
-                                        if let closest = points.min(by: {
-                                            abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date))
-                                        }) {
-                                            selectedPoint = closest
-                                        }
-                                    }
-                                }
-                                .onEnded { _ in
-                                    selectionClearTask?.cancel()
-                                    selectionClearTask = Task { @MainActor in
-                                        try? await Task.sleep(nanoseconds: 2_000_000_000)
-                                        guard !Task.isCancelled else { return }
-                                        withAnimation {
-                                            selectedPoint = nil
-                                        }
-                                    }
-                                }
-                        )
-                }
-            }
-            .frame(height: 220)
-            .padding(Theme.Spacing.lg)
-            .glassBackground(elevation: 2)
-        }
+        return InteractiveTimeSeriesChart(
+            points: points,
+            color: series.color,
+            areaFill: false,
+            height: 220,
+            valueText: { formatValue($0, unit: series.unit) },
+            dateText: { $0.formatted(date: .abbreviated, time: .omitted) }
+        )
+        .padding(Theme.Spacing.lg)
+        .glassBackground(elevation: 2)
     }
 
     private func statsSection(for series: HealthMetricSeries) -> some View {
@@ -1240,17 +1174,6 @@ private struct HealthMetricDetailSheet: View {
         }
         .padding(Theme.Spacing.lg)
         .glassBackground(elevation: 1)
-    }
-
-    private func chartDomain(for values: [Double]) -> ClosedRange<Double> {
-        guard let minValue = values.min(), let maxValue = values.max() else {
-            return 0...1
-        }
-        let span = max(maxValue - minValue, 1)
-        let padding = span * 0.12
-        let lower = max(0, minValue - padding)
-        let upper = maxValue + padding
-        return lower...upper
     }
 
     private func formatValue(_ value: Double, unit: String) -> String {
