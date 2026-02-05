@@ -331,7 +331,7 @@ struct ExerciseProgressChart: View {
         }
     }
 
-    private var seriesColors: [String: Color] {
+    private var seriesColors: KeyValuePairs<String, Color> {
         [
             ChartSeries.progress.rawValue: chartColor,
             ChartSeries.trend.rawValue: Color.secondary.opacity(0.5)

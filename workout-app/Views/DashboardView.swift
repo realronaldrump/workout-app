@@ -89,7 +89,7 @@ struct DashboardView: View {
             healthManager.refreshAuthorizationStatus()
             if dataManager.workouts.isEmpty {
                 // Offload file reading to background to prevent main thread hitch
-                loadLatestWorkoutData()
+                Task { await loadLatestWorkoutData() }
             } else {
                 // Just refresh these lightweight checks
                 triggerAutoHealthSync()
@@ -97,7 +97,7 @@ struct DashboardView: View {
             }
         }
         .refreshable {
-            loadLatestWorkoutData()
+            await loadLatestWorkoutData()
         }
         .onChange(of: dataManager.workouts.count) { _, _ in
             refreshInsights()
@@ -427,32 +427,37 @@ struct DashboardView: View {
         return items
     }
 
-    private func loadLatestWorkoutData() {
-        Task.detached(priority: .userInitiated) {
-            let files = iCloudManager.listWorkoutFiles()
-                .sorted { url1, url2 in
-                    let date1 = (try? url1.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? Date.distantPast
-                    let date2 = (try? url2.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? Date.distantPast
-                    return date1 > date2
-                }
+    @MainActor
+    private func loadLatestWorkoutData() async {
+        let directoryURL = iCloudManager.storageSnapshot().url
+        let setsResult = await Task.detached(priority: .userInitiated) { [directoryURL] in
+            do {
+                guard let directoryURL else { return Result<[WorkoutSet], Error>.success([]) }
 
-            if let latestFile = files.first {
-                do {
-                    let data = try Data(contentsOf: latestFile)
-                    let sets = try CSVParser.parseStrongWorkoutsCSV(from: data)
-
-                    let healthSnapshot = await MainActor.run {
-                        Array(healthManager.healthDataStore.values)
+                let files = iCloudDocumentManager.listWorkoutFiles(in: directoryURL)
+                    .sorted { url1, url2 in
+                        let date1 = (try? url1.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? Date.distantPast
+                        let date2 = (try? url2.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? Date.distantPast
+                        return date1 > date2
                     }
 
-                    await dataManager.processWorkoutSets(sets, healthDataSnapshot: healthSnapshot)
-                    await MainActor.run {
-                        refreshInsights()
-                    }
-                } catch {
-                    print("Failed to load workout data: \(error)")
-                }
+                guard let latestFile = files.first else { return Result<[WorkoutSet], Error>.success([]) }
+                let data = try Data(contentsOf: latestFile)
+                let sets = try CSVParser.parseStrongWorkoutsCSV(from: data)
+                return Result<[WorkoutSet], Error>.success(sets)
+            } catch {
+                return Result<[WorkoutSet], Error>.failure(error)
             }
+        }.value
+
+        switch setsResult {
+        case .success(let sets):
+            guard !sets.isEmpty else { return }
+            let healthSnapshot = Array(healthManager.healthDataStore.values)
+            await dataManager.processWorkoutSets(sets, healthDataSnapshot: healthSnapshot)
+            refreshInsights()
+        case .failure(let error):
+            print("Failed to load workout data: \(error)")
         }
     }
 

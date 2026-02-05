@@ -14,13 +14,13 @@ class WorkoutDataManager: ObservableObject {
         _ sets: [WorkoutSet],
         healthDataSnapshot: [WorkoutHealthData] = []
     ) async {
-        let (existingWorkouts, identitySnapshot) = await MainActor.run {
+        let (existingWorkouts, identitySnapshot): ([Workout], [String: UUID]) = await MainActor.run {
             self.isLoading = true
             self.error = nil
-            (self.workouts, self.identityStore.snapshot())
+            return (self.workouts, self.identityStore.snapshot())
         }
         // Run heavy grouping logic on a background thread
-        let (processedWorkouts, newIdentityEntries) = await Task.detached(priority: .userInitiated) {
+        let task = Task.detached(priority: .userInitiated) {
             // Group sets by date (year-month-day-hour) using Calendar components
             // This is significantly faster than DateFormatter
             let calendar = Calendar.current
@@ -106,7 +106,8 @@ class WorkoutDataManager: ObservableObject {
 
             let sortedWorkouts = workouts.sorted { $0.date > $1.date }
             return (sortedWorkouts, newIdentityEntries)
-        }.value
+        }
+        let (processedWorkouts, newIdentityEntries) = await task.value
         
         // Update UI on MainActor
         await MainActor.run {

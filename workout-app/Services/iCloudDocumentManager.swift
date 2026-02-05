@@ -86,13 +86,7 @@ class iCloudDocumentManager: ObservableObject {
     func listWorkoutFiles() -> [URL] {
         guard let containerURL = documentsURL else { return [] }
         
-        do {
-            let files = try FileManager.default.contentsOfDirectory(at: containerURL, includingPropertiesForKeys: [.nameKey, .creationDateKey], options: .skipsHiddenFiles)
-            return files.filter { $0.pathExtension == "csv" }
-        } catch {
-            print("Failed to list files: \(error)")
-            return []
-        }
+        return Self.listWorkoutFiles(in: containerURL)
     }
     
     func deleteFile(at url: URL) throws {
@@ -126,6 +120,33 @@ class iCloudDocumentManager: ObservableObject {
         await MainActor.run {
             self.importedData = nil
         }
+    }
+
+    /// Snapshot the current storage location for use from background tasks.
+    /// This avoids doing file I/O on the main actor when `iCloudDocumentManager` is main-actor isolated via SwiftUI.
+    @MainActor
+    func storageSnapshot() -> (url: URL?, isUsingLocalFallback: Bool) {
+        (documentsURL, isUsingLocalFallback)
+    }
+
+    static func listWorkoutFiles(in directory: URL) -> [URL] {
+        do {
+            let files = try FileManager.default.contentsOfDirectory(
+                at: directory,
+                includingPropertiesForKeys: [.nameKey, .creationDateKey],
+                options: .skipsHiddenFiles
+            )
+            return files.filter { $0.pathExtension.lowercased() == "csv" }
+        } catch {
+            print("Failed to list files: \(error)")
+            return []
+        }
+    }
+
+    static func saveWorkoutFile(data: Data, in directory: URL, fileName: String) throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let fileURL = directory.appendingPathComponent(fileName)
+        try data.write(to: fileURL, options: [.atomic, .completeFileProtection])
     }
 }
 

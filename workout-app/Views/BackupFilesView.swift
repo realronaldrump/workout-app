@@ -13,9 +13,9 @@ struct BackupFilesView: View {
                 LazyVStack(spacing: Theme.Spacing.md) {
                     if files.isEmpty {
                         ContentUnavailableView(
-                            "files 0",
+                            "No Backup Files",
                             systemImage: "icloud.slash",
-                            description: Text("iCloud 0")
+                            description: Text("Exported workout backups will appear here.")
                         )
                         .padding(.top, 50)
                     } else {
@@ -33,8 +33,14 @@ struct BackupFilesView: View {
         .navigationTitle("Backup Files")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
-            files = iCloudManager.listWorkoutFiles()
-                .sorted { $0.lastPathComponent > $1.lastPathComponent }
+            Task { @MainActor in
+                let directoryURL = iCloudManager.storageSnapshot().url
+                let sorted = await Task.detached(priority: .userInitiated) { [directoryURL] in
+                    (directoryURL.map { iCloudDocumentManager.listWorkoutFiles(in: $0) } ?? [])
+                        .sorted { $0.lastPathComponent > $1.lastPathComponent }
+                }.value
+                files = sorted
+            }
         }
         .alert("Delete File", isPresented: $showingDeleteAlert) {
             Button("Cancel", role: .cancel) {}
