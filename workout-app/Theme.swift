@@ -32,11 +32,17 @@ enum Theme {
         static let gold = Color.yellow
         
         // Muscle groups (solid colors)
-        static let push = Color.red
-        static let pull = Color.blue
-        static let legs = Color.green
-        static let core = Color.orange
-        static let cardio = Color.purple
+        static let chest = Color.red
+        static let back = Color.blue
+        static let shoulders = Color.orange
+        static let biceps = Color.purple
+        static let triceps = Color.pink
+        static let quads = Color.green
+        static let hamstrings = Color.teal
+        static let glutes = Color.indigo
+        static let calves = Color.mint
+        static let core = Color.yellow
+        static let cardio = Color.cyan
         
         // Glassmorphism
         static let glass = Color.white.opacity(0.08)
@@ -277,9 +283,15 @@ struct PRMarkerView: View {
 extension MuscleGroup {
     var color: Color {
         switch self {
-        case .push: return Theme.Colors.push
-        case .pull: return Theme.Colors.pull
-        case .legs: return Theme.Colors.legs
+        case .chest: return Theme.Colors.chest
+        case .back: return Theme.Colors.back
+        case .shoulders: return Theme.Colors.shoulders
+        case .biceps: return Theme.Colors.biceps
+        case .triceps: return Theme.Colors.triceps
+        case .quads: return Theme.Colors.quads
+        case .hamstrings: return Theme.Colors.hamstrings
+        case .glutes: return Theme.Colors.glutes
+        case .calves: return Theme.Colors.calves
         case .core: return Theme.Colors.core
         case .cardio: return Theme.Colors.cardio
         }

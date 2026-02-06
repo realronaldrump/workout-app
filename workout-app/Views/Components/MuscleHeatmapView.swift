@@ -49,7 +49,7 @@ struct MuscleHeatmapView: View {
                 GridItem(.flexible()),
                 GridItem(.flexible())
             ], spacing: Theme.Spacing.md) {
-                ForEach(MuscleGroup.allCases.filter { $0 != .core }, id: \.self) { group in
+                ForEach(MuscleGroup.allCases, id: \.self) { group in
                     MuscleGroupTile(
                         muscleGroup: group,
                         stats: muscleGroupStats[group],
@@ -259,19 +259,31 @@ struct MuscleDetailView: View {
 extension MuscleGroup {
     var iconName: String {
         switch self {
-        case .push: return "arrow.up.right"
-        case .pull: return "arrow.down.left"
-        case .legs: return "figure.walk"
+        case .chest: return "heart.fill"
+        case .back: return "arrow.left.and.right"
+        case .shoulders: return "figure.arms.open"
+        case .biceps: return "figure.strengthtraining.functional"
+        case .triceps: return "arrow.up.right"
+        case .quads: return "figure.walk"
+        case .hamstrings: return "figure.run"
+        case .glutes: return "figure.cooldown"
+        case .calves: return "shoeprints.fill"
         case .core: return "circle.hexagongrid"
-        case .cardio: return "heart"
+        case .cardio: return "heart.text.square"
         }
     }
     
     var shortName: String {
         switch self {
-        case .push: return "Push"
-        case .pull: return "Pull"
-        case .legs: return "Legs"
+        case .chest: return "Chest"
+        case .back: return "Back"
+        case .shoulders: return "Shoulders"
+        case .biceps: return "Biceps"
+        case .triceps: return "Triceps"
+        case .quads: return "Quads"
+        case .hamstrings: return "Hams"
+        case .glutes: return "Glutes"
+        case .calves: return "Calves"
         case .core: return "Core"
         case .cardio: return "Cardio"
         }

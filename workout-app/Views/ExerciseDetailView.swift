@@ -333,10 +333,10 @@ struct ExerciseProgressChart: View {
     
     private var chartColor: Color {
         switch chartType {
-        case .weight: return Theme.Colors.push
-        case .volume: return Theme.Colors.legs
+        case .weight: return Theme.Colors.chest
+        case .volume: return Theme.Colors.quads
         case .oneRepMax: return Theme.Colors.gold
-        case .reps: return Theme.Colors.pull
+        case .reps: return Theme.Colors.back
         }
     }
 

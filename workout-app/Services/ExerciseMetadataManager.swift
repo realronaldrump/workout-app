@@ -10,43 +10,55 @@ class ExerciseMetadataManager: ObservableObject {
     private let metadataKey = "ExerciseMetadata"
     
     private let defaultMappings: [String: MuscleGroup] = [
-        // Push
-        "Chest Press (Machine)": .push,
-        "Shoulder Press (Machine)": .push,
-        "Triceps Press Machine": .push,
-        "Triceps Extension (Machine)": .push,
-        "Chest Fly": .push,
-        "Lateral Raise (Machine)": .push,
-        "Bench Press (Barbell)": .push,
-        "Overhead Press (Barbell)": .push,
-        "Incline Bench Press (Barbell)": .push,
-        "Dumbbell Press": .push,
-        "Push Ups": .push,
+        // Chest
+        "Chest Press (Machine)": .chest,
+        "Bench Press (Barbell)": .chest,
+        "Incline Bench Press (Barbell)": .chest,
+        "Dumbbell Press": .chest,
+        "Chest Fly": .chest,
+        "Push Ups": .chest,
         
-        // Pull
-        "Lat Pulldown (Machine)": .pull,
-        "Seated Row (Machine)": .pull,
-        "MTS Row": .pull,
-        "Bicep Curl (Machine)": .pull,
-        "Preacher Curl (Machine)": .pull,
-        "Reverse Fly (Machine)": .pull,
-        "Pull Up": .pull,
-        "Chin Up": .pull,
-        "Barbell Row": .pull,
-        "Deadlift (Barbell)": .pull,
+        // Back
+        "Lat Pulldown (Machine)": .back,
+        "Seated Row (Machine)": .back,
+        "MTS Row": .back,
+        "Pull Up": .back,
+        "Chin Up": .back,
+        "Barbell Row": .back,
+        "Deadlift (Barbell)": .back,
+        "Reverse Fly (Machine)": .back,
         
-        // Legs
-        "Leg Extension (Machine)": .legs,
-        "Seated Leg Curl (Machine)": .legs,
-        "Lying Leg Curl (Machine)": .legs,
-        "Seated Leg Press (Machine)": .legs,
-        "Calf Extension Machine": .legs,
-        "Hip Adductor (Machine)": .legs,
-        "Hip Abductor (Machine)": .legs,
-        "Glute Kickback (Machine)": .legs,
-        "Squat (Barbell)": .legs,
-        "Leg Press": .legs,
-        "Lunges": .legs,
+        // Shoulders
+        "Shoulder Press (Machine)": .shoulders,
+        "Overhead Press (Barbell)": .shoulders,
+        "Lateral Raise (Machine)": .shoulders,
+        
+        // Biceps
+        "Bicep Curl (Machine)": .biceps,
+        "Preacher Curl (Machine)": .biceps,
+        
+        // Triceps
+        "Triceps Press Machine": .triceps,
+        "Triceps Extension (Machine)": .triceps,
+        
+        // Quads
+        "Leg Extension (Machine)": .quads,
+        "Seated Leg Press (Machine)": .quads,
+        "Squat (Barbell)": .quads,
+        "Leg Press": .quads,
+        "Lunges": .quads,
+        
+        // Hamstrings
+        "Seated Leg Curl (Machine)": .hamstrings,
+        "Lying Leg Curl (Machine)": .hamstrings,
+        
+        // Glutes
+        "Hip Adductor (Machine)": .glutes,
+        "Hip Abductor (Machine)": .glutes,
+        "Glute Kickback (Machine)": .glutes,
+        
+        // Calves
+        "Calf Extension Machine": .calves,
         
         // Cardio
         "Running (Treadmill)": .cardio,
