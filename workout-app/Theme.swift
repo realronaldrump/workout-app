@@ -34,7 +34,7 @@ enum Theme {
         static let warning = Color(uiColor: UIColor(hex: 0xFFB020))
         static let error = Color(uiColor: UIColor(hex: 0xFF3B30))
         static let info = accent
-        static let shadowOpacity: Double = 0.12
+        static let shadowOpacity: Double = 0.05
 
         // PR/Achievement
         static let gold = Color(uiColor: UIColor(hex: 0xFFD166))
