@@ -129,7 +129,7 @@ class iCloudDocumentManager: ObservableObject {
         (documentsURL, isUsingLocalFallback)
     }
 
-    static func listWorkoutFiles(in directory: URL) -> [URL] {
+    nonisolated static func listWorkoutFiles(in directory: URL) -> [URL] {
         do {
             let files = try FileManager.default.contentsOfDirectory(
                 at: directory,
@@ -143,7 +143,7 @@ class iCloudDocumentManager: ObservableObject {
         }
     }
 
-    static func saveWorkoutFile(data: Data, in directory: URL, fileName: String) throws {
+    nonisolated static func saveWorkoutFile(data: Data, in directory: URL, fileName: String) throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let fileURL = directory.appendingPathComponent(fileName)
         try data.write(to: fileURL, options: [.atomic, .completeFileProtection])

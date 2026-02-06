@@ -53,6 +53,22 @@ struct HealthMetricDetailView: View {
         values.max()
     }
 
+    private var minPoint: HealthTrendPoint? {
+        guard let minValue else { return nil }
+        // If multiple days share the same min, prefer the most recent occurrence.
+        return points
+            .filter { $0.value == minValue }
+            .max(by: { $0.date < $1.date })
+    }
+
+    private var maxPoint: HealthTrendPoint? {
+        guard let maxValue else { return nil }
+        // If multiple days share the same max, prefer the most recent occurrence.
+        return points
+            .filter { $0.value == maxValue }
+            .max(by: { $0.date < $1.date })
+    }
+
     var body: some View {
         ZStack {
             AdaptiveBackground()
@@ -129,20 +145,47 @@ struct HealthMetricDetailView: View {
         .glassBackground(elevation: 1)
     }
 
-    private var statsSection: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: Theme.Spacing.md) {
-                MetricStatCard(title: "Average", value: averageValue.map(metric.format) ?? "--", unit: metric.displayUnit)
-                MetricStatCard(title: "Min", value: minValue.map(metric.format) ?? "--", unit: metric.displayUnit)
-                MetricStatCard(title: "Max", value: maxValue.map(metric.format) ?? "--", unit: metric.displayUnit)
+	    private var statsSection: some View {
+	        let includeDayForExtremes = metric == .bodyMass
+	
+	        return ViewThatFits(in: .horizontal) {
+	            HStack(spacing: Theme.Spacing.md) {
+	                MetricStatCard(title: "Average", value: averageValue.map(metric.format) ?? "--", unit: metric.displayUnit)
+	                MetricStatCard(
+	                    title: "Min",
+                    value: minValue.map(metric.format) ?? "--",
+                    unit: metric.displayUnit,
+                    subtitle: includeDayForExtremes ? minPoint.map { formatDay($0.date) } : nil
+                )
+                MetricStatCard(
+                    title: "Max",
+                    value: maxValue.map(metric.format) ?? "--",
+                    unit: metric.displayUnit,
+                    subtitle: includeDayForExtremes ? maxPoint.map { formatDay($0.date) } : nil
+                )
             }
 
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: Theme.Spacing.md) {
                 MetricStatCard(title: "Average", value: averageValue.map(metric.format) ?? "--", unit: metric.displayUnit)
-                MetricStatCard(title: "Min", value: minValue.map(metric.format) ?? "--", unit: metric.displayUnit)
-                MetricStatCard(title: "Max", value: maxValue.map(metric.format) ?? "--", unit: metric.displayUnit)
+                MetricStatCard(
+                    title: "Min",
+                    value: minValue.map(metric.format) ?? "--",
+                    unit: metric.displayUnit,
+                    subtitle: includeDayForExtremes ? minPoint.map { formatDay($0.date) } : nil
+                )
+                MetricStatCard(
+                    title: "Max",
+                    value: maxValue.map(metric.format) ?? "--",
+                    unit: metric.displayUnit,
+                    subtitle: includeDayForExtremes ? maxPoint.map { formatDay($0.date) } : nil
+                )
             }
         }
+    }
+
+    private func formatDay(_ date: Date) -> String {
+        // Keep it compact so it fits on the stat tile.
+        date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
     }
 
     private var sleepBreakdownSection: some View {
@@ -272,12 +315,32 @@ private struct MetricStatCard: View {
     let title: String
     let value: String
     let unit: String
+    let subtitle: String?
+
+    init(title: String, value: String, unit: String, subtitle: String? = nil) {
+        self.title = title
+        self.value = value
+        self.unit = unit
+        self.subtitle = subtitle
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            Text(title)
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Colors.textTertiary)
+            HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.sm) {
+                Text(title)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.textTertiary)
+
+                Spacer(minLength: 0)
+
+                if let subtitle {
+                    Text(subtitle)
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                }
+            }
             HStack(alignment: .lastTextBaseline, spacing: 4) {
                 Text(value)
                     .font(Theme.Typography.number)

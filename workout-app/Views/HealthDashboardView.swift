@@ -1119,26 +1119,46 @@ private struct HealthMetricDetailSheet: View {
         .glassBackground(elevation: 2)
     }
 
-    private func statsSection(for series: HealthMetricSeries) -> some View {
-        let values = series.points.map { $0.value }
-        let avg = values.isEmpty ? nil : values.reduce(0, +) / Double(values.count)
-        let minValue = values.min()
-        let maxValue = values.max()
-        let change = comparisonDelta(currentSeries: series, comparisonSeries: comparisonSeries)
+	    private func statsSection(for series: HealthMetricSeries) -> some View {
+	        let points = series.points
+	        let values = points.map { $0.value }
+	        let avg = values.isEmpty ? nil : values.reduce(0, +) / Double(values.count)
+	        let minValue = values.min()
+	        let maxValue = values.max()
+	        let minPoint = minValue.flatMap { min in
+	            points
+	                .filter { $0.value == min }
+	                .max(by: { $0.date < $1.date })
+	        }
+	        let maxPoint = maxValue.flatMap { max in
+	            points
+	                .filter { $0.value == max }
+	                .max(by: { $0.date < $1.date })
+	        }
+	        let change = comparisonDelta(currentSeries: series, comparisonSeries: comparisonSeries)
+	        let includeDayForExtremes = series.unit == "lb"
 
-        return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Summary")
-                .font(Theme.Typography.headline)
+	        return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+	            Text("Summary")
+	                .font(Theme.Typography.headline)
                 .foregroundStyle(Theme.Colors.textPrimary)
 
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: Theme.Spacing.md) {
-                MetricStatCard(title: "Average", value: avg.map { formatValue($0, unit: series.unit) } ?? "--")
-                MetricStatCard(title: "Min", value: minValue.map { formatValue($0, unit: series.unit) } ?? "--")
-                MetricStatCard(title: "Max", value: maxValue.map { formatValue($0, unit: series.unit) } ?? "--")
-                MetricStatCard(title: "Change", value: change ?? "--")
-            }
-        }
-    }
+	            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: Theme.Spacing.md) {
+	                MetricStatCard(title: "Average", value: avg.map { formatValue($0, unit: series.unit) } ?? "--")
+	                MetricStatCard(
+	                    title: "Min",
+	                    value: minValue.map { formatValue($0, unit: series.unit) } ?? "--",
+	                    subtitle: includeDayForExtremes ? minPoint.map { formatDay($0.date) } : nil
+	                )
+	                MetricStatCard(
+	                    title: "Max",
+	                    value: maxValue.map { formatValue($0, unit: series.unit) } ?? "--",
+	                    subtitle: includeDayForExtremes ? maxPoint.map { formatDay($0.date) } : nil
+	                )
+	                MetricStatCard(title: "Change", value: change ?? "--")
+	            }
+	        }
+	    }
 
     private func dataPointsSection(for series: HealthMetricSeries) -> some View {
         let points = series.points.sorted { $0.date > $1.date }
@@ -1176,8 +1196,8 @@ private struct HealthMetricDetailSheet: View {
         .glassBackground(elevation: 1)
     }
 
-    private func formatValue(_ value: Double, unit: String) -> String {
-        switch unit {
+	    private func formatValue(_ value: Double, unit: String) -> String {
+	        switch unit {
         case "bpm":
             return "\(Int(value)) bpm"
         case "cal":
@@ -1192,15 +1212,19 @@ private struct HealthMetricDetailSheet: View {
             return String(format: "%.1f lb", value)
         case "%":
             return String(format: "%.1f%%", value)
-        default:
-            return String(format: "%.1f", value)
-        }
-    }
+	        default:
+	            return String(format: "%.1f", value)
+	        }
+	    }
 
-    private func comparisonDelta(currentSeries: HealthMetricSeries, comparisonSeries: HealthMetricSeries?) -> String? {
-        guard let comparisonSeries else { return nil }
-        let currentAvg = currentSeries.points.map { $0.value }
-        let previousAvg = comparisonSeries.points.map { $0.value }
+	    private func formatDay(_ date: Date) -> String {
+	        date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
+	    }
+
+	    private func comparisonDelta(currentSeries: HealthMetricSeries, comparisonSeries: HealthMetricSeries?) -> String? {
+	        guard let comparisonSeries else { return nil }
+	        let currentAvg = currentSeries.points.map { $0.value }
+	        let previousAvg = comparisonSeries.points.map { $0.value }
         guard !currentAvg.isEmpty, !previousAvg.isEmpty else { return nil }
         let currentValue = currentAvg.reduce(0, +) / Double(currentAvg.count)
         let previousValue = previousAvg.reduce(0, +) / Double(previousAvg.count)
@@ -1209,21 +1233,40 @@ private struct HealthMetricDetailSheet: View {
         let sign = diff >= 0 ? "+" : ""
         return "\(sign)\(formatValue(abs(diff), unit: currentSeries.unit))"
     }
-}
+	}
 
-private struct MetricStatCard: View {
-    let title: String
-    let value: String
+	private struct MetricStatCard: View {
+	    let title: String
+	    let value: String
+	    let subtitle: String?
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            Text(title)
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Colors.textTertiary)
-            Text(value)
-                .font(Theme.Typography.headline)
-                .foregroundStyle(Theme.Colors.textPrimary)
-        }
+	    init(title: String, value: String, subtitle: String? = nil) {
+	        self.title = title
+	        self.value = value
+	        self.subtitle = subtitle
+	    }
+
+	    var body: some View {
+	        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+	            HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.sm) {
+	                Text(title)
+	                    .font(Theme.Typography.caption)
+	                    .foregroundStyle(Theme.Colors.textTertiary)
+
+	                Spacer(minLength: 0)
+
+	                if let subtitle {
+	                    Text(subtitle)
+	                        .font(Theme.Typography.caption)
+	                        .foregroundStyle(Theme.Colors.textSecondary)
+	                        .lineLimit(1)
+	                        .minimumScaleFactor(0.75)
+	                }
+	            }
+	            Text(value)
+	                .font(Theme.Typography.headline)
+	                .foregroundStyle(Theme.Colors.textPrimary)
+	        }
         .padding(Theme.Spacing.md)
         .glassBackground(elevation: 1)
     }
