@@ -290,63 +290,59 @@ struct DashboardView: View {
 
     private var trainingSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-            Text("Training")
-                .font(Theme.Typography.sectionHeader)
-                .foregroundColor(Theme.Colors.textPrimary)
-                .tracking(1.0)
-
-            VStack(spacing: Theme.Spacing.lg) {
-                if let currentStats = filteredStats {
-                    ConsistencyView(
-                        stats: currentStats,
-                        workouts: filteredWorkouts,
-                        timeRange: consistencyTimeRange,
-                        dateRange: selectedDateRange
-                    ) {
-                        selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: .streak, scrollTarget: nil)
-                    }
-                } else {
-                    RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
-                        .fill(Theme.Colors.surface.opacity(0.6))
-                        .frame(height: 220)
-                        .redacted(reason: .placeholder)
+            // Consistency shows first without header
+            if let currentStats = filteredStats {
+                ConsistencyView(
+                    stats: currentStats,
+                    workouts: filteredWorkouts,
+                    timeRange: consistencyTimeRange,
+                    dateRange: selectedDateRange
+                ) {
+                    selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: .streak, scrollTarget: nil)
                 }
+            } else {
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
+                    .fill(Theme.Colors.surface.opacity(0.6))
+                    .frame(height: 220)
+                    .redacted(reason: .placeholder)
+            }
 
-                // More/Less button below consistency
-                Button(action: {
-                    withAnimation(Theme.Animation.spring) {
-                        isTrainingExpanded.toggle()
-                    }
-                    Haptics.selection()
-                }) {
-                    HStack {
-                        Text(isTrainingExpanded ? "Show Less" : "Show More")
-                            .font(Theme.Typography.metricLabel)
-                            .foregroundColor(Theme.Colors.accent)
-                            .textCase(.uppercase)
-                            .tracking(0.8)
-                        Spacer()
-                        Image(systemName: isTrainingExpanded ? "chevron.up" : "chevron.down")
-                            .font(.caption.weight(.bold))
-                            .foregroundColor(Theme.Colors.accent)
-                    }
-                    .padding(Theme.Spacing.md)
-                    .softCard(elevation: 1)
+            // Training header and expand button below consistency
+            Button(action: {
+                withAnimation(Theme.Animation.spring) {
+                    isTrainingExpanded.toggle()
                 }
+                Haptics.selection()
+            }) {
+                HStack {
+                    Text("Training")
+                        .font(Theme.Typography.sectionHeader)
+                        .foregroundColor(Theme.Colors.textPrimary)
+                        .tracking(1.0)
+                    Spacer()
+                    Text(isTrainingExpanded ? "Less" : "More")
+                        .font(Theme.Typography.metricLabel)
+                        .foregroundColor(Theme.Colors.accent)
+                        .textCase(.uppercase)
+                        .tracking(0.8)
+                    Image(systemName: isTrainingExpanded ? "chevron.up" : "chevron.down")
+                        .font(.caption.weight(.bold))
+                        .foregroundColor(Theme.Colors.accent)
+                }
+            }
 
-                if isTrainingExpanded {
-                    VolumeProgressChart(workouts: filteredWorkouts) {
-                        selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: .totalVolume, scrollTarget: nil)
-                    }
-                    MuscleHeatmapView(dataManager: dataManager) {
-                        showingMuscleBalance = true
-                    }
-                    ExerciseBreakdownView(workouts: filteredWorkouts) {
-                        selectedWorkoutMetric = WorkoutMetricDetailSelection(
-                            kind: .totalVolume,
-                            scrollTarget: .topExercisesByVolume
-                        )
-                    }
+            if isTrainingExpanded {
+                VolumeProgressChart(workouts: filteredWorkouts) {
+                    selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: .totalVolume, scrollTarget: nil)
+                }
+                MuscleHeatmapView(dataManager: dataManager) {
+                    showingMuscleBalance = true
+                }
+                ExerciseBreakdownView(workouts: filteredWorkouts) {
+                    selectedWorkoutMetric = WorkoutMetricDetailSelection(
+                        kind: .totalVolume,
+                        scrollTarget: .topExercisesByVolume
+                    )
                 }
             }
         }
