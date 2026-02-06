@@ -12,7 +12,6 @@ struct SettingsView: View {
     
     @AppStorage("weightUnit") private var weightUnit = "lbs"
     @AppStorage("dateFormat") private var dateFormat = "relative"
-    @AppStorage("appearanceMode") private var appearanceMode = "system"
     
     var body: some View {
         ZStack {
@@ -167,32 +166,6 @@ struct SettingsView: View {
                         
                         Divider().padding(.leading, 50)
                         
-                        // Appearance Mode
-                        HStack {
-                            Image(systemName: "moon.fill")
-                                .foregroundStyle(.white)
-                                .frame(width: 30, height: 30)
-                                .background(Theme.Colors.accent)
-                                .cornerRadius(6)
-                            
-                            Text("Appearance")
-                                .font(Theme.Typography.body)
-                            
-                            Spacer()
-                            
-                            Picker("", selection: $appearanceMode) {
-                                Text("System").tag("system")
-                                Text("Light").tag("light")
-                                Text("Dark").tag("dark")
-                            }
-                            .labelsHidden()
-                            .pickerStyle(.menu)
-                        }
-                        .padding()
-                        .softCard()
-                        
-                        Divider().padding(.leading, 50)
-                        
                         // Exercise Tags
                         NavigationLink(destination: GymProfilesView()) {
                             HStack {
@@ -312,15 +285,6 @@ struct SettingsView: View {
         }
         .onAppear {
             healthManager.refreshAuthorizationStatus()
-        }
-        .preferredColorScheme(colorScheme)
-    }
-    
-    private var colorScheme: ColorScheme? {
-        switch appearanceMode {
-        case "light": return .light
-        case "dark": return .dark
-        default: return nil  // System
         }
     }
 }

@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Visual muscle group display showing workout frequency by muscle group
-/// Dark minimalist design with glassmorphism
+/// Warm, vibrant design with glassmorphism
 struct MuscleHeatmapView: View {
     let dataManager: WorkoutDataManager
     var onOpen: (() -> Void)? = nil

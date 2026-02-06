@@ -190,5 +190,4 @@ struct EmptyInsightsView: View {
             .padding()
         }
     }
-    .preferredColorScheme(.dark)
 }

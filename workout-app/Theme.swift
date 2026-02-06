@@ -2,37 +2,31 @@ import SwiftUI
 import UIKit
 
 /// Centralized theme system - bold, bright, vibrant.
-/// Light mode: warm, sunny canvas.
-/// Dark mode: cool, neon canvas.
+/// Single theme: warm, sunny canvas (light).
 enum Theme {
     
     // MARK: - Colors
     
     enum Colors {
         // Palette
-        // - Light: warm cream + sun-washed highlights
-        // - Dark: deep cobalt + neon ice highlights
-        //
+        // - Warm cream + sun-washed highlights
         // Keep the "electric blue" brand moment from LaunchScreen as the primary accent.
 
         // Core surfaces
-        static let background = Color.uiColor(light: UIColor(hex: 0xFFF4E6), dark: UIColor(hex: 0x071316))
-        static let surface = Color.uiColor(light: UIColor(hex: 0xFFFCF7), dark: UIColor(hex: 0x0B1D21))
-        static let elevated = Color.uiColor(light: UIColor(hex: 0xFFFFFF), dark: UIColor(hex: 0x102A30))
-        static let cardBackground = Color.uiColor(light: UIColor(hex: 0xFFFEFB), dark: UIColor(hex: 0x0C2226))
-        static let border = Color.uiColor(light: UIColor(hex: 0xEED5C2), dark: UIColor(hex: 0x1C3B3F))
+        static let background = Color(uiColor: UIColor(hex: 0xFFF4E6))
+        static let surface = Color(uiColor: UIColor(hex: 0xFFFCF7))
+        static let elevated = Color(uiColor: UIColor(hex: 0xFFFFFF))
+        static let cardBackground = Color(uiColor: UIColor(hex: 0xFFFEFB))
+        static let border = Color(uiColor: UIColor(hex: 0xEED5C2))
         
         // Text hierarchy
-        static let textPrimary = Color.uiColor(light: UIColor(hex: 0x1B1612), dark: UIColor(hex: 0xF3FFFD))
-        static let textSecondary = Color.uiColor(light: UIColor(hex: 0x5B5148), dark: UIColor(hex: 0xB8E3DD))
-        static let textTertiary = Color.uiColor(light: UIColor(hex: 0x8C8075), dark: UIColor(hex: 0x7FB8B0))
+        static let textPrimary = Color(uiColor: UIColor(hex: 0x1B1612))
+        static let textSecondary = Color(uiColor: UIColor(hex: 0x5B5148))
+        static let textTertiary = Color(uiColor: UIColor(hex: 0x8C8075))
         
         // Accent colors - vibrant and energetic
         static let accent = Color(uiColor: UIColor(hex: 0x125BFF))  // Electric blue (matches LaunchBackground)
-        static let accentSecondary = Color.uiColor(
-            light: UIColor(hex: 0xFF5A1F), // Tangerine heat (light mode)
-            dark: UIColor(hex: 0x00D4FF)   // Neon ice (dark mode)
-        )
+        static let accentSecondary = Color(uiColor: UIColor(hex: 0xFF5A1F)) // Tangerine heat
         static let accentTertiary = Color(uiColor: UIColor(hex: 0x8B5CF6))  // Violet punch
         
         // Semantic colors - brighter, more saturated
@@ -58,41 +52,32 @@ enum Theme {
         static let cardio = Color(uiColor: UIColor(hex: 0x00D4FF))  // Cyan
 
         // Glassmorphism
-        static let glass = Color.uiColor(
-            light: UIColor(hex: 0xFFF7EE).withAlphaComponent(0.72),
-            dark: UIColor(hex: 0x0B1D21).withAlphaComponent(0.55)
-        )
-        static let glassBorder = Color.uiColor(
-            light: UIColor(hex: 0x1B1612).withAlphaComponent(0.08),
-            dark: UIColor(hex: 0xF3FFFD).withAlphaComponent(0.14)
-        )
+        static let glass = Color(uiColor: UIColor(hex: 0xFFF7EE).withAlphaComponent(0.72))
+        static let glassBorder = Color(uiColor: UIColor(hex: 0x1B1612).withAlphaComponent(0.08))
     }
 
     // MARK: - UIKit Colors (for UIAppearance)
 
     enum UIColors {
-        static let background = UIColor.dynamic(light: 0xFFF4E6, dark: 0x071316)
-        static let surface = UIColor.dynamic(light: 0xFFFCF7, dark: 0x0B1D21)
-        static let elevated = UIColor.dynamic(light: 0xFFFFFF, dark: 0x102A30)
-        static let cardBackground = UIColor.dynamic(light: 0xFFFEFB, dark: 0x0C2226)
-        static let border = UIColor.dynamic(light: 0xEED5C2, dark: 0x1C3B3F)
+        static let background = UIColor(hex: 0xFFF4E6)
+        static let surface = UIColor(hex: 0xFFFCF7)
+        static let elevated = UIColor(hex: 0xFFFFFF)
+        static let cardBackground = UIColor(hex: 0xFFFEFB)
+        static let border = UIColor(hex: 0xEED5C2)
 
-        static let textPrimary = UIColor.dynamic(light: 0x1B1612, dark: 0xF3FFFD)
-        static let textSecondary = UIColor.dynamic(light: 0x5B5148, dark: 0xB8E3DD)
-        static let textTertiary = UIColor.dynamic(light: 0x8C8075, dark: 0x7FB8B0)
+        static let textPrimary = UIColor(hex: 0x1B1612)
+        static let textSecondary = UIColor(hex: 0x5B5148)
+        static let textTertiary = UIColor(hex: 0x8C8075)
 
         static let accent = UIColor(hex: 0x125BFF)
-        static let accentSecondary = UIColor.dynamic(light: 0xFF5A1F, dark: 0x00D4FF)
+        static let accentSecondary = UIColor(hex: 0xFF5A1F)
     }
 
     static func configureGlobalAppearance() {
         let nav = UINavigationBarAppearance()
         nav.configureWithTransparentBackground()
         nav.backgroundEffect = UIBlurEffect(style: .systemUltraThinMaterial)
-        nav.backgroundColor = UIColor { traits in
-            let base = traits.userInterfaceStyle == .dark ? UIColor(hex: 0x0B1D21) : UIColor(hex: 0xFFFCF7)
-            return base.withAlphaComponent(traits.userInterfaceStyle == .dark ? 0.72 : 0.78)
-        }
+        nav.backgroundColor = UIColor(hex: 0xFFFCF7).withAlphaComponent(0.78)
         nav.shadowColor = UIColor.clear
 
         nav.titleTextAttributes = [
@@ -113,14 +98,8 @@ enum Theme {
         let tab = UITabBarAppearance()
         tab.configureWithTransparentBackground()
         tab.backgroundEffect = UIBlurEffect(style: .systemUltraThinMaterial)
-        tab.backgroundColor = UIColor { traits in
-            let base = traits.userInterfaceStyle == .dark ? UIColor(hex: 0x0B1D21) : UIColor(hex: 0xFFFCF7)
-            return base.withAlphaComponent(traits.userInterfaceStyle == .dark ? 0.60 : 0.74)
-        }
-        tab.shadowColor = UIColor { traits in
-            let base = traits.userInterfaceStyle == .dark ? UIColor(hex: 0x1C3B3F) : UIColor(hex: 0xEED5C2)
-            return base.withAlphaComponent(traits.userInterfaceStyle == .dark ? 0.62 : 0.45)
-        }
+        tab.backgroundColor = UIColor(hex: 0xFFFCF7).withAlphaComponent(0.74)
+        tab.shadowColor = UIColor(hex: 0xEED5C2).withAlphaComponent(0.45)
 
         let stacked = tab.stackedLayoutAppearance
         stacked.normal.iconColor = Theme.UIColors.textTertiary
@@ -235,7 +214,6 @@ struct GlassBackground: ViewModifier {
     var cornerRadius: CGFloat = Theme.CornerRadius.medium
     var elevation: CGFloat = 1
     @Environment(\.adaptiveLuminance) private var luminance
-    @Environment(\.colorScheme) private var colorScheme
     
     func body(content: Content) -> some View {
         let baseFill = Theme.Colors.glass
@@ -243,13 +221,13 @@ struct GlassBackground: ViewModifier {
         let border = Theme.Colors.glassBorder
             .blended(with: .white, amount: 0.05 + (luminance * 0.12))
         let shadowOpacity = min(0.35, 0.12 + Double(elevation) * 0.06)
-        let material: Material = colorScheme == .dark ? .ultraThinMaterial : .thinMaterial
+        let material: Material = .thinMaterial
         
         content
             .background(
                 RoundedRectangle(cornerRadius: cornerRadius)
                     .fill(material)
-                    .opacity(colorScheme == .dark ? 0.75 : 0.9)
+                    .opacity(0.9)
             )
             .background(
                 RoundedRectangle(cornerRadius: cornerRadius)
@@ -273,13 +251,12 @@ struct GlassBackground: ViewModifier {
 struct SoftCardBackground: ViewModifier {
     var cornerRadius: CGFloat = Theme.CornerRadius.large
     var elevation: CGFloat = 1
-    @Environment(\.colorScheme) private var colorScheme
 
     func body(content: Content) -> some View {
-        let shadowColor = colorScheme == .dark ? Color.black.opacity(0.32) : Color.black.opacity(0.08)
-        let shadowRadius = colorScheme == .dark ? 10 * elevation : 20 * elevation
-        let shadowY = colorScheme == .dark ? 8 * elevation : 12 * elevation
-        let innerHighlightOpacity = colorScheme == .dark ? 0.08 : 0.18
+        let shadowColor = Color.black.opacity(0.08)
+        let shadowRadius = 20 * elevation
+        let shadowY = 12 * elevation
+        let innerHighlightOpacity = 0.18
 
         content
             .background(
@@ -366,19 +343,6 @@ extension UIColor {
         self.init(red: r, green: g, blue: b, alpha: alpha)
     }
 
-    static func dynamic(light: UInt32, dark: UInt32, alpha: CGFloat = 1) -> UIColor {
-        UIColor { traits in
-            UIColor(hex: traits.userInterfaceStyle == .dark ? dark : light, alpha: alpha)
-        }
-    }
-}
-
-extension Color {
-    static func uiColor(light: UIColor, dark: UIColor) -> Color {
-        Color(uiColor: UIColor { traits in
-            traits.userInterfaceStyle == .dark ? dark : light
-        })
-    }
 }
 
 struct AnimateOnAppearModifier: ViewModifier {
