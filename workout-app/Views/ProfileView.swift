@@ -29,8 +29,7 @@ struct ProfileView: View {
                 .padding()
             }
         }
-        .navigationTitle("Profile")
-        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarHidden(true)
         .navigationDestination(isPresented: $showingWorkoutHistory) {
             WorkoutHistoryView(workouts: dataManager.workouts, showsBackButton: true)
         }

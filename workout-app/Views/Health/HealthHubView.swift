@@ -79,20 +79,9 @@ struct HealthHubView: View {
                 .padding(.horizontal, Theme.Spacing.lg)
             }
         }
-        .navigationTitle("Health")
-        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarHidden(true)
         .navigationDestination(item: $selectedMetric) { metric in
             HealthMetricDetailView(metric: metric, range: currentRange, rangeLabel: rangeLabel)
-        }
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button {
-                    triggerDailySync(force: true)
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                }
-                .disabled(healthManager.authorizationStatus != .authorized || healthManager.isDailySyncing)
-            }
         }
         .sheet(isPresented: $showingCustomRange) {
             HealthCustomRangeSheet(range: $customRange) {
@@ -139,11 +128,31 @@ struct HealthHubView: View {
 
                 Spacer()
 
-                if healthManager.isDailySyncing {
-                    ProgressView(value: healthManager.dailySyncProgress)
-                        .progressViewStyle(CircularProgressViewStyle())
-                        .tint(Theme.Colors.accent)
+                Button {
+                    triggerDailySync(force: true)
+                } label: {
+                    Group {
+                        if healthManager.isDailySyncing {
+                            ProgressView(value: healthManager.dailySyncProgress)
+                                .progressViewStyle(CircularProgressViewStyle())
+                                .tint(Theme.Colors.accent)
+                        } else {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundStyle(Theme.Colors.textPrimary)
+                        }
+                    }
+                    .frame(width: 44, height: 44)
+                    .background(
+                        Circle().fill(Theme.Colors.cardBackground)
+                    )
+                    .overlay(
+                        Circle().strokeBorder(Theme.Colors.border, lineWidth: 1)
+                    )
                 }
+                .buttonStyle(.plain)
+                .disabled(healthManager.authorizationStatus != .authorized || healthManager.isDailySyncing)
+                .accessibilityLabel("Refresh health data")
             }
 
             if let lastSync = healthManager.lastDailySyncDate {
