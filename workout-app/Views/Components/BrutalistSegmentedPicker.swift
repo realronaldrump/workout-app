@@ -18,7 +18,9 @@ struct BrutalistSegmentedPicker<SelectionValue: Hashable>: View {
                     Haptics.selection()
                 } label: {
                     Text(option.label)
-                        .font(Theme.Typography.captionBold)
+                        .font(Theme.Typography.metricLabel)
+                        .textCase(.uppercase)
+                        .tracking(0.8)
                         .foregroundStyle(selection == option.value ? Color.white : Theme.Colors.textPrimary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, Theme.Spacing.sm)
@@ -44,4 +46,3 @@ struct BrutalistSegmentedPicker<SelectionValue: Hashable>: View {
         .accessibilityLabel(Text(title))
     }
 }
-
