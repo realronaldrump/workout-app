@@ -40,7 +40,7 @@ struct InsightsStreamView: View {
                 Spacer()
 
                 if !insights.isEmpty {
-                    Text("n \(insights.count)")
+                    Text("\(insights.count) insights")
                         .font(Theme.Typography.caption)
                         .foregroundColor(Theme.Colors.accent)
                         .padding(.horizontal, Theme.Spacing.sm)
@@ -99,6 +99,6 @@ struct InsightMomentCard: View {
                 .foregroundColor(Theme.Colors.textSecondary)
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 2)
+        .softCard(elevation: 2)
     }
 }

@@ -30,9 +30,9 @@ struct WorkoutHistoryView: View {
                 LazyVStack(spacing: Theme.Spacing.xl) {
                     if workouts.isEmpty {
                         ContentUnavailableView(
-                            "history 0",
+                            "No history yet",
                             systemImage: "clock.badge.exclamationmark",
-                            description: Text("workouts 0")
+                            description: Text("Import from Strong or start a session to see workouts here.")
                         )
                         .padding(.top, 50)
                     } else {
@@ -109,7 +109,7 @@ struct WorkoutHistoryRow: View {
                     .foregroundStyle(Theme.Colors.textTertiary)
             }
             .padding(Theme.Spacing.lg)
-            .glassBackground(elevation: 2)
+            .softCard(elevation: 2)
         }
         .buttonStyle(PlainButtonStyle())
     }

@@ -339,9 +339,12 @@ class InsightsEngine: ObservableObject {
         
         guard !muscleGroupSets.isEmpty else { return nil }
         
-        // Check push/pull balance
-        let pushSets = muscleGroupSets[.push, default: 0]
-        let pullSets = muscleGroupSets[.pull, default: 0]
+        // Check push/pull balance (pushing vs pulling muscles)
+        let pushingGroups: Set<MuscleGroup> = [.chest, .shoulders, .triceps]
+        let pullingGroups: Set<MuscleGroup> = [.back, .biceps]
+        
+        let pushSets = muscleGroupSets.filter { pushingGroups.contains($0.key) }.values.reduce(0, +)
+        let pullSets = muscleGroupSets.filter { pullingGroups.contains($0.key) }.values.reduce(0, +)
         
         if pushSets > 0 && pullSets > 0 {
             let ratio = Double(pushSets) / Double(pullSets)
@@ -620,17 +623,49 @@ enum InsightType {
 }
 
 enum MuscleGroup: String, CaseIterable, Codable {
-    case push
-    case pull
-    case legs
+    case chest
+    case back
+    case shoulders
+    case biceps
+    case triceps
+    case quads
+    case hamstrings
+    case glutes
+    case calves
     case core
     case cardio
     
+    // Legacy cases for backward compatibility (not in allCases)
+    private static let legacyMappings: [String: MuscleGroup] = [
+        "push": .chest,
+        "pull": .back,
+        "legs": .quads
+    ]
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let rawValue = try container.decode(String.self)
+        
+        if let group = MuscleGroup(rawValue: rawValue) {
+            self = group
+        } else if let mapped = MuscleGroup.legacyMappings[rawValue] {
+            self = mapped
+        } else {
+            throw DecodingError.dataCorruptedError(in: container, debugDescription: "Unknown muscle group: \(rawValue)")
+        }
+    }
+    
     nonisolated var displayName: String {
         switch self {
-        case .push: return "Push (Chest/Shoulders/Triceps)"
-        case .pull: return "Pull (Back/Biceps)"
-        case .legs: return "Legs"
+        case .chest: return "Chest"
+        case .back: return "Back"
+        case .shoulders: return "Shoulders"
+        case .biceps: return "Biceps"
+        case .triceps: return "Triceps"
+        case .quads: return "Quads"
+        case .hamstrings: return "Hamstrings"
+        case .glutes: return "Glutes"
+        case .calves: return "Calves"
         case .core: return "Core"
         case .cardio: return "Cardio"
         }

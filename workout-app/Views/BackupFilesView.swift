@@ -94,6 +94,6 @@ struct BackupFileRow: View {
             .buttonStyle(PlainButtonStyle())
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 2)
+        .softCard(elevation: 2)
     }
 }

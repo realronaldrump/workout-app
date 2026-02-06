@@ -132,7 +132,7 @@ struct ExerciseDetailView: View {
                         ExerciseProgressChart(history: scopedHistory, chartType: selectedChart)
                             .frame(height: 250)
                             .padding(Theme.Spacing.lg)
-                            .glassBackground(elevation: 2)
+                            .softCard(elevation: 2)
                     }
 
                     ExerciseRangeBreakdown(history: scopedHistory)
@@ -224,6 +224,8 @@ struct ExerciseDetailView: View {
 struct ExerciseStatsCards: View {
     let exerciseName: String
     let history: [(date: Date, sets: [WorkoutSet])]
+
+    @State private var selectedStat: ExerciseStatKind?
     
     private var stats: (total: Int, maxWeight: Double, maxVolume: Double, avgReps: Double) {
         let allSets = history.flatMap { $0.sets }
@@ -243,29 +245,36 @@ struct ExerciseStatsCards: View {
                 title: "Total Sets",
                 value: "\(stats.total)",
                 icon: "number",
-                color: .blue
+                color: .blue,
+                onTap: { selectedStat = .totalSets }
             )
             
             StatCard(
                 title: "Max Weight",
                 value: "\(Int(stats.maxWeight)) lbs",
                 icon: "scalemass.fill",
-                color: .orange
+                color: .orange,
+                onTap: { selectedStat = .maxWeight }
             )
             
             StatCard(
                 title: "Max Volume",
                 value: formatVolume(stats.maxVolume),
                 icon: "chart.bar.fill",
-                color: .green
+                color: .green,
+                onTap: { selectedStat = .maxVolume }
             )
             
             StatCard(
                 title: "Avg Reps",
                 value: String(format: "%.1f", stats.avgReps),
                 icon: "repeat",
-                color: .purple
+                color: .purple,
+                onTap: { selectedStat = .avgReps }
             )
+        }
+        .navigationDestination(item: $selectedStat) { kind in
+            ExerciseStatDetailView(kind: kind, exerciseName: exerciseName, history: history)
         }
     }
     
@@ -324,10 +333,10 @@ struct ExerciseProgressChart: View {
     
     private var chartColor: Color {
         switch chartType {
-        case .weight: return Theme.Colors.push
-        case .volume: return Theme.Colors.legs
+        case .weight: return Theme.Colors.chest
+        case .volume: return Theme.Colors.quads
         case .oneRepMax: return Theme.Colors.gold
-        case .reps: return Theme.Colors.pull
+        case .reps: return Theme.Colors.back
         }
     }
 
@@ -653,7 +662,7 @@ struct PersonalRecordsView: View {
                             .foregroundColor(Theme.Colors.textTertiary)
                     }
                     .padding(Theme.Spacing.lg)
-                    .glassBackground(elevation: 2)
+                    .softCard(elevation: 2)
                 }
             }
         }
@@ -714,7 +723,7 @@ struct RecentSetsView: View {
                         }
                     }
                     .padding(Theme.Spacing.lg)
-                    .glassBackground(elevation: 2)
+                    .softCard(elevation: 2)
                 }
 
                 if canShowMore {
@@ -729,7 +738,7 @@ struct RecentSetsView: View {
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, Theme.Spacing.md)
                     }
-                    .glassBackground(elevation: 1)
+                    .softCard(elevation: 1)
                 }
             }
         }
@@ -813,7 +822,7 @@ struct ExerciseRangeBreakdown: View {
             .frame(height: 160)
             .chartXScale(domain: 0...1)
             .padding(Theme.Spacing.lg)
-            .glassBackground(elevation: 2)
+            .softCard(elevation: 2)
 
             if !intensityBuckets.isEmpty {
                 Chart(intensityBuckets) { bucket in
@@ -826,7 +835,7 @@ struct ExerciseRangeBreakdown: View {
                 .frame(height: 160)
                 .chartXScale(domain: 0...1)
                 .padding(Theme.Spacing.lg)
-                .glassBackground(elevation: 2)
+                .softCard(elevation: 2)
             }
         }
     }

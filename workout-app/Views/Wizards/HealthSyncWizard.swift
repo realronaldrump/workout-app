@@ -18,7 +18,7 @@ struct HealthSyncWizard: View {
                     HStack(spacing: 8) {
                         ForEach(0..<4) { index in
                             Capsule()
-                                .fill(index <= step ? Theme.Colors.error : Theme.Colors.surface) // Red/pink for Health
+                                .fill(index <= step ? Theme.Colors.error : Theme.Colors.border) // Red/pink for Health
                                 .frame(height: 4)
                                 .animation(.spring(), value: step)
                         }
@@ -69,7 +69,7 @@ struct HealthSyncWizard: View {
                     .font(Theme.Typography.title)
                     .foregroundStyle(Theme.Colors.textPrimary)
 
-                Text("All health data, read-only")
+                Text("Read-only and on-device.")
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Colors.textSecondary)
                     .multilineTextAlignment(.center)
@@ -85,8 +85,8 @@ struct HealthSyncWizard: View {
                     .font(Theme.Typography.headline)
                     .frame(maxWidth: .infinity)
                     .padding()
-                    .background(Color.white)
-                    .foregroundColor(.black)
+                    .background(Theme.Colors.accent)
+                    .foregroundColor(.white)
                     .cornerRadius(Theme.CornerRadius.large)
             }
             .padding(Theme.Spacing.xl)
@@ -105,7 +105,7 @@ struct HealthSyncWizard: View {
                 Text("Read Access")
                     .font(Theme.Typography.title2)
 
-                Text("read-only | on-device | private")
+                Text("Read-only, on-device, private.")
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Colors.textSecondary)
                     .multilineTextAlignment(.center)
@@ -133,7 +133,7 @@ struct HealthSyncWizard: View {
             
             ZStack {
                 Circle()
-                    .stroke(Theme.Colors.surface, lineWidth: 8)
+                    .stroke(Theme.Colors.border, lineWidth: 8)
                     .frame(width: 120, height: 120)
                 
                 Circle()
@@ -182,7 +182,7 @@ struct HealthSyncWizard: View {
             Text("Sync Complete")
                 .font(Theme.Typography.title)
             
-            Text("health data ready")
+            Text("Health data is ready.")
                 .font(Theme.Typography.body)
                 .foregroundStyle(Theme.Colors.textSecondary)
                 .multilineTextAlignment(.center)

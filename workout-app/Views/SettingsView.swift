@@ -23,14 +23,15 @@ struct SettingsView: View {
                 VStack(spacing: Theme.Spacing.sm) {
                     Image(systemName: "gearshape.fill")
                         .font(.system(size: 60))
-                        .foregroundStyle(Theme.Colors.surface)
+                        .foregroundStyle(.white)
                         .padding()
-                        .background(Theme.Colors.textPrimary)
+                        .background(Theme.Colors.accent)
                         .clipShape(Circle())
                         .shadow(radius: 10)
                     
                     Text("Settings")
                         .font(Theme.Typography.largeTitle)
+                        .foregroundStyle(Theme.Colors.textPrimary)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, Theme.Spacing.xl)
@@ -101,7 +102,7 @@ struct SettingsView: View {
                                     .foregroundStyle(Theme.Colors.textTertiary)
                             }
                             .padding()
-                            .glassBackground()
+                            .softCard()
                         }
                         .buttonStyle(PlainButtonStyle())
                     }
@@ -136,7 +137,7 @@ struct SettingsView: View {
                             .pickerStyle(.menu)
                         }
                         .padding()
-                        .glassBackground()
+                        .softCard()
                         
                         Divider().padding(.leading, 50)
                         
@@ -161,7 +162,7 @@ struct SettingsView: View {
                             .pickerStyle(.menu)
                         }
                         .padding()
-                        .glassBackground()
+                        .softCard()
                         
                         Divider().padding(.leading, 50)
                         
@@ -190,7 +191,7 @@ struct SettingsView: View {
                                     .foregroundStyle(Theme.Colors.textTertiary)
                             }
                             .padding()
-                            .glassBackground()
+                            .softCard()
                         }
                         .buttonStyle(PlainButtonStyle())
                         
@@ -220,7 +221,7 @@ struct SettingsView: View {
                                     .foregroundStyle(Theme.Colors.textTertiary)
                             }
                             .padding()
-                            .glassBackground()
+                            .softCard()
                         }
                         .buttonStyle(PlainButtonStyle())
                     }
@@ -233,13 +234,19 @@ struct SettingsView: View {
                         .foregroundStyle(.red)
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .glassBackground()
+                        .softCard()
                 }
                 
-                Text("Version 1.0.0")
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textTertiary)
-                    .padding(.top)
+                VStack(spacing: Theme.Spacing.xs) {
+                    Text("Davis's Big Beautiful Workout App")
+                        .font(Theme.Typography.captionBold)
+                        .foregroundStyle(Theme.Colors.textTertiary)
+
+                    Text("Version 1.0.0")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Colors.textTertiary)
+                }
+                .padding(.top, Theme.Spacing.sm)
                 }
                 .padding()
             }
@@ -320,7 +327,7 @@ struct SettingsRow: View {
                     .foregroundStyle(Theme.Colors.textTertiary)
             }
             .padding()
-            .glassBackground(elevation: 1)
+            .softCard(elevation: 1)
         }
     }
 }

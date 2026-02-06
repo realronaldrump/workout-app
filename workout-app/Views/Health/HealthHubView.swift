@@ -8,6 +8,7 @@ struct HealthHubView: View {
     @State private var showingCustomRange = false
     @State private var showingHealthWizard = false
     @State private var showAllDays = false
+    @State private var selectedMetric: HealthMetric?
     @State private var customRange: DateInterval = {
         let end = Date()
         let start = Calendar.current.date(byAdding: .day, value: -28, to: end) ?? end
@@ -80,6 +81,9 @@ struct HealthHubView: View {
         }
         .navigationTitle("Health")
         .navigationBarTitleDisplayMode(.inline)
+        .navigationDestination(item: $selectedMetric) { metric in
+            HealthMetricDetailView(metric: metric, range: currentRange, rangeLabel: rangeLabel)
+        }
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button {
@@ -193,7 +197,11 @@ struct HealthHubView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: Theme.Spacing.md) {
                     ForEach(summaryCards) { card in
-                        HealthSummaryCard(model: card)
+                        MetricTileButton(action: {
+                            selectedMetric = card.metric
+                        }) {
+                            HealthSummaryCard(model: card)
+                        }
                     }
                 }
             }
@@ -280,7 +288,7 @@ struct HealthHubView: View {
             .buttonStyle(.plain)
         }
         .padding(Theme.Spacing.xl)
-        .glassBackground(elevation: 1)
+        .softCard(elevation: 1)
     }
 
     private var unavailableCard: some View {
@@ -294,7 +302,7 @@ struct HealthHubView: View {
                 .foregroundStyle(Theme.Colors.textSecondary)
         }
         .padding(Theme.Spacing.xl)
-        .glassBackground(elevation: 1)
+        .softCard(elevation: 1)
     }
 
     private var emptyState: some View {
@@ -321,7 +329,7 @@ struct HealthHubView: View {
             .buttonStyle(.plain)
         }
         .padding(Theme.Spacing.xl)
-        .glassBackground(elevation: 1)
+        .softCard(elevation: 1)
     }
 
     private var summaryCards: [HealthSummaryCardModel] {
@@ -334,6 +342,7 @@ struct HealthHubView: View {
         return [
             HealthSummaryCardModel(
                 id: "avgSteps",
+                metric: .steps,
                 title: "Avg Steps",
                 value: avgSteps.map { "\(Int($0))" } ?? "--",
                 unit: "steps",
@@ -342,6 +351,7 @@ struct HealthHubView: View {
             ),
             HealthSummaryCardModel(
                 id: "avgSleep",
+                metric: .sleep,
                 title: "Avg Sleep",
                 value: avgSleep.map { String(format: "%.1f", $0) } ?? "--",
                 unit: "h",
@@ -350,6 +360,7 @@ struct HealthHubView: View {
             ),
             HealthSummaryCardModel(
                 id: "avgRestingHr",
+                metric: .restingHeartRate,
                 title: "Resting HR",
                 value: avgRestingHR.map { "\(Int($0))" } ?? "--",
                 unit: "bpm",
@@ -358,6 +369,7 @@ struct HealthHubView: View {
             ),
             HealthSummaryCardModel(
                 id: "avgHrv",
+                metric: .heartRateVariability,
                 title: "Avg HRV",
                 value: avgHRV.map { "\(Int($0))" } ?? "--",
                 unit: "ms",
@@ -366,6 +378,7 @@ struct HealthHubView: View {
             ),
             HealthSummaryCardModel(
                 id: "avgEnergy",
+                metric: .activeEnergy,
                 title: "Active Energy",
                 value: avgEnergy.map { "\(Int($0))" } ?? "--",
                 unit: "cal",
@@ -412,6 +425,7 @@ struct HealthHubView: View {
 
 private struct HealthSummaryCardModel: Identifiable {
     let id: String
+    let metric: HealthMetric
     let title: String
     let value: String
     let unit: String
@@ -445,7 +459,7 @@ private struct HealthSummaryCard: View {
         }
         .padding(Theme.Spacing.md)
         .frame(width: 160, alignment: .leading)
-        .glassBackground(elevation: 1)
+        .softCard(elevation: 1)
     }
 }
 
@@ -470,7 +484,7 @@ private struct HealthCategoryCard: View {
                 .foregroundStyle(Theme.Colors.textSecondary)
         }
         .padding(Theme.Spacing.md)
-        .glassBackground(elevation: 1)
+        .softCard(elevation: 1)
     }
 }
 
@@ -532,7 +546,7 @@ private struct DailyTimelineRow: View {
             }
         }
         .padding(Theme.Spacing.md)
-        .glassBackground(elevation: 1)
+        .softCard(elevation: 1)
     }
 }
 

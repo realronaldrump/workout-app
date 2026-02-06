@@ -74,17 +74,17 @@ struct StrongImportWizard: View {
         var message: String {
             switch self {
             case .idle:
-                return "awaiting file"
+                return "Awaiting file"
             case .reading:
-                return "reading csv"
+                return "Reading CSV"
             case .parsing:
-                return "parsing"
+                return "Parsing"
             case .processing:
-                return "processing"
+                return "Processing"
             case .saving:
-                return "saving"
+                return "Saving"
             case .complete:
-                return "complete"
+                return "Complete"
             }
         }
     }

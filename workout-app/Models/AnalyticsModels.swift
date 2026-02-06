@@ -140,7 +140,7 @@ struct ProgressContribution: Identifiable {
     let tint: Color
 }
 
-struct ChangeMetric: Identifiable {
+struct ChangeMetric: Identifiable, Hashable {
     let id = UUID()
     let title: String
     let current: Double
@@ -209,20 +209,73 @@ struct FatigueSummary {
     let averageRPE: Double?
 }
 
-struct CorrelationInsight: Identifiable {
+enum HabitFactorKind: String, Identifiable, CaseIterable {
+    case stress
+    case caffeine
+    case soreness
+    case mood
+    case timeOfDay
+
+    var id: String { rawValue }
+}
+
+enum CorrelationKind: String, Identifiable, CaseIterable {
+    case sleepVsOutput
+    case readinessVsOutput
+    case sleepVsTopExercise
+
+    var id: String { rawValue }
+}
+
+struct CorrelationInsight: Identifiable, Hashable {
     let id = UUID()
+    let kind: CorrelationKind
     let title: String
     let detail: String
     let correlation: Double
     let supportingCount: Int
+    let exerciseName: String?
 }
 
 struct HabitImpactInsight: Identifiable {
     let id = UUID()
+    let kind: HabitFactorKind
     let title: String
     let detail: String
     let value: String
     let tint: Color
+}
+
+struct HabitImpactBucket: Identifiable {
+    let id = UUID()
+    let label: String
+    let averageDensity: Double
+    let workoutCount: Int
+    let workouts: [Workout]
+}
+
+struct HabitImpactDetailModel {
+    let kind: HabitFactorKind
+    let buckets: [HabitImpactBucket]
+}
+
+struct CorrelationDetailPoint: Identifiable {
+    let id = UUID()
+    let workoutId: UUID
+    let date: Date
+    let x: Double
+    let y: Double
+}
+
+struct CorrelationDetailModel {
+    let kind: CorrelationKind
+    let points: [CorrelationDetailPoint]
+    let correlation: Double?
+    let supportingCount: Int
+    let title: String
+    let xLabel: String
+    let yLabel: String
+    let exerciseName: String?
 }
 
 struct RecoveryDebtSnapshot {

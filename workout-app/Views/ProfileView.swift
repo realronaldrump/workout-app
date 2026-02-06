@@ -8,6 +8,8 @@ struct ProfileView: View {
 
     @State private var showingHealthWizard = false
     @State private var showingHealthDashboard = false
+    @State private var showingWorkoutHistory = false
+    @State private var showingExerciseList = false
 
     @AppStorage("profileName") private var profileName = ""
     @AppStorage("weightUnit") private var weightUnit = "lbs"
@@ -29,6 +31,12 @@ struct ProfileView: View {
         }
         .navigationTitle("Profile")
         .navigationBarTitleDisplayMode(.inline)
+        .navigationDestination(isPresented: $showingWorkoutHistory) {
+            WorkoutHistoryView(workouts: dataManager.workouts)
+        }
+        .navigationDestination(isPresented: $showingExerciseList) {
+            ExerciseListView(dataManager: dataManager)
+        }
         .sheet(isPresented: $showingHealthWizard) {
             HealthSyncWizard(
                 isPresented: $showingHealthWizard,
@@ -66,13 +74,21 @@ struct ProfileView: View {
             }
 
             HStack(spacing: Theme.Spacing.lg) {
-                ProfileStat(title: "Workouts", value: "\(dataManager.workouts.count)")
-                ProfileStat(title: "Exercises", value: "\(uniqueExercisesCount)")
+                MetricTileButton(chevronPlacement: .bottomTrailing, action: {
+                    showingWorkoutHistory = true
+                }) {
+                    ProfileStat(title: "Workouts", value: "\(dataManager.workouts.count)")
+                }
+                MetricTileButton(chevronPlacement: .bottomTrailing, action: {
+                    showingExerciseList = true
+                }) {
+                    ProfileStat(title: "Exercises", value: "\(uniqueExercisesCount)")
+                }
             }
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, Theme.Spacing.xl)
-        .glassBackground()
+        .softCard()
     }
 
     private var personalInfoSection: some View {
@@ -161,7 +177,7 @@ struct ProfileView: View {
                     .pickerStyle(.menu)
                 }
                 .padding()
-                .glassBackground()
+                .softCard()
 
                 Divider().padding(.leading, 50)
 
@@ -185,7 +201,7 @@ struct ProfileView: View {
                     .pickerStyle(.menu)
                 }
                 .padding()
-                .glassBackground()
+                .softCard()
 
                 Divider().padding(.leading, 50)
 
@@ -270,7 +286,7 @@ private struct ProfileFieldRow: View {
             Spacer()
         }
         .padding()
-        .glassBackground()
+        .softCard()
     }
 }
 
@@ -310,7 +326,7 @@ private struct ProfileLinkRow: View {
                 .foregroundStyle(Theme.Colors.textTertiary)
         }
         .padding()
-        .glassBackground(elevation: 1)
+        .softCard(elevation: 1)
     }
 }
 

@@ -4,6 +4,7 @@ import SwiftUI
 /// Dark minimalist design with glassmorphism
 struct MuscleHeatmapView: View {
     let dataManager: WorkoutDataManager
+    var onOpen: (() -> Void)? = nil
     
     @State private var selectedMuscleGroup: MuscleGroup?
     @State private var isAppearing = false
@@ -25,6 +26,21 @@ struct MuscleHeatmapView: View {
                 Text("4 weeks")
                     .font(Theme.Typography.caption)
                     .foregroundColor(Theme.Colors.textTertiary)
+
+                if let onOpen {
+                    Button {
+                        Haptics.selection()
+                        onOpen()
+                    } label: {
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Theme.Colors.textTertiary)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Muscle balance details")
+                }
             }
             
             // Muscle group grid
@@ -33,7 +49,7 @@ struct MuscleHeatmapView: View {
                 GridItem(.flexible()),
                 GridItem(.flexible())
             ], spacing: Theme.Spacing.md) {
-                ForEach(MuscleGroup.allCases.filter { $0 != .core }, id: \.self) { group in
+                ForEach(MuscleGroup.allCases, id: \.self) { group in
                     MuscleGroupTile(
                         muscleGroup: group,
                         stats: muscleGroupStats[group],
@@ -46,14 +62,14 @@ struct MuscleHeatmapView: View {
                 }
             }
             
-            // Selected detail (drill down)
+            // Selected detail
             if let selected = selectedMuscleGroup, let stats = muscleGroupStats[selected] {
                 MuscleDetailView(muscleGroup: selected, stats: stats)
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(cornerRadius: Theme.CornerRadius.large, elevation: 2)
+        .softCard(cornerRadius: Theme.CornerRadius.large, elevation: 2)
         .opacity(isAppearing ? 1 : 0)
         .onAppear {
             withAnimation(Theme.Animation.spring) {
@@ -236,26 +252,38 @@ struct MuscleDetailView: View {
             }
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 2)
+        .softCard(elevation: 2)
     }
 }
 
 extension MuscleGroup {
     var iconName: String {
         switch self {
-        case .push: return "arrow.up.right"
-        case .pull: return "arrow.down.left"
-        case .legs: return "figure.walk"
+        case .chest: return "heart.fill"
+        case .back: return "arrow.left.and.right"
+        case .shoulders: return "figure.arms.open"
+        case .biceps: return "figure.strengthtraining.functional"
+        case .triceps: return "arrow.up.right"
+        case .quads: return "figure.walk"
+        case .hamstrings: return "figure.run"
+        case .glutes: return "figure.cooldown"
+        case .calves: return "shoeprints.fill"
         case .core: return "circle.hexagongrid"
-        case .cardio: return "heart"
+        case .cardio: return "heart.text.square"
         }
     }
     
     var shortName: String {
         switch self {
-        case .push: return "Push"
-        case .pull: return "Pull"
-        case .legs: return "Legs"
+        case .chest: return "Chest"
+        case .back: return "Back"
+        case .shoulders: return "Shoulders"
+        case .biceps: return "Biceps"
+        case .triceps: return "Triceps"
+        case .quads: return "Quads"
+        case .hamstrings: return "Hams"
+        case .glutes: return "Glutes"
+        case .calves: return "Calves"
         case .core: return "Core"
         case .cardio: return "Cardio"
         }

@@ -53,7 +53,7 @@ struct HighlightCardView: View {
         }
         .padding(Theme.Spacing.lg)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glassBackground(elevation: 2)
+        .softCard(elevation: 2)
     }
 }
 
@@ -91,6 +91,6 @@ struct EmptyHighlightsView: View {
             Spacer()
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 1)
+        .softCard(elevation: 1)
     }
 }

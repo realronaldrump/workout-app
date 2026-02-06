@@ -8,13 +8,12 @@ struct WorkoutAnnotationCard: View {
     @State private var soreness: SorenessLevel?
     @State private var caffeine: CaffeineIntake?
     @State private var mood: MoodLevel?
-    @State private var notes: String = ""
     @State private var didLoad = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             HStack {
-                Text("Notes")
+                Text("Check-in")
                     .font(Theme.Typography.title3)
                     .foregroundColor(Theme.Colors.textPrimary)
 
@@ -25,7 +24,6 @@ struct WorkoutAnnotationCard: View {
                     soreness = nil
                     caffeine = nil
                     mood = nil
-                    notes = ""
                     annotationsManager.clearNonGymFields(for: workout.id)
                 }
                 .font(Theme.Typography.caption)
@@ -61,30 +59,14 @@ struct WorkoutAnnotationCard: View {
                     Button("None", role: .destructive) { mood = nil }
                 }
             }
-
-            TextEditor(text: $notes)
-                .frame(minHeight: 90)
-                .padding(Theme.Spacing.sm)
-                .background(Theme.Colors.surface.opacity(0.5))
-                .cornerRadius(Theme.CornerRadius.medium)
-                .foregroundColor(Theme.Colors.textPrimary)
-                .overlay(
-                    Text(notes.isEmpty ? "Notes" : "")
-                        .font(Theme.Typography.caption)
-                        .foregroundColor(Theme.Colors.textTertiary)
-                        .padding(.horizontal, Theme.Spacing.md)
-                        .padding(.vertical, Theme.Spacing.sm),
-                    alignment: .topLeading
-                )
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 2)
+        .softCard(elevation: 2)
         .onAppear { loadIfNeeded() }
         .onChange(of: stress) { _, _ in save() }
         .onChange(of: soreness) { _, _ in save() }
         .onChange(of: caffeine) { _, _ in save() }
         .onChange(of: mood) { _, _ in save() }
-        .onChange(of: notes) { _, _ in save() }
     }
 
     private func loadIfNeeded() {
@@ -94,16 +76,19 @@ struct WorkoutAnnotationCard: View {
             soreness = annotation.soreness
             caffeine = annotation.caffeine
             mood = annotation.mood
-            notes = annotation.notes ?? ""
         }
         didLoad = true
     }
 
     private func save() {
-        let trimmed = notes.trimmingCharacters(in: .whitespacesAndNewlines)
-        let hasNonGymFields = stress != nil || soreness != nil || caffeine != nil || mood != nil || !trimmed.isEmpty
-        let existingGym = annotationsManager.annotation(for: workout.id)?.gymProfileId
-        if !hasNonGymFields {
+        let existing = annotationsManager.annotation(for: workout.id)
+        let hasNonGymFields = stress != nil || soreness != nil || caffeine != nil || mood != nil
+        let existingGym = existing?.gymProfileId
+        let existingNotes = existing?.notes
+        let existingNotesEmpty = existingNotes?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true
+        let shouldKeep = hasNonGymFields || !existingNotesEmpty
+
+        if !shouldKeep {
             if existingGym == nil {
                 annotationsManager.removeAnnotation(for: workout.id)
             } else {
@@ -113,7 +98,8 @@ struct WorkoutAnnotationCard: View {
                     soreness: nil,
                     caffeine: nil,
                     mood: nil,
-                    notes: nil
+                    // Preserve any legacy notes we might have in persisted storage.
+                    notes: existingNotes
                 )
             }
             return
@@ -125,7 +111,8 @@ struct WorkoutAnnotationCard: View {
             soreness: soreness,
             caffeine: caffeine,
             mood: mood,
-            notes: trimmed.isEmpty ? nil : trimmed
+            // Notes input was removed; keep any existing value rather than silently deleting it.
+            notes: existingNotes
         )
     }
 }

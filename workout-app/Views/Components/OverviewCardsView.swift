@@ -68,32 +68,43 @@ struct StatCard: View {
     var subtitle: String? = nil
     let icon: String
     let color: Color
+    var onTap: (() -> Void)? = nil
     
     @State private var isAppearing = false
     
     var body: some View {
+        Group {
+            if let onTap {
+                MetricTileButton(action: onTap) {
+                    cardContent
+                }
+            } else {
+                cardContent
+            }
+        }
+    }
+
+    private var cardContent: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            // Icon
             Image(systemName: icon)
                 .font(.system(size: 20, weight: .semibold))
                 .foregroundColor(color)
-            
+                .accessibilityHidden(true)
+
             Spacer()
-            
-            // Value with optional subtitle
+
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Text(value)
                     .font(Theme.Typography.metric)
                     .foregroundColor(Theme.Colors.textPrimary)
-                
+
                 if let subtitle = subtitle {
                     Text(subtitle)
                         .font(Theme.Typography.caption)
                         .foregroundColor(Theme.Colors.textSecondary)
                 }
             }
-            
-            // Title
+
             Text(title)
                 .font(Theme.Typography.caption)
                 .foregroundColor(Theme.Colors.textSecondary)
@@ -101,7 +112,7 @@ struct StatCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Theme.Spacing.lg)
         .frame(height: 120)
-        .glassBackground(elevation: 2)
+        .softCard(elevation: 2)
         .opacity(isAppearing ? 1 : 0)
         .offset(y: isAppearing ? 0 : 8)
         .onAppear {
@@ -109,5 +120,14 @@ struct StatCard: View {
                 isAppearing = true
             }
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityLabel)
+    }
+
+    private var accessibilityLabel: String {
+        if let subtitle {
+            return "\(title), \(value) \(subtitle)"
+        }
+        return "\(title), \(value)"
     }
 }

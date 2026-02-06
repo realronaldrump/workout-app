@@ -3,6 +3,7 @@ import Charts
 
 struct ExerciseBreakdownView: View {
     let workouts: [Workout]
+    var onTap: (() -> Void)? = nil
     
     private var exerciseData: [(name: String, volume: Double, frequency: Int)] {
         let allExercises = workouts.flatMap { $0.exercises }
@@ -24,33 +25,45 @@ struct ExerciseBreakdownView: View {
                 .foregroundColor(Theme.Colors.textPrimary)
             
             if !exerciseData.isEmpty {
-                Chart(exerciseData, id: \.name) { exercise in
-                    BarMark(
-                        x: .value("Volume", exercise.volume),
-                        y: .value("Exercise", exercise.name)
-                    )
-                    .foregroundStyle(Theme.Colors.accent)
-                    .annotation(position: .trailing) {
-                        Text(formatVolume(exercise.volume))
-                            .font(Theme.Typography.caption)
-                            .foregroundColor(Theme.Colors.textTertiary)
-                    }
-                }
-                .frame(height: CGFloat(exerciseData.count) * 40)
-                .chartXAxis {
-                    AxisMarks { value in
-                        AxisGridLine()
-                        AxisValueLabel {
-                            if let v = value.as(Double.self) {
-                                Text(formatVolume(v))
-                            }
+                Group {
+                    if let onTap {
+                        MetricTileButton(chevronPlacement: .bottomTrailing, action: onTap) {
+                            chartContainer
                         }
+                    } else {
+                        chartContainer
                     }
                 }
-                .padding(Theme.Spacing.lg)
-                .glassBackground(elevation: 2)
             }
         }
+    }
+
+    private var chartContainer: some View {
+        Chart(exerciseData, id: \.name) { exercise in
+            BarMark(
+                x: .value("Volume", exercise.volume),
+                y: .value("Exercise", exercise.name)
+            )
+            .foregroundStyle(Theme.Colors.accent)
+            .annotation(position: .trailing) {
+                Text(formatVolume(exercise.volume))
+                    .font(Theme.Typography.caption)
+                    .foregroundColor(Theme.Colors.textTertiary)
+            }
+        }
+        .frame(height: CGFloat(exerciseData.count) * 40)
+        .chartXAxis {
+            AxisMarks { value in
+                AxisGridLine()
+                AxisValueLabel {
+                    if let v = value.as(Double.self) {
+                        Text(formatVolume(v))
+                    }
+                }
+            }
+        }
+        .padding(Theme.Spacing.lg)
+        .softCard(elevation: 2)
     }
     
     private func formatVolume(_ volume: Double) -> String {

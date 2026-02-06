@@ -71,7 +71,7 @@ struct GymAssignmentCard: View {
                 .foregroundColor(isDeletedGym ? Theme.Colors.warning : Theme.Colors.textSecondary)
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 2)
+        .softCard(elevation: 2)
         .sheet(isPresented: $showingGymPicker) {
             GymSelectionSheet(
                 title: "Select Gym",

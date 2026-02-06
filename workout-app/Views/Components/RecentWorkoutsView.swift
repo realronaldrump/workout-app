@@ -71,7 +71,7 @@ struct WorkoutRowView: View {
                     .foregroundColor(Theme.Colors.textTertiary)
             }
             .padding(Theme.Spacing.lg)
-            .glassBackground(elevation: 2)
+            .softCard(elevation: 2)
         }
         .buttonStyle(PlainButtonStyle())
     }

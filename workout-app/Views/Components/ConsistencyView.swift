@@ -3,6 +3,7 @@ import SwiftUI
 struct ConsistencyView: View {
     let stats: WorkoutStats
     let workouts: [Workout]
+    var onTap: (() -> Void)? = nil
     
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
@@ -10,34 +11,46 @@ struct ConsistencyView: View {
                 .font(Theme.Typography.title2)
                 .foregroundColor(Theme.Colors.textPrimary)
             
-            VStack(spacing: Theme.Spacing.lg) {
-                HStack {
-                    VStack(alignment: .leading) {
-                        Text("Sessions/Wk")
-                            .font(Theme.Typography.subheadline)
-                            .foregroundColor(Theme.Colors.textSecondary)
-                        Text(String(format: "%.1f", stats.workoutsPerWeek))
-                            .font(Theme.Typography.metric)
-                            .foregroundColor(Theme.Colors.textPrimary)
+            Group {
+                if let onTap {
+                    MetricTileButton(action: onTap) {
+                        cardContent
                     }
-                    
-                    Spacer()
-                    
-                    VStack(alignment: .trailing) {
-                        Text("Longest")
-                            .font(Theme.Typography.subheadline)
-                            .foregroundColor(Theme.Colors.textSecondary)
-                        Text("\(stats.longestStreak) days")
-                            .font(Theme.Typography.metric)
-                            .foregroundColor(Theme.Colors.textPrimary)
-                    }
+                } else {
+                    cardContent
+                }
+            }
+        }
+    }
+
+    private var cardContent: some View {
+        VStack(spacing: Theme.Spacing.lg) {
+            HStack {
+                VStack(alignment: .leading) {
+                    Text("Sessions/Wk")
+                        .font(Theme.Typography.subheadline)
+                        .foregroundColor(Theme.Colors.textSecondary)
+                    Text(String(format: "%.1f", stats.workoutsPerWeek))
+                        .font(Theme.Typography.metric)
+                        .foregroundColor(Theme.Colors.textPrimary)
                 }
                 
-                CalendarHeatmap(workouts: workouts)
+                Spacer()
+                
+                VStack(alignment: .trailing) {
+                    Text("Longest")
+                        .font(Theme.Typography.subheadline)
+                        .foregroundColor(Theme.Colors.textSecondary)
+                    Text("\(stats.longestStreak) days")
+                        .font(Theme.Typography.metric)
+                        .foregroundColor(Theme.Colors.textPrimary)
+                }
             }
-            .padding(Theme.Spacing.lg)
-            .glassBackground(elevation: 2)
+            
+            CalendarHeatmap(workouts: workouts)
         }
+        .padding(Theme.Spacing.lg)
+        .softCard(elevation: 2)
     }
 }
 

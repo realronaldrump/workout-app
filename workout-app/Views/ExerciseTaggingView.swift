@@ -84,11 +84,17 @@ struct ExerciseTaggingView: View {
     
     func getIcon(for group: MuscleGroup) -> String {
         switch group {
-        case .push: return "arrow.up.forward.circle.fill"
-        case .pull: return "arrow.down.backward.circle.fill"
-        case .legs: return "figure.walk"
-        case .core: return "figure.core.training"
-        case .cardio: return "heart.text.square.fill"
+        case .chest: return "heart.fill"
+        case .back: return "arrow.left.and.right"
+        case .shoulders: return "figure.arms.open"
+        case .biceps: return "figure.strengthtraining.functional"
+        case .triceps: return "arrow.up.right"
+        case .quads: return "figure.walk"
+        case .hamstrings: return "figure.run"
+        case .glutes: return "figure.cooldown"
+        case .calves: return "shoeprints.fill"
+        case .core: return "circle.hexagongrid"
+        case .cardio: return "heart.text.square"
         }
     }
 }

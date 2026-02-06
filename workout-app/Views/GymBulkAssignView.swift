@@ -83,7 +83,7 @@ struct GymBulkAssignView: View {
                 .foregroundColor(Theme.Colors.textTertiary)
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 2)
+        .softCard(elevation: 2)
     }
 
     private var selectionHeader: some View {
@@ -114,7 +114,7 @@ struct GymBulkAssignView: View {
         }
         .padding(.horizontal, Theme.Spacing.md)
         .padding(.vertical, Theme.Spacing.sm)
-        .glassBackground(elevation: 1)
+        .softCard(elevation: 1)
         .sheet(isPresented: $showingAssignPicker) {
             GymSelectionSheet(
                 title: "Assign Gym",
@@ -173,7 +173,7 @@ struct GymBulkAssignView: View {
                 Spacer()
             }
             .padding(Theme.Spacing.lg)
-            .glassBackground(elevation: 1)
+            .softCard(elevation: 1)
         }
         .buttonStyle(PlainButtonStyle())
     }

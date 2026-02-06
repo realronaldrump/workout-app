@@ -6,11 +6,17 @@
 	<string>This app reads your health data (including sleep, activity, cardio, and recovery metrics) to personalize workout insights and progress tracking.</string>
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>This app does not write health data, but this permission is required by iOS.</string>
+	<key>CFBundleDisplayName</key>
+	<string>Davis's Big Beautiful Workout App</string>
 	<key>CFBundleIdentifier</key>
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>UIRequiredDeviceCapabilities</key>
 	<array>
 		<string>arm64</string>
+	</array>
+	<key>UIAppFonts</key>
+	<array>
+		<string>BebasNeue-Regular.ttf</string>
 	</array>
 	<key>NSUbiquitousContainers</key>
 	<dict>
@@ -19,7 +25,7 @@
 			<key>NSUbiquitousContainerIsDocumentScopePublic</key>
 			<true/>
 			<key>NSUbiquitousContainerName</key>
-			<string>Workout Analytics</string>
+			<string>Davis's Big Beautiful Workout App</string>
 			<key>NSUbiquitousContainerSupportedFolderLevels</key>
 			<string>Any</string>
 		</dict>
@@ -27,7 +33,7 @@
 	<key>UILaunchScreen</key>
 	<dict>
 		<key>UIColorName</key>
-		<string>AccentColor</string>
+		<string>LaunchBackground</string>
 		<key>UIImageName</key>
 		<string>AppIcon</string>
 	</dict>

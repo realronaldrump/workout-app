@@ -8,7 +8,10 @@ struct HealthDashboardView: View {
 
     @State private var selectedRange: HealthTimeRange = .fourWeeks
     @State private var selectedCategory: HealthCategory = .all
-    @State private var selectedDetail: HealthMetricDetail?
+    @State private var selectedDetailKind: HealthMetricKind?
+    @State private var selectedWorkout: Workout?
+    @State private var showingWorkoutsInRange = false
+    @State private var selectedRecoverySection: RecoveryDetailSection?
     @State private var showingCustomRange = false
     @State private var customRange: DateInterval = {
         let end = Date()
@@ -120,8 +123,35 @@ struct HealthDashboardView: View {
                     }
                 }
             }
-            .sheet(item: $selectedDetail) { detail in
-                HealthMetricDetailSheet(detail: detail, rangeLabel: rangeLabel)
+            .navigationDestination(item: $selectedDetailKind) { kind in
+                if let detail = detailFor(kind) {
+                    HealthMetricDetailScreen(detail: detail, rangeLabel: rangeLabel)
+                } else {
+                    VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+                        Text(kind.title)
+                            .font(Theme.Typography.title2)
+                            .foregroundStyle(Theme.Colors.textPrimary)
+
+                        Text("Not enough data in this range yet.")
+                            .font(Theme.Typography.body)
+                            .foregroundStyle(Theme.Colors.textSecondary)
+                    }
+                    .padding(Theme.Spacing.xl)
+                }
+            }
+            .navigationDestination(item: $selectedWorkout) { workout in
+                WorkoutDetailView(workout: workout)
+            }
+            .navigationDestination(item: $selectedRecoverySection) { section in
+                RecoveryDetailView(
+                    rangeLabel: rangeLabel,
+                    workouts: currentWorkouts,
+                    healthData: currentHealthDataStore,
+                    initialSection: section
+                )
+            }
+            .navigationDestination(isPresented: $showingWorkoutsInRange) {
+                WorkoutsInRangeView(workouts: currentWorkouts, rangeLabel: rangeLabel)
             }
             .sheet(isPresented: $showingCustomRange) {
                 CustomRangeSheet(range: $customRange) {
@@ -224,8 +254,12 @@ struct HealthDashboardView: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: Theme.Spacing.md) {
                         ForEach(cards) { card in
-                            HighlightCard(model: card)
-                                .frame(width: 240)
+                            MetricTileButton(action: {
+                                handleHighlightTap(card)
+                            }) {
+                                HighlightCard(model: card)
+                            }
+                            .frame(width: 240)
                         }
                     }
                 }
@@ -250,7 +284,11 @@ struct HealthDashboardView: View {
 
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 160), spacing: Theme.Spacing.md)], spacing: Theme.Spacing.md) {
                 ForEach(cards) { card in
-                    MetricSummaryCard(model: card)
+                    MetricTileButton(chevronPlacement: .bottomTrailing, action: {
+                        handleQuickStatTap(card)
+                    }) {
+                        MetricSummaryCard(model: card)
+                    }
                 }
             }
         }
@@ -283,7 +321,7 @@ struct HealthDashboardView: View {
                 points: summary.points,
                 color: detail.kind.tint
             ) {
-                selectedDetail = detail
+                selectedDetailKind = kind
             }
         } else {
             EmptyMetricCard(
@@ -306,12 +344,65 @@ struct HealthDashboardView: View {
                 )
             } else {
                 ForEach(Array(currentHealthData.prefix(5)), id: \.workoutId) { data in
-                    WorkoutHealthCard(
-                        healthData: data,
-                        workout: workoutStore[data.workoutId]
-                    )
+                    if let workout = workoutStore[data.workoutId] {
+                        MetricTileButton(action: {
+                            selectedWorkout = workout
+                        }) {
+                            WorkoutHealthCard(
+                                healthData: data,
+                                workout: workout
+                            )
+                        }
+                    } else {
+                        WorkoutHealthCard(
+                            healthData: data,
+                            workout: nil
+                        )
+                    }
                 }
             }
+        }
+    }
+
+    private func handleHighlightTap(_ card: HighlightCardModel) {
+        switch card.category {
+        case .recovery:
+            selectedRecoverySection = .score
+        case .sleep:
+            selectedDetailKind = .sleep
+        case .activity:
+            selectedDetailKind = .activity
+        case .heart:
+            selectedDetailKind = .heartRate
+        case .cardio:
+            selectedDetailKind = .cardio
+        case .body:
+            selectedDetailKind = .body
+        case .sessions:
+            showingWorkoutsInRange = true
+        case .all:
+            break
+        }
+    }
+
+    private func handleQuickStatTap(_ card: MetricSummaryModel) {
+        switch card.category {
+        case .sessions:
+            showingWorkoutsInRange = true
+        case .heart:
+            selectedDetailKind = .heartRate
+        case .sleep:
+            selectedDetailKind = .sleep
+        case .activity:
+            selectedDetailKind = .activity
+        case .cardio:
+            selectedDetailKind = .cardio
+        case .body:
+            selectedDetailKind = .body
+        case .recovery:
+            selectedRecoverySection = card.title.contains("Debt") ? .debt : .score
+        case .all:
+            break
         }
     }
 
@@ -333,7 +424,7 @@ struct HealthDashboardView: View {
                 .padding(.horizontal)
         }
         .padding(Theme.Spacing.xl)
-        .glassBackground(elevation: 1)
+        .softCard(elevation: 1)
     }
 
     private var rangeEmptyState: some View {
@@ -348,7 +439,7 @@ struct HealthDashboardView: View {
                 .multilineTextAlignment(.center)
         }
         .padding(Theme.Spacing.xl)
-        .glassBackground(elevation: 1)
+        .softCard(elevation: 1)
     }
 
     // MARK: - Models
@@ -734,7 +825,7 @@ enum HealthCategory: String, CaseIterable, Identifiable {
     }
 }
 
-enum HealthMetricKind: String, Identifiable {
+enum HealthMetricKind: String, Identifiable, Hashable {
     case heartRate
     case sleep
     case activity
@@ -845,7 +936,7 @@ private struct HighlightCard: View {
                 .lineLimit(2)
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 2)
+        .softCard(elevation: 2)
     }
 }
 
@@ -883,7 +974,7 @@ private struct MetricSummaryCard: View {
                 .lineLimit(2)
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 2)
+        .softCard(elevation: 2)
     }
 }
 
@@ -896,7 +987,7 @@ private struct TrendCard: View {
     let onTap: () -> Void
 
     var body: some View {
-        Button(action: onTap) {
+        MetricTileButton(chevronPlacement: .bottomTrailing, action: onTap) {
             VStack(alignment: .leading, spacing: Theme.Spacing.md) {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
@@ -924,21 +1015,10 @@ private struct TrendCard: View {
                 .chartYAxis(.hidden)
                 .chartXAxis(.hidden)
                 .frame(height: 70)
-
-                HStack {
-                    Text("View details")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.caption)
-                        .foregroundStyle(Theme.Colors.textTertiary)
-                }
             }
             .padding(Theme.Spacing.lg)
-            .glassBackground(elevation: 2)
+            .softCard(elevation: 2)
         }
-        .buttonStyle(.plain)
     }
 }
 
@@ -956,7 +1036,7 @@ private struct EmptyMetricCard: View {
                 .foregroundStyle(Theme.Colors.textSecondary)
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 1)
+        .softCard(elevation: 1)
     }
 }
 
@@ -1030,11 +1110,10 @@ private struct CustomRangeSheet: View {
     }
 }
 
-private struct HealthMetricDetailSheet: View {
+private struct HealthMetricDetailScreen: View {
     let detail: HealthMetricDetail
     let rangeLabel: String
 
-    @Environment(\.dismiss) var dismiss
     @State private var selectedSeriesLabel: String
 
     init(detail: HealthMetricDetail, rangeLabel: String) {
@@ -1052,44 +1131,38 @@ private struct HealthMetricDetailSheet: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ZStack {
-                AdaptiveBackground()
+        ZStack {
+            AdaptiveBackground()
 
-                ScrollView {
-                    VStack(alignment: .leading, spacing: Theme.Spacing.xxl) {
-                        headerSection
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.xxl) {
+                    headerSection
 
-                        if detail.series.count > 1 {
-                            Picker("Series", selection: $selectedSeriesLabel) {
-                                ForEach(detail.series) { series in
-                                    Text(series.label).tag(series.label)
-                                }
+                    if detail.series.count > 1 {
+                        Picker("Series", selection: $selectedSeriesLabel) {
+                            ForEach(detail.series) { series in
+                                Text(series.label).tag(series.label)
                             }
-                            .pickerStyle(.segmented)
                         }
-
-                        if let series = activeSeries {
-                            chartSection(for: series)
-                            statsSection(for: series)
-                            dataPointsSection(for: series)
-                        } else {
-                            EmptyMetricCard(title: "No data", message: "No points for this metric yet.")
-                        }
-
-                        explanationSection
+                        .pickerStyle(.segmented)
                     }
-                    .padding(Theme.Spacing.xl)
+
+                    if let series = activeSeries {
+                        chartSection(for: series)
+                        statsSection(for: series)
+                        dataPointsSection(for: series)
+                    } else {
+                        EmptyMetricCard(title: "No data", message: "No points for this metric yet.")
+                    }
+
+                    explanationSection
                 }
-            }
-            .navigationTitle(detail.kind.title)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") { dismiss() }
-                }
+                .padding(.vertical, Theme.Spacing.xxl)
+                .padding(.horizontal, Theme.Spacing.lg)
             }
         }
+        .navigationTitle(detail.kind.title)
+        .navigationBarTitleDisplayMode(.inline)
     }
 
     private var headerSection: some View {
@@ -1116,7 +1189,7 @@ private struct HealthMetricDetailSheet: View {
             dateText: { $0.formatted(date: .abbreviated, time: .omitted) }
         )
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 2)
+        .softCard(elevation: 2)
     }
 
 	    private func statsSection(for series: HealthMetricSeries) -> some View {
@@ -1178,7 +1251,7 @@ private struct HealthMetricDetailSheet: View {
                         .foregroundStyle(Theme.Colors.textPrimary)
                 }
                 .padding(Theme.Spacing.md)
-                .glassBackground(elevation: 1)
+                .softCard(elevation: 1)
             }
         }
     }
@@ -1193,7 +1266,7 @@ private struct HealthMetricDetailSheet: View {
                 .foregroundStyle(Theme.Colors.textSecondary)
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 1)
+        .softCard(elevation: 1)
     }
 
 	    private func formatValue(_ value: Double, unit: String) -> String {
@@ -1268,7 +1341,7 @@ private struct HealthMetricDetailSheet: View {
 	                .foregroundStyle(Theme.Colors.textPrimary)
 	        }
         .padding(Theme.Spacing.md)
-        .glassBackground(elevation: 1)
+        .softCard(elevation: 1)
     }
 }
 
@@ -1311,7 +1384,7 @@ private struct WorkoutHealthCard: View {
             }
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 2)
+        .softCard(elevation: 2)
     }
 
     private func metricPill(icon: String, value: String, unit: String, color: Color) -> some View {

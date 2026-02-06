@@ -181,7 +181,7 @@ struct ExerciseRowView: View {
                 .foregroundColor(Theme.Colors.textTertiary)
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 2)
+        .softCard(elevation: 2)
     }
     
     private func formatWeight(_ weight: Double) -> String {

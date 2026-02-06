@@ -12,6 +12,9 @@ struct PerformanceLabView: View {
     @State private var selectedCategory: ProgressContributionCategory = .exercise
     @State private var selectedWorkout: Workout?
     @State private var selectedExercise: ExerciseSelection?
+    @State private var selectedChangeMetric: ChangeMetric?
+    @State private var selectedHabitFactor: HabitFactorKind?
+    @State private var selectedCorrelation: CorrelationInsight?
 
     private var workouts: [Workout] {
         dataManager.workouts
@@ -68,6 +71,15 @@ struct PerformanceLabView: View {
                 gymProfilesManager: gymProfilesManager
             )
         }
+        .navigationDestination(item: $selectedChangeMetric) { metric in
+            ChangeMetricDetailView(metric: metric, windowDays: changeWindow, workouts: workouts)
+        }
+        .navigationDestination(item: $selectedHabitFactor) { kind in
+            HabitImpactDetailView(kind: kind, workouts: workouts, annotations: annotationsManager.annotations)
+        }
+        .navigationDestination(item: $selectedCorrelation) { insight in
+            CorrelationDetailView(insight: insight, workouts: workouts, healthData: healthManager.healthDataStore)
+        }
     }
 
     private var header: some View {
@@ -82,7 +94,7 @@ struct PerformanceLabView: View {
     }
 
     private var headerSummary: String {
-        "sessions \(workouts.count) | health \(healthManager.healthDataStore.count) | notes \(annotationsManager.annotations.count)"
+        "\(workouts.count) sessions, \(healthManager.healthDataStore.count) health snapshots, \(annotationsManager.annotations.count) notes."
     }
 
     private var progressMapSection: some View {
@@ -117,11 +129,11 @@ struct PerformanceLabView: View {
             .pickerStyle(.segmented)
 
             if top.isEmpty {
-                Text("n < 2")
+                Text("Not enough data yet.")
                     .font(Theme.Typography.body)
                     .foregroundColor(Theme.Colors.textSecondary)
                     .padding(Theme.Spacing.lg)
-                    .glassBackground(elevation: 2)
+                    .softCard(elevation: 2)
             } else {
                 Chart(top) { item in
                     BarMark(
@@ -133,7 +145,7 @@ struct PerformanceLabView: View {
                 .chartXAxis { AxisMarks(position: .bottom) }
                 .frame(height: CGFloat(top.count) * 28 + 40)
                 .padding(Theme.Spacing.lg)
-                .glassBackground(elevation: 2)
+                .softCard(elevation: 2)
 
                 if selectedCategory == .exercise {
                     ForEach(top) { item in
@@ -145,7 +157,7 @@ struct PerformanceLabView: View {
                                     Text(item.name)
                                         .font(Theme.Typography.headline)
                                         .foregroundColor(Theme.Colors.textPrimary)
-                                    Text("delta \(formatDelta(item.delta)) 1RM")
+                                    Text("Change \(formatDelta(item.delta)) 1RM")
                                         .font(Theme.Typography.caption)
                                         .foregroundColor(Theme.Colors.textSecondary)
                                 }
@@ -155,7 +167,7 @@ struct PerformanceLabView: View {
                                     .foregroundColor(Theme.Colors.textTertiary)
                             }
                             .padding(Theme.Spacing.lg)
-                            .glassBackground(elevation: 1)
+                            .softCard(elevation: 1)
                         }
                         .buttonStyle(PlainButtonStyle())
                     }
@@ -181,7 +193,7 @@ struct PerformanceLabView: View {
                                     .foregroundColor(Theme.Colors.textTertiary)
                             }
                             .padding(Theme.Spacing.lg)
-                            .glassBackground(elevation: 1)
+                            .softCard(elevation: 1)
                         }
                         .buttonStyle(PlainButtonStyle())
                     }
@@ -216,7 +228,11 @@ struct PerformanceLabView: View {
 
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: Theme.Spacing.md) {
                 ForEach(changes) { metric in
-                    ChangeMetricCard(metric: metric)
+                    MetricTileButton(action: {
+                        selectedChangeMetric = metric
+                    }) {
+                        ChangeMetricCard(metric: metric)
+                    }
                 }
             }
 
@@ -244,7 +260,7 @@ struct PerformanceLabView: View {
                                 .foregroundColor(Theme.Colors.textTertiary)
                         }
                         .padding(Theme.Spacing.lg)
-                        .glassBackground(elevation: 1)
+                        .softCard(elevation: 1)
                     }
                     .buttonStyle(PlainButtonStyle())
                 }
@@ -266,7 +282,7 @@ struct PerformanceLabView: View {
                     .font(Theme.Typography.body)
                     .foregroundColor(Theme.Colors.textSecondary)
                     .padding(Theme.Spacing.lg)
-                    .glassBackground(elevation: 2)
+                    .softCard(elevation: 2)
             } else {
                 ForEach([ConsistencyIssueType.missedDay, .shortenedSession, .skippedExercises], id: \.self) { type in
                     if let bucket = grouped[type] {
@@ -295,7 +311,7 @@ struct PerformanceLabView: View {
                     .font(Theme.Typography.body)
                     .foregroundColor(Theme.Colors.textSecondary)
                     .padding(Theme.Spacing.lg)
-                    .glassBackground(elevation: 2)
+                    .softCard(elevation: 2)
             } else {
                 Chart(series) { point in
                     LineMark(
@@ -311,7 +327,7 @@ struct PerformanceLabView: View {
                 }
                 .frame(height: 180)
                 .padding(Theme.Spacing.lg)
-                .glassBackground(elevation: 2)
+                .softCard(elevation: 2)
 
                 Text("Top Density")
                     .font(Theme.Typography.title3)
@@ -337,7 +353,7 @@ struct PerformanceLabView: View {
                                     .foregroundColor(Theme.Colors.textTertiary)
                             }
                             .padding(Theme.Spacing.lg)
-                            .glassBackground(elevation: 1)
+                            .softCard(elevation: 1)
                         }
                         .buttonStyle(PlainButtonStyle())
                     }
@@ -381,7 +397,7 @@ struct PerformanceLabView: View {
             .chartXScale(domain: 0...1)
             .frame(height: 180)
             .padding(Theme.Spacing.lg)
-            .glassBackground(elevation: 2)
+            .softCard(elevation: 2)
 
             if !intensity.isEmpty {
                 Chart(intensity) { bucket in
@@ -394,7 +410,7 @@ struct PerformanceLabView: View {
                 .chartXScale(domain: 0...1)
                 .frame(height: 180)
                 .padding(Theme.Spacing.lg)
-                .glassBackground(elevation: 2)
+                .softCard(elevation: 2)
             }
         }
     }
@@ -415,28 +431,32 @@ struct PerformanceLabView: View {
                     .font(Theme.Typography.body)
                     .foregroundColor(Theme.Colors.textSecondary)
                     .padding(Theme.Spacing.lg)
-                    .glassBackground(elevation: 2)
+                    .softCard(elevation: 2)
             } else {
                 ForEach(insights) { insight in
-                    HStack(spacing: Theme.Spacing.md) {
-                        Circle()
-                            .fill(insight.tint)
-                            .frame(width: 10, height: 10)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(insight.title)
-                                .font(Theme.Typography.headline)
+                    MetricTileButton(action: {
+                        selectedHabitFactor = insight.kind
+                    }) {
+                        HStack(spacing: Theme.Spacing.md) {
+                            Circle()
+                                .fill(insight.tint)
+                                .frame(width: 10, height: 10)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(insight.title)
+                                    .font(Theme.Typography.headline)
+                                    .foregroundColor(Theme.Colors.textPrimary)
+                                Text(insight.detail)
+                                    .font(Theme.Typography.caption)
+                                    .foregroundColor(Theme.Colors.textSecondary)
+                            }
+                            Spacer()
+                            Text(insight.value)
+                                .font(Theme.Typography.captionBold)
                                 .foregroundColor(Theme.Colors.textPrimary)
-                            Text(insight.detail)
-                                .font(Theme.Typography.caption)
-                                .foregroundColor(Theme.Colors.textSecondary)
                         }
-                        Spacer()
-                        Text(insight.value)
-                            .font(Theme.Typography.captionBold)
-                            .foregroundColor(Theme.Colors.textPrimary)
+                        .padding(Theme.Spacing.lg)
+                        .softCard(elevation: 1)
                     }
-                    .padding(Theme.Spacing.lg)
-                    .glassBackground(elevation: 1)
                 }
             }
         }
@@ -458,22 +478,26 @@ struct PerformanceLabView: View {
                     .font(Theme.Typography.body)
                     .foregroundColor(Theme.Colors.textSecondary)
                     .padding(Theme.Spacing.lg)
-                    .glassBackground(elevation: 2)
+                    .softCard(elevation: 2)
             } else {
                 ForEach(insights) { insight in
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(insight.title)
-                            .font(Theme.Typography.headline)
-                            .foregroundColor(Theme.Colors.textPrimary)
-                        Text(insight.detail)
-                            .font(Theme.Typography.caption)
-                            .foregroundColor(Theme.Colors.textSecondary)
-                        Text("r=\(String(format: "%.2f", insight.correlation)) | n=\(insight.supportingCount)")
-                            .font(Theme.Typography.caption)
-                            .foregroundColor(Theme.Colors.textTertiary)
+                    MetricTileButton(action: {
+                        selectedCorrelation = insight
+                    }) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(insight.title)
+                                .font(Theme.Typography.headline)
+                                .foregroundColor(Theme.Colors.textPrimary)
+                            Text(insight.detail)
+                                .font(Theme.Typography.caption)
+                                .foregroundColor(Theme.Colors.textSecondary)
+                            Text("r=\(String(format: "%.2f", insight.correlation)) | n=\(insight.supportingCount)")
+                                .font(Theme.Typography.caption)
+                                .foregroundColor(Theme.Colors.textTertiary)
+                        }
+                        .padding(Theme.Spacing.lg)
+                        .softCard(elevation: 1)
                     }
-                    .padding(Theme.Spacing.lg)
-                    .glassBackground(elevation: 1)
                 }
             }
         }
@@ -489,16 +513,16 @@ struct PerformanceLabView: View {
         .sorted { $0.delta > $1.delta }
 
         return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Top delta")
+            Text("Most improved")
                 .font(Theme.Typography.title2)
                 .foregroundColor(Theme.Colors.textPrimary)
 
             if improvements.isEmpty {
-                Text("n 0")
+                Text("No improvements yet.")
                     .font(Theme.Typography.body)
                     .foregroundColor(Theme.Colors.textSecondary)
                     .padding(Theme.Spacing.lg)
-                    .glassBackground(elevation: 2)
+                    .softCard(elevation: 2)
             } else {
                 ForEach(improvements.prefix(6)) { item in
                     Button {
@@ -509,7 +533,7 @@ struct PerformanceLabView: View {
                                 Text(item.name)
                                     .font(Theme.Typography.headline)
                                     .foregroundColor(Theme.Colors.textPrimary)
-                                Text("delta +\(Int(item.delta)) 1RM | \(progressWindow)w")
+                                Text("Change +\(Int(item.delta)) 1RM over \(progressWindow) weeks")
                                     .font(Theme.Typography.caption)
                                     .foregroundColor(Theme.Colors.textSecondary)
                             }
@@ -519,7 +543,7 @@ struct PerformanceLabView: View {
                                 .foregroundColor(Theme.Colors.textTertiary)
                         }
                         .padding(Theme.Spacing.lg)
-                        .glassBackground(elevation: 1)
+                        .softCard(elevation: 1)
                     }
                     .buttonStyle(PlainButtonStyle())
                 }
@@ -561,7 +585,7 @@ private struct ChangeMetricCard: View {
                 .foregroundColor(metric.isPositive ? Theme.Colors.success : Theme.Colors.error)
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 1)
+        .softCard(elevation: 1)
     }
 
     private var changeLabel: String {
@@ -609,7 +633,7 @@ private struct ConsistencyIssueSection: View {
                         }
                     }
                     .padding(Theme.Spacing.lg)
-                    .glassBackground(elevation: 1)
+                    .softCard(elevation: 1)
                 }
                 .buttonStyle(PlainButtonStyle())
             }
@@ -655,7 +679,7 @@ private struct WeeklyMuscleVolumeChart: View {
                 .font(Theme.Typography.body)
                 .foregroundColor(Theme.Colors.textSecondary)
                 .padding(Theme.Spacing.lg)
-                .glassBackground(elevation: 2)
+                .softCard(elevation: 2)
         } else {
             Chart(points) { point in
                 BarMark(
@@ -671,7 +695,7 @@ private struct WeeklyMuscleVolumeChart: View {
             }
             .frame(height: 200)
             .padding(Theme.Spacing.lg)
-            .glassBackground(elevation: 2)
+            .softCard(elevation: 2)
         }
     }
 }
@@ -719,7 +743,7 @@ private struct WeeklyExerciseVolumeChart: View {
                 .font(Theme.Typography.body)
                 .foregroundColor(Theme.Colors.textSecondary)
                 .padding(Theme.Spacing.lg)
-                .glassBackground(elevation: 2)
+                .softCard(elevation: 2)
         } else {
             Chart(points) { point in
                 LineMark(
@@ -735,7 +759,7 @@ private struct WeeklyExerciseVolumeChart: View {
             }
             .frame(height: 200)
             .padding(Theme.Spacing.lg)
-            .glassBackground(elevation: 2)
+            .softCard(elevation: 2)
         }
     }
 }

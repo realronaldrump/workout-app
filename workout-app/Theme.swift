@@ -1,51 +1,81 @@
 import SwiftUI
 import UIKit
 
-/// Centralized theme system - Dark-ish, Bold, Minimalist with Glassmorphism
+/// Centralized theme system - Bright Studio (light-first), Bold, Minimalist with Hybrid surfaces
 enum Theme {
     
     // MARK: - Colors
     
     enum Colors {
-        // Background hierarchy (dark-ish, not pure black)
-        static let background = Color(red: 0.08, green: 0.08, blue: 0.10)
-        static let surface = Color(red: 0.12, green: 0.12, blue: 0.14)
-        static let elevated = Color(red: 0.16, green: 0.16, blue: 0.18)
-        static let cardBackground = Color(red: 0.14, green: 0.14, blue: 0.16)
+        // Bright Studio palette (light-first) with a coherent dark companion.
+        //
+        // Light:
+        // - paper: #FBF7F2
+        // - surface: #FFFDFB
+        // - ink: #101317
+        // - electric: #125BFF
+        // - coral: #FF4D2E
+        //
+        // Dark:
+        // - background: #0D1117
+        // - surface: #111827
+        // - ink: #F3F6FF
+        static let background = Color.uiColor(light: UIColor(hex: 0xFBF7F2), dark: UIColor(hex: 0x0D1117))
+        static let surface = Color.uiColor(light: UIColor(hex: 0xFFFDFB), dark: UIColor(hex: 0x111827))
+        static let elevated = Color.uiColor(light: UIColor(hex: 0xFFFFFF), dark: UIColor(hex: 0x1F2937))
+        static let cardBackground = Color.uiColor(light: UIColor(hex: 0xFFFDFB), dark: UIColor(hex: 0x111827))
+        static let border = Color.uiColor(light: UIColor(hex: 0xE9E0D8), dark: UIColor(hex: 0x263041))
         
         // Text hierarchy
-        static let textPrimary = Color.white
-        static let textSecondary = Color.white.opacity(0.6)
-        static let textTertiary = Color.white.opacity(0.4)
+        static let textPrimary = Color.uiColor(light: UIColor(hex: 0x101317), dark: UIColor(hex: 0xF3F6FF))
+        static let textSecondary = Color.uiColor(light: UIColor(hex: 0x39424E), dark: UIColor(hex: 0xB7C0D1))
+        static let textTertiary = Color.uiColor(light: UIColor(hex: 0x6B7786), dark: UIColor(hex: 0x7F8AA3))
         
-        // Accent colors (solid, no gradients)
-        static let accent = Color.blue
-        static let accentSecondary = Color.cyan
+        // Accent colors
+        static let accent = Color(uiColor: UIColor(hex: 0x125BFF))
+        static let accentSecondary = Color(uiColor: UIColor(hex: 0xFF4D2E))
         
         // Semantic colors
-        static let success = Color.green
-        static let warning = Color.orange
-        static let error = Color.red
-        static let info = Color.blue
+        static let success = Color(uiColor: UIColor(hex: 0x12C971))
+        static let warning = Color(uiColor: UIColor(hex: 0xFFB020))
+        static let error = Color(uiColor: UIColor(hex: 0xE11D48))
+        static let info = accent
         
         // PR/Achievement
-        static let gold = Color.yellow
+        static let gold = Color(uiColor: UIColor(hex: 0xF6C445))
         
         // Muscle groups (solid colors)
-        static let push = Color.red
-        static let pull = Color.blue
-        static let legs = Color.green
-        static let core = Color.orange
-        static let cardio = Color.purple
+        static let chest = Color(uiColor: UIColor(hex: 0xFF4D2E))
+        static let back = Color(uiColor: UIColor(hex: 0x125BFF))
+        static let shoulders = Color(uiColor: UIColor(hex: 0xFFB020))
+        static let biceps = Color(uiColor: UIColor(hex: 0x8B5CF6))
+        static let triceps = Color(uiColor: UIColor(hex: 0xEC4899))
+        static let quads = Color(uiColor: UIColor(hex: 0x12C971))
+        static let hamstrings = Color(uiColor: UIColor(hex: 0x14B8A6))
+        static let glutes = Color(uiColor: UIColor(hex: 0x4F46E5))
+        static let calves = Color(uiColor: UIColor(hex: 0x06B6D4))
+        static let core = Color(uiColor: UIColor(hex: 0xF6C445))
+        static let cardio = Color(uiColor: UIColor(hex: 0x0EA5E9))
         
         // Glassmorphism
-        static let glass = Color.white.opacity(0.08)
-        static let glassBorder = Color.white.opacity(0.12)
+        static let glass = Color.uiColor(
+            light: UIColor.white.withAlphaComponent(0.55),
+            dark: UIColor.white.withAlphaComponent(0.08)
+        )
+        static let glassBorder = Color.uiColor(
+            light: UIColor.black.withAlphaComponent(0.08),
+            dark: UIColor.white.withAlphaComponent(0.12)
+        )
     }
     
     // MARK: - Typography
     
     enum Typography {
+        // Brand wordmark (Bebas Neue). Use sparingly: splash + onboarding + hero moments only.
+        static let wordmarkHuge = Font.custom("BebasNeue-Regular", size: 52, relativeTo: .largeTitle)
+        static let wordmarkBig = Font.custom("BebasNeue-Regular", size: 36, relativeTo: .title)
+        static let heroTitle = Font.system(size: 32, weight: .bold, design: .default)
+
         static let largeTitle = Font.system(size: 34, weight: .bold, design: .rounded)
         static let title = Font.system(size: 28, weight: .bold, design: .rounded)
         static let title2 = Font.system(size: 22, weight: .bold, design: .default)
@@ -115,39 +145,128 @@ extension EnvironmentValues {
 
 struct AdaptiveBackground: View {
     @Environment(\.adaptiveLuminance) private var luminance
+    @Environment(\.colorScheme) private var colorScheme
     
     var body: some View {
-        let base = Theme.Colors.background
-            .blended(with: .white, amount: 0.06 + (luminance * 0.08))
-        let highlight = Theme.Colors.elevated
-            .blended(with: Theme.Colors.accentSecondary, amount: 0.06 + (luminance * 0.1))
-        
+        if colorScheme == .dark {
+            let base = Theme.Colors.background
+                .blended(with: .white, amount: 0.06 + (luminance * 0.08))
+            let highlight = Theme.Colors.elevated
+                .blended(with: Theme.Colors.accentSecondary, amount: 0.06 + (luminance * 0.1))
+
+            ZStack {
+                LinearGradient(
+                    colors: [base, highlight],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+
+                RadialGradient(
+                    colors: [
+                        Theme.Colors.accent.opacity(0.18 + (luminance * 0.1)),
+                        Color.clear
+                    ],
+                    center: .topTrailing,
+                    startRadius: 20,
+                    endRadius: 320
+                )
+
+                RadialGradient(
+                    colors: [
+                        Theme.Colors.accentSecondary.opacity(0.12 + (luminance * 0.08)),
+                        Color.clear
+                    ],
+                    center: .bottomLeading,
+                    startRadius: 40,
+                    endRadius: 300
+                )
+            }
+            .ignoresSafeArea()
+        } else {
+            // Light mode: warm paper with subtle depth (no heavy gradients).
+            ZStack {
+                LinearGradient(
+                    colors: [
+                        Theme.Colors.background,
+                        Theme.Colors.surface
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+
+                RadialGradient(
+                    colors: [
+                        Theme.Colors.accent.opacity(0.08),
+                        Color.clear
+                    ],
+                    center: .topTrailing,
+                    startRadius: 10,
+                    endRadius: 360
+                )
+
+                RadialGradient(
+                    colors: [
+                        Theme.Colors.accentSecondary.opacity(0.06),
+                        Color.clear
+                    ],
+                    center: .bottomLeading,
+                    startRadius: 20,
+                    endRadius: 380
+                )
+            }
+            .ignoresSafeArea()
+        }
+    }
+}
+
+// MARK: - Splash Background
+
+struct SplashBackground: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
         ZStack {
-            LinearGradient(
-                colors: [base, highlight],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            
-            RadialGradient(
-                colors: [
-                    Theme.Colors.accent.opacity(0.18 + (luminance * 0.1)),
-                    Color.clear
-                ],
-                center: .topTrailing,
-                startRadius: 20,
-                endRadius: 320
-            )
-            
-            RadialGradient(
-                colors: [
-                    Theme.Colors.accentSecondary.opacity(0.12 + (luminance * 0.08)),
-                    Color.clear
-                ],
-                center: .bottomLeading,
-                startRadius: 40,
-                endRadius: 300
-            )
+            if colorScheme == .dark {
+                AdaptiveBackground()
+            } else {
+                LinearGradient(
+                    colors: [
+                        Theme.Colors.background,
+                        Theme.Colors.surface
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+
+                RadialGradient(
+                    colors: [
+                        Theme.Colors.accent.opacity(0.22),
+                        Color.clear
+                    ],
+                    center: .topTrailing,
+                    startRadius: 20,
+                    endRadius: 520
+                )
+
+                RadialGradient(
+                    colors: [
+                        Theme.Colors.accentSecondary.opacity(0.18),
+                        Color.clear
+                    ],
+                    center: .bottomLeading,
+                    startRadius: 30,
+                    endRadius: 520
+                )
+
+                LinearGradient(
+                    colors: [
+                        Color.clear,
+                        Theme.Colors.accent.opacity(0.05)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
         }
         .ignoresSafeArea()
     }
@@ -160,6 +279,7 @@ struct GlassBackground: ViewModifier {
     var cornerRadius: CGFloat = Theme.CornerRadius.medium
     var elevation: CGFloat = 1
     @Environment(\.adaptiveLuminance) private var luminance
+    @Environment(\.colorScheme) private var colorScheme
     
     func body(content: Content) -> some View {
         let baseFill = Theme.Colors.glass
@@ -167,12 +287,13 @@ struct GlassBackground: ViewModifier {
         let border = Theme.Colors.glassBorder
             .blended(with: .white, amount: 0.05 + (luminance * 0.12))
         let shadowOpacity = min(0.35, 0.12 + Double(elevation) * 0.06)
+        let material: Material = colorScheme == .dark ? .ultraThinMaterial : .thinMaterial
         
         content
             .background(
                 RoundedRectangle(cornerRadius: cornerRadius)
-                    .fill(.ultraThinMaterial)
-                    .opacity(0.75)
+                    .fill(material)
+                    .opacity(colorScheme == .dark ? 0.75 : 0.9)
             )
             .background(
                 RoundedRectangle(cornerRadius: cornerRadius)
@@ -191,6 +312,36 @@ struct GlassBackground: ViewModifier {
     }
 }
 
+// MARK: - Soft Card Modifier (Default Surface)
+
+struct SoftCardBackground: ViewModifier {
+    var cornerRadius: CGFloat = Theme.CornerRadius.large
+    var elevation: CGFloat = 1
+    @Environment(\.colorScheme) private var colorScheme
+
+    func body(content: Content) -> some View {
+        let shadowColor = colorScheme == .dark ? Color.black.opacity(0.32) : Color.black.opacity(0.08)
+        let shadowRadius = colorScheme == .dark ? 10 * elevation : 20 * elevation
+        let shadowY = colorScheme == .dark ? 8 * elevation : 12 * elevation
+
+        content
+            .background(
+                RoundedRectangle(cornerRadius: cornerRadius)
+                    .fill(Theme.Colors.cardBackground)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius)
+                    .strokeBorder(Theme.Colors.border, lineWidth: 1)
+            )
+            .shadow(
+                color: shadowColor,
+                radius: shadowRadius,
+                x: 0,
+                y: shadowY
+            )
+    }
+}
+
 extension View {
     func glassBackground(
         opacity: Double = 0.08,
@@ -199,11 +350,18 @@ extension View {
     ) -> some View {
         modifier(GlassBackground(opacity: opacity, cornerRadius: cornerRadius, elevation: elevation))
     }
+
+    func softCard(
+        cornerRadius: CGFloat = Theme.CornerRadius.large,
+        elevation: CGFloat = 1
+    ) -> some View {
+        modifier(SoftCardBackground(cornerRadius: cornerRadius, elevation: elevation))
+    }
     
     func cardStyle() -> some View {
         self
             .padding(Theme.Spacing.lg)
-            .glassBackground(elevation: 2)
+            .softCard(elevation: 2)
     }
     
     func animateOnAppear(delay: Double = 0) -> some View {
@@ -235,6 +393,23 @@ extension Color {
         var alpha: CGFloat = 0
         uiColor.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
         return (Double(red), Double(green), Double(blue), Double(alpha))
+    }
+}
+
+extension UIColor {
+    convenience init(hex: UInt32, alpha: CGFloat = 1) {
+        let r = CGFloat((hex >> 16) & 0xFF) / 255.0
+        let g = CGFloat((hex >> 8) & 0xFF) / 255.0
+        let b = CGFloat(hex & 0xFF) / 255.0
+        self.init(red: r, green: g, blue: b, alpha: alpha)
+    }
+}
+
+extension Color {
+    static func uiColor(light: UIColor, dark: UIColor) -> Color {
+        Color(uiColor: UIColor { traits in
+            traits.userInterfaceStyle == .dark ? dark : light
+        })
     }
 }
 
@@ -277,9 +452,15 @@ struct PRMarkerView: View {
 extension MuscleGroup {
     var color: Color {
         switch self {
-        case .push: return Theme.Colors.push
-        case .pull: return Theme.Colors.pull
-        case .legs: return Theme.Colors.legs
+        case .chest: return Theme.Colors.chest
+        case .back: return Theme.Colors.back
+        case .shoulders: return Theme.Colors.shoulders
+        case .biceps: return Theme.Colors.biceps
+        case .triceps: return Theme.Colors.triceps
+        case .quads: return Theme.Colors.quads
+        case .hamstrings: return Theme.Colors.hamstrings
+        case .glutes: return Theme.Colors.glutes
+        case .calves: return Theme.Colors.calves
         case .core: return Theme.Colors.core
         case .cardio: return Theme.Colors.cardio
         }

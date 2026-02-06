@@ -15,6 +15,7 @@ struct HomeView: View {
     @State private var quickStartExercise: String?
     @State private var selectedExercise: ExerciseSelection?
     @State private var selectedWorkout: Workout?
+    @State private var selectedWorkoutMetric: WorkoutMetricDetailSelection?
 
     init(
         dataManager: WorkoutDataManager,
@@ -48,13 +49,21 @@ struct HomeView: View {
                     quickActionsSection
 
                     if dataManager.workouts.isEmpty {
-                        HomeEmptyState()
+                        HomeEmptyState(
+                            onStart: {
+                                quickStartExercise = nil
+                                showingQuickStart = true
+                            },
+                            onImport: {
+                                showingImportWizard = true
+                            }
+                        )
                             .padding(.horizontal, Theme.Spacing.lg)
                     } else {
                         weeklySummarySection
                             .padding(.horizontal, Theme.Spacing.lg)
 
-                        highlightsSection
+                        spotlightSection
                             .padding(.horizontal, Theme.Spacing.lg)
 
                         recentWorkoutsSection
@@ -78,6 +87,13 @@ struct HomeView: View {
         }
         .navigationDestination(item: $selectedWorkout) { workout in
             WorkoutDetailView(workout: workout)
+        }
+        .navigationDestination(item: $selectedWorkoutMetric) { selection in
+            MetricDetailView(
+                kind: selection.kind,
+                workouts: weeklyWorkouts,
+                scrollTarget: selection.scrollTarget
+            )
         }
         .sheet(isPresented: $showingImportWizard) {
             StrongImportWizard(
@@ -126,46 +142,62 @@ struct HomeView: View {
     }
 
     private var quickActionsSection: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: Theme.Spacing.sm) {
-                ActionChip(title: "Start", icon: "bolt.fill", tint: Theme.Colors.accentSecondary) {
-                    quickStartExercise = nil
-                    showingQuickStart = true
+        VStack(spacing: Theme.Spacing.sm) {
+            Button(action: {
+                Haptics.selection()
+                quickStartExercise = nil
+                showingQuickStart = true
+            }) {
+                HStack(spacing: Theme.Spacing.sm) {
+                    Image(systemName: "bolt.fill")
+                    Text("Start a session")
+                        .font(Theme.Typography.headline)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundStyle(Color.white.opacity(0.8))
                 }
-
-                ActionChip(title: "Import", icon: "arrow.down.to.line", tint: Theme.Colors.accent) {
-                    showingImportWizard = true
-                }
-
-                ActionChip(title: "Health", icon: "heart.fill", tint: .red) {
-                    if healthManager.authorizationStatus == .authorized {
-                        selectedTab = .health
-                    } else {
-                        showingHealthWizard = true
-                    }
-                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, Theme.Spacing.lg)
+                .padding(.vertical, Theme.Spacing.md)
+                .frame(minHeight: 56)
+                .background(Theme.Colors.accent)
+                .cornerRadius(Theme.CornerRadius.xlarge)
             }
+            .buttonStyle(.plain)
             .padding(.horizontal, Theme.Spacing.lg)
 
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: Theme.Spacing.sm) {
-                ActionChip(title: "Start", icon: "bolt.fill", tint: Theme.Colors.accentSecondary) {
-                    quickStartExercise = nil
-                    showingQuickStart = true
-                }
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: Theme.Spacing.sm) {
+                    SecondaryChip(title: "Import", icon: "arrow.down.to.line") {
+                        showingImportWizard = true
+                    }
 
-                ActionChip(title: "Import", icon: "arrow.down.to.line", tint: Theme.Colors.accent) {
-                    showingImportWizard = true
-                }
-
-                ActionChip(title: "Health", icon: "heart.fill", tint: .red) {
-                    if healthManager.authorizationStatus == .authorized {
-                        selectedTab = .health
-                    } else {
-                        showingHealthWizard = true
+                    SecondaryChip(title: "Health", icon: "heart.fill") {
+                        if healthManager.authorizationStatus == .authorized {
+                            selectedTab = .health
+                        } else {
+                            showingHealthWizard = true
+                        }
                     }
                 }
+                .padding(.horizontal, Theme.Spacing.lg)
+
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: Theme.Spacing.sm) {
+                    SecondaryChip(title: "Import", icon: "arrow.down.to.line") {
+                        showingImportWizard = true
+                    }
+
+                    SecondaryChip(title: "Health", icon: "heart.fill") {
+                        if healthManager.authorizationStatus == .authorized {
+                            selectedTab = .health
+                        } else {
+                            showingHealthWizard = true
+                        }
+                    }
+                }
+                .padding(.horizontal, Theme.Spacing.lg)
             }
-            .padding(.horizontal, Theme.Spacing.lg)
         }
     }
 
@@ -175,6 +207,7 @@ struct HomeView: View {
         let sessions = stats.map { "\($0.totalWorkouts)" } ?? "0"
         let avgDuration = stats?.avgWorkoutDuration ?? "--"
         let favorite = stats?.favoriteExercise ?? "--"
+        let favoriteName = stats?.favoriteExercise
 
         return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             Text("This Week")
@@ -183,24 +216,36 @@ struct HomeView: View {
 
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: Theme.Spacing.md) {
-                    SummaryPill(title: "Sessions", value: sessions)
-                    SummaryPill(title: "Avg Duration", value: avgDuration)
-                    SummaryPill(title: "Favorite", value: favorite)
+                    SummaryPill(title: "Sessions", value: sessions) {
+                        selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: .sessions, scrollTarget: nil)
+                    }
+                    SummaryPill(title: "Avg Duration", value: avgDuration) {
+                        selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: .avgDuration, scrollTarget: nil)
+                    }
+                    SummaryPill(title: "Favorite", value: favorite, onTap: favoriteName.map { name in
+                        { selectedExercise = ExerciseSelection(id: name) }
+                    })
                 }
 
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: Theme.Spacing.md) {
-                    SummaryPill(title: "Sessions", value: sessions)
-                    SummaryPill(title: "Avg Duration", value: avgDuration)
-                    SummaryPill(title: "Favorite", value: favorite)
+                    SummaryPill(title: "Sessions", value: sessions) {
+                        selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: .sessions, scrollTarget: nil)
+                    }
+                    SummaryPill(title: "Avg Duration", value: avgDuration) {
+                        selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: .avgDuration, scrollTarget: nil)
+                    }
+                    SummaryPill(title: "Favorite", value: favorite, onTap: favoriteName.map { name in
+                        { selectedExercise = ExerciseSelection(id: name) }
+                    })
                 }
             }
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 2)
+        .softCard(elevation: 2)
     }
 
-    private var highlightsSection: some View {
-        HighlightsSectionView(title: "Highlights", items: homeHighlights)
+    private var spotlightSection: some View {
+        HighlightsSectionView(title: "Spotlight", items: Array(homeHighlights.prefix(1)))
     }
 
     private var recentWorkoutsSection: some View {
@@ -390,23 +435,85 @@ struct HomeView: View {
 }
 
 private struct HomeEmptyState: View {
+    let onStart: () -> Void
+    let onImport: () -> Void
+
     var body: some View {
-        VStack(spacing: Theme.Spacing.md) {
-            Image(systemName: "figure.strengthtraining.traditional")
-                .font(.system(size: 40))
-                .foregroundColor(Theme.Colors.textTertiary)
+        VStack(spacing: Theme.Spacing.lg) {
+            VStack(spacing: Theme.Spacing.sm) {
+                Image(systemName: "figure.strengthtraining.traditional")
+                    .font(.system(size: 40))
+                    .foregroundColor(Theme.Colors.textTertiary)
 
-            Text("No workouts yet")
-                .font(Theme.Typography.title3)
-                .foregroundColor(Theme.Colors.textPrimary)
+                Text("You're ready.")
+                    .font(Theme.Typography.title3)
+                    .foregroundColor(Theme.Colors.textPrimary)
 
-            Text("Start a session or import your history to see progress.")
-                .font(Theme.Typography.caption)
-                .foregroundColor(Theme.Colors.textSecondary)
-                .multilineTextAlignment(.center)
+                Text("Start a session or import your history. We'll keep it simple from there.")
+                    .font(Theme.Typography.body)
+                    .foregroundColor(Theme.Colors.textSecondary)
+                    .multilineTextAlignment(.center)
+            }
+
+            VStack(spacing: Theme.Spacing.sm) {
+                Button(action: {
+                    Haptics.selection()
+                    onStart()
+                }) {
+                    Text("Start a session")
+                        .font(Theme.Typography.headline)
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, Theme.Spacing.md)
+                        .frame(minHeight: 52)
+                        .background(Theme.Colors.accent)
+                        .cornerRadius(Theme.CornerRadius.xlarge)
+                }
+                .buttonStyle(.plain)
+
+                Button(action: {
+                    Haptics.selection()
+                    onImport()
+                }) {
+                    Text("Import from Strong")
+                        .font(Theme.Typography.subheadline)
+                        .foregroundStyle(Theme.Colors.accent)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, Theme.Spacing.md)
+                        .frame(minHeight: 44)
+                        .softCard(cornerRadius: Theme.CornerRadius.xlarge, elevation: 1)
+                }
+                .buttonStyle(.plain)
+            }
         }
         .padding(Theme.Spacing.xl)
-        .glassBackground(elevation: 2)
+        .softCard(elevation: 2)
+    }
+}
+
+private struct SecondaryChip: View {
+    let title: String
+    let icon: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: {
+            Haptics.selection()
+            action()
+        }) {
+            HStack(spacing: Theme.Spacing.xs) {
+                Image(systemName: icon)
+                Text(title)
+                    .font(Theme.Typography.subheadline)
+            }
+            .foregroundStyle(Theme.Colors.textPrimary)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, Theme.Spacing.md)
+            .padding(.vertical, Theme.Spacing.sm)
+            .frame(minHeight: 44)
+            .softCard(cornerRadius: Theme.CornerRadius.xlarge, elevation: 1)
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -440,8 +547,21 @@ private struct ActionChip: View {
 private struct SummaryPill: View {
     let title: String
     let value: String
+    var onTap: (() -> Void)? = nil
 
     var body: some View {
+        Group {
+            if let onTap {
+                MetricTileButton(action: onTap) {
+                    content
+                }
+            } else {
+                content
+            }
+        }
+    }
+
+    private var content: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
             Text(title)
                 .font(Theme.Typography.caption)
@@ -454,7 +574,7 @@ private struct SummaryPill: View {
         }
         .padding(Theme.Spacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glassBackground(elevation: 1)
+        .softCard(elevation: 1)
     }
 }
 
@@ -488,6 +608,6 @@ private struct ExploreRow: View {
                 .foregroundColor(Theme.Colors.textTertiary)
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 1)
+        .softCard(elevation: 1)
     }
 }
