@@ -41,8 +41,9 @@ struct FatigueLensDetailView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
             Text("Fatigue Lens")
-                .font(Theme.Typography.largeTitle)
+                .font(Theme.Typography.screenTitle)
                 .foregroundStyle(Theme.Colors.textPrimary)
+                .tracking(1.5)
             Text(workout.date.formatted(date: .abbreviated, time: .shortened))
                 .font(Theme.Typography.body)
                 .foregroundStyle(Theme.Colors.textSecondary)

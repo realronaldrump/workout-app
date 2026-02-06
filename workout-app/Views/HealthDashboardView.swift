@@ -166,8 +166,9 @@ struct HealthDashboardView: View {
     private var headerSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             Text("Health Insights")
-                .font(Theme.Typography.largeTitle)
+                .font(Theme.Typography.screenTitle)
                 .foregroundStyle(Theme.Colors.textPrimary)
+                .tracking(1.5)
 
             Text(headerSubtitle)
                 .font(Theme.Typography.body)

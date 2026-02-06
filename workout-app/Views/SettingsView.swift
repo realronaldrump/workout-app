@@ -25,13 +25,20 @@ struct SettingsView: View {
                         .font(.system(size: 60))
                         .foregroundStyle(.white)
                         .padding()
-                        .background(Theme.Colors.accent)
-                        .clipShape(Circle())
-                        .shadow(radius: 10)
+                        .background(
+                            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                                .fill(Theme.Colors.accent)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                                .strokeBorder(Theme.Colors.border, lineWidth: 2)
+                        )
+                        .shadow(color: Color.black.opacity(Theme.Colors.shadowOpacity), radius: 0, x: 4, y: 4)
                     
                     Text("Settings")
-                        .font(Theme.Typography.largeTitle)
+                        .font(Theme.Typography.screenTitle)
                         .foregroundStyle(Theme.Colors.textPrimary)
+                        .tracking(1.5)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, Theme.Spacing.xl)

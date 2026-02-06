@@ -2,7 +2,7 @@ import SwiftUI
 
 /// A standardized tappable wrapper for metric tiles/cards.
 /// - Full-card hit target
-/// - Subtle press animation
+/// - Neubrutalist press-into-shadow animation
 /// - Haptic feedback on tap
 /// - Optional chevron affordance (no copy)
 struct MetricTileButton<Content: View>: View {
@@ -39,8 +39,8 @@ struct MetricTileButton<Content: View>: View {
                 .overlay(alignment: chevronAlignment) {
                     if chevronPlacement != .none {
                         Image(systemName: "chevron.right")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(Theme.Colors.textTertiary.opacity(0.9))
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(Theme.Colors.textTertiary)
                             .padding(Theme.Spacing.md)
                             .accessibilityHidden(true)
                     }
@@ -65,14 +65,17 @@ struct MetricTileButton<Content: View>: View {
     }
 }
 
+/// Neubrutalist press style: card translates into its own shadow on press.
 private struct MetricTilePressStyle: ButtonStyle {
     let isEnabled: Bool
 
     func makeBody(configuration: Configuration) -> some View {
+        let isPressed = configuration.isPressed && isEnabled
         configuration.label
-            .scaleEffect(configuration.isPressed && isEnabled ? 0.985 : 1)
-            .opacity(configuration.isPressed && isEnabled ? 0.95 : 1)
-            .animation(.easeInOut(duration: 0.12), value: configuration.isPressed)
+            .offset(
+                x: isPressed ? 2 : 0,
+                y: isPressed ? 2 : 0
+            )
+            .animation(.easeInOut(duration: 0.08), value: configuration.isPressed)
     }
 }
-

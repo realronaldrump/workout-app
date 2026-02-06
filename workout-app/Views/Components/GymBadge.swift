@@ -37,19 +37,19 @@ struct GymBadge: View {
             Image(systemName: icon)
                 .font(.system(size: 11, weight: .semibold))
             Text(text)
-                .font(Theme.Typography.caption)
+                .font(Theme.Typography.metricLabel)
                 .lineLimit(1)
         }
         .foregroundColor(tint)
         .padding(.horizontal, Theme.Spacing.sm)
         .padding(.vertical, 6)
         .background(
-            Capsule()
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
                 .fill(tint.opacity(0.12))
         )
         .overlay(
-            Capsule()
-                .strokeBorder(tint.opacity(0.3), lineWidth: 1)
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                .strokeBorder(tint.opacity(0.6), lineWidth: 2)
         )
     }
 }

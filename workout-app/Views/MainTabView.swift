@@ -11,7 +11,6 @@ enum AppTab: String, CaseIterable, Hashable {
 struct MainTabView: View {
     @StateObject private var dataManager = WorkoutDataManager()
     @StateObject private var iCloudManager = iCloudDocumentManager()
-    @StateObject private var luminanceManager = AdaptiveLuminanceManager()
     @StateObject private var annotationsManager: WorkoutAnnotationsManager
     @StateObject private var gymProfilesManager: GymProfilesManager
     @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
@@ -86,10 +85,9 @@ struct MainTabView: View {
         .environmentObject(annotationsManager)
         .environmentObject(gymProfilesManager)
         .tint(Theme.Colors.accent)
-        .environment(\.adaptiveLuminance, luminanceManager.luminance)
         .overlay {
             if showSplash {
-                InAppSplashView(statusText: "Loading...")
+                InAppSplashView(statusText: "Stronger than Strong")
                     .transition(.opacity)
                     .zIndex(10)
                     .contentShape(Rectangle())

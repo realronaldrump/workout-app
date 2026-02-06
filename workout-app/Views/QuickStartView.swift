@@ -62,7 +62,7 @@ struct QuickStartView: View {
                         }
                     }
                     .padding(Theme.Spacing.lg)
-                    .glassBackground(elevation: 2)
+                    .softCard(elevation: 2)
 
                     VStack(alignment: .leading, spacing: Theme.Spacing.md) {
                         Text("Target Duration")
@@ -81,7 +81,7 @@ struct QuickStartView: View {
                         }
                     }
                     .padding(Theme.Spacing.lg)
-                    .glassBackground(elevation: 2)
+                    .softCard(elevation: 2)
 
                     VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                         Text("session target only")
@@ -89,7 +89,7 @@ struct QuickStartView: View {
                             .foregroundColor(Theme.Colors.textSecondary)
                     }
                     .padding(Theme.Spacing.lg)
-                    .glassBackground(elevation: 1)
+                    .softCard(elevation: 1)
 
                     Button(action: {
                         Haptics.notify(.success)

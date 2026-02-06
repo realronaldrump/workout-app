@@ -33,8 +33,9 @@ struct HabitImpactDetailView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
             Text(title)
-                .font(Theme.Typography.largeTitle)
+                .font(Theme.Typography.screenTitle)
                 .foregroundStyle(Theme.Colors.textPrimary)
+                .tracking(1.5)
             Text("Grouped by \(subtitle)")
                 .font(Theme.Typography.body)
                 .foregroundStyle(Theme.Colors.textSecondary)

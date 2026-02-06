@@ -44,9 +44,9 @@ struct WorkoutHistoryView: View {
                         ForEach(groupedWorkouts, id: \.month) { group in
                             VStack(alignment: .leading, spacing: Theme.Spacing.md) {
                                 Text(group.month)
-                                    .font(Theme.Typography.title2)
+                                    .font(Theme.Typography.sectionHeader)
                                     .foregroundStyle(Theme.Colors.textPrimary)
-                                    .tracking(0.4)
+                                    .tracking(1.0)
                                 
                                 VStack(spacing: Theme.Spacing.md) {
                                     ForEach(group.workouts) { workout in
@@ -75,10 +75,12 @@ struct WorkoutHistoryView: View {
                         .foregroundStyle(Theme.Colors.textPrimary)
                         .frame(width: 44, height: 44)
                         .background(
-                            Circle().fill(Theme.Colors.cardBackground)
+                            RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                                .fill(Theme.Colors.cardBackground)
                         )
                         .overlay(
-                            Circle().strokeBorder(Theme.Colors.border, lineWidth: 1)
+                            RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                                .strokeBorder(Theme.Colors.border, lineWidth: 2)
                         )
                 }
                 .buttonStyle(.plain)
@@ -87,8 +89,9 @@ struct WorkoutHistoryView: View {
             }
 
             Text("History")
-                .font(Theme.Typography.largeTitle)
+                .font(Theme.Typography.screenTitle)
                 .foregroundStyle(Theme.Colors.textPrimary)
+                .tracking(1.5)
 
             Text("Search by workout name or exercise.")
                 .font(Theme.Typography.microcopy)

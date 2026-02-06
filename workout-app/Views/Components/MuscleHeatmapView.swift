@@ -18,8 +18,9 @@ struct MuscleHeatmapView: View {
             // Header
             HStack {
                 Text("Muscle Balance")
-                    .font(Theme.Typography.title2)
+                    .font(Theme.Typography.sectionHeader)
                     .foregroundColor(Theme.Colors.textPrimary)
+                    .tracking(1.0)
                 
                 Spacer()
                 
@@ -228,7 +229,7 @@ struct MuscleDetailView: View {
                 HStack(spacing: 3) {
                     ForEach(0..<5, id: \.self) { i in
                         RoundedRectangle(cornerRadius: 2)
-                            .fill(Double(i) / 5.0 < stats.intensity ? muscleGroup.color : Theme.Colors.glass)
+                            .fill(Double(i) / 5.0 < stats.intensity ? muscleGroup.color : Theme.Colors.surface)
                             .frame(width: 8, height: 20)
                     }
                 }
@@ -244,7 +245,7 @@ struct MuscleDetailView: View {
                                 .foregroundColor(Theme.Colors.textSecondary)
                                 .padding(.horizontal, Theme.Spacing.sm)
                                 .padding(.vertical, Theme.Spacing.xs)
-                                .background(Theme.Colors.glass)
+                                .background(Theme.Colors.surface)
                                 .cornerRadius(Theme.CornerRadius.small)
                         }
                     }

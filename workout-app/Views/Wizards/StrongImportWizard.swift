@@ -237,7 +237,7 @@ struct StrongImportWizard: View {
                             }
                         }
                         .padding()
-                        .glassBackground()
+                        .softCard()
                     }
                 }
                 
@@ -265,7 +265,7 @@ struct StrongImportWizard: View {
                             .foregroundStyle(Theme.Colors.textTertiary)
                     }
                     .padding(Theme.Spacing.lg)
-                    .glassBackground(elevation: 2)
+                    .softCard(elevation: 2)
                 }
                 .buttonStyle(PlainButtonStyle())
                 
@@ -307,7 +307,7 @@ struct StrongImportWizard: View {
             }
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground()
+        .softCard()
     }
     
     private var healthSyncStatusCard: some View {
@@ -355,7 +355,7 @@ struct StrongImportWizard: View {
             }
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground()
+        .softCard()
     }
     
     private func statusRow(title: String, value: String, valueColor: Color = Theme.Colors.textPrimary) -> some View {

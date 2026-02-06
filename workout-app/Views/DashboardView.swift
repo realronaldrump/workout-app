@@ -145,8 +145,9 @@ struct DashboardView: View {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                     Text("Progress")
-                        .font(Theme.Typography.largeTitle)
+                        .font(Theme.Typography.screenTitle)
                         .foregroundColor(Theme.Colors.textPrimary)
+                        .tracking(1.5)
                     Text(headerSummary)
                         .font(Theme.Typography.microcopy)
                         .foregroundColor(Theme.Colors.textSecondary)
@@ -168,8 +169,10 @@ struct DashboardView: View {
     private var timeRangeSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             Text("Time Range")
-                .font(Theme.Typography.caption)
+                .font(Theme.Typography.metricLabel)
                 .foregroundColor(Theme.Colors.textTertiary)
+                .textCase(.uppercase)
+                .tracking(0.8)
                 .padding(.horizontal, Theme.Spacing.lg)
 
             TimeRangePicker(selectedRange: $selectedTimeRange)
@@ -179,8 +182,9 @@ struct DashboardView: View {
     private var summarySection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             Text("Summary")
-                .font(Theme.Typography.title3)
+                .font(Theme.Typography.sectionHeader)
                 .foregroundColor(Theme.Colors.textPrimary)
+                .tracking(1.0)
 
             if let currentStats = filteredStats {
                 ViewThatFits(in: .horizontal) {
@@ -283,8 +287,9 @@ struct DashboardView: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             HStack {
                 Text("Training")
-                    .font(Theme.Typography.title2)
+                    .font(Theme.Typography.sectionHeader)
                     .foregroundColor(Theme.Colors.textPrimary)
+                    .tracking(1.0)
 
                 Spacer()
 
@@ -295,8 +300,10 @@ struct DashboardView: View {
                     Haptics.selection()
                 }) {
                     Text(isTrainingExpanded ? "Less" : "More")
-                        .font(Theme.Typography.subheadline)
+                        .font(Theme.Typography.metricLabel)
                         .foregroundColor(Theme.Colors.accent)
+                        .textCase(.uppercase)
+                        .tracking(0.8)
                 }
             }
 
@@ -599,16 +606,22 @@ private struct SyncStatusPill: View {
 
     var body: some View {
         HStack(spacing: Theme.Spacing.xs) {
-            Circle()
+            RoundedRectangle(cornerRadius: 2)
                 .fill(isActive ? Theme.Colors.success : Theme.Colors.textTertiary)
                 .frame(width: 6, height: 6)
             Text(text)
-                .font(Theme.Typography.caption)
+                .font(Theme.Typography.metricLabel)
+                .textCase(.uppercase)
+                .tracking(0.8)
         }
         .padding(.horizontal, Theme.Spacing.sm)
         .padding(.vertical, Theme.Spacing.xs)
-        .background(Theme.Colors.surface.opacity(0.7))
-        .cornerRadius(14)
+        .background(Theme.Colors.surface)
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                .strokeBorder(Theme.Colors.border, lineWidth: 2)
+        )
+        .cornerRadius(Theme.CornerRadius.small)
     }
 }
 
@@ -619,18 +632,25 @@ private struct TimeRangePicker: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: Theme.Spacing.sm) {
                 ForEach(DashboardView.TimeRange.allCases, id: \.self) { range in
+                    let isSelected = selectedRange == range
                     Button {
                         selectedRange = range
                         Haptics.selection()
                     } label: {
                         Text(range.rawValue)
-                            .font(Theme.Typography.captionBold)
-                            .foregroundColor(selectedRange == range ? Theme.Colors.textPrimary : Theme.Colors.textSecondary)
+                            .font(Theme.Typography.metricLabel)
+                            .textCase(.uppercase)
+                            .tracking(0.8)
+                            .foregroundColor(isSelected ? .white : Theme.Colors.textSecondary)
                             .padding(.horizontal, Theme.Spacing.md)
                             .padding(.vertical, Theme.Spacing.sm)
                             .background(
-                                RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
-                                    .fill(selectedRange == range ? Theme.Colors.elevated : Theme.Colors.surface.opacity(0.4))
+                                RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                                    .fill(isSelected ? Theme.Colors.accent : Color.clear)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                                    .strokeBorder(Theme.Colors.border, lineWidth: 2)
                             )
                     }
                 }
@@ -661,8 +681,10 @@ private struct SummaryMetricCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
             Text(title)
-                .font(Theme.Typography.caption)
+                .font(Theme.Typography.metricLabel)
                 .foregroundColor(Theme.Colors.textSecondary)
+                .textCase(.uppercase)
+                .tracking(0.8)
 
             Text(value)
                 .font(Theme.Typography.title3)
@@ -684,12 +706,18 @@ private struct ChangeMetricRow: View {
                 .foregroundColor(metric.isPositive ? Theme.Colors.success : Theme.Colors.warning)
                 .frame(width: 24, height: 24)
                 .background((metric.isPositive ? Theme.Colors.success : Theme.Colors.warning).opacity(0.15))
-                .cornerRadius(8)
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                        .strokeBorder(metric.isPositive ? Theme.Colors.success : Theme.Colors.warning, lineWidth: 2)
+                )
+                .cornerRadius(Theme.CornerRadius.small)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(metric.title)
-                    .font(Theme.Typography.caption)
+                    .font(Theme.Typography.metricLabel)
                     .foregroundColor(Theme.Colors.textSecondary)
+                    .textCase(.uppercase)
+                    .tracking(0.8)
                 Text(formatValue(metric))
                     .font(Theme.Typography.headline)
                     .foregroundColor(Theme.Colors.textPrimary)
@@ -745,7 +773,11 @@ private struct ExplorationRow: View {
                 .foregroundColor(tint)
                 .frame(width: 36, height: 36)
                 .background(tint.opacity(0.15))
-                .cornerRadius(12)
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                        .strokeBorder(tint, lineWidth: 2)
+                )
+                .cornerRadius(Theme.CornerRadius.small)
 
             VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                 Text(title)

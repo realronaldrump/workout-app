@@ -26,8 +26,9 @@ struct CollapsibleSection<Content: View>: View {
                 HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.md) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(title)
-                            .font(Theme.Typography.title3)
+                            .font(Theme.Typography.sectionHeader)
                             .foregroundStyle(Theme.Colors.textPrimary)
+                            .tracking(1.0)
 
                         if let subtitle {
                             Text(subtitle)

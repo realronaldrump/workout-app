@@ -10,8 +10,9 @@ struct MuscleBalanceDetailView: View {
             ScrollView(showsIndicators: false) {
                 LazyVStack(alignment: .leading, spacing: Theme.Spacing.xxl) {
                     Text("Muscle Balance")
-                        .font(Theme.Typography.largeTitle)
+                        .font(Theme.Typography.screenTitle)
                         .foregroundStyle(Theme.Colors.textPrimary)
+                        .tracking(1.5)
                         .padding(.top, Theme.Spacing.md)
 
                     MuscleHeatmapView(dataManager: dataManager)

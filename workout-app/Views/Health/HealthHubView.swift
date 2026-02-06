@@ -118,8 +118,9 @@ struct HealthHubView: View {
             HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                     Text("Health")
-                        .font(Theme.Typography.largeTitle)
+                        .font(Theme.Typography.screenTitle)
                         .foregroundStyle(Theme.Colors.textPrimary)
+                        .tracking(1.5)
 
                     Text(headerSubtitle)
                         .font(Theme.Typography.body)
@@ -144,10 +145,12 @@ struct HealthHubView: View {
                     }
                     .frame(width: 44, height: 44)
                     .background(
-                        Circle().fill(Theme.Colors.cardBackground)
+                        RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                            .fill(Theme.Colors.cardBackground)
                     )
                     .overlay(
-                        Circle().strokeBorder(Theme.Colors.border, lineWidth: 1)
+                        RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                            .strokeBorder(Theme.Colors.border, lineWidth: 2)
                     )
                 }
                 .buttonStyle(.plain)
@@ -166,12 +169,15 @@ struct HealthHubView: View {
     private var timeRangeSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             Text("Time Range")
-                .font(Theme.Typography.caption)
+                .font(Theme.Typography.metricLabel)
                 .foregroundStyle(Theme.Colors.textTertiary)
+                .textCase(.uppercase)
+                .tracking(0.8)
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: Theme.Spacing.sm) {
                     ForEach(HealthTimeRange.allCases) { range in
+                        let isSelected = selectedRange == range
                         Button {
                             if range == .custom {
                                 showingCustomRange = true
@@ -180,14 +186,20 @@ struct HealthHubView: View {
                             }
                         } label: {
                             Text(range.title)
-                                .font(Theme.Typography.subheadline)
-                                .foregroundStyle(selectedRange == range ? Theme.Colors.textPrimary : Theme.Colors.textSecondary)
-                                .padding(.horizontal, Theme.Spacing.lg)
+                                .font(Theme.Typography.metricLabel)
+                                .textCase(.uppercase)
+                                .tracking(0.8)
+                                .foregroundStyle(isSelected ? .white : Theme.Colors.textSecondary)
+                                .padding(.horizontal, Theme.Spacing.md)
                                 .padding(.vertical, Theme.Spacing.sm)
                                 .frame(minHeight: 44)
                                 .background(
-                                    RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
-                                        .fill(selectedRange == range ? Theme.Colors.elevated : Theme.Colors.surface)
+                                    RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                                        .fill(isSelected ? Theme.Colors.accent : Color.clear)
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                                        .strokeBorder(Theme.Colors.border, lineWidth: 2)
                                 )
                         }
                         .buttonStyle(.plain)
@@ -200,8 +212,9 @@ struct HealthHubView: View {
     private var summarySection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             Text("Overview")
-                .font(Theme.Typography.title3)
+                .font(Theme.Typography.sectionHeader)
                 .foregroundStyle(Theme.Colors.textPrimary)
+                .tracking(1.0)
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: Theme.Spacing.md) {
@@ -221,8 +234,9 @@ struct HealthHubView: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             HStack {
                 Text("Daily Timeline")
-                    .font(Theme.Typography.title3)
+                    .font(Theme.Typography.sectionHeader)
                     .foregroundStyle(Theme.Colors.textPrimary)
+                    .tracking(1.0)
 
                 Spacer()
 
@@ -232,8 +246,10 @@ struct HealthHubView: View {
                             showAllDays.toggle()
                         }
                     }
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .font(Theme.Typography.metricLabel)
+                    .foregroundStyle(Theme.Colors.accent)
+                    .textCase(.uppercase)
+                    .tracking(0.8)
                 }
             }
 
@@ -253,8 +269,9 @@ struct HealthHubView: View {
     private var categorySection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             Text("Explore Health")
-                .font(Theme.Typography.title3)
+                .font(Theme.Typography.sectionHeader)
                 .foregroundStyle(Theme.Colors.textPrimary)
+                .tracking(1.0)
 
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: Theme.Spacing.md) {
                 ForEach(HealthHubCategory.allCases) { category in
@@ -452,8 +469,10 @@ private struct HealthSummaryCard: View {
                     .font(.caption)
                     .foregroundStyle(model.tint)
                 Text(model.title)
-                    .font(Theme.Typography.caption)
+                    .font(Theme.Typography.metricLabel)
                     .foregroundStyle(Theme.Colors.textSecondary)
+                    .textCase(.uppercase)
+                    .tracking(0.8)
             }
 
             HStack(alignment: .lastTextBaseline, spacing: 4) {
@@ -485,7 +504,7 @@ private struct HealthCategoryCard: View {
             }
 
             Text(category.title)
-                .font(Theme.Typography.headline)
+                .font(Theme.Typography.cardHeader)
                 .foregroundStyle(Theme.Colors.textPrimary)
 
             Text(category.subtitle)
@@ -567,8 +586,10 @@ private struct DailyTimelineStat: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(label)
-                .font(Theme.Typography.caption)
+                .font(Theme.Typography.metricLabel)
                 .foregroundStyle(Theme.Colors.textTertiary)
+                .textCase(.uppercase)
+                .tracking(0.8)
             HStack(alignment: .lastTextBaseline, spacing: 2) {
                 Text(value)
                     .font(Theme.Typography.numberSmall)

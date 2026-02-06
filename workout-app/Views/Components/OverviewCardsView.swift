@@ -6,8 +6,9 @@ struct OverviewCardsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             Text("Overview")
-                .font(Theme.Typography.title2)
+                .font(Theme.Typography.sectionHeader)
                 .foregroundColor(Theme.Colors.textPrimary)
+                .tracking(1.0)
             
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: Theme.Spacing.md) {
                 StatCard(
@@ -106,8 +107,10 @@ struct StatCard: View {
             }
 
             Text(title)
-                .font(Theme.Typography.caption)
+                .font(Theme.Typography.metricLabel)
                 .foregroundColor(Theme.Colors.textSecondary)
+                .textCase(.uppercase)
+                .tracking(0.8)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Theme.Spacing.lg)

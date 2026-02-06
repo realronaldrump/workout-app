@@ -78,7 +78,7 @@ struct OnboardingView: View {
 
             HStack(spacing: 8) {
                 ForEach(0..<totalSteps, id: \.self) { index in
-                    Capsule()
+                    RoundedRectangle(cornerRadius: 2)
                         .fill(index <= step ? Theme.Colors.accent : Theme.Colors.border.opacity(0.7))
                         .frame(height: 4)
                         .animation(reduceMotion ? .easeOut(duration: 0.2) : .spring(), value: step)
@@ -99,6 +99,11 @@ struct OnboardingView: View {
                     .frame(minHeight: 52)
                     .background(primaryButtonColor)
                     .cornerRadius(Theme.CornerRadius.xlarge)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge)
+                            .strokeBorder(Theme.Colors.border, lineWidth: 2)
+                    )
+                    .shadow(color: Color.black.opacity(Theme.Colors.shadowOpacity), radius: 0, x: 4, y: 4)
             }
 
             if let secondary = secondaryButtonTitle {
@@ -148,14 +153,19 @@ struct OnboardingView: View {
                     .foregroundStyle(Theme.Colors.accent)
                     .padding(Theme.Spacing.xl)
                     .background(
-                        Circle()
+                        RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
                             .fill(Theme.Colors.accent.opacity(0.12))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                            .strokeBorder(Theme.Colors.accent, lineWidth: 2)
                     )
 
                 VStack(spacing: Theme.Spacing.sm) {
                     Text("Bring your history.")
-                        .font(Theme.Typography.title2)
+                        .font(Theme.Typography.sectionHeader)
                         .foregroundStyle(Theme.Colors.textPrimary)
+                        .tracking(1.0)
                         .multilineTextAlignment(.center)
 
                     Text("Import your Strong CSV in under a minute.")
@@ -180,14 +190,19 @@ struct OnboardingView: View {
                     .foregroundStyle(Theme.Colors.error)
                     .padding(Theme.Spacing.xl)
                     .background(
-                        Circle()
+                        RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
                             .fill(Theme.Colors.error.opacity(0.10))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                            .strokeBorder(Theme.Colors.error, lineWidth: 2)
                     )
 
                 VStack(spacing: Theme.Spacing.sm) {
                     Text("Add recovery context.")
-                        .font(Theme.Typography.title2)
+                        .font(Theme.Typography.sectionHeader)
                         .foregroundStyle(Theme.Colors.textPrimary)
+                        .tracking(1.0)
                         .multilineTextAlignment(.center)
 
                     Text("Sleep and recovery alongside training. Read-only and on-device.")
@@ -228,7 +243,7 @@ struct OnboardingView: View {
         }()
 
         return HStack(spacing: Theme.Spacing.sm) {
-            Circle()
+            RoundedRectangle(cornerRadius: 2)
                 .fill(tint)
                 .frame(width: 10, height: 10)
             Text(statusText)

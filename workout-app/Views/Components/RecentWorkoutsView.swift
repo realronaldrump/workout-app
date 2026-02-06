@@ -14,8 +14,9 @@ struct RecentWorkoutsView: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             HStack {
                 Text("Recent Workouts")
-                    .font(Theme.Typography.title2)
+                    .font(Theme.Typography.sectionHeader)
                     .foregroundColor(Theme.Colors.textPrimary)
+                    .tracking(1.0)
                 
                 Spacer()
                 

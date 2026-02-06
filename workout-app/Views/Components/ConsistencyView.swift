@@ -13,8 +13,9 @@ struct ConsistencyView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             Text("Consistency")
-                .font(Theme.Typography.title2)
+                .font(Theme.Typography.sectionHeader)
                 .foregroundColor(Theme.Colors.textPrimary)
+                .tracking(1.0)
 
             Group {
                 if let onTap {
@@ -110,17 +111,12 @@ private struct ActivityRing: View {
             Circle()
                 .stroke(Theme.Colors.surface, lineWidth: 10)
 
-            // Progress arc
+            // Progress arc — flat solid stroke, squared ends
             Circle()
                 .trim(from: 0, to: animatedProgress)
                 .stroke(
-                    AngularGradient(
-                        colors: [Theme.Colors.success.opacity(0.6), Theme.Colors.success],
-                        center: .center,
-                        startAngle: .degrees(0),
-                        endAngle: .degrees(360 * animatedProgress)
-                    ),
-                    style: StrokeStyle(lineWidth: 10, lineCap: .round)
+                    Theme.Colors.success,
+                    style: StrokeStyle(lineWidth: 10, lineCap: .butt)
                 )
                 .rotationEffect(.degrees(-90))
 
@@ -243,11 +239,11 @@ private struct WeekColumn: View {
             ForEach(dates, id: \.self) { date in
                 let isWorkout = workoutDays.contains(calendar.startOfDay(for: date))
                 let isToday = calendar.isDateInToday(date)
-                Circle()
+                RoundedRectangle(cornerRadius: 2)
                     .fill(isWorkout ? Theme.Colors.success : Theme.Colors.surface.opacity(0.5))
                     .frame(width: 14, height: 14)
                     .overlay(
-                        Circle()
+                        RoundedRectangle(cornerRadius: 2)
                             .strokeBorder(isToday ? Theme.Colors.accent : Color.clear, lineWidth: 2)
                     )
             }

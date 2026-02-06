@@ -25,11 +25,16 @@ struct InsightCardView: View {
             onTap?()
         }) {
             HStack(spacing: Theme.Spacing.lg) {
-                // Icon
                 Image(systemName: insight.type.iconName)
-                    .font(.system(size: 24, weight: .semibold))
+                    .font(.system(size: 20, weight: .bold))
                     .foregroundColor(iconColor)
-                    .frame(width: 44, height: 44)
+                    .frame(width: 40, height: 40)
+                    .background(iconColor.opacity(0.12))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                            .strokeBorder(iconColor, lineWidth: 2)
+                    )
+                    .cornerRadius(Theme.CornerRadius.small)
                 
                 VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                     Text(insight.title)
@@ -65,12 +70,15 @@ struct InsightCardView: View {
     }
 }
 
-// Subtle scale effect on press
+/// Neubrutalist press style: card shifts into its shadow on press.
 struct ScaleButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? 0.98 : 1)
-            .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
+            .offset(
+                x: configuration.isPressed ? 2 : 0,
+                y: configuration.isPressed ? 2 : 0
+            )
+            .animation(.easeInOut(duration: 0.08), value: configuration.isPressed)
     }
 }
 
@@ -95,8 +103,9 @@ struct InsightsSectionView: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             HStack {
                 Text("Insights")
-                    .font(Theme.Typography.title2)
+                    .font(Theme.Typography.sectionHeader)
                     .foregroundColor(Theme.Colors.textPrimary)
+                    .tracking(1.0)
                 
                 Spacer()
                 

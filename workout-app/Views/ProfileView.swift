@@ -53,23 +53,24 @@ struct ProfileView: View {
     private var headerSection: some View {
         VStack(spacing: Theme.Spacing.md) {
             ZStack {
-                Circle()
-                    .fill(Theme.Colors.surface)
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                    .fill(Theme.Colors.accent)
                     .frame(width: 96, height: 96)
 
                 Text(initials)
-                    .font(Theme.Typography.title)
-                    .foregroundStyle(Theme.Colors.textPrimary)
+                    .font(Theme.Typography.sectionHeader)
+                    .foregroundStyle(.white)
             }
             .overlay(
-                Circle()
-                    .strokeBorder(Theme.Colors.textTertiary, lineWidth: 1)
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                    .strokeBorder(Theme.Colors.border, lineWidth: 3)
             )
 
             VStack(spacing: Theme.Spacing.xs) {
                 Text(displayName)
-                    .font(Theme.Typography.title2)
+                    .font(Theme.Typography.sectionHeader)
                     .foregroundStyle(Theme.Colors.textPrimary)
+                    .tracking(1.0)
             }
 
             HStack(spacing: Theme.Spacing.md) {
@@ -96,8 +97,10 @@ struct ProfileView: View {
     private var personalInfoSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             Text("Personal")
-                .font(Theme.Typography.headline)
+                .font(Theme.Typography.sectionHeader2)
                 .foregroundStyle(Theme.Colors.textSecondary)
+                .textCase(.uppercase)
+                .tracking(1.0)
                 .padding(.horizontal)
 
             VStack(spacing: Theme.Spacing.sm) {
@@ -116,8 +119,10 @@ struct ProfileView: View {
     private var connectionsSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             Text("Connections")
-                .font(Theme.Typography.headline)
+                .font(Theme.Typography.sectionHeader2)
                 .foregroundStyle(Theme.Colors.textSecondary)
+                .textCase(.uppercase)
+                .tracking(1.0)
                 .padding(.horizontal)
 
             VStack(spacing: 1) {
@@ -154,8 +159,10 @@ struct ProfileView: View {
     private var preferencesSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             Text("Preferences")
-                .font(Theme.Typography.headline)
+                .font(Theme.Typography.sectionHeader2)
                 .foregroundStyle(Theme.Colors.textSecondary)
+                .textCase(.uppercase)
+                .tracking(1.0)
                 .padding(.horizontal)
 
             VStack(spacing: 1) {
@@ -164,7 +171,7 @@ struct ProfileView: View {
                         .foregroundStyle(.white)
                         .frame(width: 30, height: 30)
                         .background(Theme.Colors.success)
-                        .cornerRadius(6)
+                        .cornerRadius(Theme.CornerRadius.small)
 
                     Text("Weight Unit")
                         .font(Theme.Typography.body)
@@ -188,7 +195,7 @@ struct ProfileView: View {
                         .foregroundStyle(.white)
                         .frame(width: 30, height: 30)
                         .background(Theme.Colors.warning)
-                        .cornerRadius(6)
+                        .cornerRadius(Theme.CornerRadius.small)
 
                     Text("Date Format")
                         .font(Theme.Typography.body)
@@ -272,7 +279,7 @@ private struct ProfileFieldRow: View {
                 .foregroundStyle(.white)
                 .frame(width: 30, height: 30)
                 .background(color)
-                .cornerRadius(6)
+                .cornerRadius(Theme.CornerRadius.small)
 
             VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                 Text(title)
@@ -305,7 +312,7 @@ private struct ProfileLinkRow: View {
                 .foregroundStyle(.white)
                 .frame(width: 30, height: 30)
                 .background(color)
-                .cornerRadius(6)
+                .cornerRadius(Theme.CornerRadius.small)
 
             VStack(alignment: .leading) {
                 Text(title)
@@ -339,8 +346,10 @@ private struct ProfileStat: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
             Text(title)
-                .font(Theme.Typography.caption)
+                .font(Theme.Typography.metricLabel)
                 .foregroundStyle(Theme.Colors.textSecondary)
+                .textCase(.uppercase)
+                .tracking(0.8)
             Text(value)
                 .font(Theme.Typography.number)
                 .foregroundStyle(Theme.Colors.textPrimary)
@@ -348,11 +357,6 @@ private struct ProfileStat: View {
         .padding(.horizontal, Theme.Spacing.lg)
         .padding(.vertical, Theme.Spacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.Colors.surface.opacity(0.5))
-        .cornerRadius(Theme.CornerRadius.medium)
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                .strokeBorder(Theme.Colors.border.opacity(0.5), lineWidth: 1)
-        )
+        .softCard(elevation: 1)
     }
 }

@@ -111,8 +111,9 @@ struct CorrelationDetailView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             Text(insight.title)
-                .font(Theme.Typography.largeTitle)
+                .font(Theme.Typography.screenTitle)
                 .foregroundStyle(Theme.Colors.textPrimary)
+                .tracking(1.5)
 
             Text(insight.detail)
                 .font(Theme.Typography.body)

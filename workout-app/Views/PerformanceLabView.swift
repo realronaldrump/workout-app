@@ -85,8 +85,9 @@ struct PerformanceLabView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             Text("Performance Analytics")
-                .font(Theme.Typography.largeTitle)
+                .font(Theme.Typography.screenTitle)
                 .foregroundColor(Theme.Colors.textPrimary)
+                .tracking(1.5)
             Text(headerSummary)
                 .font(Theme.Typography.body)
                 .foregroundColor(Theme.Colors.textSecondary)

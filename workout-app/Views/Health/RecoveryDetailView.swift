@@ -112,8 +112,9 @@ struct RecoveryDetailView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
             Text("Recovery")
-                .font(Theme.Typography.largeTitle)
+                .font(Theme.Typography.screenTitle)
                 .foregroundStyle(Theme.Colors.textPrimary)
+                .tracking(1.5)
             Text(rangeLabel)
                 .font(Theme.Typography.body)
                 .foregroundStyle(Theme.Colors.textSecondary)

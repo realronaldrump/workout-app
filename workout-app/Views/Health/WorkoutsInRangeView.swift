@@ -16,8 +16,9 @@ struct WorkoutsInRangeView: View {
                 LazyVStack(alignment: .leading, spacing: Theme.Spacing.xl) {
                     VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                         Text("Workouts")
-                            .font(Theme.Typography.largeTitle)
+                            .font(Theme.Typography.screenTitle)
                             .foregroundStyle(Theme.Colors.textPrimary)
+                            .tracking(1.5)
                         Text("\(rangeLabel) • \(sortedWorkouts.count) sessions")
                             .font(Theme.Typography.body)
                             .foregroundStyle(Theme.Colors.textSecondary)

@@ -35,8 +35,10 @@ struct HighlightCardView: View {
                 Image(systemName: item.icon)
                     .foregroundColor(item.tint)
                 Text(item.title)
-                    .font(Theme.Typography.caption)
+                    .font(Theme.Typography.metricLabel)
                     .foregroundColor(Theme.Colors.textSecondary)
+                    .textCase(.uppercase)
+                    .tracking(0.8)
                 Spacer()
             }
 
@@ -64,8 +66,9 @@ struct HighlightsSectionView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             Text(title)
-                .font(Theme.Typography.title3)
+                .font(Theme.Typography.sectionHeader)
                 .foregroundColor(Theme.Colors.textPrimary)
+                .tracking(1.0)
 
             if items.isEmpty {
                 EmptyHighlightsView()

@@ -132,8 +132,9 @@ struct HomeView: View {
     private var headerSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
             Text("Home")
-                .font(Theme.Typography.largeTitle)
+                .font(Theme.Typography.screenTitle)
                 .foregroundColor(Theme.Colors.textPrimary)
+                .tracking(1.5)
             Text(headerSubtitle)
                 .font(Theme.Typography.microcopy)
                 .foregroundColor(Theme.Colors.textSecondary)
@@ -163,6 +164,11 @@ struct HomeView: View {
                 .frame(minHeight: 56)
                 .background(Theme.Colors.accent)
                 .cornerRadius(Theme.CornerRadius.xlarge)
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge)
+                        .strokeBorder(Color.white.opacity(0.25), lineWidth: 2)
+                )
+                .shadow(color: .black.opacity(Theme.Colors.shadowOpacity), radius: 0, x: 4, y: 4)
             }
             .buttonStyle(.plain)
             .padding(.horizontal, Theme.Spacing.lg)
@@ -206,13 +212,13 @@ struct HomeView: View {
         let stats = workouts.isEmpty ? nil : dataManager.calculateStats(for: workouts)
         let sessions = stats.map { "\($0.totalWorkouts)" } ?? "0"
         let avgDuration = stats?.avgWorkoutDuration ?? "--"
-        let favorite = stats?.favoriteExercise ?? "--"
-        let favoriteName = stats?.favoriteExercise
+        let volumeText = stats.map { formatVolume($0.totalVolume) } ?? "--"
 
         return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             Text("This Week")
-                .font(Theme.Typography.title3)
+                .font(Theme.Typography.sectionHeader)
                 .foregroundColor(Theme.Colors.textPrimary)
+                .tracking(1.0)
 
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: Theme.Spacing.md) {
@@ -222,9 +228,7 @@ struct HomeView: View {
                     SummaryPill(title: "Avg Duration", value: avgDuration) {
                         selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: .avgDuration, scrollTarget: nil)
                     }
-                    SummaryPill(title: "Favorite", value: favorite, onTap: favoriteName.map { name in
-                        { selectedExercise = ExerciseSelection(id: name) }
-                    })
+                    SummaryPill(title: "Volume", value: volumeText)
                 }
 
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: Theme.Spacing.md) {
@@ -234,9 +238,7 @@ struct HomeView: View {
                     SummaryPill(title: "Avg Duration", value: avgDuration) {
                         selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: .avgDuration, scrollTarget: nil)
                     }
-                    SummaryPill(title: "Favorite", value: favorite, onTap: favoriteName.map { name in
-                        { selectedExercise = ExerciseSelection(id: name) }
-                    })
+                    SummaryPill(title: "Volume", value: volumeText)
                 }
             }
         }
@@ -258,8 +260,9 @@ struct HomeView: View {
     private var exploreSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             Text("Explore")
-                .font(Theme.Typography.title3)
+                .font(Theme.Typography.sectionHeader)
                 .foregroundColor(Theme.Colors.textPrimary)
+                .tracking(1.0)
 
             VStack(spacing: Theme.Spacing.md) {
                 NavigationLink {
@@ -420,6 +423,15 @@ struct HomeView: View {
         return message
     }
 
+    private func formatVolume(_ volume: Double) -> String {
+        if volume >= 1000000 {
+            return String(format: "%.1fM", volume / 1000000)
+        } else if volume >= 1000 {
+            return String(format: "%.0fk", volume / 1000)
+        }
+        return "\(Int(volume))"
+    }
+
     private func highlightTint(for type: InsightType) -> Color {
         switch type {
         case .personalRecord:
@@ -504,7 +516,8 @@ private struct SecondaryChip: View {
             HStack(spacing: Theme.Spacing.xs) {
                 Image(systemName: icon)
                 Text(title)
-                    .font(Theme.Typography.subheadline)
+                    .font(Theme.Typography.cardHeader)
+                    .textCase(.uppercase)
             }
             .foregroundStyle(Theme.Colors.textPrimary)
             .frame(maxWidth: .infinity)
@@ -564,8 +577,10 @@ private struct SummaryPill: View {
     private var content: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
             Text(title)
-                .font(Theme.Typography.caption)
+                .font(Theme.Typography.metricLabel)
                 .foregroundColor(Theme.Colors.textSecondary)
+                .textCase(.uppercase)
+                .tracking(0.8)
 
             Text(value)
                 .font(Theme.Typography.headline)
@@ -589,8 +604,12 @@ private struct ExploreRow: View {
             Image(systemName: icon)
                 .foregroundColor(tint)
                 .frame(width: 36, height: 36)
-                .background(tint.opacity(0.15))
-                .cornerRadius(12)
+                .background(tint.opacity(0.12))
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                        .strokeBorder(tint, lineWidth: 2)
+                )
+                .cornerRadius(Theme.CornerRadius.small)
 
             VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                 Text(title)
