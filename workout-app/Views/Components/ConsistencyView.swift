@@ -4,6 +4,7 @@ struct ConsistencyView: View {
     let stats: WorkoutStats
     let workouts: [Workout]
     var timeRange: TimeRangeOption = .month
+    var dateRange: DateInterval? = nil
     var onTap: (() -> Void)? = nil
 
     enum TimeRangeOption {
@@ -33,21 +34,8 @@ struct ConsistencyView: View {
 
     private var targetSessionsPerWeek: Double { 4.0 }
 
-    private var weeksInRange: Int {
-        switch timeRange {
-        case .week: return 1
-        case .month: return 4
-        case .threeMonths: return 13
-        case .year: return 52
-        case .allTime:
-            guard let oldest = workouts.map({ $0.date }).min() else { return 4 }
-            let weeks = Calendar.current.dateComponents([.weekOfYear], from: oldest, to: Date()).weekOfYear ?? 4
-            return max(weeks, 1)
-        }
-    }
-
     private var targetSessions: Int {
-        Int(ceil(Double(weeksInRange) * targetSessionsPerWeek))
+        max(1, Int(ceil(Double(daysInRange) / 7.0 * targetSessionsPerWeek)))
     }
 
     private var sessionCount: Int {
@@ -60,12 +48,32 @@ struct ConsistencyView: View {
     }
 
     private var daysInRange: Int {
+        let rawDays: Int = {
+            if let dateRange {
+                let calendar = Calendar.current
+                let start = calendar.startOfDay(for: dateRange.start)
+                let end = calendar.startOfDay(for: dateRange.end)
+                let days = (calendar.dateComponents([.day], from: start, to: end).day ?? 0) + 1
+                return max(days, 1)
+            }
+
+            switch timeRange {
+            case .week: return 7
+            case .month: return 28
+            case .threeMonths: return 91
+            case .year: return 365
+            case .allTime:
+                guard let oldest = workouts.map({ $0.date }).min() else { return 28 }
+                let days = (Calendar.current.dateComponents([.day], from: oldest, to: Date()).day ?? 0) + 1
+                return max(days, 1)
+            }
+        }()
+
         switch timeRange {
-        case .week: return 7
-        case .month: return 28
-        case .threeMonths: return 91
-        case .year: return 365
-        case .allTime: return min(weeksInRange * 7, 365)
+        case .allTime:
+            return min(rawDays, 365)
+        default:
+            return rawDays
         }
     }
 
@@ -89,7 +97,7 @@ struct ConsistencyView: View {
             }
 
             // Streak Bar
-            StreakBar(workouts: workouts, daysToShow: daysInRange)
+            StreakBar(workouts: workouts, daysToShow: daysInRange, dateRange: dateRange)
         }
         .padding(Theme.Spacing.lg)
         .softCard(elevation: 2)
@@ -168,21 +176,35 @@ private struct StatRow: View {
 private struct StreakBar: View {
     let workouts: [Workout]
     let daysToShow: Int
+    let dateRange: DateInterval?
+
+    private var calendar: Calendar {
+        var calendar = Calendar.current
+        calendar.firstWeekday = 1 // Sunday
+        calendar.minimumDaysInFirstWeek = 1
+        return calendar
+    }
 
     private var workoutDays: Set<Date> {
-        let calendar = Calendar.current
         return Set(workouts.map { calendar.startOfDay(for: $0.date) })
     }
 
     private var dates: [Date] {
-        let calendar = Calendar.current
-        let today = calendar.startOfDay(for: Date())
         let count = min(daysToShow, 28) // Cap at 4 weeks for visual clarity
+        if let dateRange {
+            let start = calendar.startOfDay(for: dateRange.start)
+            let end = calendar.startOfDay(for: dateRange.end)
+            let totalDays = (calendar.dateComponents([.day], from: start, to: end).day ?? 0) + 1
+            let displayCount = min(count, max(totalDays, 1))
+            let displayStart = calendar.date(byAdding: .day, value: -(displayCount - 1), to: end) ?? end
+            return (0..<displayCount).compactMap { calendar.date(byAdding: .day, value: $0, to: displayStart) }
+        }
+
+        let today = calendar.startOfDay(for: Date())
         return (0..<count).compactMap { calendar.date(byAdding: .day, value: -($0), to: today) }.reversed()
     }
 
     private var weekGroupedDates: [[Date]] {
-        let calendar = Calendar.current
         var weeks: [[Date]] = []
         var currentWeek: [Date] = []
         var lastWeekOfYear: Int?

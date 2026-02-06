@@ -186,13 +186,17 @@ struct WorkoutAnalytics {
     }
 
     static func changeMetrics(for workouts: [Workout], windowDays: Int) -> [ChangeMetric] {
-        guard let endDate = workouts.map({ $0.date }).max() else { return [] }
-        let calendar = Calendar.current
-        let currentStart = calendar.date(byAdding: .day, value: -windowDays, to: endDate) ?? endDate
-        let previousStart = calendar.date(byAdding: .day, value: -(windowDays * 2), to: endDate) ?? endDate
+        guard let window = rollingChangeWindow(for: workouts, windowDays: windowDays) else { return [] }
+        return changeMetrics(for: workouts, window: window)
+    }
 
-        let current = workouts.filter { $0.date >= currentStart }
-        let previous = workouts.filter { $0.date >= previousStart && $0.date < currentStart }
+    static func changeMetrics(for workouts: [Workout], window: ChangeMetricWindow) -> [ChangeMetric] {
+        changeMetrics(for: workouts, currentRange: window.current, previousRange: window.previous)
+    }
+
+    static func changeMetrics(for workouts: [Workout], currentRange: DateInterval, previousRange: DateInterval) -> [ChangeMetric] {
+        let current = workouts.filter { currentRange.contains($0.date) }
+        let previous = workouts.filter { previousRange.contains($0.date) }
 
         let currentDuration = average(current.map { durationMinutes(from: $0.duration) })
         let previousDuration = average(previous.map { durationMinutes(from: $0.duration) })
@@ -206,14 +210,34 @@ struct WorkoutAnalytics {
         let currentSessions = Double(current.count)
         let previousSessions = Double(previous.count)
 
-        let metrics = [
+        return [
             changeMetric(title: "Sessions", current: currentSessions, previous: previousSessions),
             changeMetric(title: "Total Volume", current: currentVolume, previous: previousVolume),
             changeMetric(title: "Avg Duration", current: currentDuration, previous: previousDuration),
             changeMetric(title: "Effort Density", current: currentDensity, previous: previousDensity)
         ]
+    }
 
-        return metrics
+    static func rollingChangeWindow(for workouts: [Workout], windowDays: Int) -> ChangeMetricWindow? {
+        guard let endDate = workouts.map({ $0.date }).max() else { return nil }
+        let calendar = Calendar.current
+        let currentStart = calendar.date(byAdding: .day, value: -windowDays, to: endDate) ?? endDate
+        let previousStart = calendar.date(byAdding: .day, value: -(windowDays * 2), to: endDate) ?? endDate
+        // DateInterval.contains(...) is inclusive; shift the previous end slightly to avoid double-counting
+        // workouts that happen exactly at currentStart.
+        let previousEnd = currentStart.addingTimeInterval(-0.001)
+
+        return ChangeMetricWindow(
+            label: rollingWindowLabel(days: windowDays),
+            current: DateInterval(start: currentStart, end: endDate),
+            previous: DateInterval(start: previousStart, end: previousEnd)
+        )
+    }
+
+    private static func rollingWindowLabel(days: Int) -> String {
+        if days <= 14 { return "Last 2w" }
+        if days <= 28 { return "Last 4w" }
+        return "Last \(days)d"
     }
 
     static func consistencyIssues(for workouts: [Workout]) -> [ConsistencyIssue] {

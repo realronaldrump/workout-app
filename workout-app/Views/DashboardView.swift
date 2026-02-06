@@ -65,7 +65,7 @@ struct DashboardView: View {
 
                         CollapsibleSection(
                             title: "Change",
-                            subtitle: selectedTimeRange.rawValue,
+                            subtitle: timeRangeDetailLabel,
                             isExpanded: $isChangeExpanded
                         ) {
                             changeSummaryContent
@@ -115,7 +115,7 @@ struct DashboardView: View {
             )
         }
         .navigationDestination(item: $selectedChangeMetric) { metric in
-            ChangeMetricDetailView(metric: metric, windowDays: windowDays, workouts: dataManager.workouts)
+            ChangeMetricDetailView(metric: metric, window: changeWindow, workouts: dataManager.workouts)
         }
         .navigationDestination(isPresented: $showingMuscleBalance) {
             MuscleBalanceDetailView(dataManager: dataManager)
@@ -176,6 +176,11 @@ struct DashboardView: View {
                 .padding(.horizontal, Theme.Spacing.lg)
 
             TimeRangePicker(selectedRange: $selectedTimeRange)
+
+            Text(timeRangeDetailLabel)
+                .font(Theme.Typography.caption)
+                .foregroundColor(Theme.Colors.textTertiary)
+                .padding(.horizontal, Theme.Spacing.lg)
         }
     }
 
@@ -312,7 +317,8 @@ struct DashboardView: View {
                     ConsistencyView(
                         stats: currentStats,
                         workouts: filteredWorkouts,
-                        timeRange: consistencyTimeRange
+                        timeRange: consistencyTimeRange,
+                        dateRange: selectedDateRange
                     ) {
                         selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: .streak, scrollTarget: nil)
                     }
@@ -371,26 +377,71 @@ struct DashboardView: View {
 
     private var filteredWorkouts: [Workout] {
         guard !dataManager.workouts.isEmpty else { return [] }
+        return dataManager.workouts.filter { selectedDateRange.contains($0.date) }
+    }
 
+    private var selectedDateRange: DateInterval {
         let calendar = Calendar.current
         let now = Date()
 
         switch selectedTimeRange {
         case .week:
-            let weekAgo = calendar.date(byAdding: .day, value: -7, to: now) ?? now
-            return dataManager.workouts.filter { $0.date >= weekAgo }
+            let start = startOfWeekSunday(for: now)
+            return DateInterval(start: start, end: now)
         case .month:
-            let monthAgo = calendar.date(byAdding: .month, value: -1, to: now) ?? now
-            return dataManager.workouts.filter { $0.date >= monthAgo }
+            let start = calendar.dateInterval(of: .month, for: now)?.start ?? calendar.startOfDay(for: now)
+            return DateInterval(start: start, end: now)
         case .threeMonths:
-            let threeMonthsAgo = calendar.date(byAdding: .month, value: -3, to: now) ?? now
-            return dataManager.workouts.filter { $0.date >= threeMonthsAgo }
+            let start = calendar.date(byAdding: .month, value: -3, to: now) ?? now
+            return DateInterval(start: start, end: now)
         case .year:
-            let yearAgo = calendar.date(byAdding: .year, value: -1, to: now) ?? now
-            return dataManager.workouts.filter { $0.date >= yearAgo }
+            let start = calendar.date(byAdding: .year, value: -1, to: now) ?? now
+            return DateInterval(start: start, end: now)
         case .allTime:
-            return dataManager.workouts
+            let oldest = dataManager.workouts.map { $0.date }.min() ?? now
+            return DateInterval(start: oldest, end: now)
         }
+    }
+
+    private var timeRangeDetailLabel: String {
+        formattedRange(
+            selectedDateRange,
+            includeWeekday: selectedTimeRange == .week,
+            forceIncludeYear: selectedTimeRange == .year || selectedTimeRange == .allTime
+        )
+    }
+
+    private func startOfWeekSunday(for date: Date) -> Date {
+        var calendar = Calendar.current
+        calendar.firstWeekday = 1 // Sunday
+        calendar.minimumDaysInFirstWeek = 1
+        return calendar.dateInterval(of: .weekOfYear, for: date)?.start ?? calendar.startOfDay(for: date)
+    }
+
+    private func formattedRange(_ range: DateInterval, includeWeekday: Bool, forceIncludeYear: Bool) -> String {
+        let calendar = Calendar.current
+        let startYear = calendar.component(.year, from: range.start)
+        let endYear = calendar.component(.year, from: range.end)
+        let includeYear = forceIncludeYear || startYear != endYear
+
+        let startText = formattedDate(range.start, includeWeekday: includeWeekday, includeYear: includeYear)
+        let endText = formattedDate(range.end, includeWeekday: includeWeekday, includeYear: includeYear)
+        if startText == endText { return startText }
+        return "\(startText) – \(endText)"
+    }
+
+    private func formattedDate(_ date: Date, includeWeekday: Bool, includeYear: Bool) -> String {
+        var style = Date.FormatStyle()
+            .month(.abbreviated)
+            .day()
+
+        if includeYear {
+            style = style.year()
+        }
+        if includeWeekday {
+            style = style.weekday(.abbreviated)
+        }
+        return date.formatted(style)
     }
 
     private var filteredStats: WorkoutStats? {
@@ -430,25 +481,6 @@ struct DashboardView: View {
         return abs(lastSync.timeIntervalSinceNow) < 3600 * 6
     }
 
-
-    private var windowDays: Int {
-        switch selectedTimeRange {
-        case .week:
-            return 7
-        case .month:
-            return 30
-        case .threeMonths:
-            return 90
-        case .year:
-            return 365
-        case .allTime:
-            guard let oldest = dataManager.workouts.map({ $0.date }).min(),
-                  let newest = dataManager.workouts.map({ $0.date }).max() else { return 30 }
-            let days = Calendar.current.dateComponents([.day], from: oldest, to: newest).day ?? 30
-            return max(days, 30)
-        }
-    }
-
     private var consistencyTimeRange: ConsistencyView.TimeRangeOption {
         switch selectedTimeRange {
         case .week: return .week
@@ -459,8 +491,57 @@ struct DashboardView: View {
         }
     }
 
+    private var changeWindow: ChangeMetricWindow {
+        let calendar = Calendar.current
+        let current = selectedDateRange
+
+        switch selectedTimeRange {
+        case .week:
+            let previousStart = calendar.date(byAdding: .day, value: -7, to: current.start) ?? current.start
+            let previousEnd = calendar.date(byAdding: .day, value: -7, to: current.end) ?? current.end
+            return ChangeMetricWindow(
+                label: "This week • \(timeRangeDetailLabel)",
+                current: current,
+                previous: DateInterval(start: previousStart, end: previousEnd)
+            )
+        case .month:
+            let previousStart = calendar.date(byAdding: .month, value: -1, to: current.start) ?? current.start
+            let previousEnd = calendar.date(byAdding: .month, value: -1, to: current.end) ?? current.end
+            return ChangeMetricWindow(
+                label: "This month • \(timeRangeDetailLabel)",
+                current: current,
+                previous: DateInterval(start: previousStart, end: previousEnd)
+            )
+        case .threeMonths:
+            let previousStart = calendar.date(byAdding: .month, value: -3, to: current.start) ?? current.start
+            let previousEnd = current.start.addingTimeInterval(-0.001)
+            return ChangeMetricWindow(
+                label: "Last 3 months • \(timeRangeDetailLabel)",
+                current: current,
+                previous: DateInterval(start: previousStart, end: previousEnd)
+            )
+        case .year:
+            let previousStart = calendar.date(byAdding: .year, value: -1, to: current.start) ?? current.start
+            let previousEnd = current.start.addingTimeInterval(-0.001)
+            return ChangeMetricWindow(
+                label: "Last year • \(timeRangeDetailLabel)",
+                current: current,
+                previous: DateInterval(start: previousStart, end: previousEnd)
+            )
+        case .allTime:
+            let duration = current.duration
+            let previousEnd = duration > 0 ? current.start.addingTimeInterval(-0.001) : current.start
+            let previousStart = previousEnd.addingTimeInterval(-duration)
+            return ChangeMetricWindow(
+                label: "All time • \(timeRangeDetailLabel)",
+                current: current,
+                previous: DateInterval(start: previousStart, end: previousEnd)
+            )
+        }
+    }
+
     private var windowChangeMetrics: [ChangeMetric] {
-        WorkoutAnalytics.changeMetrics(for: dataManager.workouts, windowDays: windowDays)
+        WorkoutAnalytics.changeMetrics(for: dataManager.workouts, window: changeWindow)
     }
 
     private var changeSummaryMetrics: [ChangeMetric] {

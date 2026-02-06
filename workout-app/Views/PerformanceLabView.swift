@@ -72,7 +72,17 @@ struct PerformanceLabView: View {
             )
         }
         .navigationDestination(item: $selectedChangeMetric) { metric in
-            ChangeMetricDetailView(metric: metric, windowDays: changeWindow, workouts: workouts)
+            let fallbackNow = Date()
+            let fallbackWindow = ChangeMetricWindow(
+                label: "Last \(changeWindow)d",
+                current: DateInterval(start: fallbackNow, end: fallbackNow),
+                previous: DateInterval(start: fallbackNow, end: fallbackNow)
+            )
+            ChangeMetricDetailView(
+                metric: metric,
+                window: WorkoutAnalytics.rollingChangeWindow(for: workouts, windowDays: changeWindow) ?? fallbackWindow,
+                workouts: workouts
+            )
         }
         .navigationDestination(item: $selectedHabitFactor) { kind in
             HabitImpactDetailView(kind: kind, workouts: workouts, annotations: annotationsManager.annotations)
@@ -206,7 +216,8 @@ struct PerformanceLabView: View {
     }
 
     private var changeSection: some View {
-        let changes = WorkoutAnalytics.changeMetrics(for: workouts, windowDays: changeWindow)
+        let window = WorkoutAnalytics.rollingChangeWindow(for: workouts, windowDays: changeWindow)
+        let changes = window.map { WorkoutAnalytics.changeMetrics(for: workouts, window: $0) } ?? []
         let exerciseImprovements = WorkoutAnalytics.progressContributions(
             workouts: workouts,
             weeks: max(2, changeWindow / 7),

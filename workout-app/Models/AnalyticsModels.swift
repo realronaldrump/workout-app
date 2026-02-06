@@ -150,6 +150,12 @@ struct ChangeMetric: Identifiable, Hashable {
     let isPositive: Bool
 }
 
+struct ChangeMetricWindow {
+    let label: String
+    let current: DateInterval
+    let previous: DateInterval
+}
+
 enum ConsistencyIssueType: String {
     case missedDay
     case shortenedSession

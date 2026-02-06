@@ -3,7 +3,7 @@ import Charts
 
 struct ChangeMetricDetailView: View {
     let metric: ChangeMetric
-    let windowDays: Int
+    let window: ChangeMetricWindow
     let workouts: [Workout]
 
     @EnvironmentObject var dataManager: WorkoutDataManager
@@ -22,34 +22,16 @@ struct ChangeMetricDetailView: View {
         let window: Window
     }
 
-    private var endDate: Date? {
-        workouts.map(\.date).max()
-    }
-
-    private var currentStart: Date? {
-        guard let endDate else { return nil }
-        return Calendar.current.date(byAdding: .day, value: -windowDays, to: endDate)
-    }
-
-    private var previousStart: Date? {
-        guard let endDate else { return nil }
-        return Calendar.current.date(byAdding: .day, value: -(windowDays * 2), to: endDate)
-    }
-
     private var currentWorkouts: [Workout] {
-        guard let currentStart else { return [] }
-        return workouts.filter { $0.date >= currentStart }
+        workouts.filter { window.current.contains($0.date) }
     }
 
     private var previousWorkouts: [Workout] {
-        guard let currentStart, let previousStart else { return [] }
-        return workouts.filter { $0.date >= previousStart && $0.date < currentStart }
+        workouts.filter { window.previous.contains($0.date) }
     }
 
     private var windowLabel: String {
-        if windowDays <= 14 { return "Last 2w" }
-        if windowDays <= 28 { return "Last 4w" }
-        return "Last \(windowDays)d"
+        window.label
     }
 
     var body: some View {
@@ -127,35 +109,50 @@ struct ChangeMetricDetailView: View {
                     .softCard(elevation: 1)
             } else {
                 Chart {
-                    ForEach(chartPoints) { point in
-                        if metric.title == "Sessions" {
+                    if metric.title == "Sessions" {
+                        ForEach(chartPoints) { point in
                             BarMark(
                                 x: .value("Date", point.date),
                                 y: .value("Count", point.value)
                             )
                             .foregroundStyle(point.window == .current ? Theme.Colors.accent : Theme.Colors.elevated)
                             .cornerRadius(3)
-                        } else {
+                        }
+                    } else {
+                        ForEach(chartPoints.filter { $0.window == .previous }) { point in
                             LineMark(
                                 x: .value("Date", point.date),
                                 y: .value("Value", point.value)
                             )
-                            .foregroundStyle(point.window == .current ? Theme.Colors.accent : Theme.Colors.textTertiary)
+                            .foregroundStyle(Theme.Colors.textTertiary)
                             .interpolationMethod(.catmullRom)
 
                             PointMark(
                                 x: .value("Date", point.date),
                                 y: .value("Value", point.value)
                             )
-                            .foregroundStyle(point.window == .current ? Theme.Colors.accent : Theme.Colors.textTertiary)
+                            .foregroundStyle(Theme.Colors.textTertiary)
+                        }
+
+                        ForEach(chartPoints.filter { $0.window == .current }) { point in
+                            LineMark(
+                                x: .value("Date", point.date),
+                                y: .value("Value", point.value)
+                            )
+                            .foregroundStyle(Theme.Colors.accent)
+                            .interpolationMethod(.catmullRom)
+
+                            PointMark(
+                                x: .value("Date", point.date),
+                                y: .value("Value", point.value)
+                            )
+                            .foregroundStyle(Theme.Colors.accent)
                         }
                     }
 
-                    if let currentStart {
-                        RuleMark(x: .value("Current start", currentStart))
-                            .foregroundStyle(Theme.Colors.textTertiary.opacity(0.4))
-                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
-                    }
+                    RuleMark(x: .value("Current start", window.current.start))
+                        .foregroundStyle(Theme.Colors.textTertiary.opacity(0.4))
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
                 }
                 .chartXAxis {
                     AxisMarks(values: .automatic(desiredCount: 4)) { _ in
@@ -416,24 +413,24 @@ struct ChangeMetricDetailView: View {
     }
 
     private func seriesPoints(from workouts: [Workout], value: (Workout) -> Double) -> [ChartPoint] {
-        guard let currentStart else { return [] }
         let sorted = workouts.sorted { $0.date < $1.date }
         return sorted.compactMap { workout in
             let v = value(workout)
             guard v > 0 else { return nil }
-            return ChartPoint(date: workout.date, value: v, window: workout.date >= currentStart ? .current : .previous)
+            guard window.current.contains(workout.date) || window.previous.contains(workout.date) else { return nil }
+            let windowBucket: Window = window.current.contains(workout.date) ? .current : .previous
+            return ChartPoint(date: workout.date, value: v, window: windowBucket)
         }
     }
 
     private var sessionChartPoints: [ChartPoint] {
-        guard let currentStart, let previousStart else { return [] }
         let calendar = Calendar.current
-        let filtered = workouts.filter { $0.date >= previousStart }
+        let filtered = workouts.filter { window.current.contains($0.date) || window.previous.contains($0.date) }
         let buckets: [Date: (count: Int, window: Window)] = filtered.reduce(into: [:]) { result, workout in
             let day = calendar.startOfDay(for: workout.date)
-            let window: Window = workout.date >= currentStart ? .current : .previous
-            let current = result[day] ?? (0, window)
-            result[day] = (current.count + 1, window)
+            let windowBucket: Window = window.current.contains(workout.date) ? .current : .previous
+            let current = result[day] ?? (0, windowBucket)
+            result[day] = (current.count + 1, windowBucket)
         }
 
         return buckets
