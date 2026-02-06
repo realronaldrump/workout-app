@@ -124,7 +124,7 @@ struct ProfileView: View {
             VStack(spacing: 1) {
                 SettingsRow(
                     icon: "heart.fill",
-                    color: .red,
+                    color: Theme.Colors.error,
                     title: "Apple Health",
                     subtitle: healthManager.authorizationStatus == .authorized ? "Connected" : "Health off",
                     value: healthManager.authorizationStatus == .authorized ? "On" : "Off"
@@ -141,7 +141,7 @@ struct ProfileView: View {
                 NavigationLink(destination: BackupFilesView(iCloudManager: iCloudManager)) {
                     ProfileLinkRow(
                         icon: "icloud.fill",
-                        color: .cyan,
+                        color: Theme.Colors.cardio,
                         title: "Backups",
                         subtitle: "iCloud",
                         value: iCloudStatusText
@@ -164,7 +164,7 @@ struct ProfileView: View {
                     Image(systemName: "scalemass.fill")
                         .foregroundStyle(.white)
                         .frame(width: 30, height: 30)
-                        .background(Color.green)
+                        .background(Theme.Colors.success)
                         .cornerRadius(6)
 
                     Text("Weight Unit")
@@ -188,7 +188,7 @@ struct ProfileView: View {
                     Image(systemName: "calendar")
                         .foregroundStyle(.white)
                         .frame(width: 30, height: 30)
-                        .background(Color.orange)
+                        .background(Theme.Colors.warning)
                         .cornerRadius(6)
 
                     Text("Date Format")
@@ -211,7 +211,7 @@ struct ProfileView: View {
                 NavigationLink(destination: ExerciseTaggingView(dataManager: dataManager)) {
                     ProfileLinkRow(
                         icon: "tag.fill",
-                        color: .purple,
+                        color: Theme.Colors.accentTertiary,
                         title: "Exercise Tags",
                         subtitle: "Assign muscle groups"
                     )
@@ -223,7 +223,7 @@ struct ProfileView: View {
                 NavigationLink(destination: SettingsView(dataManager: dataManager, iCloudManager: iCloudManager)) {
                     ProfileLinkRow(
                         icon: "gearshape.fill",
-                        color: .gray,
+                        color: Theme.Colors.textTertiary,
                         title: "Settings",
                         subtitle: "Sync, units, tags"
                     )

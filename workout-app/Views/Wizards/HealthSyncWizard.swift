@@ -56,11 +56,11 @@ struct HealthSyncWizard: View {
             
             Image(systemName: "heart.text.square.fill")
                 .font(.system(size: 80))
-                .foregroundStyle(Color.red)
+                .foregroundStyle(Theme.Colors.error)
                 .padding()
                 .background(
                     Circle()
-                        .fill(Color.red.opacity(0.1))
+                        .fill(Theme.Colors.error.opacity(0.12))
                         .frame(width: 160, height: 160)
                 )
             
@@ -138,7 +138,7 @@ struct HealthSyncWizard: View {
                 
                 Circle()
                     .trim(from: 0, to: healthManager.syncProgress)
-                    .stroke(Color.red, style: StrokeStyle(lineWidth: 8, lineCap: .round))
+                    .stroke(Theme.Colors.error, style: StrokeStyle(lineWidth: 8, lineCap: .round))
                     .frame(width: 120, height: 120)
                     .rotationEffect(.degrees(-90))
                     .animation(.spring(), value: healthManager.syncProgress)

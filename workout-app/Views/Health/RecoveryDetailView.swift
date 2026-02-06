@@ -50,7 +50,7 @@ struct RecoveryDetailView: View {
         } else if overallAvg < 140 {
             score = 75
             label = "Solid"
-            color = Color.green
+            color = Theme.Colors.success
         } else if overallAvg < 155 {
             score = 60
             label = "Caution"
@@ -272,4 +272,3 @@ struct RecoveryDetailView: View {
         }
     }
 }
-

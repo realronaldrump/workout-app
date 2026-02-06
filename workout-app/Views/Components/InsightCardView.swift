@@ -8,14 +8,14 @@ struct InsightCardView: View {
     
     private var iconColor: Color {
         switch insight.type.color {
-        case "yellow": return .yellow
-        case "green": return .green
-        case "orange": return .orange
-        case "purple": return .purple
-        case "blue": return .blue
-        case "cyan": return .cyan
-        case "red": return .red
-        default: return .blue
+        case "yellow": return Theme.Colors.gold
+        case "green": return Theme.Colors.success
+        case "orange": return Theme.Colors.warning
+        case "purple": return Theme.Colors.accentTertiary
+        case "blue": return Theme.Colors.accent
+        case "cyan": return Theme.Colors.cardio
+        case "red": return Theme.Colors.error
+        default: return Theme.Colors.accent
         }
     }
     
@@ -108,7 +108,7 @@ struct InsightsSectionView: View {
                     }) {
                         Text(showAllInsights ? "Less" : "All \(insightsEngine.insights.count)")
                             .font(Theme.Typography.subheadline)
-                            .foregroundColor(.blue)
+                            .foregroundColor(Theme.Colors.accent)
                     }
                 }
             }

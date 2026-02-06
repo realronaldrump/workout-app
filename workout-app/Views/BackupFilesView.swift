@@ -86,9 +86,9 @@ struct BackupFileRow: View {
             Button(action: onDelete) {
                 Image(systemName: "trash")
                     .font(.body)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(Theme.Colors.error)
                     .padding(8)
-                    .background(Color.red.opacity(0.1))
+                    .background(Theme.Colors.error.opacity(0.12))
                     .clipShape(Circle())
             }
             .buttonStyle(PlainButtonStyle())

@@ -3,12 +3,16 @@ import SwiftUI
 struct WordmarkLockup: View {
     var showTagline: Bool = true
     var tagline: String = "Best Workout App in The World"
+    var isOnSplash: Bool = false
+
+    private var primaryText: Color { isOnSplash ? .white : Theme.Colors.textPrimary }
+    private var secondaryText: Color { isOnSplash ? Color.white.opacity(0.86) : Theme.Colors.textSecondary }
 
     var body: some View {
         VStack(spacing: 8) {
             Text("Davis's")
                 .font(.system(size: 16, weight: .semibold, design: .rounded))
-                .foregroundStyle(Theme.Colors.textSecondary)
+                .foregroundStyle(secondaryText)
                 .textCase(.uppercase)
                 .tracking(1.2)
 
@@ -21,7 +25,7 @@ struct WordmarkLockup: View {
                         .font(.custom("BebasNeue-Regular", size: 44, relativeTo: .largeTitle))
                 }
                 .tracking(0.8)
-                .foregroundStyle(Theme.Colors.textPrimary)
+                .foregroundStyle(primaryText)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
 
@@ -33,7 +37,7 @@ struct WordmarkLockup: View {
                         .font(.custom("BebasNeue-Regular", size: 30, relativeTo: .title))
                 }
                 .tracking(0.6)
-                .foregroundStyle(Theme.Colors.textPrimary)
+                .foregroundStyle(primaryText)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
             }
@@ -41,7 +45,7 @@ struct WordmarkLockup: View {
             if showTagline {
                 Text(tagline)
                     .font(Theme.Typography.subheadline)
-                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .foregroundStyle(secondaryText)
                     .multilineTextAlignment(.center)
             }
         }
@@ -53,8 +57,7 @@ struct WordmarkLockup: View {
 #Preview {
     ZStack {
         SplashBackground()
-        WordmarkLockup()
+        WordmarkLockup(isOnSplash: true)
             .padding(Theme.Spacing.xl)
     }
 }
-

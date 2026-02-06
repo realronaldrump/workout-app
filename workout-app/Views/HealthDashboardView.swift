@@ -712,7 +712,7 @@ struct HealthDashboardView: View {
             label = "Ready"
         } else if overallAvgHR < 140 {
             score = 75
-            color = Color.green
+            color = Theme.Colors.success
             label = "Solid"
         } else if overallAvgHR < 155 {
             score = 60

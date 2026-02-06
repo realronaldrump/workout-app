@@ -30,7 +30,7 @@ struct GymProfilesView: View {
                             Image(systemName: "square.stack.3d.up.fill")
                                 .foregroundStyle(.white)
                                 .frame(width: 30, height: 30)
-                                .background(Color.indigo)
+                                .background(Theme.Colors.accent)
                                 .cornerRadius(6)
 
                             VStack(alignment: .leading) {

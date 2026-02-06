@@ -17,7 +17,7 @@ struct OnboardingView: View {
 
     var body: some View {
         ZStack {
-            SplashBackground()
+            AdaptiveBackground()
 
             VStack(spacing: Theme.Spacing.lg) {
                 topBar

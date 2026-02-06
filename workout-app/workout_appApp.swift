@@ -14,6 +14,7 @@ struct workout_appApp: App {
 
     init() {
         FontRegistrar.registerFontsIfNeeded()
+        Theme.configureGlobalAppearance()
     }
     
     var body: some Scene {

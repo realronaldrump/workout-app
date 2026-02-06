@@ -14,7 +14,7 @@ struct InAppSplashView: View {
             VStack(spacing: Theme.Spacing.xl) {
                 Spacer()
 
-                WordmarkLockup(showTagline: true)
+                WordmarkLockup(showTagline: true, isOnSplash: true)
                     .padding(.horizontal, Theme.Spacing.xl)
                     .opacity(isVisible ? 1 : 0)
                     .scaleEffect(isVisible || reduceMotion ? 1 : 0.98)
@@ -27,7 +27,7 @@ struct InAppSplashView: View {
                 if let statusText {
                     Text(statusText)
                         .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textTertiary)
+                        .foregroundStyle(Color.white.opacity(0.72))
                         .padding(.bottom, Theme.Spacing.xl)
                 } else {
                     // Keep spacing consistent so the lockup doesn't jump when status is used elsewhere.

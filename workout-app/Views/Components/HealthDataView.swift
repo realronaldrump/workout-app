@@ -9,11 +9,11 @@ struct HealthDataView: View {
     var body: some View {
         VStack(spacing: Theme.Spacing.lg) {
             // Header
-            HStack {
-                Image(systemName: "heart.fill")
-                    .foregroundColor(.red)
-                Text("Health Metrics")
-                    .font(Theme.Typography.headline)
+                HStack {
+                    Image(systemName: "heart.fill")
+	                    .foregroundColor(Theme.Colors.error)
+                    Text("Health Metrics")
+                        .font(Theme.Typography.headline)
                 
                 Spacer()
                 

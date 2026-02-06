@@ -47,7 +47,7 @@ struct SettingsView: View {
                     VStack(spacing: 1) {
                         SettingsRow(
                             icon: "square.and.arrow.down",
-                            color: .blue,
+                            color: Theme.Colors.accent,
                             title: "Import Data",
                             subtitle: "Import CSV"
                         ) {
@@ -58,7 +58,7 @@ struct SettingsView: View {
                         
                         SettingsRow(
                             icon: "heart.fill",
-                            color: .red,
+                            color: Theme.Colors.error,
                             title: "Apple Health",
                             subtitle: healthManager.authorizationStatus == .authorized ? "Connected" : "Health off",
                             value: healthManager.authorizationStatus == .authorized ? "On" : "Off"
@@ -71,7 +71,7 @@ struct SettingsView: View {
                         if healthManager.authorizationStatus == .authorized {
                             SettingsRow(
                                 icon: "chart.xyaxis.line",
-                                color: .pink,
+                                color: Theme.Colors.accentSecondary,
                                 title: "Health Insights",
                                 subtitle: "Trends"
                             ) {
@@ -86,7 +86,7 @@ struct SettingsView: View {
                                 Image(systemName: "icloud.fill")
                                     .foregroundStyle(.white)
                                     .frame(width: 30, height: 30)
-                                    .background(Color.cyan)
+                                    .background(Theme.Colors.cardio)
                                     .cornerRadius(6)
                                 
                                 VStack(alignment: .leading) {
@@ -122,7 +122,7 @@ struct SettingsView: View {
                             Image(systemName: "scalemass.fill")
                                 .foregroundStyle(.white)
                                 .frame(width: 30, height: 30)
-                                .background(Color.green)
+                                .background(Theme.Colors.success)
                                 .cornerRadius(6)
                             
                             Text("Weight Unit")
@@ -147,7 +147,7 @@ struct SettingsView: View {
                             Image(systemName: "calendar")
                                 .foregroundStyle(.white)
                                 .frame(width: 30, height: 30)
-                                .background(Color.orange)
+                                .background(Theme.Colors.warning)
                                 .cornerRadius(6)
                             
                             Text("Date Format")
@@ -172,7 +172,7 @@ struct SettingsView: View {
                             Image(systemName: "moon.fill")
                                 .foregroundStyle(.white)
                                 .frame(width: 30, height: 30)
-                                .background(Color.indigo)
+                                .background(Theme.Colors.accent)
                                 .cornerRadius(6)
                             
                             Text("Appearance")
@@ -199,7 +199,7 @@ struct SettingsView: View {
                                 Image(systemName: "mappin.and.ellipse")
                                     .foregroundStyle(.white)
                                     .frame(width: 30, height: 30)
-                                    .background(Color.indigo)
+                                    .background(Theme.Colors.accent)
                                     .cornerRadius(6)
                                 
                                 VStack(alignment: .leading) {
@@ -229,7 +229,7 @@ struct SettingsView: View {
                                 Image(systemName: "tag.fill")
                                     .foregroundStyle(.white)
                                     .frame(width: 30, height: 30)
-                                    .background(Color.purple)
+                                    .background(Theme.Colors.accentTertiary)
                                     .cornerRadius(6)
                                 
                                 VStack(alignment: .leading) {
@@ -258,7 +258,7 @@ struct SettingsView: View {
                 Button(action: { showingDeleteAlert = true }) {
                     Text("Clear All Data")
                         .font(Theme.Typography.bodyBold)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(Theme.Colors.error)
                         .frame(maxWidth: .infinity)
                         .padding()
                         .softCard()
