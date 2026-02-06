@@ -64,13 +64,14 @@ struct VolumeProgressChart: View {
                     y: .value(selectedMetric.rawValue, dataPoint.value)
                 )
                 .foregroundStyle(Theme.Colors.accent)
+                .symbolSize(pointSymbolSize)
             }
         }
         .frame(height: 200)
         .chartXAxis {
-            AxisMarks(values: .stride(by: .day, count: 7)) { _ in
+            AxisMarks(values: .stride(by: xAxisComponent, count: xAxisStride)) { _ in
                 AxisGridLine()
-                AxisValueLabel(format: .dateTime.month().day())
+                AxisValueLabel(format: xAxisDateFormat)
             }
         }
         .chartYAxis {
@@ -105,6 +106,42 @@ struct VolumeProgressChart: View {
                     }
                 }
         )
+    }
+    
+    // MARK: - Dynamic Axis Configuration
+    
+    private var dateRangeInDays: Int {
+        guard let earliest = chartData.first?.date,
+              let latest = chartData.last?.date else { return 7 }
+        return max(1, Calendar.current.dateComponents([.day], from: earliest, to: latest).day ?? 7)
+    }
+    
+    private var xAxisComponent: Calendar.Component {
+        if dateRangeInDays > 180 { return .month }       // 6+ months: monthly ticks
+        if dateRangeInDays > 28 { return .weekOfYear }   // 1-6 months: weekly ticks
+        return .day                                       // Under 1 month: daily ticks
+    }
+    
+    private var xAxisStride: Int {
+        if dateRangeInDays > 365 { return 2 }            // Over a year: every 2 months
+        if dateRangeInDays > 180 { return 1 }            // 6-12 months: every month
+        if dateRangeInDays > 60 { return 2 }             // 2-6 months: every 2 weeks
+        if dateRangeInDays > 28 { return 1 }             // 1-2 months: every week
+        return 7                                          // Under 1 month: every 7 days
+    }
+    
+    private var xAxisDateFormat: Date.FormatStyle {
+        if dateRangeInDays > 180 {
+            return .dateTime.month(.abbreviated)         // "Jan", "Feb"
+        }
+        return .dateTime.month(.abbreviated).day()       // "Jan 5"
+    }
+    
+    private var pointSymbolSize: CGFloat {
+        // Smaller points for dense data
+        if chartData.count > 50 { return 12 }
+        if chartData.count > 20 { return 20 }
+        return 30
     }
     
     private var chartData: [(date: Date, value: Double)] {

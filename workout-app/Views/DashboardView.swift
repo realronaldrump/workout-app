@@ -290,27 +290,10 @@ struct DashboardView: View {
 
     private var trainingSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-            HStack {
-                Text("Training")
-                    .font(Theme.Typography.sectionHeader)
-                    .foregroundColor(Theme.Colors.textPrimary)
-                    .tracking(1.0)
-
-                Spacer()
-
-                Button(action: {
-                    withAnimation(Theme.Animation.spring) {
-                        isTrainingExpanded.toggle()
-                    }
-                    Haptics.selection()
-                }) {
-                    Text(isTrainingExpanded ? "Less" : "More")
-                        .font(Theme.Typography.metricLabel)
-                        .foregroundColor(Theme.Colors.accent)
-                        .textCase(.uppercase)
-                        .tracking(0.8)
-                }
-            }
+            Text("Training")
+                .font(Theme.Typography.sectionHeader)
+                .foregroundColor(Theme.Colors.textPrimary)
+                .tracking(1.0)
 
             VStack(spacing: Theme.Spacing.lg) {
                 if let currentStats = filteredStats {
@@ -327,6 +310,28 @@ struct DashboardView: View {
                         .fill(Theme.Colors.surface.opacity(0.6))
                         .frame(height: 220)
                         .redacted(reason: .placeholder)
+                }
+
+                // More/Less button below consistency
+                Button(action: {
+                    withAnimation(Theme.Animation.spring) {
+                        isTrainingExpanded.toggle()
+                    }
+                    Haptics.selection()
+                }) {
+                    HStack {
+                        Text(isTrainingExpanded ? "Show Less" : "Show More")
+                            .font(Theme.Typography.metricLabel)
+                            .foregroundColor(Theme.Colors.accent)
+                            .textCase(.uppercase)
+                            .tracking(0.8)
+                        Spacer()
+                        Image(systemName: isTrainingExpanded ? "chevron.up" : "chevron.down")
+                            .font(.caption.weight(.bold))
+                            .foregroundColor(Theme.Colors.accent)
+                    }
+                    .padding(Theme.Spacing.md)
+                    .softCard(elevation: 1)
                 }
 
                 if isTrainingExpanded {
