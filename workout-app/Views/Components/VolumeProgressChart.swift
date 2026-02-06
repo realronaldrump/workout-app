@@ -14,21 +14,17 @@ struct VolumeProgressChart: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-            HStack {
+            VStack(alignment: .leading, spacing: Theme.Spacing.md) {
                 Text("Progress")
                     .font(Theme.Typography.sectionHeader)
                     .foregroundColor(Theme.Colors.textPrimary)
                     .tracking(1.0)
                 
-                Spacer()
-                
-                Picker("Metric", selection: $selectedMetric) {
-                    ForEach(VolumeMetric.allCases, id: \.self) { metric in
-                        Text(metric.rawValue).tag(metric)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .frame(width: 200)
+                BrutalistSegmentedPicker(
+                    title: "Metric",
+                    selection: $selectedMetric,
+                    options: VolumeMetric.allCases.map { ($0.rawValue, $0) }
+                )
             }
             
             Group {
@@ -53,12 +49,14 @@ struct VolumeProgressChart: View {
                     x: .value("Date", dataPoint.date),
                     y: .value(selectedMetric.rawValue, dataPoint.value)
                 )
+                .interpolationMethod(.catmullRom)
                 .foregroundStyle(Theme.Colors.accent)
                 
                 AreaMark(
                     x: .value("Date", dataPoint.date),
                     y: .value(selectedMetric.rawValue, dataPoint.value)
                 )
+                .interpolationMethod(.catmullRom)
                 .foregroundStyle(Theme.Colors.accent.opacity(0.2))
                 
                 PointMark(
