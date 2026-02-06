@@ -26,26 +26,14 @@ struct WorkoutHRChart: View {
                         x: .value("Time", sample.timestamp),
                         y: .value("BPM", sample.value)
                     )
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [.red, .pink.opacity(0.5)],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
+                    .foregroundStyle(Theme.Colors.error)
                     .interpolationMethod(.catmullRom)
                     
                     AreaMark(
                         x: .value("Time", sample.timestamp),
                         y: .value("BPM", sample.value)
                     )
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [.red.opacity(0.2), .red.opacity(0.0)],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
+                    .foregroundStyle(Theme.Colors.error.opacity(0.16))
                     .interpolationMethod(.catmullRom)
                 }
             }

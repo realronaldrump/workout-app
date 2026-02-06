@@ -16,16 +16,16 @@ enum Theme {
         // Keep the "electric blue" brand moment from LaunchScreen as the primary accent.
 
         // Core surfaces
-        static let background = Color.uiColor(light: UIColor(hex: 0xFFF4E6), dark: UIColor(hex: 0x060A1A))
-        static let surface = Color.uiColor(light: UIColor(hex: 0xFFFCF7), dark: UIColor(hex: 0x0B1330))
-        static let elevated = Color.uiColor(light: UIColor(hex: 0xFFFFFF), dark: UIColor(hex: 0x101C3D))
-        static let cardBackground = Color.uiColor(light: UIColor(hex: 0xFFFEFB), dark: UIColor(hex: 0x0C1633))
-        static let border = Color.uiColor(light: UIColor(hex: 0xEED5C2), dark: UIColor(hex: 0x23325E))
+        static let background = Color.uiColor(light: UIColor(hex: 0xFFF4E6), dark: UIColor(hex: 0x071316))
+        static let surface = Color.uiColor(light: UIColor(hex: 0xFFFCF7), dark: UIColor(hex: 0x0B1D21))
+        static let elevated = Color.uiColor(light: UIColor(hex: 0xFFFFFF), dark: UIColor(hex: 0x102A30))
+        static let cardBackground = Color.uiColor(light: UIColor(hex: 0xFFFEFB), dark: UIColor(hex: 0x0C2226))
+        static let border = Color.uiColor(light: UIColor(hex: 0xEED5C2), dark: UIColor(hex: 0x1C3B3F))
         
         // Text hierarchy
-        static let textPrimary = Color.uiColor(light: UIColor(hex: 0x1B1612), dark: UIColor(hex: 0xF3F7FF))
-        static let textSecondary = Color.uiColor(light: UIColor(hex: 0x5B5148), dark: UIColor(hex: 0xB8C7E6))
-        static let textTertiary = Color.uiColor(light: UIColor(hex: 0x8C8075), dark: UIColor(hex: 0x7E8FB8))
+        static let textPrimary = Color.uiColor(light: UIColor(hex: 0x1B1612), dark: UIColor(hex: 0xF3FFFD))
+        static let textSecondary = Color.uiColor(light: UIColor(hex: 0x5B5148), dark: UIColor(hex: 0xB8E3DD))
+        static let textTertiary = Color.uiColor(light: UIColor(hex: 0x8C8075), dark: UIColor(hex: 0x7FB8B0))
         
         // Accent colors - vibrant and energetic
         static let accent = Color(uiColor: UIColor(hex: 0x125BFF))  // Electric blue (matches LaunchBackground)
@@ -60,26 +60,26 @@ enum Theme {
         // Glassmorphism
         static let glass = Color.uiColor(
             light: UIColor(hex: 0xFFF7EE).withAlphaComponent(0.72),
-            dark: UIColor(hex: 0x0B1330).withAlphaComponent(0.35)
+            dark: UIColor(hex: 0x0B1D21).withAlphaComponent(0.55)
         )
         static let glassBorder = Color.uiColor(
             light: UIColor(hex: 0x1B1612).withAlphaComponent(0.08),
-            dark: UIColor(hex: 0xF3F7FF).withAlphaComponent(0.12)
+            dark: UIColor(hex: 0xF3FFFD).withAlphaComponent(0.14)
         )
     }
 
     // MARK: - UIKit Colors (for UIAppearance)
 
     enum UIColors {
-        static let background = UIColor.dynamic(light: 0xFFF4E6, dark: 0x060A1A)
-        static let surface = UIColor.dynamic(light: 0xFFFCF7, dark: 0x0B1330)
-        static let elevated = UIColor.dynamic(light: 0xFFFFFF, dark: 0x101C3D)
-        static let cardBackground = UIColor.dynamic(light: 0xFFFEFB, dark: 0x0C1633)
-        static let border = UIColor.dynamic(light: 0xEED5C2, dark: 0x23325E)
+        static let background = UIColor.dynamic(light: 0xFFF4E6, dark: 0x071316)
+        static let surface = UIColor.dynamic(light: 0xFFFCF7, dark: 0x0B1D21)
+        static let elevated = UIColor.dynamic(light: 0xFFFFFF, dark: 0x102A30)
+        static let cardBackground = UIColor.dynamic(light: 0xFFFEFB, dark: 0x0C2226)
+        static let border = UIColor.dynamic(light: 0xEED5C2, dark: 0x1C3B3F)
 
-        static let textPrimary = UIColor.dynamic(light: 0x1B1612, dark: 0xF3F7FF)
-        static let textSecondary = UIColor.dynamic(light: 0x5B5148, dark: 0xB8C7E6)
-        static let textTertiary = UIColor.dynamic(light: 0x8C8075, dark: 0x7E8FB8)
+        static let textPrimary = UIColor.dynamic(light: 0x1B1612, dark: 0xF3FFFD)
+        static let textSecondary = UIColor.dynamic(light: 0x5B5148, dark: 0xB8E3DD)
+        static let textTertiary = UIColor.dynamic(light: 0x8C8075, dark: 0x7FB8B0)
 
         static let accent = UIColor(hex: 0x125BFF)
         static let accentSecondary = UIColor.dynamic(light: 0xFF5A1F, dark: 0x00D4FF)
@@ -90,8 +90,8 @@ enum Theme {
         nav.configureWithTransparentBackground()
         nav.backgroundEffect = UIBlurEffect(style: .systemUltraThinMaterial)
         nav.backgroundColor = UIColor { traits in
-            let base = traits.userInterfaceStyle == .dark ? UIColor(hex: 0x0B1330) : UIColor(hex: 0xFFFCF7)
-            return base.withAlphaComponent(traits.userInterfaceStyle == .dark ? 0.65 : 0.75)
+            let base = traits.userInterfaceStyle == .dark ? UIColor(hex: 0x0B1D21) : UIColor(hex: 0xFFFCF7)
+            return base.withAlphaComponent(traits.userInterfaceStyle == .dark ? 0.72 : 0.78)
         }
         nav.shadowColor = UIColor.clear
 
@@ -114,12 +114,12 @@ enum Theme {
         tab.configureWithTransparentBackground()
         tab.backgroundEffect = UIBlurEffect(style: .systemUltraThinMaterial)
         tab.backgroundColor = UIColor { traits in
-            let base = traits.userInterfaceStyle == .dark ? UIColor(hex: 0x0B1330) : UIColor(hex: 0xFFFCF7)
-            return base.withAlphaComponent(traits.userInterfaceStyle == .dark ? 0.52 : 0.70)
+            let base = traits.userInterfaceStyle == .dark ? UIColor(hex: 0x0B1D21) : UIColor(hex: 0xFFFCF7)
+            return base.withAlphaComponent(traits.userInterfaceStyle == .dark ? 0.60 : 0.74)
         }
         tab.shadowColor = UIColor { traits in
-            let base = traits.userInterfaceStyle == .dark ? UIColor(hex: 0x23325E) : UIColor(hex: 0xEED5C2)
-            return base.withAlphaComponent(traits.userInterfaceStyle == .dark ? 0.55 : 0.45)
+            let base = traits.userInterfaceStyle == .dark ? UIColor(hex: 0x1C3B3F) : UIColor(hex: 0xEED5C2)
+            return base.withAlphaComponent(traits.userInterfaceStyle == .dark ? 0.62 : 0.45)
         }
 
         let stacked = tab.stackedLayoutAppearance
@@ -142,15 +142,15 @@ enum Theme {
         static let wordmarkBig = Font.custom("BebasNeue-Regular", size: 36, relativeTo: .title)
         static let heroTitle = Font.system(size: 32, weight: .heavy, design: .rounded)
 
-        static let largeTitle = Font.system(size: 34, weight: .bold, design: .rounded)
-        static let title = Font.system(size: 28, weight: .bold, design: .rounded)
-        static let title2 = Font.system(size: 22, weight: .bold, design: .rounded)
-        static let title3 = Font.system(size: 20, weight: .semibold, design: .rounded)
-        static let headline = Font.system(size: 17, weight: .bold, design: .rounded)
+        static let largeTitle = Font.system(size: 36, weight: .heavy, design: .rounded)
+        static let title = Font.system(size: 30, weight: .heavy, design: .rounded)
+        static let title2 = Font.system(size: 24, weight: .bold, design: .rounded)
+        static let title3 = Font.system(size: 20, weight: .bold, design: .rounded)
+        static let headline = Font.system(size: 18, weight: .bold, design: .rounded)
         static let body = Font.system(size: 17, weight: .regular, design: .default)
         static let bodyBold = Font.system(size: 17, weight: .semibold, design: .default)
-        static let callout = Font.system(size: 16, weight: .medium, design: .default)
-        static let subheadline = Font.system(size: 15, weight: .medium, design: .default)
+        static let callout = Font.system(size: 16, weight: .medium, design: .rounded)
+        static let subheadline = Font.system(size: 15, weight: .medium, design: .rounded)
         static let footnote = Font.system(size: 13, weight: .medium, design: .default)
         static let caption = Font.system(size: 12, weight: .medium, design: .default)
         static let captionBold = Font.system(size: 12, weight: .bold, design: .default)
@@ -210,146 +210,19 @@ extension EnvironmentValues {
 }
 
 struct AdaptiveBackground: View {
-    @Environment(\.adaptiveLuminance) private var luminance
-    @Environment(\.colorScheme) private var colorScheme
-    
     var body: some View {
-        if colorScheme == .dark {
-            // Dark mode: Deep cobalt canvas with neon ice glow
-            ZStack {
-                // Base gradient
-                LinearGradient(
-                    colors: [
-                        Theme.Colors.background,
-                        Theme.Colors.surface,
-                        Theme.Colors.elevated
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                
-                // Electric blue glow - top right
-                RadialGradient(
-                    colors: [
-                        Theme.Colors.accent.opacity(0.16 + (luminance * 0.12)),
-                        Color.clear
-                    ],
-                    center: .topTrailing,
-                    startRadius: 60,
-                    endRadius: 520
-                )
-                
-                // Neon ice glow - bottom left
-                RadialGradient(
-                    colors: [
-                        Theme.Colors.accentSecondary.opacity(0.14 + (luminance * 0.10)),
-                        Color.clear
-                    ],
-                    center: .bottomLeading,
-                    startRadius: 80,
-                    endRadius: 560
-                )
-
-                // Violet punch - top left (kept subtle, mostly for depth)
-                RadialGradient(
-                    colors: [
-                        Theme.Colors.accentTertiary.opacity(0.10 + (luminance * 0.06)),
-                        Color.clear
-                    ],
-                    center: .topLeading,
-                    startRadius: 40,
-                    endRadius: 520
-                )
-            }
+        Theme.Colors.background
             .ignoresSafeArea()
-        } else {
-            // Light mode: Warm cream canvas with bold, sunny glow
-            ZStack {
-                LinearGradient(
-                    colors: [
-                        Theme.Colors.background,
-                        Theme.Colors.surface
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-
-                // Warm sun glow - top left
-                RadialGradient(
-                    colors: [
-                        Theme.Colors.gold.opacity(0.20 + (luminance * 0.10)),
-                        Color.clear
-                    ],
-                    center: .topLeading,
-                    startRadius: 20,
-                    endRadius: 540
-                )
-
-                // Electric blue tint - top right (ties to the launch moment)
-                RadialGradient(
-                    colors: [
-                        Theme.Colors.accent.opacity(0.14 + (luminance * 0.10)),
-                        Color.clear
-                    ],
-                    center: .topTrailing,
-                    startRadius: 30,
-                    endRadius: 560
-                )
-                
-                // Tangerine heat - bottom left
-                RadialGradient(
-                    colors: [
-                        Theme.Colors.accentSecondary.opacity(0.22 + (luminance * 0.10)),
-                        Color.clear
-                    ],
-                    center: .bottomLeading,
-                    startRadius: 60,
-                    endRadius: 640
-                )
-            }
-            .ignoresSafeArea()
-        }
     }
 }
 
 // MARK: - Splash Background
 
 struct SplashBackground: View {
-    @Environment(\.colorScheme) private var colorScheme
-
     var body: some View {
         ZStack {
-            // Keep the launch moment: a bold electric-blue field, then layered glows.
-            LinearGradient(
-                colors: [
-                    Theme.Colors.accent,
-                    Theme.Colors.accent.blended(with: Theme.Colors.background, amount: 0.25)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-
-            // Frost/heat glow (mode-dependent via accentSecondary)
-            RadialGradient(
-                colors: [
-                    Theme.Colors.accentSecondary.opacity(colorScheme == .dark ? 0.20 : 0.16),
-                    Color.clear
-                ],
-                center: .bottomLeading,
-                startRadius: 60,
-                endRadius: 560
-            )
-
-            // Bright highlight so the lockup reads crisply (less in dark)
-            RadialGradient(
-                colors: [
-                    Color.white.opacity(colorScheme == .dark ? 0.08 : 0.20),
-                    Color.clear
-                ],
-                center: .topLeading,
-                startRadius: 30,
-                endRadius: 700
-            )
+            // Flat electric blue for a crisp, high-impact brand moment (no gradients).
+            Theme.Colors.accent
         }
         .ignoresSafeArea()
     }
@@ -406,7 +279,7 @@ struct SoftCardBackground: ViewModifier {
         let shadowColor = colorScheme == .dark ? Color.black.opacity(0.32) : Color.black.opacity(0.08)
         let shadowRadius = colorScheme == .dark ? 10 * elevation : 20 * elevation
         let shadowY = colorScheme == .dark ? 8 * elevation : 12 * elevation
-        let highlightOpacity = colorScheme == .dark ? 0.16 : 0.10
+        let innerHighlightOpacity = colorScheme == .dark ? 0.08 : 0.18
 
         content
             .background(
@@ -418,21 +291,9 @@ struct SoftCardBackground: ViewModifier {
                     .strokeBorder(Theme.Colors.border, lineWidth: 1)
             )
             .overlay(
-                // Subtle chroma edge so cards feel "alive" on bold backgrounds, without turning into gradients.
                 RoundedRectangle(cornerRadius: cornerRadius)
-                    .strokeBorder(
-                        LinearGradient(
-                            colors: [
-                                Theme.Colors.accent.opacity(0.9),
-                                Theme.Colors.accentSecondary.opacity(0.85),
-                                Theme.Colors.accentTertiary.opacity(0.8)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        lineWidth: 1
-                    )
-                    .opacity(highlightOpacity)
+                    .inset(by: 0.5)
+                    .strokeBorder(Color.white.opacity(innerHighlightOpacity), lineWidth: 1)
             )
             .shadow(
                 color: shadowColor,

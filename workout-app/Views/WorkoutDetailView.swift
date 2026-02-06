@@ -191,7 +191,7 @@ struct WorkoutDetailView: View {
             .padding(.vertical, Theme.Spacing.xs)
             .background(
                 Capsule()
-                    .fill(LinearGradient(colors: [.red, .pink], startPoint: .leading, endPoint: .trailing))
+                    .fill(Theme.Colors.error)
             )
         }
         .disabled(healthManager.isSyncing)

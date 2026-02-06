@@ -32,7 +32,7 @@ struct ProfileView: View {
         .navigationTitle("Profile")
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(isPresented: $showingWorkoutHistory) {
-            WorkoutHistoryView(workouts: dataManager.workouts)
+            WorkoutHistoryView(workouts: dataManager.workouts, showsBackButton: true)
         }
         .navigationDestination(isPresented: $showingExerciseList) {
             ExerciseListView(dataManager: dataManager)

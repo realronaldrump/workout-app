@@ -287,7 +287,7 @@ struct HomeView: View {
                 .buttonStyle(PlainButtonStyle())
 
                 NavigationLink {
-                    WorkoutHistoryView(workouts: dataManager.workouts)
+                    WorkoutHistoryView(workouts: dataManager.workouts, showsBackButton: true)
                 } label: {
                     ExploreRow(
                         title: "History",

@@ -492,11 +492,7 @@ struct HealthSyncButton: View {
             .padding(.horizontal, Theme.Spacing.lg)
             .padding(.vertical, Theme.Spacing.md)
             .background(
-                LinearGradient(
-                    colors: [.red, .pink],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
+                Theme.Colors.error
             )
             .cornerRadius(Theme.CornerRadius.medium)
         }

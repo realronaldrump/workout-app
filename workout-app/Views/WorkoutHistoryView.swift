@@ -2,7 +2,9 @@ import SwiftUI
 
 struct WorkoutHistoryView: View {
     let workouts: [Workout]
+    var showsBackButton: Bool = false
     @State private var searchText = ""
+    @Environment(\.dismiss) private var dismiss
     
     private var groupedWorkouts: [(month: String, workouts: [Workout])] {
         let filtered = workouts.filter { workout in
@@ -26,35 +28,104 @@ struct WorkoutHistoryView: View {
         ZStack {
             AdaptiveBackground()
             
-            ScrollView {
-                LazyVStack(spacing: Theme.Spacing.xl) {
+            ScrollView(showsIndicators: false) {
+                LazyVStack(alignment: .leading, spacing: Theme.Spacing.xxl) {
+                    header
+
                     if workouts.isEmpty {
                         ContentUnavailableView(
                             "No history yet",
                             systemImage: "clock.badge.exclamationmark",
                             description: Text("Import from Strong or start a session to see workouts here.")
                         )
-                        .padding(.top, 50)
+                        .padding(.horizontal, Theme.Spacing.lg)
+                        .padding(.top, Theme.Spacing.xl)
                     } else {
                         ForEach(groupedWorkouts, id: \.month) { group in
                             VStack(alignment: .leading, spacing: Theme.Spacing.md) {
                                 Text(group.month)
-                                    .font(Theme.Typography.title3)
-                                    .foregroundStyle(Theme.Colors.textSecondary)
-                                    .padding(.horizontal)
+                                    .font(Theme.Typography.title2)
+                                    .foregroundStyle(Theme.Colors.textPrimary)
+                                    .tracking(0.4)
                                 
-                                ForEach(group.workouts) { workout in
-                                    WorkoutHistoryRow(workout: workout)
+                                VStack(spacing: Theme.Spacing.md) {
+                                    ForEach(group.workouts) { workout in
+                                        WorkoutHistoryRow(workout: workout)
+                                    }
                                 }
                             }
+                            .padding(.horizontal, Theme.Spacing.lg)
                         }
                     }
                 }
-                .padding()
+                .padding(.vertical, Theme.Spacing.xxl)
             }
         }
-        .navigationTitle("History")
-        .searchable(text: $searchText, prompt: "Search workouts or exercises")
+        .navigationBarHidden(true)
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            if showsBackButton {
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                        .frame(width: 44, height: 44)
+                        .background(
+                            Circle().fill(Theme.Colors.cardBackground)
+                        )
+                        .overlay(
+                            Circle().strokeBorder(Theme.Colors.border, lineWidth: 1)
+                        )
+                }
+                .buttonStyle(.plain)
+                .padding(.bottom, Theme.Spacing.xs)
+                .accessibilityLabel("Back")
+            }
+
+            Text("History")
+                .font(Theme.Typography.largeTitle)
+                .foregroundStyle(Theme.Colors.textPrimary)
+
+            Text("Search by workout name or exercise.")
+                .font(Theme.Typography.microcopy)
+                .foregroundStyle(Theme.Colors.textSecondary)
+
+            searchField
+        }
+        .padding(.horizontal, Theme.Spacing.lg)
+    }
+
+    private var searchField: some View {
+        HStack(spacing: Theme.Spacing.sm) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(Theme.Colors.textTertiary)
+
+            TextField("Search workouts or exercises", text: $searchText)
+                .textInputAutocapitalization(.never)
+                .disableAutocorrection(true)
+                .font(Theme.Typography.callout)
+                .foregroundStyle(Theme.Colors.textPrimary)
+                .tint(Theme.Colors.accent)
+
+            if !searchText.isEmpty {
+                Button {
+                    searchText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(Theme.Colors.textTertiary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Clear search")
+            }
+        }
+        .padding(.horizontal, Theme.Spacing.lg)
+        .padding(.vertical, Theme.Spacing.md)
+        .softCard(cornerRadius: Theme.CornerRadius.xlarge, elevation: 1)
     }
 }
 
@@ -70,8 +141,7 @@ struct WorkoutHistoryRow: View {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
                         Text(workout.name)
-                            .font(Theme.Typography.condensed)
-                            .tracking(-0.2)
+                            .font(Theme.Typography.title3)
                             .foregroundStyle(Theme.Colors.textPrimary)
                         
                         Spacer()
@@ -88,12 +158,11 @@ struct WorkoutHistoryRow: View {
                     GymBadge(text: gymLabel, style: gymBadgeStyle)
                     
                     HStack(spacing: 12) {
-                        Label(workout.duration, systemImage: "clock")
-                        Label("\(workout.exercises.count) Exercises", systemImage: "figure.strengthtraining.traditional")
-                        Label(formatVolume(workout.totalVolume), systemImage: "scalemass")
+                        metric(workout.duration, systemImage: "clock")
+                        metric("\(workout.exercises.count) exercises", systemImage: "figure.strengthtraining.traditional")
+                        metric(formatVolume(workout.totalVolume), systemImage: "scalemass")
                     }
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.accent)
+                    .font(Theme.Typography.captionBold)
                     .padding(.top, 4)
 
                     if let data = healthManager.getHealthData(for: workout.id) {
@@ -112,6 +181,18 @@ struct WorkoutHistoryRow: View {
             .softCard(elevation: 2)
         }
         .buttonStyle(PlainButtonStyle())
+    }
+
+    private func metric(_ value: String, systemImage: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: systemImage)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Theme.Colors.accentSecondary)
+                .frame(width: 14)
+                .accessibilityHidden(true)
+            Text(value)
+                .foregroundStyle(Theme.Colors.textSecondary)
+        }
     }
     
     private func formatVolume(_ volume: Double) -> String {

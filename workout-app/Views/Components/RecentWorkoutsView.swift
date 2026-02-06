@@ -19,7 +19,7 @@ struct RecentWorkoutsView: View {
                 
                 Spacer()
                 
-                NavigationLink(destination: WorkoutHistoryView(workouts: allWorkouts)) {
+                NavigationLink(destination: WorkoutHistoryView(workouts: allWorkouts, showsBackButton: true)) {
                     Text("See All")
                         .font(Theme.Typography.subheadline)
                         .foregroundColor(Theme.Colors.accent)

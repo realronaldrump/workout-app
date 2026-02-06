@@ -66,7 +66,7 @@ struct MainTabView: View {
             .tag(AppTab.progress)
 
             NavigationStack {
-                WorkoutHistoryView(workouts: dataManager.workouts)
+                WorkoutHistoryView(workouts: dataManager.workouts, showsBackButton: false)
             }
             .tabItem {
                 Label("History", systemImage: "clock.fill")
