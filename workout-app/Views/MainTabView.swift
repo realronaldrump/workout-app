@@ -89,7 +89,7 @@ struct MainTabView: View {
         .environment(\.adaptiveLuminance, luminanceManager.luminance)
         .overlay {
             if showSplash {
-                InAppSplashView(statusText: "Preparing your dashboard...")
+                InAppSplashView(statusText: "Loading...")
                     .transition(.opacity)
                     .zIndex(10)
                     .contentShape(Rectangle())

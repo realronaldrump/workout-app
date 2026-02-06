@@ -48,5 +48,5 @@ struct InAppSplashView: View {
 }
 
 #Preview {
-    InAppSplashView(statusText: "Preparing your dashboard...")
+    InAppSplashView(statusText: "Loading...")
 }
