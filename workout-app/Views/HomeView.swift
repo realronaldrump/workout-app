@@ -15,6 +15,7 @@ struct HomeView: View {
     @State private var quickStartExercise: String?
     @State private var selectedExercise: ExerciseSelection?
     @State private var selectedWorkout: Workout?
+    @State private var selectedWorkoutMetric: WorkoutMetricDetailSelection?
 
     init(
         dataManager: WorkoutDataManager,
@@ -78,6 +79,13 @@ struct HomeView: View {
         }
         .navigationDestination(item: $selectedWorkout) { workout in
             WorkoutDetailView(workout: workout)
+        }
+        .navigationDestination(item: $selectedWorkoutMetric) { selection in
+            MetricDetailView(
+                kind: selection.kind,
+                workouts: weeklyWorkouts,
+                scrollTarget: selection.scrollTarget
+            )
         }
         .sheet(isPresented: $showingImportWizard) {
             StrongImportWizard(
@@ -175,6 +183,7 @@ struct HomeView: View {
         let sessions = stats.map { "\($0.totalWorkouts)" } ?? "0"
         let avgDuration = stats?.avgWorkoutDuration ?? "--"
         let favorite = stats?.favoriteExercise ?? "--"
+        let favoriteName = stats?.favoriteExercise
 
         return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             Text("This Week")
@@ -183,15 +192,27 @@ struct HomeView: View {
 
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: Theme.Spacing.md) {
-                    SummaryPill(title: "Sessions", value: sessions)
-                    SummaryPill(title: "Avg Duration", value: avgDuration)
-                    SummaryPill(title: "Favorite", value: favorite)
+                    SummaryPill(title: "Sessions", value: sessions) {
+                        selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: .sessions, scrollTarget: nil)
+                    }
+                    SummaryPill(title: "Avg Duration", value: avgDuration) {
+                        selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: .avgDuration, scrollTarget: nil)
+                    }
+                    SummaryPill(title: "Favorite", value: favorite, onTap: favoriteName.map { name in
+                        { selectedExercise = ExerciseSelection(id: name) }
+                    })
                 }
 
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: Theme.Spacing.md) {
-                    SummaryPill(title: "Sessions", value: sessions)
-                    SummaryPill(title: "Avg Duration", value: avgDuration)
-                    SummaryPill(title: "Favorite", value: favorite)
+                    SummaryPill(title: "Sessions", value: sessions) {
+                        selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: .sessions, scrollTarget: nil)
+                    }
+                    SummaryPill(title: "Avg Duration", value: avgDuration) {
+                        selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: .avgDuration, scrollTarget: nil)
+                    }
+                    SummaryPill(title: "Favorite", value: favorite, onTap: favoriteName.map { name in
+                        { selectedExercise = ExerciseSelection(id: name) }
+                    })
                 }
             }
         }
@@ -440,8 +461,21 @@ private struct ActionChip: View {
 private struct SummaryPill: View {
     let title: String
     let value: String
+    var onTap: (() -> Void)? = nil
 
     var body: some View {
+        Group {
+            if let onTap {
+                MetricTileButton(action: onTap) {
+                    content
+                }
+            } else {
+                content
+            }
+        }
+    }
+
+    private var content: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
             Text(title)
                 .font(Theme.Typography.caption)

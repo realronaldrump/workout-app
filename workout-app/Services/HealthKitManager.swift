@@ -669,7 +669,7 @@ class HealthKitManager: ObservableObject {
         }
     }
 
-    /// Fetch raw samples for a metric (used in drilldowns)
+    /// Fetch raw samples for a metric (used in detail views)
     func fetchMetricSamples(metric: HealthMetric, range: DateInterval) async throws -> [HealthMetricSample] {
         guard metric.supportsSamples else { return [] }
         guard authorizationStatus == .authorized else { return [] }

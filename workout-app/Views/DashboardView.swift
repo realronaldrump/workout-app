@@ -13,6 +13,9 @@ struct DashboardView: View {
     @State private var selectedExercise: ExerciseSelection?
     @State private var selectedWorkout: Workout?
     @State private var isTrainingExpanded = false
+    @State private var selectedWorkoutMetric: WorkoutMetricDetailSelection?
+    @State private var selectedChangeMetric: ChangeMetric?
+    @State private var showingMuscleBalance = false
 
     init(
         dataManager: WorkoutDataManager,
@@ -85,6 +88,19 @@ struct DashboardView: View {
         .navigationDestination(item: $selectedWorkout) { workout in
             WorkoutDetailView(workout: workout)
         }
+        .navigationDestination(item: $selectedWorkoutMetric) { selection in
+            MetricDetailView(
+                kind: selection.kind,
+                workouts: filteredWorkouts,
+                scrollTarget: selection.scrollTarget
+            )
+        }
+        .navigationDestination(item: $selectedChangeMetric) { metric in
+            ChangeMetricDetailView(metric: metric, windowDays: windowDays, workouts: dataManager.workouts)
+        }
+        .navigationDestination(isPresented: $showingMuscleBalance) {
+            MuscleBalanceDetailView(dataManager: dataManager)
+        }
         .onAppear {
             healthManager.refreshAuthorizationStatus()
             if dataManager.workouts.isEmpty {
@@ -150,15 +166,39 @@ struct DashboardView: View {
             if let currentStats = filteredStats {
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: Theme.Spacing.md) {
-                        SummaryMetricCard(title: "Sessions", value: "\(currentStats.totalWorkouts)")
-                        SummaryMetricCard(title: "Avg Duration", value: currentStats.avgWorkoutDuration)
-                        SummaryMetricCard(title: "Volume", value: formatVolume(currentStats.totalVolume))
+                        MetricTileButton(action: {
+                            selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: .sessions, scrollTarget: nil)
+                        }) {
+                            SummaryMetricCard(title: "Sessions", value: "\(currentStats.totalWorkouts)")
+                        }
+                        MetricTileButton(action: {
+                            selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: .avgDuration, scrollTarget: nil)
+                        }) {
+                            SummaryMetricCard(title: "Avg Duration", value: currentStats.avgWorkoutDuration)
+                        }
+                        MetricTileButton(action: {
+                            selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: .totalVolume, scrollTarget: nil)
+                        }) {
+                            SummaryMetricCard(title: "Volume", value: formatVolume(currentStats.totalVolume))
+                        }
                     }
 
                     LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: Theme.Spacing.md) {
-                        SummaryMetricCard(title: "Sessions", value: "\(currentStats.totalWorkouts)")
-                        SummaryMetricCard(title: "Avg Duration", value: currentStats.avgWorkoutDuration)
-                        SummaryMetricCard(title: "Volume", value: formatVolume(currentStats.totalVolume))
+                        MetricTileButton(action: {
+                            selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: .sessions, scrollTarget: nil)
+                        }) {
+                            SummaryMetricCard(title: "Sessions", value: "\(currentStats.totalWorkouts)")
+                        }
+                        MetricTileButton(action: {
+                            selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: .avgDuration, scrollTarget: nil)
+                        }) {
+                            SummaryMetricCard(title: "Avg Duration", value: currentStats.avgWorkoutDuration)
+                        }
+                        MetricTileButton(action: {
+                            selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: .totalVolume, scrollTarget: nil)
+                        }) {
+                            SummaryMetricCard(title: "Volume", value: formatVolume(currentStats.totalVolume))
+                        }
                     }
                 }
             } else {
@@ -188,7 +228,11 @@ struct DashboardView: View {
             } else {
                 VStack(spacing: Theme.Spacing.sm) {
                     ForEach(changeSummaryMetrics) { metric in
-                        ChangeMetricRow(metric: metric)
+                        MetricTileButton(action: {
+                            selectedChangeMetric = metric
+                        }) {
+                            ChangeMetricRow(metric: metric)
+                        }
                     }
                 }
             }
@@ -241,7 +285,9 @@ struct DashboardView: View {
 
             VStack(spacing: Theme.Spacing.lg) {
                 if let currentStats = filteredStats {
-                    ConsistencyView(stats: currentStats, workouts: filteredWorkouts)
+                    ConsistencyView(stats: currentStats, workouts: filteredWorkouts) {
+                        selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: .streak, scrollTarget: nil)
+                    }
                 } else {
                     RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
                         .fill(Theme.Colors.surface.opacity(0.6))
@@ -250,9 +296,18 @@ struct DashboardView: View {
                 }
 
                 if isTrainingExpanded {
-                    VolumeProgressChart(workouts: filteredWorkouts)
-                    MuscleHeatmapView(dataManager: dataManager)
-                    ExerciseBreakdownView(workouts: filteredWorkouts)
+                    VolumeProgressChart(workouts: filteredWorkouts) {
+                        selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: .totalVolume, scrollTarget: nil)
+                    }
+                    MuscleHeatmapView(dataManager: dataManager) {
+                        showingMuscleBalance = true
+                    }
+                    ExerciseBreakdownView(workouts: filteredWorkouts) {
+                        selectedWorkoutMetric = WorkoutMetricDetailSelection(
+                            kind: .totalVolume,
+                            scrollTarget: .topExercisesByVolume
+                        )
+                    }
                 }
             }
         }

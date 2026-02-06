@@ -8,6 +8,8 @@ struct ProfileView: View {
 
     @State private var showingHealthWizard = false
     @State private var showingHealthDashboard = false
+    @State private var showingWorkoutHistory = false
+    @State private var showingExerciseList = false
 
     @AppStorage("profileName") private var profileName = ""
     @AppStorage("weightUnit") private var weightUnit = "lbs"
@@ -29,6 +31,12 @@ struct ProfileView: View {
         }
         .navigationTitle("Profile")
         .navigationBarTitleDisplayMode(.inline)
+        .navigationDestination(isPresented: $showingWorkoutHistory) {
+            WorkoutHistoryView(workouts: dataManager.workouts)
+        }
+        .navigationDestination(isPresented: $showingExerciseList) {
+            ExerciseListView(dataManager: dataManager)
+        }
         .sheet(isPresented: $showingHealthWizard) {
             HealthSyncWizard(
                 isPresented: $showingHealthWizard,
@@ -66,8 +74,16 @@ struct ProfileView: View {
             }
 
             HStack(spacing: Theme.Spacing.lg) {
-                ProfileStat(title: "Workouts", value: "\(dataManager.workouts.count)")
-                ProfileStat(title: "Exercises", value: "\(uniqueExercisesCount)")
+                MetricTileButton(chevronPlacement: .bottomTrailing, action: {
+                    showingWorkoutHistory = true
+                }) {
+                    ProfileStat(title: "Workouts", value: "\(dataManager.workouts.count)")
+                }
+                MetricTileButton(chevronPlacement: .bottomTrailing, action: {
+                    showingExerciseList = true
+                }) {
+                    ProfileStat(title: "Exercises", value: "\(uniqueExercisesCount)")
+                }
             }
         }
         .frame(maxWidth: .infinity)

@@ -4,6 +4,7 @@ import SwiftUI
 /// Dark minimalist design with glassmorphism
 struct MuscleHeatmapView: View {
     let dataManager: WorkoutDataManager
+    var onOpen: (() -> Void)? = nil
     
     @State private var selectedMuscleGroup: MuscleGroup?
     @State private var isAppearing = false
@@ -25,6 +26,21 @@ struct MuscleHeatmapView: View {
                 Text("4 weeks")
                     .font(Theme.Typography.caption)
                     .foregroundColor(Theme.Colors.textTertiary)
+
+                if let onOpen {
+                    Button {
+                        Haptics.selection()
+                        onOpen()
+                    } label: {
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Theme.Colors.textTertiary)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Muscle balance details")
+                }
             }
             
             // Muscle group grid
@@ -46,7 +62,7 @@ struct MuscleHeatmapView: View {
                 }
             }
             
-            // Selected detail (drill down)
+            // Selected detail
             if let selected = selectedMuscleGroup, let stats = muscleGroupStats[selected] {
                 MuscleDetailView(muscleGroup: selected, stats: stats)
                     .transition(.opacity.combined(with: .move(edge: .bottom)))

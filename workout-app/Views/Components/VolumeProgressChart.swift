@@ -3,6 +3,7 @@ import Charts
 
 struct VolumeProgressChart: View {
     let workouts: [Workout]
+    var onTap: (() -> Void)? = nil
     @State private var selectedMetric = VolumeMetric.totalVolume
     
     enum VolumeMetric: String, CaseIterable {
@@ -29,70 +30,82 @@ struct VolumeProgressChart: View {
                 .frame(width: 200)
             }
             
-            Chart {
-                ForEach(chartData, id: \.date) { dataPoint in
-                    LineMark(
-                        x: .value("Date", dataPoint.date),
-                        y: .value(selectedMetric.rawValue, dataPoint.value)
-                    )
-                    .foregroundStyle(Theme.Colors.accent)
-                    
-                    AreaMark(
-                        x: .value("Date", dataPoint.date),
-                        y: .value(selectedMetric.rawValue, dataPoint.value)
-                    )
-                    .foregroundStyle(Theme.Colors.accent.opacity(0.2))
-                    
-                    PointMark(
-                        x: .value("Date", dataPoint.date),
-                        y: .value(selectedMetric.rawValue, dataPoint.value)
-                    )
-                    .foregroundStyle(Theme.Colors.accent)
-                }
-            }
-            .frame(height: 200)
-            .chartXAxis {
-                AxisMarks(values: .stride(by: .day, count: 7)) { _ in
-                    AxisGridLine()
-                    AxisValueLabel(format: .dateTime.month().day())
-                }
-            }
-            .chartYAxis {
-                AxisMarks { value in
-                    AxisGridLine()
-                    AxisValueLabel {
-                        if selectedMetric == .totalVolume || selectedMetric == .avgVolume {
-                            if let v = value.as(Double.self) {
-                                Text(formatAxisValue(v))
-                            }
-                        } else {
-                            if let v = value.as(Int.self) {
-                                Text("\(v)")
-                            }
-                        }
+            Group {
+                if let onTap {
+                    MetricTileButton(chevronPlacement: .bottomTrailing, action: onTap) {
+                        chartContainer
                     }
+                } else {
+                    chartContainer
                 }
             }
-            .padding(Theme.Spacing.lg)
-            .glassBackground(elevation: 2)
-            .gesture(
-                DragGesture(minimumDistance: 24)
-                    .onEnded { value in
-                        let direction = value.translation.width
-                        guard abs(direction) > 40 else { return }
-                        let all = VolumeMetric.allCases
-                        guard let index = all.firstIndex(of: selectedMetric) else { return }
-                        let nextIndex = direction < 0 ? min(index + 1, all.count - 1) : max(index - 1, 0)
-                        if nextIndex != index {
-                            selectedMetric = all[nextIndex]
-                            Haptics.selection()
-                        }
-                    }
-            )
         }
         .onChange(of: selectedMetric) { _, _ in
             Haptics.selection()
         }
+    }
+
+    private var chartContainer: some View {
+        Chart {
+            ForEach(chartData, id: \.date) { dataPoint in
+                LineMark(
+                    x: .value("Date", dataPoint.date),
+                    y: .value(selectedMetric.rawValue, dataPoint.value)
+                )
+                .foregroundStyle(Theme.Colors.accent)
+                
+                AreaMark(
+                    x: .value("Date", dataPoint.date),
+                    y: .value(selectedMetric.rawValue, dataPoint.value)
+                )
+                .foregroundStyle(Theme.Colors.accent.opacity(0.2))
+                
+                PointMark(
+                    x: .value("Date", dataPoint.date),
+                    y: .value(selectedMetric.rawValue, dataPoint.value)
+                )
+                .foregroundStyle(Theme.Colors.accent)
+            }
+        }
+        .frame(height: 200)
+        .chartXAxis {
+            AxisMarks(values: .stride(by: .day, count: 7)) { _ in
+                AxisGridLine()
+                AxisValueLabel(format: .dateTime.month().day())
+            }
+        }
+        .chartYAxis {
+            AxisMarks { value in
+                AxisGridLine()
+                AxisValueLabel {
+                    if selectedMetric == .totalVolume || selectedMetric == .avgVolume {
+                        if let v = value.as(Double.self) {
+                            Text(formatAxisValue(v))
+                        }
+                    } else {
+                        if let v = value.as(Int.self) {
+                            Text("\(v)")
+                        }
+                    }
+                }
+            }
+        }
+        .padding(Theme.Spacing.lg)
+        .glassBackground(elevation: 2)
+        .gesture(
+            DragGesture(minimumDistance: 24)
+                .onEnded { value in
+                    let direction = value.translation.width
+                    guard abs(direction) > 40 else { return }
+                    let all = VolumeMetric.allCases
+                    guard let index = all.firstIndex(of: selectedMetric) else { return }
+                    let nextIndex = direction < 0 ? min(index + 1, all.count - 1) : max(index - 1, 0)
+                    if nextIndex != index {
+                        selectedMetric = all[nextIndex]
+                        Haptics.selection()
+                    }
+                }
+        )
     }
     
     private var chartData: [(date: Date, value: Double)] {

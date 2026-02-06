@@ -12,6 +12,9 @@ struct PerformanceLabView: View {
     @State private var selectedCategory: ProgressContributionCategory = .exercise
     @State private var selectedWorkout: Workout?
     @State private var selectedExercise: ExerciseSelection?
+    @State private var selectedChangeMetric: ChangeMetric?
+    @State private var selectedHabitFactor: HabitFactorKind?
+    @State private var selectedCorrelation: CorrelationInsight?
 
     private var workouts: [Workout] {
         dataManager.workouts
@@ -67,6 +70,15 @@ struct PerformanceLabView: View {
                 annotationsManager: annotationsManager,
                 gymProfilesManager: gymProfilesManager
             )
+        }
+        .navigationDestination(item: $selectedChangeMetric) { metric in
+            ChangeMetricDetailView(metric: metric, windowDays: changeWindow, workouts: workouts)
+        }
+        .navigationDestination(item: $selectedHabitFactor) { kind in
+            HabitImpactDetailView(kind: kind, workouts: workouts, annotations: annotationsManager.annotations)
+        }
+        .navigationDestination(item: $selectedCorrelation) { insight in
+            CorrelationDetailView(insight: insight, workouts: workouts, healthData: healthManager.healthDataStore)
         }
     }
 
@@ -216,7 +228,11 @@ struct PerformanceLabView: View {
 
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: Theme.Spacing.md) {
                 ForEach(changes) { metric in
-                    ChangeMetricCard(metric: metric)
+                    MetricTileButton(action: {
+                        selectedChangeMetric = metric
+                    }) {
+                        ChangeMetricCard(metric: metric)
+                    }
                 }
             }
 
@@ -418,25 +434,29 @@ struct PerformanceLabView: View {
                     .glassBackground(elevation: 2)
             } else {
                 ForEach(insights) { insight in
-                    HStack(spacing: Theme.Spacing.md) {
-                        Circle()
-                            .fill(insight.tint)
-                            .frame(width: 10, height: 10)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(insight.title)
-                                .font(Theme.Typography.headline)
+                    MetricTileButton(action: {
+                        selectedHabitFactor = insight.kind
+                    }) {
+                        HStack(spacing: Theme.Spacing.md) {
+                            Circle()
+                                .fill(insight.tint)
+                                .frame(width: 10, height: 10)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(insight.title)
+                                    .font(Theme.Typography.headline)
+                                    .foregroundColor(Theme.Colors.textPrimary)
+                                Text(insight.detail)
+                                    .font(Theme.Typography.caption)
+                                    .foregroundColor(Theme.Colors.textSecondary)
+                            }
+                            Spacer()
+                            Text(insight.value)
+                                .font(Theme.Typography.captionBold)
                                 .foregroundColor(Theme.Colors.textPrimary)
-                            Text(insight.detail)
-                                .font(Theme.Typography.caption)
-                                .foregroundColor(Theme.Colors.textSecondary)
                         }
-                        Spacer()
-                        Text(insight.value)
-                            .font(Theme.Typography.captionBold)
-                            .foregroundColor(Theme.Colors.textPrimary)
+                        .padding(Theme.Spacing.lg)
+                        .glassBackground(elevation: 1)
                     }
-                    .padding(Theme.Spacing.lg)
-                    .glassBackground(elevation: 1)
                 }
             }
         }
@@ -461,19 +481,23 @@ struct PerformanceLabView: View {
                     .glassBackground(elevation: 2)
             } else {
                 ForEach(insights) { insight in
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(insight.title)
-                            .font(Theme.Typography.headline)
-                            .foregroundColor(Theme.Colors.textPrimary)
-                        Text(insight.detail)
-                            .font(Theme.Typography.caption)
-                            .foregroundColor(Theme.Colors.textSecondary)
-                        Text("r=\(String(format: "%.2f", insight.correlation)) | n=\(insight.supportingCount)")
-                            .font(Theme.Typography.caption)
-                            .foregroundColor(Theme.Colors.textTertiary)
+                    MetricTileButton(action: {
+                        selectedCorrelation = insight
+                    }) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(insight.title)
+                                .font(Theme.Typography.headline)
+                                .foregroundColor(Theme.Colors.textPrimary)
+                            Text(insight.detail)
+                                .font(Theme.Typography.caption)
+                                .foregroundColor(Theme.Colors.textSecondary)
+                            Text("r=\(String(format: "%.2f", insight.correlation)) | n=\(insight.supportingCount)")
+                                .font(Theme.Typography.caption)
+                                .foregroundColor(Theme.Colors.textTertiary)
+                        }
+                        .padding(Theme.Spacing.lg)
+                        .glassBackground(elevation: 1)
                     }
-                    .padding(Theme.Spacing.lg)
-                    .glassBackground(elevation: 1)
                 }
             }
         }

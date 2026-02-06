@@ -356,6 +356,7 @@ struct WorkoutAnalytics {
         if let (label, value) = topDifference(from: densityByStress) {
             insights.append(
                 HabitImpactInsight(
+                    kind: .stress,
                     title: "Stress impact",
                     detail: "density \(value) | stress \(label)",
                     value: value,
@@ -368,6 +369,7 @@ struct WorkoutAnalytics {
         if let (label, value) = topDifference(from: densityByCaffeine) {
             insights.append(
                 HabitImpactInsight(
+                    kind: .caffeine,
                     title: "Caffeine impact",
                     detail: "density \(value) | caffeine \(label)",
                     value: value,
@@ -380,6 +382,7 @@ struct WorkoutAnalytics {
         if let (label, value) = topDifference(from: densityBySoreness) {
             insights.append(
                 HabitImpactInsight(
+                    kind: .soreness,
                     title: "Soreness impact",
                     detail: "density \(value) | soreness \(label)",
                     value: value,
@@ -392,6 +395,7 @@ struct WorkoutAnalytics {
         if let (label, value) = topDifference(from: densityByMood) {
             insights.append(
                 HabitImpactInsight(
+                    kind: .mood,
                     title: "Mood impact",
                     detail: "density \(value) | mood \(label)",
                     value: value,
@@ -409,6 +413,7 @@ struct WorkoutAnalytics {
         if let (label, value) = topDifference(from: densityByTime) {
             insights.append(
                 HabitImpactInsight(
+                    kind: .timeOfDay,
                     title: "Time of day",
                     detail: "density \(value) | \(label)",
                     value: value,
@@ -418,6 +423,47 @@ struct WorkoutAnalytics {
         }
 
         return insights
+    }
+
+    static func habitImpactDetail(
+        kind: HabitFactorKind,
+        workouts: [Workout],
+        annotations: [UUID: WorkoutAnnotation]
+    ) -> HabitImpactDetailModel {
+        var buckets: [String: [Workout]] = [:]
+
+        for workout in workouts {
+            let label: String?
+            switch kind {
+            case .stress:
+                label = annotations[workout.id]?.stress?.label
+            case .caffeine:
+                label = annotations[workout.id]?.caffeine?.label
+            case .soreness:
+                label = annotations[workout.id]?.soreness?.label
+            case .mood:
+                label = annotations[workout.id]?.mood?.label
+            case .timeOfDay:
+                label = timeOfDayLabel(for: workout.date)
+            }
+
+            guard let label else { continue }
+            buckets[label, default: []].append(workout)
+        }
+
+        let models = buckets.map { label, items in
+            let densities = items.map { effortDensity(for: $0) }
+            let avg = average(densities)
+            return HabitImpactBucket(
+                label: label.lowercased(),
+                averageDensity: avg,
+                workoutCount: items.count,
+                workouts: items.sorted { $0.date > $1.date }
+            )
+        }
+        .sorted { $0.averageDensity > $1.averageDensity }
+
+        return HabitImpactDetailModel(kind: kind, buckets: models)
     }
 
     static func correlationInsights(
@@ -439,10 +485,12 @@ struct WorkoutAnalytics {
             let detail = "avg>=7h \(String(format: "%.1f", avgHigh)) | <7h \(String(format: "%.1f", avgLow))"
             insights.append(
                 CorrelationInsight(
+                    kind: .sleepVsOutput,
                     title: title,
                     detail: detail,
                     correlation: correlation,
-                    supportingCount: points.count
+                    supportingCount: points.count,
+                    exerciseName: nil
                 )
             )
         }
@@ -460,10 +508,12 @@ struct WorkoutAnalytics {
             let detail = "avg>=70 \(String(format: "%.1f", avgHigh)) | <70 \(String(format: "%.1f", avgLow))"
             insights.append(
                 CorrelationInsight(
+                    kind: .readinessVsOutput,
                     title: title,
                     detail: detail,
                     correlation: correlation,
-                    supportingCount: readinessPoints.count
+                    supportingCount: readinessPoints.count,
+                    exerciseName: nil
                 )
             )
         }
@@ -488,10 +538,12 @@ struct WorkoutAnalytics {
                     let detail = "avg1RM 7h+ \(Int(avgGood)) | <7h \(Int(avgLow)) | delta \(Int(delta))"
                     insights.append(
                         CorrelationInsight(
+                            kind: .sleepVsTopExercise,
                             title: "Sleep vs \(topExercise)",
                             detail: detail,
                             correlation: corr,
-                            supportingCount: paired.count
+                            supportingCount: paired.count,
+                            exerciseName: topExercise
                         )
                     )
                 }
@@ -499,6 +551,75 @@ struct WorkoutAnalytics {
         }
 
         return insights
+    }
+
+    static func correlationDetail(
+        kind: CorrelationKind,
+        workouts: [Workout],
+        healthData: [UUID: WorkoutHealthData]
+    ) -> CorrelationDetailModel {
+        let sortedWorkouts = workouts.sorted { $0.date < $1.date }
+
+        switch kind {
+        case .sleepVsOutput:
+            let points = sortedWorkouts.compactMap { workout -> CorrelationDetailPoint? in
+                guard let sleep = healthData[workout.id]?.sleepSummary?.totalHours else { return nil }
+                let density = effortDensity(for: workout)
+                guard density > 0 else { return nil }
+                return CorrelationDetailPoint(workoutId: workout.id, date: workout.date, x: sleep, y: density)
+            }
+            let corr = correlation(points.map(\.x), points.map(\.y))
+            return CorrelationDetailModel(
+                kind: kind,
+                points: points,
+                correlation: corr,
+                supportingCount: points.count,
+                title: "Sleep vs output",
+                xLabel: "Sleep (h)",
+                yLabel: "Output",
+                exerciseName: nil
+            )
+        case .readinessVsOutput:
+            let points = sortedWorkouts.compactMap { workout -> CorrelationDetailPoint? in
+                guard let readiness = readinessScore(for: healthData[workout.id]) else { return nil }
+                let density = effortDensity(for: workout)
+                guard density > 0 else { return nil }
+                return CorrelationDetailPoint(workoutId: workout.id, date: workout.date, x: readiness, y: density)
+            }
+            let corr = correlation(points.map(\.x), points.map(\.y))
+            return CorrelationDetailModel(
+                kind: kind,
+                points: points,
+                correlation: corr,
+                supportingCount: points.count,
+                title: "Readiness vs output",
+                xLabel: "Readiness",
+                yLabel: "Output",
+                exerciseName: nil
+            )
+        case .sleepVsTopExercise:
+            let topExercise = topExerciseName(in: workouts)
+            let points = sortedWorkouts.compactMap { workout -> CorrelationDetailPoint? in
+                guard let sleep = healthData[workout.id]?.sleepSummary?.totalHours else { return nil }
+                guard let name = topExercise else { return nil }
+                guard let exercise = workout.exercises.first(where: { $0.name == name }) else { return nil }
+                let best = exercise.sets.map { estimateOneRepMax(weight: $0.weight, reps: $0.reps) }.max() ?? 0
+                guard best > 0 else { return nil }
+                return CorrelationDetailPoint(workoutId: workout.id, date: workout.date, x: sleep, y: best)
+            }
+            let corr = correlation(points.map(\.x), points.map(\.y))
+            let title = topExercise.map { "Sleep vs \($0)" } ?? "Sleep vs top exercise"
+            return CorrelationDetailModel(
+                kind: kind,
+                points: points,
+                correlation: corr,
+                supportingCount: points.count,
+                title: title,
+                xLabel: "Sleep (h)",
+                yLabel: "1RM",
+                exerciseName: topExercise
+            )
+        }
     }
 
     static func recoveryDebtSnapshot(
@@ -543,15 +664,15 @@ struct WorkoutAnalytics {
 
         switch clamped {
         case 80...100:
-            label = "Index A"
+            label = "Low debt"
             detail = detailBase
             tint = Theme.Colors.success
         case 60..<80:
-            label = "Index B"
+            label = "Moderate debt"
             detail = detailBase
             tint = Theme.Colors.warning
         default:
-            label = "Index C"
+            label = "High debt"
             detail = detailBase
             tint = Theme.Colors.error
         }

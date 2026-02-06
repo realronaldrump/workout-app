@@ -224,6 +224,8 @@ struct ExerciseDetailView: View {
 struct ExerciseStatsCards: View {
     let exerciseName: String
     let history: [(date: Date, sets: [WorkoutSet])]
+
+    @State private var selectedStat: ExerciseStatKind?
     
     private var stats: (total: Int, maxWeight: Double, maxVolume: Double, avgReps: Double) {
         let allSets = history.flatMap { $0.sets }
@@ -243,29 +245,36 @@ struct ExerciseStatsCards: View {
                 title: "Total Sets",
                 value: "\(stats.total)",
                 icon: "number",
-                color: .blue
+                color: .blue,
+                onTap: { selectedStat = .totalSets }
             )
             
             StatCard(
                 title: "Max Weight",
                 value: "\(Int(stats.maxWeight)) lbs",
                 icon: "scalemass.fill",
-                color: .orange
+                color: .orange,
+                onTap: { selectedStat = .maxWeight }
             )
             
             StatCard(
                 title: "Max Volume",
                 value: formatVolume(stats.maxVolume),
                 icon: "chart.bar.fill",
-                color: .green
+                color: .green,
+                onTap: { selectedStat = .maxVolume }
             )
             
             StatCard(
                 title: "Avg Reps",
                 value: String(format: "%.1f", stats.avgReps),
                 icon: "repeat",
-                color: .purple
+                color: .purple,
+                onTap: { selectedStat = .avgReps }
             )
+        }
+        .navigationDestination(item: $selectedStat) { kind in
+            ExerciseStatDetailView(kind: kind, exerciseName: exerciseName, history: history)
         }
     }
     
