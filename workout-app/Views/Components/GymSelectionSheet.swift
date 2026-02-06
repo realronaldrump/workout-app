@@ -86,7 +86,12 @@ struct GymSelectionSheet: View {
 
                         if showAddNew {
                             Button {
-                                onAddNew?()
+                                // This view is typically presented as a sheet; dismiss it before triggering
+                                // a new sheet/navigation from the parent.
+                                dismiss()
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                                    onAddNew?()
+                                }
                             } label: {
                                 HStack(spacing: Theme.Spacing.md) {
                                     Image(systemName: "plus.circle.fill")
