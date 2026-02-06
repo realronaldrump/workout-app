@@ -377,7 +377,13 @@ struct PerformanceLabView: View {
     }
 
     private var volumeBalanceSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+        let allTimeRange: DateInterval = {
+            let now = Date()
+            let oldest = workouts.map { $0.date }.min() ?? now
+            return DateInterval(start: oldest, end: now)
+        }()
+
+        return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             Text("Volume Balance")
                 .font(Theme.Typography.title2)
                 .foregroundColor(Theme.Colors.textPrimary)
@@ -388,7 +394,7 @@ struct PerformanceLabView: View {
 
             ExerciseBreakdownView(workouts: workouts)
 
-            MuscleHeatmapView(dataManager: dataManager)
+            MuscleHeatmapView(dataManager: dataManager, dateRange: allTimeRange)
         }
     }
 
