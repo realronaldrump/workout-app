@@ -92,7 +92,7 @@ struct FatigueLensDetailView: View {
                 .foregroundStyle(Theme.Colors.textSecondary)
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 2)
+        .softCard(elevation: 2)
     }
 
     private var entriesSection: some View {
@@ -106,7 +106,7 @@ struct FatigueLensDetailView: View {
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Colors.textSecondary)
                     .padding(Theme.Spacing.lg)
-                    .glassBackground(elevation: 1)
+                    .softCard(elevation: 1)
             } else {
                 ForEach(summary.entries) { entry in
                     MetricTileButton(action: {
@@ -129,7 +129,7 @@ struct FatigueLensDetailView: View {
                                 .foregroundStyle(Theme.Colors.warning)
                         }
                         .padding(Theme.Spacing.lg)
-                        .glassBackground(elevation: 1)
+                        .softCard(elevation: 1)
                     }
                 }
             }
@@ -151,7 +151,7 @@ private struct MetricPill: View {
                 .foregroundStyle(Theme.Colors.textPrimary)
         }
         .padding(Theme.Spacing.md)
-        .glassBackground(elevation: 1)
+        .softCard(elevation: 1)
     }
 }
 

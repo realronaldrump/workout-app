@@ -152,7 +152,7 @@ struct RecoveryDetailView: View {
             }
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 2)
+        .softCard(elevation: 2)
     }
 
     private var scoreSection: some View {
@@ -219,11 +219,11 @@ struct RecoveryDetailView: View {
                 }
                 .frame(height: 180)
                 .padding(Theme.Spacing.lg)
-                .glassBackground(elevation: 1)
+                .softCard(elevation: 1)
             }
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 2)
+        .softCard(elevation: 2)
     }
 
     private var supportingSection: some View {
@@ -237,7 +237,7 @@ struct RecoveryDetailView: View {
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Colors.textSecondary)
                     .padding(Theme.Spacing.lg)
-                    .glassBackground(elevation: 1)
+                    .softCard(elevation: 1)
             } else {
                 ForEach(sortedWorkouts.prefix(12)) { workout in
                     NavigationLink(destination: WorkoutDetailView(workout: workout)) {
@@ -264,7 +264,7 @@ struct RecoveryDetailView: View {
                                 .foregroundStyle(Theme.Colors.textTertiary)
                         }
                         .padding(Theme.Spacing.lg)
-                        .glassBackground(elevation: 1)
+                        .softCard(elevation: 1)
                     }
                     .buttonStyle(.plain)
                 }

@@ -50,7 +50,7 @@ struct ConsistencyView: View {
             CalendarHeatmap(workouts: workouts)
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 2)
+        .softCard(elevation: 2)
     }
 }
 

@@ -61,7 +61,7 @@ struct WorkoutAnnotationCard: View {
             }
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 2)
+        .softCard(elevation: 2)
         .onAppear { loadIfNeeded() }
         .onChange(of: stress) { _, _ in save() }
         .onChange(of: soreness) { _, _ in save() }

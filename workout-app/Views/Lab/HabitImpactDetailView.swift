@@ -52,7 +52,7 @@ struct HabitImpactDetailView: View {
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Colors.textSecondary)
                     .padding(Theme.Spacing.lg)
-                    .glassBackground(elevation: 1)
+                    .softCard(elevation: 1)
             } else {
                 Chart(model.buckets) { bucket in
                     BarMark(
@@ -83,7 +83,7 @@ struct HabitImpactDetailView: View {
                 }
                 .frame(height: CGFloat(model.buckets.count) * 32 + 24)
                 .padding(Theme.Spacing.lg)
-                .glassBackground(elevation: 2)
+                .softCard(elevation: 2)
             }
         }
     }
@@ -136,14 +136,14 @@ struct HabitImpactDetailView: View {
                                             .foregroundStyle(Theme.Colors.textTertiary)
                                     }
                                     .padding(Theme.Spacing.lg)
-                                    .glassBackground(elevation: 1)
+                                    .softCard(elevation: 1)
                                 }
                                 .buttonStyle(.plain)
                             }
                         }
                     }
                     .padding(Theme.Spacing.lg)
-                    .glassBackground(elevation: 2)
+                    .softCard(elevation: 2)
                 }
             }
         }
@@ -194,7 +194,7 @@ private struct EmptyStateCard: View {
                 .foregroundStyle(Theme.Colors.textSecondary)
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 1)
+        .softCard(elevation: 1)
     }
 }
 

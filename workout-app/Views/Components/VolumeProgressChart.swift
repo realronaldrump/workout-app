@@ -91,7 +91,7 @@ struct VolumeProgressChart: View {
             }
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 2)
+        .softCard(elevation: 2)
         .gesture(
             DragGesture(minimumDistance: 24)
                 .onEnded { value in

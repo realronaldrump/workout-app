@@ -123,7 +123,7 @@ struct HealthMetricDetailView: View {
                 .foregroundStyle(Theme.Colors.textSecondary)
         }
         .padding(Theme.Spacing.xl)
-        .glassBackground(elevation: 1)
+        .softCard(elevation: 1)
     }
 
     private var dailyChartSection: some View {
@@ -142,7 +142,7 @@ struct HealthMetricDetailView: View {
             )
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 1)
+        .softCard(elevation: 1)
     }
 
 	    private var statsSection: some View {
@@ -219,7 +219,7 @@ struct HealthMetricDetailView: View {
             }
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 1)
+        .softCard(elevation: 1)
     }
 
     private var rawSamplesSection: some View {
@@ -265,7 +265,7 @@ struct HealthMetricDetailView: View {
             }
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 1)
+        .softCard(elevation: 1)
     }
 
     private func tooltipValueText(displayValue: Double) -> String {
@@ -352,6 +352,6 @@ private struct MetricStatCard: View {
         }
         .padding(Theme.Spacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glassBackground(elevation: 1)
+        .softCard(elevation: 1)
     }
 }

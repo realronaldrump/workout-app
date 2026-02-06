@@ -59,7 +59,7 @@ struct WorkoutDetailView: View {
                             }
                         }
                         .padding(Theme.Spacing.lg)
-                        .glassBackground(elevation: 2)
+                        .softCard(elevation: 2)
                     }
 
                     GymAssignmentCard(workout: workout)
@@ -215,7 +215,7 @@ struct WorkoutDetailView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(Theme.Spacing.xl)
-        .glassBackground(elevation: 2)
+        .softCard(elevation: 2)
     }
     
     // MARK: - Actions
@@ -315,7 +315,7 @@ struct ExerciseCard: View {
             }
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 2)
+        .softCard(elevation: 2)
         .contextMenu {
             Button("View History") {
                 onViewHistory?(exercise.name)
@@ -435,7 +435,7 @@ struct RecoveryInsightCard: View {
                 .foregroundColor(Theme.Colors.textTertiary)
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 2)
+        .softCard(elevation: 2)
         .onAppear {
             if insight.grade == .c, !didTriggerHaptic {
                 Haptics.notify(.warning)

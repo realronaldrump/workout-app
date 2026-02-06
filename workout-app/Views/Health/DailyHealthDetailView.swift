@@ -138,7 +138,7 @@ struct DailyHealthDetailView: View {
             }
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 1)
+        .softCard(elevation: 1)
     }
 
     private func formatInt(_ value: Double?) -> String {
@@ -187,7 +187,7 @@ private struct DailyOverviewCard: View {
         }
         .padding(Theme.Spacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glassBackground(elevation: 1)
+        .softCard(elevation: 1)
     }
 }
 
@@ -222,6 +222,6 @@ private struct DailyMetricRow: View {
             }
         }
         .padding(Theme.Spacing.md)
-        .glassBackground(elevation: 1)
+        .softCard(elevation: 1)
     }
 }

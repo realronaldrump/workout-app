@@ -7,23 +7,25 @@ struct OnboardingView: View {
     @Binding var hasSeenOnboarding: Bool
     @EnvironmentObject var healthManager: HealthKitManager
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     @State private var step = 0
     @State private var showingImportWizard = false
+    @State private var showingHealthWizard = false
 
-    private let totalSteps = 4
+    private let totalSteps = 3
 
     var body: some View {
         ZStack {
-            AdaptiveBackground()
+            SplashBackground()
 
             VStack(spacing: Theme.Spacing.lg) {
-                header
+                topBar
 
                 TabView(selection: $step) {
-                    missionControlStep.tag(0)
-                    insightsStep.tag(1)
+                    welcomeStep.tag(0)
+                    importStep.tag(1)
                     healthStep.tag(2)
-                    importStep.tag(3)
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
 
@@ -38,212 +40,288 @@ struct OnboardingView: View {
                 iCloudManager: iCloudManager
             )
         }
+        .fullScreenCover(isPresented: $showingHealthWizard) {
+            HealthSyncWizard(
+                isPresented: $showingHealthWizard,
+                workouts: dataManager.workouts
+            )
+        }
+        .onChange(of: showingImportWizard) { _, isShowing in
+            guard !isShowing else { return }
+            guard step == 1 else { return }
+            guard !dataManager.workouts.isEmpty else { return }
+            withAnimation(reduceMotion ? .easeOut(duration: 0.2) : Theme.Animation.spring) {
+                step = 2
+            }
+        }
+        .onChange(of: healthManager.authorizationStatus) { _, newValue in
+            // If the user authorizes in the wizard, show the "Connected" state immediately.
+            if step == 2, newValue == .authorized {
+                Haptics.notify(.success)
+            }
+        }
     }
 
-    private var header: some View {
+    private var topBar: some View {
         VStack(spacing: Theme.Spacing.sm) {
             HStack {
+                Spacer()
+
                 Button("Skip") {
                     completeOnboarding()
                 }
                 .font(Theme.Typography.subheadline)
-                .foregroundColor(Theme.Colors.textSecondary)
-
-                Spacer()
-
-                Text("Step \(step + 1) of \(totalSteps)")
-                    .font(Theme.Typography.caption)
-                    .foregroundColor(Theme.Colors.textTertiary)
+                .foregroundStyle(Theme.Colors.textSecondary)
+                .padding(.horizontal, Theme.Spacing.lg)
+                .frame(minHeight: 44)
             }
 
             HStack(spacing: 8) {
                 ForEach(0..<totalSteps, id: \.self) { index in
                     Capsule()
-                        .fill(index <= step ? Theme.Colors.accent : Theme.Colors.surface.opacity(0.6))
+                        .fill(index <= step ? Theme.Colors.accent : Theme.Colors.border.opacity(0.7))
                         .frame(height: 4)
+                        .animation(reduceMotion ? .easeOut(duration: 0.2) : .spring(), value: step)
                 }
             }
+            .padding(.horizontal, Theme.Spacing.xl)
         }
-        .padding(.horizontal, Theme.Spacing.xl)
     }
 
     private var footer: some View {
-        HStack(spacing: Theme.Spacing.md) {
-            if step > 0 {
-                Button(action: {
-                    withAnimation(Theme.Animation.spring) {
-                        step = max(step - 1, 0)
-                    }
-                    Haptics.selection()
-                }) {
-                    Text("Back")
-                        .font(Theme.Typography.subheadline)
-                        .foregroundColor(Theme.Colors.textSecondary)
-                        .padding(.horizontal, Theme.Spacing.lg)
-                        .padding(.vertical, Theme.Spacing.sm)
-                        .background(Theme.Colors.surface.opacity(0.6))
-                        .cornerRadius(Theme.CornerRadius.large)
-                }
+        VStack(spacing: Theme.Spacing.md) {
+            Button(action: handlePrimaryAction) {
+                Text(primaryButtonTitle)
+                    .font(Theme.Typography.headline)
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, Theme.Spacing.md)
+                    .frame(minHeight: 52)
+                    .background(primaryButtonColor)
+                    .cornerRadius(Theme.CornerRadius.xlarge)
             }
 
-            Spacer()
-
-            Button(action: {
-                handlePrimaryAction()
-            }) {
-                Text(step == totalSteps - 1 ? "Launch App" : "Continue")
-                    .font(Theme.Typography.headline)
-                    .foregroundColor(.white)
-                    .padding(.horizontal, Theme.Spacing.xl)
-                    .padding(.vertical, Theme.Spacing.sm)
-                    .background(Theme.Colors.accent)
-                    .cornerRadius(Theme.CornerRadius.large)
+            if let secondary = secondaryButtonTitle {
+                Button(action: handleSecondaryAction) {
+                    Text(secondary)
+                        .font(Theme.Typography.subheadline)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                        .frame(minHeight: 44)
+                }
+                .buttonStyle(.plain)
             }
         }
         .padding(.horizontal, Theme.Spacing.xl)
     }
 
-    private var missionControlStep: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-                Text("Home Preview")
-                    .font(Theme.Typography.title)
-                    .foregroundColor(Theme.Colors.textPrimary)
+    private var welcomeStep: some View {
+        VStack(spacing: Theme.Spacing.xl) {
+            Spacer()
 
-                Text("sessions \(SampleData.stats.totalWorkouts) | volume \(Int(SampleData.stats.totalVolume))")
+            WordmarkLockup(showTagline: false)
+                .padding(.horizontal, Theme.Spacing.xl)
+
+            VStack(spacing: Theme.Spacing.sm) {
+                Text("Train with clarity.")
+                    .font(Theme.Typography.heroTitle)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                    .multilineTextAlignment(.center)
+
+                Text("See what's changed, what's working, and what to do next.")
                     .font(Theme.Typography.body)
-                    .foregroundColor(Theme.Colors.textSecondary)
-
-                OverviewCardsView(stats: SampleData.stats)
-                    .padding(.top, Theme.Spacing.md)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, Theme.Spacing.xl)
             }
-            .padding(.horizontal, Theme.Spacing.xl)
-        }
-    }
 
-    private var insightsStep: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-                Text("Highlights Preview")
-                    .font(Theme.Typography.title)
-                    .foregroundColor(Theme.Colors.textPrimary)
-
-                Text("n \(SampleData.insights.count)")
-                    .font(Theme.Typography.body)
-                    .foregroundColor(Theme.Colors.textSecondary)
-
-                VStack(spacing: Theme.Spacing.md) {
-                    ForEach(SampleData.insights) { insight in
-                        InsightCardView(insight: insight)
-                    }
-                }
-            }
-            .padding(.horizontal, Theme.Spacing.xl)
-        }
-    }
-
-    private var healthStep: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-                Text("Health Metrics Preview")
-                    .font(Theme.Typography.title)
-                    .foregroundColor(Theme.Colors.textPrimary)
-
-                Text("avgHRV 48 | resting 58 | sync live")
-                    .font(Theme.Typography.body)
-                    .foregroundColor(Theme.Colors.textSecondary)
-
-                if #available(iOS 16.0, *) {
-                    WorkoutHRChart(samples: SampleData.healthData.heartRateSamples)
-                } else {
-                    Text("Health charts require iOS 16 or newer.")
-                        .font(Theme.Typography.caption)
-                        .foregroundColor(Theme.Colors.textTertiary)
-                }
-
-                HStack(spacing: Theme.Spacing.md) {
-                    OnboardingStatPill(title: "Avg HRV", value: "48", unit: "ms")
-                    OnboardingStatPill(title: "Resting HR", value: "58", unit: "bpm")
-                    OnboardingStatPill(title: "Sync", value: "Live", unit: "")
-                }
-            }
-            .padding(.horizontal, Theme.Spacing.xl)
+            Spacer()
         }
     }
 
     private var importStep: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-                Text("Import")
-                    .font(Theme.Typography.title)
-                    .foregroundColor(Theme.Colors.textPrimary)
+        VStack(spacing: Theme.Spacing.xl) {
+            Spacer()
 
-                Text("CSV import")
-                    .font(Theme.Typography.body)
-                    .foregroundColor(Theme.Colors.textSecondary)
+            VStack(spacing: Theme.Spacing.lg) {
+                Image(systemName: "square.and.arrow.down.on.square")
+                    .font(.system(size: 64))
+                    .foregroundStyle(Theme.Colors.accent)
+                    .padding(Theme.Spacing.xl)
+                    .background(
+                        Circle()
+                            .fill(Theme.Colors.accent.opacity(0.12))
+                    )
 
-                Button(action: {
-                    showingImportWizard = true
-                }) {
-                    HStack {
-                        Spacer()
-                        Text("Import Strong CSV")
-                            .font(Theme.Typography.headline)
-                            .foregroundColor(.white)
-                        Spacer()
-                    }
-                    .padding()
-                    .background(Theme.Colors.accent)
-                    .cornerRadius(Theme.CornerRadius.large)
+                VStack(spacing: Theme.Spacing.sm) {
+                    Text("Bring your history.")
+                        .font(Theme.Typography.title2)
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                        .multilineTextAlignment(.center)
+
+                    Text("Import your Strong CSV in under a minute.")
+                        .font(Theme.Typography.body)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, Theme.Spacing.xl)
+                }
+            }
+
+            Spacer()
+        }
+    }
+
+    private var healthStep: some View {
+        VStack(spacing: Theme.Spacing.xl) {
+            Spacer()
+
+            VStack(spacing: Theme.Spacing.lg) {
+                Image(systemName: "heart.fill")
+                    .font(.system(size: 64))
+                    .foregroundStyle(Theme.Colors.error)
+                    .padding(Theme.Spacing.xl)
+                    .background(
+                        Circle()
+                            .fill(Theme.Colors.error.opacity(0.10))
+                    )
+
+                VStack(spacing: Theme.Spacing.sm) {
+                    Text("Add recovery context.")
+                        .font(Theme.Typography.title2)
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                        .multilineTextAlignment(.center)
+
+                    Text("Sleep and recovery alongside training. Read-only and on-device.")
+                        .font(Theme.Typography.body)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, Theme.Spacing.xl)
                 }
 
-                Text("storage on-device/iCloud")
-                    .font(Theme.Typography.caption)
-                    .foregroundColor(Theme.Colors.textTertiary)
+                healthStatusPill
             }
-            .padding(.horizontal, Theme.Spacing.xl)
+
+            Spacer()
+        }
+    }
+
+    private var healthStatusPill: some View {
+        let statusText: String = {
+            switch healthManager.authorizationStatus {
+            case .authorized:
+                return "Connected"
+            case .unavailable:
+                return "Unavailable"
+            default:
+                return "Not connected"
+            }
+        }()
+
+        let tint: Color = {
+            switch healthManager.authorizationStatus {
+            case .authorized:
+                return Theme.Colors.success
+            case .unavailable:
+                return Theme.Colors.textTertiary
+            default:
+                return Theme.Colors.warning
+            }
+        }()
+
+        return HStack(spacing: Theme.Spacing.sm) {
+            Circle()
+                .fill(tint)
+                .frame(width: 10, height: 10)
+            Text(statusText)
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.Colors.textSecondary)
+        }
+        .padding(.horizontal, Theme.Spacing.lg)
+        .padding(.vertical, Theme.Spacing.sm)
+        .softCard(cornerRadius: Theme.CornerRadius.xlarge, elevation: 1)
+        .padding(.top, Theme.Spacing.sm)
+    }
+
+    private var primaryButtonTitle: String {
+        switch step {
+        case 0:
+            return "Get started"
+        case 1:
+            return "Import from Strong"
+        default:
+            switch healthManager.authorizationStatus {
+            case .authorized, .unavailable:
+                return "Continue"
+            default:
+                return "Connect Apple Health"
+            }
+        }
+    }
+
+    private var secondaryButtonTitle: String? {
+        switch step {
+        case 0:
+            return nil
+        case 1:
+            return "Skip for now"
+        default:
+            return "Not now"
+        }
+    }
+
+    private var primaryButtonColor: Color {
+        switch step {
+        case 1:
+            return Theme.Colors.accent
+        default:
+            return Theme.Colors.accent
         }
     }
 
     private func handlePrimaryAction() {
-        if step < totalSteps - 1 {
-            withAnimation(Theme.Animation.spring) {
-                step += 1
+        Haptics.selection()
+
+        switch step {
+        case 0:
+            withAnimation(reduceMotion ? .easeOut(duration: 0.2) : Theme.Animation.spring) {
+                step = 1
             }
-            Haptics.selection()
-        } else {
+        case 1:
+            showingImportWizard = true
+        default:
+            switch healthManager.authorizationStatus {
+            case .authorized, .unavailable:
+                completeOnboarding()
+            default:
+                showingHealthWizard = true
+            }
+        }
+    }
+
+    private func handleSecondaryAction() {
+        Haptics.selection()
+
+        switch step {
+        case 1:
+            withAnimation(reduceMotion ? .easeOut(duration: 0.2) : Theme.Animation.spring) {
+                step = 2
+            }
+        default:
             completeOnboarding()
         }
     }
 
     private func completeOnboarding() {
-        Haptics.selection()
         hasSeenOnboarding = true
         isPresented = false
     }
 }
 
-struct OnboardingStatPill: View {
-    let title: String
-    let value: String
-    let unit: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            Text(title)
-                .font(Theme.Typography.caption)
-                .foregroundColor(Theme.Colors.textSecondary)
-            HStack(alignment: .lastTextBaseline, spacing: 4) {
-                Text(value)
-                    .font(Theme.Typography.numberSmall)
-                    .foregroundColor(Theme.Colors.textPrimary)
-                Text(unit)
-                    .font(Theme.Typography.caption)
-                    .foregroundColor(Theme.Colors.textTertiary)
-            }
-        }
-        .padding(Theme.Spacing.sm)
-        .background(Theme.Colors.surface.opacity(0.6))
-        .cornerRadius(Theme.CornerRadius.medium)
-    }
+#Preview {
+    OnboardingView(
+        isPresented: .constant(true),
+        dataManager: WorkoutDataManager(),
+        iCloudManager: iCloudDocumentManager(),
+        hasSeenOnboarding: .constant(false)
+    )
+    .environmentObject(HealthKitManager())
 }

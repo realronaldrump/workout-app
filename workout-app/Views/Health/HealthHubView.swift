@@ -288,7 +288,7 @@ struct HealthHubView: View {
             .buttonStyle(.plain)
         }
         .padding(Theme.Spacing.xl)
-        .glassBackground(elevation: 1)
+        .softCard(elevation: 1)
     }
 
     private var unavailableCard: some View {
@@ -302,7 +302,7 @@ struct HealthHubView: View {
                 .foregroundStyle(Theme.Colors.textSecondary)
         }
         .padding(Theme.Spacing.xl)
-        .glassBackground(elevation: 1)
+        .softCard(elevation: 1)
     }
 
     private var emptyState: some View {
@@ -329,7 +329,7 @@ struct HealthHubView: View {
             .buttonStyle(.plain)
         }
         .padding(Theme.Spacing.xl)
-        .glassBackground(elevation: 1)
+        .softCard(elevation: 1)
     }
 
     private var summaryCards: [HealthSummaryCardModel] {
@@ -459,7 +459,7 @@ private struct HealthSummaryCard: View {
         }
         .padding(Theme.Spacing.md)
         .frame(width: 160, alignment: .leading)
-        .glassBackground(elevation: 1)
+        .softCard(elevation: 1)
     }
 }
 
@@ -484,7 +484,7 @@ private struct HealthCategoryCard: View {
                 .foregroundStyle(Theme.Colors.textSecondary)
         }
         .padding(Theme.Spacing.md)
-        .glassBackground(elevation: 1)
+        .softCard(elevation: 1)
     }
 }
 
@@ -546,7 +546,7 @@ private struct DailyTimelineRow: View {
             }
         }
         .padding(Theme.Spacing.md)
-        .glassBackground(elevation: 1)
+        .softCard(elevation: 1)
     }
 }
 

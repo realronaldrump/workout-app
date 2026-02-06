@@ -424,7 +424,7 @@ struct HealthDashboardView: View {
                 .padding(.horizontal)
         }
         .padding(Theme.Spacing.xl)
-        .glassBackground(elevation: 1)
+        .softCard(elevation: 1)
     }
 
     private var rangeEmptyState: some View {
@@ -439,7 +439,7 @@ struct HealthDashboardView: View {
                 .multilineTextAlignment(.center)
         }
         .padding(Theme.Spacing.xl)
-        .glassBackground(elevation: 1)
+        .softCard(elevation: 1)
     }
 
     // MARK: - Models
@@ -936,7 +936,7 @@ private struct HighlightCard: View {
                 .lineLimit(2)
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 2)
+        .softCard(elevation: 2)
     }
 }
 
@@ -974,7 +974,7 @@ private struct MetricSummaryCard: View {
                 .lineLimit(2)
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 2)
+        .softCard(elevation: 2)
     }
 }
 
@@ -1017,7 +1017,7 @@ private struct TrendCard: View {
                 .frame(height: 70)
             }
             .padding(Theme.Spacing.lg)
-            .glassBackground(elevation: 2)
+            .softCard(elevation: 2)
         }
     }
 }
@@ -1036,7 +1036,7 @@ private struct EmptyMetricCard: View {
                 .foregroundStyle(Theme.Colors.textSecondary)
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 1)
+        .softCard(elevation: 1)
     }
 }
 
@@ -1189,7 +1189,7 @@ private struct HealthMetricDetailScreen: View {
             dateText: { $0.formatted(date: .abbreviated, time: .omitted) }
         )
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 2)
+        .softCard(elevation: 2)
     }
 
 	    private func statsSection(for series: HealthMetricSeries) -> some View {
@@ -1251,7 +1251,7 @@ private struct HealthMetricDetailScreen: View {
                         .foregroundStyle(Theme.Colors.textPrimary)
                 }
                 .padding(Theme.Spacing.md)
-                .glassBackground(elevation: 1)
+                .softCard(elevation: 1)
             }
         }
     }
@@ -1266,7 +1266,7 @@ private struct HealthMetricDetailScreen: View {
                 .foregroundStyle(Theme.Colors.textSecondary)
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 1)
+        .softCard(elevation: 1)
     }
 
 	    private func formatValue(_ value: Double, unit: String) -> String {
@@ -1341,7 +1341,7 @@ private struct HealthMetricDetailScreen: View {
 	                .foregroundStyle(Theme.Colors.textPrimary)
 	        }
         .padding(Theme.Spacing.md)
-        .glassBackground(elevation: 1)
+        .softCard(elevation: 1)
     }
 }
 
@@ -1384,7 +1384,7 @@ private struct WorkoutHealthCard: View {
             }
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 2)
+        .softCard(elevation: 2)
     }
 
     private func metricPill(icon: String, value: String, unit: String, color: Color) -> some View {

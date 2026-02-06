@@ -110,7 +110,7 @@ struct ChangeMetricDetailView: View {
             }
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 2)
+        .softCard(elevation: 2)
     }
 
     private var chartSection: some View {
@@ -124,7 +124,7 @@ struct ChangeMetricDetailView: View {
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Colors.textSecondary)
                     .padding(Theme.Spacing.lg)
-                    .glassBackground(elevation: 1)
+                    .softCard(elevation: 1)
             } else {
                 Chart {
                     ForEach(chartPoints) { point in
@@ -174,7 +174,7 @@ struct ChangeMetricDetailView: View {
                 }
                 .frame(height: 220)
                 .padding(Theme.Spacing.lg)
-                .glassBackground(elevation: 2)
+                .softCard(elevation: 2)
             }
         }
     }
@@ -199,7 +199,7 @@ struct ChangeMetricDetailView: View {
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Colors.textSecondary)
                     .padding(Theme.Spacing.lg)
-                    .glassBackground(elevation: 1)
+                    .softCard(elevation: 1)
             }
         }
     }
@@ -211,7 +211,7 @@ struct ChangeMetricDetailView: View {
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Colors.textSecondary)
                     .padding(Theme.Spacing.lg)
-                    .glassBackground(elevation: 1)
+                    .softCard(elevation: 1)
             } else {
                 ForEach(currentWorkouts.sorted { $0.date > $1.date }) { workout in
                     NavigationLink(destination: WorkoutDetailView(workout: workout)) {
@@ -230,7 +230,7 @@ struct ChangeMetricDetailView: View {
                                 .foregroundStyle(Theme.Colors.textTertiary)
                         }
                         .padding(Theme.Spacing.lg)
-                        .glassBackground(elevation: 1)
+                        .softCard(elevation: 1)
                     }
                     .buttonStyle(.plain)
                 }
@@ -249,7 +249,7 @@ struct ChangeMetricDetailView: View {
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Colors.textSecondary)
                     .padding(Theme.Spacing.lg)
-                    .glassBackground(elevation: 1)
+                    .softCard(elevation: 1)
             } else {
                 Text("Top Workouts")
                     .font(Theme.Typography.headline)
@@ -272,7 +272,7 @@ struct ChangeMetricDetailView: View {
                                 .foregroundStyle(Theme.Colors.textTertiary)
                         }
                         .padding(Theme.Spacing.lg)
-                        .glassBackground(elevation: 1)
+                        .softCard(elevation: 1)
                     }
                     .buttonStyle(.plain)
                 }
@@ -313,7 +313,7 @@ struct ChangeMetricDetailView: View {
                                     .foregroundStyle(Theme.Colors.textTertiary)
                             }
                             .padding(Theme.Spacing.lg)
-                            .glassBackground(elevation: 1)
+                            .softCard(elevation: 1)
                         }
                         .buttonStyle(.plain)
                     }
@@ -334,7 +334,7 @@ struct ChangeMetricDetailView: View {
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Colors.textSecondary)
                     .padding(Theme.Spacing.lg)
-                    .glassBackground(elevation: 1)
+                    .softCard(elevation: 1)
             } else {
                 ForEach(Array(longest), id: \.workout.id) { item in
                     NavigationLink(destination: WorkoutDetailView(workout: item.workout)) {
@@ -353,7 +353,7 @@ struct ChangeMetricDetailView: View {
                                 .foregroundStyle(Theme.Colors.textTertiary)
                         }
                         .padding(Theme.Spacing.lg)
-                        .glassBackground(elevation: 1)
+                        .softCard(elevation: 1)
                     }
                     .buttonStyle(.plain)
                 }
@@ -373,7 +373,7 @@ struct ChangeMetricDetailView: View {
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Colors.textSecondary)
                     .padding(Theme.Spacing.lg)
-                    .glassBackground(elevation: 1)
+                    .softCard(elevation: 1)
             } else {
                 ForEach(Array(top), id: \.workout.id) { item in
                     NavigationLink(destination: WorkoutDetailView(workout: item.workout)) {
@@ -392,7 +392,7 @@ struct ChangeMetricDetailView: View {
                                 .foregroundStyle(Theme.Colors.textTertiary)
                         }
                         .padding(Theme.Spacing.lg)
-                        .glassBackground(elevation: 1)
+                        .softCard(elevation: 1)
                     }
                     .buttonStyle(.plain)
                 }

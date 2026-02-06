@@ -145,7 +145,7 @@ struct ExerciseStatDetailView: View {
                     .frame(height: 180)
                 }
                 .padding(Theme.Spacing.lg)
-                .glassBackground(elevation: 2)
+                .softCard(elevation: 2)
             }
         }
     }
@@ -307,7 +307,7 @@ private struct StatPill: View {
                 .foregroundColor(Theme.Colors.textPrimary)
         }
         .padding(Theme.Spacing.md)
-        .glassBackground(elevation: 1)
+        .softCard(elevation: 1)
     }
 }
 
@@ -343,7 +343,7 @@ private struct TopSessionRow: View {
             }
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 1)
+        .softCard(elevation: 1)
     }
 }
 
@@ -361,7 +361,7 @@ private struct EmptyStatCard: View {
                 .foregroundColor(Theme.Colors.textSecondary)
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 2)
+        .softCard(elevation: 2)
     }
 }
 

@@ -68,7 +68,7 @@ struct HealthCategoryDetailView: View {
                 .foregroundStyle(Theme.Colors.textSecondary)
         }
         .padding(Theme.Spacing.xl)
-        .glassBackground(elevation: 1)
+        .softCard(elevation: 1)
     }
 
     private func metricPoints(for metric: HealthMetric) -> [HealthTrendPoint] {
@@ -139,6 +139,6 @@ private struct HealthMetricRow: View {
             }
         }
         .padding(Theme.Spacing.md)
-        .glassBackground(elevation: 1)
+        .softCard(elevation: 1)
     }
 }

@@ -23,7 +23,7 @@ struct GymProfilesView: View {
                             .foregroundColor(Theme.Colors.textSecondary)
                     }
                     .padding(Theme.Spacing.lg)
-                    .glassBackground(elevation: 1)
+                    .softCard(elevation: 1)
 
                     NavigationLink(destination: GymBulkAssignView()) {
                         HStack {
@@ -48,7 +48,7 @@ struct GymProfilesView: View {
                                 .foregroundStyle(Theme.Colors.textTertiary)
                         }
                         .padding()
-                        .glassBackground(elevation: 1)
+                        .softCard(elevation: 1)
                     }
                     .buttonStyle(PlainButtonStyle())
 
@@ -153,7 +153,7 @@ struct GymProfilesView: View {
             }
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 2)
+        .softCard(elevation: 2)
     }
 }
 

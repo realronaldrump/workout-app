@@ -59,7 +59,7 @@ struct FatigueLensView: View {
             }
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 2)
+        .softCard(elevation: 2)
     }
 }
 
@@ -77,6 +77,6 @@ private struct FatigueMetricPill: View {
                 .foregroundColor(Theme.Colors.textPrimary)
         }
         .padding(Theme.Spacing.md)
-        .glassBackground(elevation: 1)
+        .softCard(elevation: 1)
     }
 }

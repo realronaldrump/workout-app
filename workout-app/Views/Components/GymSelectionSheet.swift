@@ -108,7 +108,7 @@ struct GymSelectionSheet: View {
                                         .foregroundStyle(Theme.Colors.textTertiary)
                                 }
                                 .padding(Theme.Spacing.lg)
-                                .glassBackground(elevation: 1)
+                                .softCard(elevation: 1)
                             }
                             .buttonStyle(.plain)
                         }
@@ -167,7 +167,7 @@ struct GymSelectionSheet: View {
                 }
             }
             .padding(Theme.Spacing.lg)
-            .glassBackground(elevation: 1)
+            .softCard(elevation: 1)
         }
         .buttonStyle(.plain)
     }

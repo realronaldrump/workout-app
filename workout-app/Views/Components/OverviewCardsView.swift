@@ -112,7 +112,7 @@ struct StatCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Theme.Spacing.lg)
         .frame(height: 120)
-        .glassBackground(elevation: 2)
+        .softCard(elevation: 2)
         .opacity(isAppearing ? 1 : 0)
         .offset(y: isAppearing ? 0 : 8)
         .onAppear {

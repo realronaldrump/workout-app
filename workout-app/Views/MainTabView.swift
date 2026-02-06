@@ -16,7 +16,10 @@ struct MainTabView: View {
     @StateObject private var gymProfilesManager: GymProfilesManager
     @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
     @State private var showingOnboarding = false
+    @State private var pendingOnboarding = false
     @State private var selectedTab: AppTab = .home
+    @State private var showSplash = true
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init() {
         let annotations = WorkoutAnnotationsManager()
@@ -25,7 +28,8 @@ struct MainTabView: View {
     }
     
     var body: some View {
-        TabView(selection: $selectedTab) {
+        ZStack {
+            TabView(selection: $selectedTab) {
             NavigationStack {
                 HomeView(
                     dataManager: dataManager,
@@ -76,14 +80,25 @@ struct MainTabView: View {
                 Label("Profile", systemImage: "person.crop.circle")
             }
             .tag(AppTab.profile)
+            }
         }
         .environmentObject(dataManager)
         .environmentObject(annotationsManager)
         .environmentObject(gymProfilesManager)
         .tint(Theme.Colors.accent)
         .environment(\.adaptiveLuminance, luminanceManager.luminance)
-        .preferredColorScheme(.dark)
-        .onAppear { refreshOnboardingState() }
+        .overlay {
+            if showSplash {
+                InAppSplashView(statusText: "Preparing your dashboard...")
+                    .transition(.opacity)
+                    .zIndex(10)
+                    .contentShape(Rectangle())
+            }
+        }
+        .onAppear {
+            beginSplashIfNeeded()
+            refreshOnboardingState()
+        }
         .onChange(of: dataManager.workouts.count) { _, _ in
             refreshOnboardingState()
         }
@@ -98,6 +113,30 @@ struct MainTabView: View {
     }
 
     private func refreshOnboardingState() {
-        showingOnboarding = !hasSeenOnboarding && dataManager.workouts.isEmpty
+        let shouldShow = !hasSeenOnboarding && dataManager.workouts.isEmpty
+        if showSplash {
+            pendingOnboarding = shouldShow
+        } else {
+            showingOnboarding = shouldShow
+        }
+    }
+
+    private func beginSplashIfNeeded() {
+        guard showSplash else { return }
+
+        Task { @MainActor in
+            let delayNs: UInt64 = reduceMotion ? 300_000_000 : 750_000_000
+            try? await Task.sleep(nanoseconds: delayNs)
+
+            withAnimation(reduceMotion ? .easeOut(duration: 0.2) : .easeInOut(duration: 0.35)) {
+                showSplash = false
+            }
+
+            if pendingOnboarding {
+                pendingOnboarding = false
+                // Present onboarding only after the splash fades out.
+                showingOnboarding = true
+            }
+        }
     }
 }

@@ -129,7 +129,7 @@ struct CorrelationDetailView: View {
             }
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 2)
+        .softCard(elevation: 2)
     }
 
     private func metricPill(title: String, value: String) -> some View {
@@ -142,7 +142,7 @@ struct CorrelationDetailView: View {
                 .foregroundStyle(Theme.Colors.textPrimary)
         }
         .padding(Theme.Spacing.md)
-        .glassBackground(elevation: 1)
+        .softCard(elevation: 1)
     }
 
     private var chartSection: some View {
@@ -156,7 +156,7 @@ struct CorrelationDetailView: View {
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Colors.textSecondary)
                     .padding(Theme.Spacing.lg)
-                    .glassBackground(elevation: 1)
+                    .softCard(elevation: 1)
             } else {
                 Chart(points) { point in
                     PointMark(
@@ -188,7 +188,7 @@ struct CorrelationDetailView: View {
                 }
                 .frame(height: 260)
                 .padding(Theme.Spacing.lg)
-                .glassBackground(elevation: 2)
+                .softCard(elevation: 2)
             }
         }
     }
@@ -204,7 +204,7 @@ struct CorrelationDetailView: View {
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Colors.textSecondary)
                     .padding(Theme.Spacing.lg)
-                    .glassBackground(elevation: 1)
+                    .softCard(elevation: 1)
             } else {
                 ForEach(points.sorted { $0.date > $1.date }) { point in
                     if let workout = workoutStore[point.workoutId] {
@@ -235,7 +235,7 @@ struct CorrelationDetailView: View {
                                     .foregroundStyle(Theme.Colors.textTertiary)
                             }
                             .padding(Theme.Spacing.lg)
-                            .glassBackground(elevation: 1)
+                            .softCard(elevation: 1)
                         }
                         .buttonStyle(.plain)
                     }

@@ -28,7 +28,7 @@ struct WorkoutsInRangeView: View {
                             .font(Theme.Typography.body)
                             .foregroundStyle(Theme.Colors.textSecondary)
                             .padding(Theme.Spacing.xl)
-                            .glassBackground(elevation: 1)
+                            .softCard(elevation: 1)
                     } else {
                         VStack(spacing: Theme.Spacing.md) {
                             ForEach(sortedWorkouts) { workout in

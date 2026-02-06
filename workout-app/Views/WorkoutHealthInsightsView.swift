@@ -59,7 +59,7 @@ struct WorkoutHealthInsightsView: View {
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Colors.textSecondary)
                     .padding(Theme.Spacing.lg)
-                    .glassBackground(elevation: 1)
+                    .softCard(elevation: 1)
             } else {
                 if !data.heartRateSamples.isEmpty {
                     Toggle(isOn: $showHeartRateSamples) {
@@ -117,7 +117,7 @@ struct WorkoutHealthInsightsView: View {
             }
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 2)
+        .softCard(elevation: 2)
     }
 
     private func samplesList(title: String, rows: [(Date, String)]) -> some View {
@@ -137,7 +137,7 @@ struct WorkoutHealthInsightsView: View {
                         .foregroundStyle(Theme.Colors.textPrimary)
                 }
                 .padding(Theme.Spacing.md)
-                .glassBackground(elevation: 1)
+                .softCard(elevation: 1)
             }
         }
     }
@@ -157,6 +157,6 @@ private struct EmptyStateCard: View {
                 .foregroundStyle(Theme.Colors.textSecondary)
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 1)
+        .softCard(elevation: 1)
     }
 }

@@ -16,6 +16,9 @@ struct DashboardView: View {
     @State private var selectedWorkoutMetric: WorkoutMetricDetailSelection?
     @State private var selectedChangeMetric: ChangeMetric?
     @State private var showingMuscleBalance = false
+    @State private var isChangeExpanded = false
+    @State private var isHighlightsExpanded = false
+    @State private var isExploreExpanded = false
 
     init(
         dataManager: WorkoutDataManager,
@@ -60,17 +63,33 @@ struct DashboardView: View {
                         summarySection
                             .padding(.horizontal, Theme.Spacing.lg)
 
-                        changeSummarySection
-                            .padding(.horizontal, Theme.Spacing.lg)
+                        CollapsibleSection(
+                            title: "Change",
+                            subtitle: selectedTimeRange.rawValue,
+                            isExpanded: $isChangeExpanded
+                        ) {
+                            changeSummaryContent
+                        }
+                        .padding(.horizontal, Theme.Spacing.lg)
 
-                        highlightsSection
-                            .padding(.horizontal, Theme.Spacing.lg)
+                        CollapsibleSection(
+                            title: "Highlights",
+                            isExpanded: $isHighlightsExpanded
+                        ) {
+                            highlightsContent
+                        }
+                        .padding(.horizontal, Theme.Spacing.lg)
 
                         trainingSection
                             .padding(.horizontal, Theme.Spacing.lg)
 
-                        exploreSection
-                            .padding(.horizontal, Theme.Spacing.lg)
+                        CollapsibleSection(
+                            title: "Explore",
+                            isExpanded: $isExploreExpanded
+                        ) {
+                            exploreContent
+                        }
+                        .padding(.horizontal, Theme.Spacing.lg)
                     }
                 }
                 .padding(.vertical, Theme.Spacing.xxl)
@@ -207,24 +226,14 @@ struct DashboardView: View {
         }
     }
 
-    private var changeSummarySection: some View {
+    private var changeSummaryContent: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            HStack {
-                Text("Change")
-                    .font(Theme.Typography.title3)
-                    .foregroundColor(Theme.Colors.textPrimary)
-                Spacer()
-                Text(selectedTimeRange.rawValue)
-                    .font(Theme.Typography.caption)
-                    .foregroundColor(Theme.Colors.textTertiary)
-            }
-
             if changeSummaryMetrics.isEmpty {
-                Text("No change data")
-                    .font(Theme.Typography.caption)
+                Text("No change data yet.")
+                    .font(Theme.Typography.body)
                     .foregroundColor(Theme.Colors.textSecondary)
                     .padding(Theme.Spacing.lg)
-                    .glassBackground(elevation: 1)
+                    .softCard(elevation: 1)
             } else {
                 VStack(spacing: Theme.Spacing.sm) {
                     ForEach(changeSummaryMetrics) { metric in
@@ -240,8 +249,8 @@ struct DashboardView: View {
             NavigationLink {
                 PerformanceLabView(dataManager: dataManager)
             } label: {
-                HStack {
-                    Text("See Performance Lab")
+                HStack(spacing: Theme.Spacing.sm) {
+                    Text("Open Performance Lab")
                         .font(Theme.Typography.subheadline)
                         .foregroundColor(Theme.Colors.accent)
                     Spacer()
@@ -250,16 +259,24 @@ struct DashboardView: View {
                         .foregroundColor(Theme.Colors.textTertiary)
                 }
                 .padding(Theme.Spacing.md)
-                .glassBackground(elevation: 1)
+                .softCard(elevation: 1)
             }
             .buttonStyle(PlainButtonStyle())
         }
-        .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 2)
     }
 
-    private var highlightsSection: some View {
-        HighlightsSectionView(title: "Highlights", items: progressHighlights)
+    private var highlightsContent: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            if progressHighlights.isEmpty {
+                EmptyHighlightsView()
+            } else {
+                VStack(spacing: Theme.Spacing.md) {
+                    ForEach(progressHighlights) { item in
+                        HighlightCardView(item: item)
+                    }
+                }
+            }
+        }
     }
 
     private var trainingSection: some View {
@@ -313,37 +330,31 @@ struct DashboardView: View {
         }
     }
 
-    private var exploreSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Explore")
-                .font(Theme.Typography.title3)
-                .foregroundColor(Theme.Colors.textPrimary)
-
-            VStack(spacing: Theme.Spacing.md) {
-                NavigationLink {
-                    PerformanceLabView(dataManager: dataManager)
-                } label: {
-                    ExplorationRow(
-                        title: "Performance Lab",
-                        subtitle: "Trends and comparisons",
-                        icon: "viewfinder",
-                        tint: Theme.Colors.success
-                    )
-                }
-                .buttonStyle(PlainButtonStyle())
-
-                NavigationLink {
-                    ExerciseListView(dataManager: dataManager)
-                } label: {
-                    ExplorationRow(
-                        title: "Exercises",
-                        subtitle: "History by lift",
-                        icon: "figure.strengthtraining.traditional",
-                        tint: Theme.Colors.accentSecondary
-                    )
-                }
-                .buttonStyle(PlainButtonStyle())
+    private var exploreContent: some View {
+        VStack(spacing: Theme.Spacing.md) {
+            NavigationLink {
+                PerformanceLabView(dataManager: dataManager)
+            } label: {
+                ExplorationRow(
+                    title: "Performance Lab",
+                    subtitle: "Trends and comparisons",
+                    icon: "viewfinder",
+                    tint: Theme.Colors.success
+                )
             }
+            .buttonStyle(PlainButtonStyle())
+
+            NavigationLink {
+                ExerciseListView(dataManager: dataManager)
+            } label: {
+                ExplorationRow(
+                    title: "Exercises",
+                    subtitle: "History by lift",
+                    icon: "figure.strengthtraining.traditional",
+                    tint: Theme.Colors.accentSecondary
+                )
+            }
+            .buttonStyle(PlainButtonStyle())
         }
     }
 
@@ -645,7 +656,7 @@ private struct SummaryMetricCard: View {
         }
         .padding(Theme.Spacing.lg)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glassBackground(elevation: 2)
+        .softCard(elevation: 2)
     }
 }
 
@@ -673,7 +684,7 @@ private struct ChangeMetricRow: View {
             Spacer()
         }
         .padding(Theme.Spacing.md)
-        .glassBackground(elevation: 1)
+        .softCard(elevation: 1)
     }
 
     private func formatValue(_ metric: ChangeMetric) -> String {
@@ -738,7 +749,7 @@ private struct ExplorationRow: View {
                 .foregroundColor(Theme.Colors.textTertiary)
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 1)
+        .softCard(elevation: 1)
     }
 }
 
@@ -759,7 +770,7 @@ private struct EmptyDataView: View {
                 .multilineTextAlignment(.center)
         }
         .padding(Theme.Spacing.xl)
-        .glassBackground(elevation: 2)
+        .softCard(elevation: 2)
     }
 }
 

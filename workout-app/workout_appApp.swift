@@ -10,6 +10,10 @@ import SwiftUI
 @main
 struct workout_appApp: App {
     @StateObject private var healthManager = HealthKitManager()
+
+    init() {
+        FontRegistrar.registerFontsIfNeeded()
+    }
     
     var body: some Scene {
         WindowGroup {

@@ -88,7 +88,7 @@ struct ProfileView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, Theme.Spacing.xl)
-        .glassBackground()
+        .softCard()
     }
 
     private var personalInfoSection: some View {
@@ -177,7 +177,7 @@ struct ProfileView: View {
                     .pickerStyle(.menu)
                 }
                 .padding()
-                .glassBackground()
+                .softCard()
 
                 Divider().padding(.leading, 50)
 
@@ -201,7 +201,7 @@ struct ProfileView: View {
                     .pickerStyle(.menu)
                 }
                 .padding()
-                .glassBackground()
+                .softCard()
 
                 Divider().padding(.leading, 50)
 
@@ -286,7 +286,7 @@ private struct ProfileFieldRow: View {
             Spacer()
         }
         .padding()
-        .glassBackground()
+        .softCard()
     }
 }
 
@@ -326,7 +326,7 @@ private struct ProfileLinkRow: View {
                 .foregroundStyle(Theme.Colors.textTertiary)
         }
         .padding()
-        .glassBackground(elevation: 1)
+        .softCard(elevation: 1)
     }
 }
 

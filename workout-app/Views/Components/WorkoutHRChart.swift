@@ -53,6 +53,6 @@ struct WorkoutHRChart: View {
             .frame(height: 200)
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 2)
+        .softCard(elevation: 2)
     }
 }

@@ -54,7 +54,7 @@ struct HealthDataView: View {
             }
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 2)
+        .softCard(elevation: 2)
     }
     
     // MARK: - No Data View
@@ -327,7 +327,7 @@ struct HealthDataView: View {
             SleepStageStrip(summary: summary)
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 2)
+        .softCard(elevation: 2)
     }
 
     private var dailyActivitySection: some View {

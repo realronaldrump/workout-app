@@ -92,7 +92,7 @@ struct MetricDetailView: View {
 
             CalendarHeatmap(workouts: workouts)
                 .padding(Theme.Spacing.lg)
-                .glassBackground(elevation: 2)
+                .softCard(elevation: 2)
 
             Text("sessions \(sortedWorkouts.count)")
                 .font(Theme.Typography.caption)
@@ -163,7 +163,7 @@ struct MetricDetailView: View {
                                 .foregroundColor(Theme.Colors.textTertiary)
                         }
                         .padding(Theme.Spacing.lg)
-                        .glassBackground(elevation: 1)
+                        .softCard(elevation: 1)
                     }
                     .buttonStyle(PlainButtonStyle())
                 }
@@ -268,7 +268,7 @@ struct MetricDetailView: View {
                     .font(Theme.Typography.body)
                     .foregroundColor(Theme.Colors.textSecondary)
                     .padding(Theme.Spacing.lg)
-                    .glassBackground(elevation: 2)
+                    .softCard(elevation: 2)
             } else {
                 Chart(points) { point in
                     LineMark(
@@ -285,7 +285,7 @@ struct MetricDetailView: View {
                 .chartYScale(domain: 0...100)
                 .frame(height: 180)
                 .padding(Theme.Spacing.lg)
-                .glassBackground(elevation: 2)
+                .softCard(elevation: 2)
 
                 ForEach(sortedWorkouts) { workout in
                     if let readiness = WorkoutAnalytics.readinessScore(for: healthManager.getHealthData(for: workout.id)) {
@@ -410,7 +410,7 @@ private struct MetricWorkoutRow: View {
                 .foregroundColor(Theme.Colors.textTertiary)
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 1)
+        .softCard(elevation: 1)
     }
 }
 
@@ -428,7 +428,7 @@ private struct MetricPill: View {
                 .foregroundColor(Theme.Colors.textPrimary)
         }
         .padding(Theme.Spacing.md)
-        .glassBackground(elevation: 1)
+        .softCard(elevation: 1)
     }
 }
 
@@ -518,7 +518,7 @@ private extension MetricDetailView {
                     .frame(height: 180)
                 }
                 .padding(Theme.Spacing.lg)
-                .glassBackground(elevation: 2)
+                .softCard(elevation: 2)
             }
         }
     }
@@ -566,7 +566,7 @@ private extension MetricDetailView {
                     .frame(height: 180)
                 }
                 .padding(Theme.Spacing.lg)
-                .glassBackground(elevation: 2)
+                .softCard(elevation: 2)
             }
         }
     }
@@ -607,7 +607,7 @@ private extension MetricDetailView {
                     .frame(height: 180)
                 }
                 .padding(Theme.Spacing.lg)
-                .glassBackground(elevation: 2)
+                .softCard(elevation: 2)
             }
         }
     }
@@ -648,7 +648,7 @@ private extension MetricDetailView {
                     .frame(height: 180)
                 }
                 .padding(Theme.Spacing.lg)
-                .glassBackground(elevation: 2)
+                .softCard(elevation: 2)
             }
         }
     }
@@ -668,6 +668,6 @@ private struct EmptyChartCard: View {
                 .foregroundColor(Theme.Colors.textSecondary)
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 2)
+        .softCard(elevation: 2)
     }
 }

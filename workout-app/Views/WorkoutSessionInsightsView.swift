@@ -69,7 +69,7 @@ struct WorkoutSessionInsightsView: View {
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Colors.textSecondary)
                     .padding(Theme.Spacing.lg)
-                    .glassBackground(elevation: 1)
+                    .softCard(elevation: 1)
             } else {
                 Chart(exerciseVolumes) { point in
                     BarMark(
@@ -95,7 +95,7 @@ struct WorkoutSessionInsightsView: View {
                     }
                 }
                 .padding(Theme.Spacing.lg)
-                .glassBackground(elevation: 2)
+                .softCard(elevation: 2)
             }
         }
     }
@@ -125,7 +125,7 @@ struct WorkoutSessionInsightsView: View {
             }
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 2)
+        .softCard(elevation: 2)
     }
 
     private var healthSnapshotSection: some View {
@@ -150,14 +150,14 @@ struct WorkoutSessionInsightsView: View {
                 if !data.heartRateSamples.isEmpty {
                     WorkoutHRChart(samples: data.heartRateSamples)
                         .padding(Theme.Spacing.lg)
-                        .glassBackground(elevation: 2)
+                        .softCard(elevation: 2)
                 }
             } else {
                 Text("No health data synced for this workout.")
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Colors.textSecondary)
                     .padding(Theme.Spacing.lg)
-                    .glassBackground(elevation: 1)
+                    .softCard(elevation: 1)
             }
         }
     }
@@ -200,7 +200,7 @@ struct WorkoutSessionInsightsView: View {
                                 .foregroundStyle(Theme.Colors.textTertiary)
                         }
                         .padding(Theme.Spacing.lg)
-                        .glassBackground(elevation: 1)
+                        .softCard(elevation: 1)
                     }
                     .buttonStyle(.plain)
                 }
@@ -234,7 +234,7 @@ private struct MetricStatPill: View {
         }
         .padding(Theme.Spacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glassBackground(elevation: 1)
+        .softCard(elevation: 1)
     }
 }
 
@@ -252,7 +252,7 @@ private struct EmptyStateCard: View {
                 .foregroundStyle(Theme.Colors.textSecondary)
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 1)
+        .softCard(elevation: 1)
     }
 }
 

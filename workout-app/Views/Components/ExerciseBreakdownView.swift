@@ -63,7 +63,7 @@ struct ExerciseBreakdownView: View {
             }
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 2)
+        .softCard(elevation: 2)
     }
     
     private func formatVolume(_ volume: Double) -> String {

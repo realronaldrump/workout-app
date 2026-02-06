@@ -132,7 +132,7 @@ struct ExerciseDetailView: View {
                         ExerciseProgressChart(history: scopedHistory, chartType: selectedChart)
                             .frame(height: 250)
                             .padding(Theme.Spacing.lg)
-                            .glassBackground(elevation: 2)
+                            .softCard(elevation: 2)
                     }
 
                     ExerciseRangeBreakdown(history: scopedHistory)
@@ -662,7 +662,7 @@ struct PersonalRecordsView: View {
                             .foregroundColor(Theme.Colors.textTertiary)
                     }
                     .padding(Theme.Spacing.lg)
-                    .glassBackground(elevation: 2)
+                    .softCard(elevation: 2)
                 }
             }
         }
@@ -723,7 +723,7 @@ struct RecentSetsView: View {
                         }
                     }
                     .padding(Theme.Spacing.lg)
-                    .glassBackground(elevation: 2)
+                    .softCard(elevation: 2)
                 }
 
                 if canShowMore {
@@ -738,7 +738,7 @@ struct RecentSetsView: View {
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, Theme.Spacing.md)
                     }
-                    .glassBackground(elevation: 1)
+                    .softCard(elevation: 1)
                 }
             }
         }
@@ -822,7 +822,7 @@ struct ExerciseRangeBreakdown: View {
             .frame(height: 160)
             .chartXScale(domain: 0...1)
             .padding(Theme.Spacing.lg)
-            .glassBackground(elevation: 2)
+            .softCard(elevation: 2)
 
             if !intensityBuckets.isEmpty {
                 Chart(intensityBuckets) { bucket in
@@ -835,7 +835,7 @@ struct ExerciseRangeBreakdown: View {
                 .frame(height: 160)
                 .chartXScale(domain: 0...1)
                 .padding(Theme.Spacing.lg)
-                .glassBackground(elevation: 2)
+                .softCard(elevation: 2)
             }
         }
     }

@@ -69,7 +69,7 @@ struct MuscleHeatmapView: View {
             }
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(cornerRadius: Theme.CornerRadius.large, elevation: 2)
+        .softCard(cornerRadius: Theme.CornerRadius.large, elevation: 2)
         .opacity(isAppearing ? 1 : 0)
         .onAppear {
             withAnimation(Theme.Animation.spring) {
@@ -252,7 +252,7 @@ struct MuscleDetailView: View {
             }
         }
         .padding(Theme.Spacing.lg)
-        .glassBackground(elevation: 2)
+        .softCard(elevation: 2)
     }
 }
 
