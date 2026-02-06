@@ -3,14 +3,19 @@ import SwiftUI
 struct ConsistencyView: View {
     let stats: WorkoutStats
     let workouts: [Workout]
+    var timeRange: TimeRangeOption = .month
     var onTap: (() -> Void)? = nil
-    
+
+    enum TimeRangeOption {
+        case week, month, threeMonths, year, allTime
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             Text("Consistency")
                 .font(Theme.Typography.title2)
                 .foregroundColor(Theme.Colors.textPrimary)
-            
+
             Group {
                 if let onTap {
                     MetricTileButton(action: onTap) {
@@ -23,43 +28,241 @@ struct ConsistencyView: View {
         }
     }
 
+    // MARK: - Computed Properties
+
+    private var targetSessionsPerWeek: Double { 4.0 }
+
+    private var weeksInRange: Int {
+        switch timeRange {
+        case .week: return 1
+        case .month: return 4
+        case .threeMonths: return 13
+        case .year: return 52
+        case .allTime:
+            guard let oldest = workouts.map({ $0.date }).min() else { return 4 }
+            let weeks = Calendar.current.dateComponents([.weekOfYear], from: oldest, to: Date()).weekOfYear ?? 4
+            return max(weeks, 1)
+        }
+    }
+
+    private var targetSessions: Int {
+        Int(ceil(Double(weeksInRange) * targetSessionsPerWeek))
+    }
+
+    private var sessionCount: Int {
+        workouts.count
+    }
+
+    private var progress: Double {
+        guard targetSessions > 0 else { return 0 }
+        return min(Double(sessionCount) / Double(targetSessions), 1.0)
+    }
+
+    private var daysInRange: Int {
+        switch timeRange {
+        case .week: return 7
+        case .month: return 28
+        case .threeMonths: return 91
+        case .year: return 365
+        case .allTime: return min(weeksInRange * 7, 365)
+        }
+    }
+
+    // MARK: - Card Content
+
     private var cardContent: some View {
         VStack(spacing: Theme.Spacing.lg) {
-            HStack {
-                VStack(alignment: .leading) {
-                    Text("Sessions/Wk")
-                        .font(Theme.Typography.subheadline)
-                        .foregroundColor(Theme.Colors.textSecondary)
-                    Text(String(format: "%.1f", stats.workoutsPerWeek))
-                        .font(Theme.Typography.metric)
-                        .foregroundColor(Theme.Colors.textPrimary)
+            HStack(alignment: .center, spacing: Theme.Spacing.xl) {
+                // Activity Ring
+                ActivityRing(progress: progress, sessionCount: sessionCount, targetSessions: targetSessions)
+                    .frame(width: 100, height: 100)
+
+                // Stats Column
+                VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+                    StatRow(label: "Sessions/Wk", value: String(format: "%.1f", stats.workoutsPerWeek))
+                    StatRow(label: "Current", value: "\(stats.currentStreak) days", highlight: stats.currentStreak > 0)
+                    StatRow(label: "Longest", value: "\(stats.longestStreak) days")
                 }
-                
+
                 Spacer()
-                
-                VStack(alignment: .trailing) {
-                    Text("Longest")
-                        .font(Theme.Typography.subheadline)
-                        .foregroundColor(Theme.Colors.textSecondary)
-                    Text("\(stats.longestStreak) days")
-                        .font(Theme.Typography.metric)
-                        .foregroundColor(Theme.Colors.textPrimary)
-                }
             }
-            
-            CalendarHeatmap(workouts: workouts)
+
+            // Streak Bar
+            StreakBar(workouts: workouts, daysToShow: daysInRange)
         }
         .padding(Theme.Spacing.lg)
         .softCard(elevation: 2)
     }
 }
 
+// MARK: - Activity Ring
+
+private struct ActivityRing: View {
+    let progress: Double
+    let sessionCount: Int
+    let targetSessions: Int
+
+    @State private var animatedProgress: Double = 0
+
+    var body: some View {
+        ZStack {
+            // Background track
+            Circle()
+                .stroke(Theme.Colors.surface, lineWidth: 10)
+
+            // Progress arc
+            Circle()
+                .trim(from: 0, to: animatedProgress)
+                .stroke(
+                    AngularGradient(
+                        colors: [Theme.Colors.success.opacity(0.6), Theme.Colors.success],
+                        center: .center,
+                        startAngle: .degrees(0),
+                        endAngle: .degrees(360 * animatedProgress)
+                    ),
+                    style: StrokeStyle(lineWidth: 10, lineCap: .round)
+                )
+                .rotationEffect(.degrees(-90))
+
+            // Center content
+            VStack(spacing: 2) {
+                Text("\(Int(animatedProgress * 100))%")
+                    .font(Theme.Typography.headline)
+                    .foregroundColor(Theme.Colors.textPrimary)
+                Text("\(sessionCount)/\(targetSessions)")
+                    .font(Theme.Typography.caption)
+                    .foregroundColor(Theme.Colors.textSecondary)
+            }
+        }
+        .onAppear {
+            withAnimation(Theme.Animation.spring.delay(0.2)) {
+                animatedProgress = progress
+            }
+        }
+        .onChange(of: progress) { _, newValue in
+            withAnimation(Theme.Animation.spring) {
+                animatedProgress = newValue
+            }
+        }
+    }
+}
+
+// MARK: - Stat Row
+
+private struct StatRow: View {
+    let label: String
+    let value: String
+    var highlight: Bool = false
+
+    var body: some View {
+        HStack(spacing: Theme.Spacing.sm) {
+            Text(label)
+                .font(Theme.Typography.caption)
+                .foregroundColor(Theme.Colors.textTertiary)
+            Spacer()
+            Text(value)
+                .font(Theme.Typography.subheadline)
+                .foregroundColor(highlight ? Theme.Colors.success : Theme.Colors.textPrimary)
+        }
+    }
+}
+
+// MARK: - Streak Bar
+
+private struct StreakBar: View {
+    let workouts: [Workout]
+    let daysToShow: Int
+
+    private var workoutDays: Set<Date> {
+        let calendar = Calendar.current
+        return Set(workouts.map { calendar.startOfDay(for: $0.date) })
+    }
+
+    private var dates: [Date] {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let count = min(daysToShow, 28) // Cap at 4 weeks for visual clarity
+        return (0..<count).compactMap { calendar.date(byAdding: .day, value: -($0), to: today) }.reversed()
+    }
+
+    private var weekGroupedDates: [[Date]] {
+        let calendar = Calendar.current
+        var weeks: [[Date]] = []
+        var currentWeek: [Date] = []
+        var lastWeekOfYear: Int?
+
+        for date in dates {
+            let weekOfYear = calendar.component(.weekOfYear, from: date)
+            if let last = lastWeekOfYear, last != weekOfYear {
+                if !currentWeek.isEmpty {
+                    weeks.append(currentWeek)
+                    currentWeek = []
+                }
+            }
+            currentWeek.append(date)
+            lastWeekOfYear = weekOfYear
+        }
+        if !currentWeek.isEmpty {
+            weeks.append(currentWeek)
+        }
+        return weeks
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            // Day labels
+            HStack(spacing: 0) {
+                ForEach(["S", "M", "T", "W", "T", "F", "S"], id: \.self) { day in
+                    Text(day)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(Theme.Colors.textTertiary)
+                        .frame(maxWidth: .infinity)
+                }
+            }
+
+            // Week rows
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: Theme.Spacing.sm) {
+                    ForEach(weekGroupedDates.indices, id: \.self) { weekIndex in
+                        WeekColumn(dates: weekGroupedDates[weekIndex], workoutDays: workoutDays)
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct WeekColumn: View {
+    let dates: [Date]
+    let workoutDays: Set<Date>
+
+    private let calendar = Calendar.current
+
+    var body: some View {
+        VStack(spacing: 4) {
+            ForEach(dates, id: \.self) { date in
+                let isWorkout = workoutDays.contains(calendar.startOfDay(for: date))
+                let isToday = calendar.isDateInToday(date)
+                Circle()
+                    .fill(isWorkout ? Theme.Colors.success : Theme.Colors.surface.opacity(0.5))
+                    .frame(width: 14, height: 14)
+                    .overlay(
+                        Circle()
+                            .strokeBorder(isToday ? Theme.Colors.accent : Color.clear, lineWidth: 2)
+                    )
+            }
+        }
+    }
+}
+
+// MARK: - Calendar Heatmap (for MetricDetailView compatibility)
+
 struct CalendarHeatmap: View {
     let workouts: [Workout]
-    
+
     private let rows = Array(repeating: GridItem(.fixed(12), spacing: 4), count: 7)
     private let weeks = 16
-    
+
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
             // Day Labels
@@ -76,7 +279,7 @@ struct CalendarHeatmap: View {
                 }
             }
             .padding(.top, 0)
-            
+
             // Heatmap Grid
             let dates = generateDateGrid()
             LazyHGrid(rows: rows, spacing: 4) {
@@ -88,70 +291,53 @@ struct CalendarHeatmap: View {
             }
         }
         .frame(height: 120) // Fixed height for the horizontal container
-        
+
         // Legend
         HStack(spacing: 8) {
             Text("0")
                 .font(.caption2)
                 .foregroundColor(Theme.Colors.textTertiary)
-            
+
             ForEach([0.0, 0.25, 0.5, 0.75, 1.0], id: \.self) { intensity in
                 RoundedRectangle(cornerRadius: 2)
                     .fill(Theme.Colors.success.opacity(intensity))
                     .frame(width: 12, height: 12)
             }
-            
+
             Text(formatVolume(maxVolume))
                 .font(.caption2)
                 .foregroundColor(Theme.Colors.textTertiary)
         }
         .padding(.top, 8)
     }
-    
+
     private func dayLabel(for index: Int) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        // weekdaySymbols returns [Sun, Mon, Tue...]
-        // We want short labels like M, W, F
         let symbols = ["S", "M", "T", "W", "T", "F", "S"]
         return symbols[index]
     }
-    
+
     private func generateDateGrid() -> [Date] {
         var dates: [Date] = []
         let calendar = Calendar.current
         let today = Date()
-        
-        // Find the most recent Saturday (end of current week)
-        let weekday = calendar.component(.weekday, from: today) // Sun=1 ... Sat=7
-        // Calculate days to add to get to Saturday
+
+        let weekday = calendar.component(.weekday, from: today)
         let daysToSaturday = 7 - weekday
-        
+
         guard let endOfWeek = calendar.date(byAdding: .day, value: daysToSaturday, to: today) else { return [] }
-        
-        // We want 'weeks' number of weeks.
-        // Total days = weeks * 7
-        // Start date is (weeks * 7) - 1 days ago relative to endOfWeek? 
-        // No, we want exactly 'weeks' columns. 
-        // Example: weeks=1. End = Sat. Start = Sun (6 days ago).
-        // dates needed: Sun ... Sat.
-        
+
         let totalDays = weeks * 7
-        
+
         for i in 0..<totalDays {
-            // we want to start from the past.
-            // i=0 -> oldest date.
-            // i=totalDays-1 -> endOfWeek
-            
             let daysBack = (totalDays - 1) - i
             if let date = calendar.date(byAdding: .day, value: -daysBack, to: endOfWeek) {
                 dates.append(date)
             }
         }
-        
+
         return dates
     }
-    
+
     private func colorForDate(_ date: Date) -> Color {
         let calendar = Calendar.current
         let day = calendar.startOfDay(for: date)

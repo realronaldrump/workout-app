@@ -302,7 +302,11 @@ struct DashboardView: View {
 
             VStack(spacing: Theme.Spacing.lg) {
                 if let currentStats = filteredStats {
-                    ConsistencyView(stats: currentStats, workouts: filteredWorkouts) {
+                    ConsistencyView(
+                        stats: currentStats,
+                        workouts: filteredWorkouts,
+                        timeRange: consistencyTimeRange
+                    ) {
                         selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: .streak, scrollTarget: nil)
                     }
                 } else {
@@ -435,6 +439,16 @@ struct DashboardView: View {
                   let newest = dataManager.workouts.map({ $0.date }).max() else { return 30 }
             let days = Calendar.current.dateComponents([.day], from: oldest, to: newest).day ?? 30
             return max(days, 30)
+        }
+    }
+
+    private var consistencyTimeRange: ConsistencyView.TimeRangeOption {
+        switch selectedTimeRange {
+        case .week: return .week
+        case .month: return .month
+        case .threeMonths: return .threeMonths
+        case .year: return .year
+        case .allTime: return .allTime
         }
     }
 
