@@ -1,70 +1,65 @@
 import SwiftUI
 import UIKit
 
-/// Centralized theme system - Bright Studio (light-first), Bold, Minimalist with Hybrid surfaces
+/// Centralized theme system - Electric Gym (bold, vibrant, modern fitness aesthetic)
 enum Theme {
     
     // MARK: - Colors
     
     enum Colors {
-        // Bright Studio palette (light-first) with a coherent dark companion.
+        // Electric Gym palette - bold, vibrant, premium fitness aesthetic
         //
-        // Light:
-        // - paper: #FBF7F2
-        // - surface: #FFFDFB
-        // - ink: #101317
-        // - electric: #125BFF
-        // - coral: #FF4D2E
+        // Light: Cool white base with electric accents
+        // Dark: Deep ink with glowing accents
         //
-        // Dark:
-        // - background: #0D1117
-        // - surface: #111827
-        // - ink: #F3F6FF
-        static let background = Color.uiColor(light: UIColor(hex: 0xFBF7F2), dark: UIColor(hex: 0x0D1117))
-        static let surface = Color.uiColor(light: UIColor(hex: 0xFFFDFB), dark: UIColor(hex: 0x111827))
-        static let elevated = Color.uiColor(light: UIColor(hex: 0xFFFFFF), dark: UIColor(hex: 0x1F2937))
-        static let cardBackground = Color.uiColor(light: UIColor(hex: 0xFFFDFB), dark: UIColor(hex: 0x111827))
-        static let border = Color.uiColor(light: UIColor(hex: 0xE9E0D8), dark: UIColor(hex: 0x263041))
+        // Primary: Electric Indigo #6366F1
+        // Secondary: Hot Rose #F43F5E
+        
+        static let background = Color.uiColor(light: UIColor(hex: 0xFAFBFF), dark: UIColor(hex: 0x090B10))
+        static let surface = Color.uiColor(light: UIColor(hex: 0xFFFFFF), dark: UIColor(hex: 0x12151C))
+        static let elevated = Color.uiColor(light: UIColor(hex: 0xFFFFFF), dark: UIColor(hex: 0x1A1E28))
+        static let cardBackground = Color.uiColor(light: UIColor(hex: 0xFFFFFF), dark: UIColor(hex: 0x12151C))
+        static let border = Color.uiColor(light: UIColor(hex: 0xE5E8F0), dark: UIColor(hex: 0x2A3040))
         
         // Text hierarchy
-        static let textPrimary = Color.uiColor(light: UIColor(hex: 0x101317), dark: UIColor(hex: 0xF3F6FF))
-        static let textSecondary = Color.uiColor(light: UIColor(hex: 0x39424E), dark: UIColor(hex: 0xB7C0D1))
-        static let textTertiary = Color.uiColor(light: UIColor(hex: 0x6B7786), dark: UIColor(hex: 0x7F8AA3))
+        static let textPrimary = Color.uiColor(light: UIColor(hex: 0x0F172A), dark: UIColor(hex: 0xF8FAFC))
+        static let textSecondary = Color.uiColor(light: UIColor(hex: 0x475569), dark: UIColor(hex: 0xCBD5E1))
+        static let textTertiary = Color.uiColor(light: UIColor(hex: 0x94A3B8), dark: UIColor(hex: 0x64748B))
         
-        // Accent colors
-        static let accent = Color(uiColor: UIColor(hex: 0x125BFF))
-        static let accentSecondary = Color(uiColor: UIColor(hex: 0xFF4D2E))
+        // Accent colors - vibrant and energetic
+        static let accent = Color(uiColor: UIColor(hex: 0x6366F1))  // Electric indigo
+        static let accentSecondary = Color(uiColor: UIColor(hex: 0xF43F5E))  // Hot rose
         
-        // Semantic colors
-        static let success = Color(uiColor: UIColor(hex: 0x12C971))
-        static let warning = Color(uiColor: UIColor(hex: 0xFFB020))
-        static let error = Color(uiColor: UIColor(hex: 0xE11D48))
+        // Semantic colors - brighter, more saturated
+        static let success = Color(uiColor: UIColor(hex: 0x10B981))  // Vibrant emerald
+        static let warning = Color(uiColor: UIColor(hex: 0xF59E0B))  // Rich amber
+        static let error = Color(uiColor: UIColor(hex: 0xEF4444))  // Bright red
         static let info = accent
         
-        // PR/Achievement
-        static let gold = Color(uiColor: UIColor(hex: 0xF6C445))
+        // PR/Achievement - brighter gold
+        static let gold = Color(uiColor: UIColor(hex: 0xFBBF24))
         
-        // Muscle groups (solid colors)
-        static let chest = Color(uiColor: UIColor(hex: 0xFF4D2E))
-        static let back = Color(uiColor: UIColor(hex: 0x125BFF))
-        static let shoulders = Color(uiColor: UIColor(hex: 0xFFB020))
-        static let biceps = Color(uiColor: UIColor(hex: 0x8B5CF6))
-        static let triceps = Color(uiColor: UIColor(hex: 0xEC4899))
-        static let quads = Color(uiColor: UIColor(hex: 0x12C971))
-        static let hamstrings = Color(uiColor: UIColor(hex: 0x14B8A6))
-        static let glutes = Color(uiColor: UIColor(hex: 0x4F46E5))
-        static let calves = Color(uiColor: UIColor(hex: 0x06B6D4))
-        static let core = Color(uiColor: UIColor(hex: 0xF6C445))
-        static let cardio = Color(uiColor: UIColor(hex: 0x0EA5E9))
+        // Muscle groups - vibrant, distinguishable colors
+        static let chest = Color(uiColor: UIColor(hex: 0xF43F5E))  // Rose
+        static let back = Color(uiColor: UIColor(hex: 0x6366F1))   // Indigo
+        static let shoulders = Color(uiColor: UIColor(hex: 0xF59E0B))  // Amber
+        static let biceps = Color(uiColor: UIColor(hex: 0xA855F7))  // Purple
+        static let triceps = Color(uiColor: UIColor(hex: 0xEC4899))  // Pink
+        static let quads = Color(uiColor: UIColor(hex: 0x10B981))  // Emerald
+        static let hamstrings = Color(uiColor: UIColor(hex: 0x14B8A6))  // Teal
+        static let glutes = Color(uiColor: UIColor(hex: 0x8B5CF6))  // Violet
+        static let calves = Color(uiColor: UIColor(hex: 0x06B6D4))  // Cyan
+        static let core = Color(uiColor: UIColor(hex: 0xFBBF24))  // Yellow
+        static let cardio = Color(uiColor: UIColor(hex: 0x0EA5E9))  // Sky
         
         // Glassmorphism
         static let glass = Color.uiColor(
-            light: UIColor.white.withAlphaComponent(0.55),
-            dark: UIColor.white.withAlphaComponent(0.08)
+            light: UIColor.white.withAlphaComponent(0.65),
+            dark: UIColor.white.withAlphaComponent(0.06)
         )
         static let glassBorder = Color.uiColor(
-            light: UIColor.black.withAlphaComponent(0.08),
-            dark: UIColor.white.withAlphaComponent(0.12)
+            light: UIColor.black.withAlphaComponent(0.06),
+            dark: UIColor.white.withAlphaComponent(0.10)
         )
     }
     
@@ -149,69 +144,66 @@ struct AdaptiveBackground: View {
     
     var body: some View {
         if colorScheme == .dark {
-            let base = Theme.Colors.background
-                .blended(with: .white, amount: 0.06 + (luminance * 0.08))
-            let highlight = Theme.Colors.elevated
-                .blended(with: Theme.Colors.accentSecondary, amount: 0.06 + (luminance * 0.1))
-
+            // Dark mode: Deep ink canvas with vibrant electric glow
             ZStack {
+                // Base gradient - deep ink, no muddy blending
                 LinearGradient(
-                    colors: [base, highlight],
+                    colors: [
+                        Theme.Colors.background,
+                        Theme.Colors.elevated
+                    ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
-
+                
+                // Electric indigo glow - top right
                 RadialGradient(
                     colors: [
-                        Theme.Colors.accent.opacity(0.18 + (luminance * 0.1)),
+                        Theme.Colors.accent.opacity(0.12 + (luminance * 0.08)),
                         Color.clear
                     ],
                     center: .topTrailing,
-                    startRadius: 20,
-                    endRadius: 320
+                    startRadius: 60,
+                    endRadius: 400
                 )
-
+                
+                // Hot rose glow - bottom left
                 RadialGradient(
                     colors: [
-                        Theme.Colors.accentSecondary.opacity(0.12 + (luminance * 0.08)),
+                        Theme.Colors.accentSecondary.opacity(0.08 + (luminance * 0.06)),
                         Color.clear
                     ],
                     center: .bottomLeading,
-                    startRadius: 40,
-                    endRadius: 300
+                    startRadius: 80,
+                    endRadius: 450
                 )
             }
             .ignoresSafeArea()
         } else {
-            // Light mode: warm paper with subtle depth (no heavy gradients).
+            // Light mode: Clean white with subtle accent wash
             ZStack {
-                LinearGradient(
-                    colors: [
-                        Theme.Colors.background,
-                        Theme.Colors.surface
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-
+                Theme.Colors.background
+                
+                // Subtle indigo tint in corner
                 RadialGradient(
                     colors: [
-                        Theme.Colors.accent.opacity(0.08),
+                        Theme.Colors.accent.opacity(0.05),
                         Color.clear
                     ],
                     center: .topTrailing,
-                    startRadius: 10,
-                    endRadius: 360
+                    startRadius: 20,
+                    endRadius: 500
                 )
-
+                
+                // Hint of warmth from rose
                 RadialGradient(
                     colors: [
-                        Theme.Colors.accentSecondary.opacity(0.06),
+                        Theme.Colors.accentSecondary.opacity(0.03),
                         Color.clear
                     ],
                     center: .bottomLeading,
-                    startRadius: 20,
-                    endRadius: 380
+                    startRadius: 40,
+                    endRadius: 500
                 )
             }
             .ignoresSafeArea()
@@ -229,42 +221,27 @@ struct SplashBackground: View {
             if colorScheme == .dark {
                 AdaptiveBackground()
             } else {
-                LinearGradient(
-                    colors: [
-                        Theme.Colors.background,
-                        Theme.Colors.surface
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-
+                // Light mode splash: Bold electric glow for impact
+                Theme.Colors.background
+                
                 RadialGradient(
                     colors: [
-                        Theme.Colors.accent.opacity(0.22),
+                        Theme.Colors.accent.opacity(0.15),
                         Color.clear
                     ],
                     center: .topTrailing,
-                    startRadius: 20,
-                    endRadius: 520
+                    startRadius: 40,
+                    endRadius: 500
                 )
 
                 RadialGradient(
                     colors: [
-                        Theme.Colors.accentSecondary.opacity(0.18),
+                        Theme.Colors.accentSecondary.opacity(0.10),
                         Color.clear
                     ],
                     center: .bottomLeading,
-                    startRadius: 30,
-                    endRadius: 520
-                )
-
-                LinearGradient(
-                    colors: [
-                        Color.clear,
-                        Theme.Colors.accent.opacity(0.05)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
+                    startRadius: 60,
+                    endRadius: 500
                 )
             }
         }
