@@ -118,7 +118,7 @@ struct DashboardView: View {
             ChangeMetricDetailView(metric: metric, window: changeWindow, workouts: dataManager.workouts)
         }
         .navigationDestination(isPresented: $showingMuscleBalance) {
-            MuscleBalanceDetailView(dataManager: dataManager)
+            MuscleBalanceDetailView(dataManager: dataManager, dateRange: selectedDateRange)
         }
         .onAppear {
             healthManager.refreshAuthorizationStatus()
@@ -335,7 +335,7 @@ struct DashboardView: View {
                 VolumeProgressChart(workouts: filteredWorkouts) {
                     selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: .totalVolume, scrollTarget: nil)
                 }
-                MuscleHeatmapView(dataManager: dataManager) {
+                MuscleHeatmapView(dataManager: dataManager, dateRange: selectedDateRange) {
                     showingMuscleBalance = true
                 }
                 ExerciseBreakdownView(workouts: filteredWorkouts) {

@@ -4,6 +4,7 @@ import SwiftUI
 /// Warm, vibrant design with glassmorphism
 struct MuscleHeatmapView: View {
     let dataManager: WorkoutDataManager
+    let dateRange: DateInterval
     var onOpen: (() -> Void)? = nil
     
     @State private var selectedMuscleGroup: MuscleGroup?
@@ -11,6 +12,23 @@ struct MuscleHeatmapView: View {
     
     private var muscleGroupStats: [MuscleGroup: MuscleStats] {
         calculateMuscleStats()
+    }
+    
+    private var dateRangeLabel: String {
+        let calendar = Calendar.current
+        let days = calendar.dateComponents([.day], from: dateRange.start, to: dateRange.end).day ?? 0
+        
+        if days <= 7 {
+            return "This week"
+        } else if days <= 31 {
+            return "This month"
+        } else if days <= 93 {
+            return "3 months"
+        } else if days <= 366 {
+            return "This year"
+        } else {
+            return "All time"
+        }
     }
     
     var body: some View {
@@ -24,7 +42,7 @@ struct MuscleHeatmapView: View {
                 
                 Spacer()
                 
-                Text("4 weeks")
+                Text(dateRangeLabel)
                     .font(Theme.Typography.caption)
                     .foregroundColor(Theme.Colors.textTertiary)
 
@@ -80,10 +98,7 @@ struct MuscleHeatmapView: View {
     }
     
     private func calculateMuscleStats() -> [MuscleGroup: MuscleStats] {
-        let calendar = Calendar.current
-        let fourWeeksAgo = calendar.date(byAdding: .day, value: -28, to: Date()) ?? Date()
-        
-        let recentWorkouts = dataManager.workouts.filter { $0.date >= fourWeeksAgo }
+        let recentWorkouts = dataManager.workouts.filter { dateRange.contains($0.date) }
         var muscleGroupData: [MuscleGroup: (sets: Int, exercises: Set<String>, lastDate: Date?)] = [:]
         
         for group in MuscleGroup.allCases {
