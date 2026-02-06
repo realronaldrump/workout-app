@@ -73,17 +73,20 @@ struct ProfileView: View {
                     .foregroundStyle(Theme.Colors.textPrimary)
             }
 
-            HStack(spacing: Theme.Spacing.lg) {
+            HStack(spacing: Theme.Spacing.md) {
                 MetricTileButton(chevronPlacement: .bottomTrailing, action: {
                     showingWorkoutHistory = true
                 }) {
                     ProfileStat(title: "Workouts", value: "\(dataManager.workouts.count)")
                 }
+                .frame(maxWidth: .infinity)
+                
                 MetricTileButton(chevronPlacement: .bottomTrailing, action: {
                     showingExerciseList = true
                 }) {
                     ProfileStat(title: "Exercises", value: "\(uniqueExercisesCount)")
                 }
+                .frame(maxWidth: .infinity)
             }
         }
         .frame(maxWidth: .infinity)
@@ -340,12 +343,17 @@ private struct ProfileStat: View {
                 .font(Theme.Typography.caption)
                 .foregroundStyle(Theme.Colors.textSecondary)
             Text(value)
-                .font(Theme.Typography.numberSmall)
+                .font(Theme.Typography.number)
                 .foregroundStyle(Theme.Colors.textPrimary)
         }
-        .padding(Theme.Spacing.sm)
+        .padding(.horizontal, Theme.Spacing.lg)
+        .padding(.vertical, Theme.Spacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.Colors.surface.opacity(0.5))
         .cornerRadius(Theme.CornerRadius.medium)
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                .strokeBorder(Theme.Colors.border.opacity(0.5), lineWidth: 1)
+        )
     }
 }
