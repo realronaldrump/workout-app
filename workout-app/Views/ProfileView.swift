@@ -88,6 +88,9 @@ struct ProfileView: View {
                 }
                 .frame(maxWidth: .infinity)
             }
+            // Keep these tiles inset from the header card border so they don't visually
+            // "kiss" the edges of the top square/card.
+            .padding(.horizontal, Theme.Spacing.lg)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, Theme.Spacing.xl)
@@ -343,6 +346,9 @@ private struct ProfileStat: View {
     let title: String
     let value: String
 
+    // Slightly smaller than the dashboard stat tiles so they sit comfortably under the avatar.
+    private let tileHeight: CGFloat = 88
+
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
             Text(title)
@@ -350,13 +356,18 @@ private struct ProfileStat: View {
                 .foregroundStyle(Theme.Colors.textSecondary)
                 .textCase(.uppercase)
                 .tracking(0.8)
+                .lineLimit(1)
             Text(value)
                 .font(Theme.Typography.number)
                 .foregroundStyle(Theme.Colors.textPrimary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.9)
+                .allowsTightening(true)
         }
-        .padding(.horizontal, Theme.Spacing.lg)
-        .padding(.vertical, Theme.Spacing.md)
+        .padding(.horizontal, Theme.Spacing.md)
+        .padding(.vertical, Theme.Spacing.sm)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(height: tileHeight)
         .softCard(elevation: 1)
     }
 }

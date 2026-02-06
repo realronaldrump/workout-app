@@ -72,6 +72,10 @@ struct StatCard: View {
     var onTap: (() -> Void)? = nil
     
     @State private var isAppearing = false
+
+    // Keep tiles visually consistent while giving text enough vertical room
+    // (prevents top/bottom clipping on metric screens).
+    private let tileHeight: CGFloat = 128
     
     var body: some View {
         Group {
@@ -86,23 +90,25 @@ struct StatCard: View {
     }
 
     private var cardContent: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             Image(systemName: icon)
                 .font(.system(size: 20, weight: .semibold))
                 .foregroundColor(color)
                 .accessibilityHidden(true)
 
-            Spacer()
-
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Text(value)
                     .font(Theme.Typography.metric)
                     .foregroundColor(Theme.Colors.textPrimary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+                    .allowsTightening(true)
 
                 if let subtitle = subtitle {
                     Text(subtitle)
                         .font(Theme.Typography.caption)
                         .foregroundColor(Theme.Colors.textSecondary)
+                        .lineLimit(1)
                 }
             }
 
@@ -111,10 +117,14 @@ struct StatCard: View {
                 .foregroundColor(Theme.Colors.textSecondary)
                 .textCase(.uppercase)
                 .tracking(0.8)
+                .lineLimit(1)
+                .minimumScaleFactor(0.9)
+                .allowsTightening(true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(Theme.Spacing.lg)
-        .frame(height: 120)
+        .padding(.horizontal, Theme.Spacing.lg)
+        .padding(.vertical, Theme.Spacing.md)
+        .frame(height: tileHeight)
         .softCard(elevation: 2)
         .opacity(isAppearing ? 1 : 0)
         .offset(y: isAppearing ? 0 : 8)
