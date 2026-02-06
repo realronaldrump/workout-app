@@ -127,7 +127,7 @@ struct MainTabView: View {
         Task { @MainActor in
             // Make the brand moment feel intentional: allow the lockup to animate in,
             // then hold briefly before dismissing.
-            let minVisibleNs: UInt64 = reduceMotion ? 900_000_000 : 1_750_000_000
+            let minVisibleNs: UInt64 = reduceMotion ? 900_000_000 : 2_750_000_000
             let fadeOutSeconds: Double = reduceMotion ? 0.2 : 0.45
 
             try? await Task.sleep(nanoseconds: minVisibleNs)

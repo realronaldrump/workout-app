@@ -2,7 +2,7 @@ import SwiftUI
 
 struct WordmarkLockup: View {
     var showTagline: Bool = true
-    var tagline: String = "Progress, without the noise."
+    var tagline: String = "Best Workout App in The World"
 
     var body: some View {
         VStack(spacing: 8) {
