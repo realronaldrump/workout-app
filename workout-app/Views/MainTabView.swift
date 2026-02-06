@@ -125,16 +125,24 @@ struct MainTabView: View {
         guard showSplash else { return }
 
         Task { @MainActor in
-            let delayNs: UInt64 = reduceMotion ? 300_000_000 : 750_000_000
-            try? await Task.sleep(nanoseconds: delayNs)
+            // Make the brand moment feel intentional: allow the lockup to animate in,
+            // then hold briefly before dismissing.
+            let minVisibleNs: UInt64 = reduceMotion ? 900_000_000 : 1_750_000_000
+            let fadeOutSeconds: Double = reduceMotion ? 0.2 : 0.45
 
-            withAnimation(reduceMotion ? .easeOut(duration: 0.2) : .easeInOut(duration: 0.35)) {
+            try? await Task.sleep(nanoseconds: minVisibleNs)
+
+            // Subtle "closing" feedback to mark the transition into the app.
+            Haptics.impact(.soft)
+
+            withAnimation(reduceMotion ? .easeOut(duration: 0.2) : .easeInOut(duration: fadeOutSeconds)) {
                 showSplash = false
             }
 
             if pendingOnboarding {
                 pendingOnboarding = false
                 // Present onboarding only after the splash fades out.
+                try? await Task.sleep(nanoseconds: UInt64(fadeOutSeconds * 1_000_000_000))
                 showingOnboarding = true
             }
         }
