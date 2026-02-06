@@ -95,24 +95,13 @@ struct DailyHealthDetailView: View {
                 .font(Theme.Typography.title3)
                 .foregroundStyle(Theme.Colors.textPrimary)
 
-            HStack(spacing: Theme.Spacing.xl) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(String(format: "%.1f", summary.totalHours))
-                        .font(Theme.Typography.number)
-                        .foregroundStyle(Theme.Colors.textPrimary)
-                    Text("h asleep")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                }
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(formatDuration(summary.inBed))
-                        .font(Theme.Typography.subheadline)
-                        .foregroundStyle(Theme.Colors.textPrimary)
-                    Text("in bed")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(String(format: "%.1f", summary.totalHours))
+                    .font(Theme.Typography.number)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                Text("h asleep")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.textSecondary)
             }
 
             VStack(spacing: Theme.Spacing.xs) {

@@ -113,21 +113,23 @@ struct PerformanceLabView: View {
                     .font(Theme.Typography.title2)
                     .foregroundColor(Theme.Colors.textPrimary)
                 Spacer()
-                Picker("Window", selection: $progressWindow) {
-                    Text("4w").tag(4)
-                    Text("8w").tag(8)
-                    Text("12w").tag(12)
-                }
-                .pickerStyle(.segmented)
-                .frame(width: 160)
+                BrutalistSegmentedPicker(
+                    title: "Progress window",
+                    selection: $progressWindow,
+                    options: [("4w", 4), ("8w", 8), ("12w", 12)]
+                )
+                .frame(width: 190)
             }
 
-            Picker("Category", selection: $selectedCategory) {
-                Text("Exercises").tag(ProgressContributionCategory.exercise)
-                Text("Muscle").tag(ProgressContributionCategory.muscleGroup)
-                Text("Workout").tag(ProgressContributionCategory.workoutType)
-            }
-            .pickerStyle(.segmented)
+            BrutalistSegmentedPicker(
+                title: "Progress category",
+                selection: $selectedCategory,
+                options: [
+                    ("Exercises", ProgressContributionCategory.exercise),
+                    ("Muscle", ProgressContributionCategory.muscleGroup),
+                    ("Workout", ProgressContributionCategory.workoutType)
+                ]
+            )
 
             if top.isEmpty {
                 Text("Not enough data yet.")
@@ -219,12 +221,12 @@ struct PerformanceLabView: View {
                     .font(Theme.Typography.title2)
                     .foregroundColor(Theme.Colors.textPrimary)
                 Spacer()
-                Picker("Window", selection: $changeWindow) {
-                    Text("2w").tag(14)
-                    Text("4w").tag(28)
-                }
-                .pickerStyle(.segmented)
-                .frame(width: 140)
+                BrutalistSegmentedPicker(
+                    title: "Change window",
+                    selection: $changeWindow,
+                    options: [("2w", 14), ("4w", 28)]
+                )
+                .frame(width: 160)
             }
 
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: Theme.Spacing.md) {
