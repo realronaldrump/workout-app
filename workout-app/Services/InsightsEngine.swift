@@ -1,5 +1,3 @@
-// swiftlint:disable file_length
-
 import Foundation
 import Combine
 
@@ -188,6 +186,12 @@ class InsightsEngine: ObservableObject {
         in workouts: [Workout],
         annotations: [UUID: WorkoutAnnotation]
     ) -> [Insight] {
+        struct ExerciseSession {
+            let date: Date
+            let sets: [WorkoutSet]
+            let gymId: UUID?
+        }
+
         var plateauInsights: [Insight] = []
         let calendar = Calendar.current
         guard let fourWeeksAgo = calendar.date(byAdding: .day, value: -28, to: Date()) else { return [] }
@@ -196,10 +200,10 @@ class InsightsEngine: ObservableObject {
         let exerciseGroups = Dictionary(grouping: allExercises) { $0.name }
 
         for (exerciseName, _) in exerciseGroups {
-            let history = workouts.compactMap { workout -> (date: Date, sets: [WorkoutSet], gymId: UUID?)? in
+            let history = workouts.compactMap { workout -> ExerciseSession? in
                 if let exercise = workout.exercises.first(where: { $0.name == exerciseName }) {
                     let gymId = annotations[workout.id]?.gymProfileId
-                    return (date: workout.date, sets: exercise.sets, gymId: gymId)
+                    return ExerciseSession(date: workout.date, sets: exercise.sets, gymId: gymId)
                 }
                 return nil
             }.sorted { $0.date < $1.date }
