@@ -4,7 +4,7 @@ import Charts
 struct MetricDetailView: View {
     let kind: WorkoutMetricDetailKind
     let workouts: [Workout]
-    var scrollTarget: MetricDetailScrollTarget? = nil
+    var scrollTarget: MetricDetailScrollTarget?
 
     @EnvironmentObject var healthManager: HealthKitManager
     @EnvironmentObject var dataManager: WorkoutDataManager

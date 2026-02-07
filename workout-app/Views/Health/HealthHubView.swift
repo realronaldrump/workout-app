@@ -219,11 +219,14 @@ struct HealthHubView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: Theme.Spacing.md) {
                     ForEach(summaryCards) { card in
-                        MetricTileButton(action: {
-                            selectedMetric = card.metric
-                        }) {
-                            HealthSummaryCard(model: card)
-                        }
+                        MetricTileButton(
+                            action: {
+                                selectedMetric = card.metric
+                            },
+                            content: {
+                                HealthSummaryCard(model: card)
+                            }
+                        )
                     }
                 }
             }

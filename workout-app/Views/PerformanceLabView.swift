@@ -238,11 +238,14 @@ struct PerformanceLabView: View {
 
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: Theme.Spacing.md) {
                 ForEach(changes) { metric in
-                    MetricTileButton(action: {
-                        selectedChangeMetric = metric
-                    }) {
-                        ChangeMetricCard(metric: metric)
-                    }
+                    MetricTileButton(
+                        action: {
+                            selectedChangeMetric = metric
+                        },
+                        content: {
+                            ChangeMetricCard(metric: metric)
+                        }
+                    )
                 }
             }
 
@@ -450,29 +453,32 @@ struct PerformanceLabView: View {
                     .softCard(elevation: 2)
             } else {
                 ForEach(insights) { insight in
-                    MetricTileButton(action: {
-                        selectedHabitFactor = insight.kind
-                    }) {
-                        HStack(spacing: Theme.Spacing.md) {
-                            Circle()
-                                .fill(insight.tint)
-                                .frame(width: 10, height: 10)
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(insight.title)
-                                    .font(Theme.Typography.headline)
+                    MetricTileButton(
+                        action: {
+                            selectedHabitFactor = insight.kind
+                        },
+                        content: {
+                            HStack(spacing: Theme.Spacing.md) {
+                                Circle()
+                                    .fill(insight.tint)
+                                    .frame(width: 10, height: 10)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(insight.title)
+                                        .font(Theme.Typography.headline)
+                                        .foregroundColor(Theme.Colors.textPrimary)
+                                    Text(insight.detail)
+                                        .font(Theme.Typography.caption)
+                                        .foregroundColor(Theme.Colors.textSecondary)
+                                }
+                                Spacer()
+                                Text(insight.value)
+                                    .font(Theme.Typography.captionBold)
                                     .foregroundColor(Theme.Colors.textPrimary)
-                                Text(insight.detail)
-                                    .font(Theme.Typography.caption)
-                                    .foregroundColor(Theme.Colors.textSecondary)
                             }
-                            Spacer()
-                            Text(insight.value)
-                                .font(Theme.Typography.captionBold)
-                                .foregroundColor(Theme.Colors.textPrimary)
+                            .padding(Theme.Spacing.lg)
+                            .softCard(elevation: 1)
                         }
-                        .padding(Theme.Spacing.lg)
-                        .softCard(elevation: 1)
-                    }
+                    )
                 }
             }
         }
@@ -497,23 +503,26 @@ struct PerformanceLabView: View {
                     .softCard(elevation: 2)
             } else {
                 ForEach(insights) { insight in
-                    MetricTileButton(action: {
-                        selectedCorrelation = insight
-                    }) {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(insight.title)
-                                .font(Theme.Typography.headline)
-                                .foregroundColor(Theme.Colors.textPrimary)
-                            Text(insight.detail)
-                                .font(Theme.Typography.caption)
-                                .foregroundColor(Theme.Colors.textSecondary)
-                            Text("r=\(String(format: "%.2f", insight.correlation)) | n=\(insight.supportingCount)")
-                                .font(Theme.Typography.caption)
-                                .foregroundColor(Theme.Colors.textTertiary)
+                    MetricTileButton(
+                        action: {
+                            selectedCorrelation = insight
+                        },
+                        content: {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(insight.title)
+                                    .font(Theme.Typography.headline)
+                                    .foregroundColor(Theme.Colors.textPrimary)
+                                Text(insight.detail)
+                                    .font(Theme.Typography.caption)
+                                    .foregroundColor(Theme.Colors.textSecondary)
+                                Text("r=\(String(format: "%.2f", insight.correlation)) | n=\(insight.supportingCount)")
+                                    .font(Theme.Typography.caption)
+                                    .foregroundColor(Theme.Colors.textTertiary)
+                            }
+                            .padding(Theme.Spacing.lg)
+                            .softCard(elevation: 1)
                         }
-                        .padding(Theme.Spacing.lg)
-                        .softCard(elevation: 1)
-                    }
+                    )
                 }
             }
         }

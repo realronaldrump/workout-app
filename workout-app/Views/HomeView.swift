@@ -144,32 +144,35 @@ struct HomeView: View {
 
     private var quickActionsSection: some View {
         VStack(spacing: Theme.Spacing.sm) {
-            Button(action: {
-                Haptics.selection()
-                quickStartExercise = nil
-                showingQuickStart = true
-            }) {
-                HStack(spacing: Theme.Spacing.sm) {
-                    Image(systemName: "bolt.fill")
-                    Text("Start a session")
-                        .font(Theme.Typography.headline)
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.caption)
-                        .foregroundStyle(Color.white.opacity(0.8))
+            Button(
+                action: {
+                    Haptics.selection()
+                    quickStartExercise = nil
+                    showingQuickStart = true
+                },
+                label: {
+                    HStack(spacing: Theme.Spacing.sm) {
+                        Image(systemName: "bolt.fill")
+                        Text("Start a session")
+                            .font(Theme.Typography.headline)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundStyle(Color.white.opacity(0.8))
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, Theme.Spacing.lg)
+                    .padding(.vertical, Theme.Spacing.md)
+                    .frame(minHeight: 56)
+                    .background(Theme.Colors.accent)
+                    .cornerRadius(Theme.CornerRadius.xlarge)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge)
+                            .strokeBorder(Color.white.opacity(0.25), lineWidth: 2)
+                    )
+                    .shadow(color: .black.opacity(Theme.Colors.shadowOpacity), radius: 0, x: 4, y: 4)
                 }
-                .foregroundStyle(.white)
-                .padding(.horizontal, Theme.Spacing.lg)
-                .padding(.vertical, Theme.Spacing.md)
-                .frame(minHeight: 56)
-                .background(Theme.Colors.accent)
-                .cornerRadius(Theme.CornerRadius.xlarge)
-                .overlay(
-                    RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge)
-                        .strokeBorder(Color.white.opacity(0.25), lineWidth: 2)
-                )
-                .shadow(color: .black.opacity(Theme.Colors.shadowOpacity), radius: 0, x: 4, y: 4)
-            }
+            )
             .buttonStyle(.plain)
             .padding(.horizontal, Theme.Spacing.lg)
 
@@ -471,33 +474,39 @@ private struct HomeEmptyState: View {
             }
 
             VStack(spacing: Theme.Spacing.sm) {
-                Button(action: {
-                    Haptics.selection()
-                    onStart()
-                }) {
-                    Text("Start a session")
-                        .font(Theme.Typography.headline)
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, Theme.Spacing.md)
-                        .frame(minHeight: 52)
-                        .background(Theme.Colors.accent)
-                        .cornerRadius(Theme.CornerRadius.xlarge)
-                }
+                Button(
+                    action: {
+                        Haptics.selection()
+                        onStart()
+                    },
+                    label: {
+                        Text("Start a session")
+                            .font(Theme.Typography.headline)
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, Theme.Spacing.md)
+                            .frame(minHeight: 52)
+                            .background(Theme.Colors.accent)
+                            .cornerRadius(Theme.CornerRadius.xlarge)
+                    }
+                )
                 .buttonStyle(.plain)
 
-                Button(action: {
-                    Haptics.selection()
-                    onImport()
-                }) {
-                    Text("Import from Strong")
-                        .font(Theme.Typography.subheadline)
-                        .foregroundStyle(Theme.Colors.accent)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, Theme.Spacing.md)
-                        .frame(minHeight: 44)
-                        .softCard(cornerRadius: Theme.CornerRadius.xlarge, elevation: 1)
-                }
+                Button(
+                    action: {
+                        Haptics.selection()
+                        onImport()
+                    },
+                    label: {
+                        Text("Import from Strong")
+                            .font(Theme.Typography.subheadline)
+                            .foregroundStyle(Theme.Colors.accent)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, Theme.Spacing.md)
+                            .frame(minHeight: 44)
+                            .softCard(cornerRadius: Theme.CornerRadius.xlarge, elevation: 1)
+                    }
+                )
                 .buttonStyle(.plain)
             }
         }
@@ -512,23 +521,26 @@ private struct SecondaryChip: View {
     let action: () -> Void
 
     var body: some View {
-        Button(action: {
-            Haptics.selection()
-            action()
-        }) {
-            HStack(spacing: Theme.Spacing.xs) {
-                Image(systemName: icon)
-                Text(title)
-                    .font(Theme.Typography.cardHeader)
-                    .textCase(.uppercase)
+        Button(
+            action: {
+                Haptics.selection()
+                action()
+            },
+            label: {
+                HStack(spacing: Theme.Spacing.xs) {
+                    Image(systemName: icon)
+                    Text(title)
+                        .font(Theme.Typography.cardHeader)
+                        .textCase(.uppercase)
+                }
+                .foregroundStyle(Theme.Colors.textPrimary)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, Theme.Spacing.md)
+                .padding(.vertical, Theme.Spacing.sm)
+                .frame(minHeight: 44)
+                .softCard(cornerRadius: Theme.CornerRadius.xlarge, elevation: 1)
             }
-            .foregroundStyle(Theme.Colors.textPrimary)
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, Theme.Spacing.md)
-            .padding(.vertical, Theme.Spacing.sm)
-            .frame(minHeight: 44)
-            .softCard(cornerRadius: Theme.CornerRadius.xlarge, elevation: 1)
-        }
+        )
         .buttonStyle(.plain)
     }
 }
@@ -540,30 +552,33 @@ private struct ActionChip: View {
     let action: () -> Void
 
     var body: some View {
-        Button(action: {
-            Haptics.selection()
-            action()
-        }) {
-            HStack(spacing: Theme.Spacing.xs) {
-                Image(systemName: icon)
-                Text(title)
-                    .font(Theme.Typography.subheadline)
+        Button(
+            action: {
+                Haptics.selection()
+                action()
+            },
+            label: {
+                HStack(spacing: Theme.Spacing.xs) {
+                    Image(systemName: icon)
+                    Text(title)
+                        .font(Theme.Typography.subheadline)
+                }
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, Theme.Spacing.md)
+                .padding(.vertical, Theme.Spacing.sm)
+                .frame(minHeight: 44)
+                .background(tint)
+                .cornerRadius(Theme.CornerRadius.large)
             }
-            .foregroundColor(.white)
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, Theme.Spacing.md)
-            .padding(.vertical, Theme.Spacing.sm)
-            .frame(minHeight: 44)
-            .background(tint)
-            .cornerRadius(Theme.CornerRadius.large)
-        }
+        )
     }
 }
 
 private struct SummaryPill: View {
     let title: String
     let value: String
-    var onTap: (() -> Void)? = nil
+    var onTap: (() -> Void)?
 
     var body: some View {
         Group {

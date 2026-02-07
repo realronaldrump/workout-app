@@ -110,28 +110,31 @@ struct FatigueLensDetailView: View {
                     .softCard(elevation: 1)
             } else {
                 ForEach(summary.entries) { entry in
-                    MetricTileButton(action: {
-                        selectedExercise = ExerciseSelection(id: entry.exerciseName)
-                    }) {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(entry.exerciseName)
-                                    .font(Theme.Typography.headline)
-                                    .foregroundStyle(Theme.Colors.textPrimary)
-                                Text(entry.note)
-                                    .font(Theme.Typography.caption)
-                                    .foregroundStyle(Theme.Colors.textSecondary)
+                    MetricTileButton(
+                        action: {
+                            selectedExercise = ExerciseSelection(id: entry.exerciseName)
+                        },
+                        content: {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(entry.exerciseName)
+                                        .font(Theme.Typography.headline)
+                                        .foregroundStyle(Theme.Colors.textPrimary)
+                                    Text(entry.note)
+                                        .font(Theme.Typography.caption)
+                                        .foregroundStyle(Theme.Colors.textSecondary)
+                                }
+
+                                Spacer()
+
+                                Text("-\(Int(entry.dropPercent * 100))%")
+                                    .font(Theme.Typography.captionBold)
+                                    .foregroundStyle(Theme.Colors.warning)
                             }
-
-                            Spacer()
-
-                            Text("-\(Int(entry.dropPercent * 100))%")
-                                .font(Theme.Typography.captionBold)
-                                .foregroundStyle(Theme.Colors.warning)
+                            .padding(Theme.Spacing.lg)
+                            .softCard(elevation: 1)
                         }
-                        .padding(Theme.Spacing.lg)
-                        .softCard(elevation: 1)
-                    }
+                    )
                 }
             }
         }

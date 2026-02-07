@@ -10,7 +10,6 @@ class WorkoutDataManager: ObservableObject {
 
     private let identityStore = WorkoutIdentityStore()
 
-    // swiftlint:disable:next cyclomatic_complexity
     nonisolated func processWorkoutSets(
         _ sets: [WorkoutSet],
         healthDataSnapshot: [WorkoutHealthData] = []

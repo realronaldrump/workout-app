@@ -74,18 +74,26 @@ struct ProfileView: View {
             }
 
             HStack(spacing: Theme.Spacing.md) {
-                MetricTileButton(chevronPlacement: .bottomTrailing, action: {
-                    showingWorkoutHistory = true
-                }) {
-                    ProfileStat(title: "Workouts", value: "\(dataManager.workouts.count)")
-                }
+                MetricTileButton(
+                    chevronPlacement: .bottomTrailing,
+                    action: {
+                        showingWorkoutHistory = true
+                    },
+                    content: {
+                        ProfileStat(title: "Workouts", value: "\(dataManager.workouts.count)")
+                    }
+                )
                 .frame(maxWidth: .infinity)
 
-                MetricTileButton(chevronPlacement: .bottomTrailing, action: {
-                    showingExerciseList = true
-                }) {
-                    ProfileStat(title: "Exercises", value: "\(uniqueExercisesCount)")
-                }
+                MetricTileButton(
+                    chevronPlacement: .bottomTrailing,
+                    action: {
+                        showingExerciseList = true
+                    },
+                    content: {
+                        ProfileStat(title: "Exercises", value: "\(uniqueExercisesCount)")
+                    }
+                )
                 .frame(maxWidth: .infinity)
             }
             // Keep these tiles inset from the header card border so they don't visually
@@ -307,7 +315,7 @@ private struct ProfileLinkRow: View {
     let color: Color
     let title: String
     let subtitle: String
-    var value: String? = nil
+    var value: String?
 
     var body: some View {
         HStack {

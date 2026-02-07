@@ -12,7 +12,7 @@ struct RecoveryDetailView: View {
     let rangeLabel: String
     let workouts: [Workout]
     let healthData: [UUID: WorkoutHealthData]
-    var initialSection: RecoveryDetailSection? = nil
+    var initialSection: RecoveryDetailSection?
 
     @State private var hasAutoScrolled = false
 
@@ -31,6 +31,7 @@ struct RecoveryDetailView: View {
         WorkoutAnalytics.recoveryDebtSnapshot(workouts: workouts, healthData: healthData)
     }
 
+    // swiftlint:disable:next large_tuple
     private var recoveryScore: (score: Int, label: String, message: String, color: Color)? {
         let recent = sortedWorkouts.prefix(3)
         let recentHealth = recent.compactMap { healthData[$0.id] }

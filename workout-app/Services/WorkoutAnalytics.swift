@@ -1,7 +1,6 @@
 import Foundation
 import SwiftUI
 
-// swiftlint:disable file_length type_body_length
 struct WorkoutAnalytics {
     private struct RepRangeDescriptor {
         let label: String
@@ -254,7 +253,6 @@ struct WorkoutAnalytics {
         return "Last \(days)d"
     }
 
-    // swiftlint:disable:next cyclomatic_complexity
     static func consistencyIssues(for workouts: [Workout]) -> [ConsistencyIssue] {
         guard !workouts.isEmpty else { return [] }
         let calendar = Calendar.current
@@ -592,7 +590,6 @@ struct WorkoutAnalytics {
         return insights
     }
 
-    // swiftlint:disable:next cyclomatic_complexity
     static func correlationDetail(
         kind: CorrelationKind,
         workouts: [Workout],

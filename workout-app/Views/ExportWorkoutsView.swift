@@ -327,18 +327,21 @@ struct ExportWorkoutsView: View {
                 .disabled(!exportButtonEnabled)
 
                 if exportFileURL != nil {
-                    Button(action: { showingShareSheet = true }) {
-                        Image(systemName: "square.and.arrow.up")
-                            .font(.headline)
-                            .frame(width: 48, height: 48)
-                            .background(Theme.Colors.cardBackground)
-                            .foregroundStyle(Theme.Colors.textPrimary)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
-                                    .strokeBorder(Theme.Colors.border, lineWidth: 2)
-                            )
-                            .cornerRadius(Theme.CornerRadius.large)
-                    }
+                    Button(
+                        action: { showingShareSheet = true },
+                        label: {
+                            Image(systemName: "square.and.arrow.up")
+                                .font(.headline)
+                                .frame(width: 48, height: 48)
+                                .background(Theme.Colors.cardBackground)
+                                .foregroundStyle(Theme.Colors.textPrimary)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
+                                        .strokeBorder(Theme.Colors.border, lineWidth: 2)
+                                )
+                                .cornerRadius(Theme.CornerRadius.large)
+                        }
+                    )
                     .buttonStyle(.plain)
                     .accessibilityLabel("Share")
                 }

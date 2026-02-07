@@ -326,7 +326,6 @@ enum HealthMetric: String, CaseIterable, Identifiable {
     }
 
     /// Formats a value that is already in display units (matches `displayValue(from:)`).
-    // swiftlint:disable:next cyclomatic_complexity
     func formatDisplay(_ displayValue: Double) -> String {
         switch self {
         case .steps:
@@ -360,7 +359,6 @@ enum HealthMetric: String, CaseIterable, Identifiable {
         }
     }
 
-    // swiftlint:disable:next cyclomatic_complexity
     func format(_ value: Double) -> String {
         switch self {
         case .steps:

@@ -194,39 +194,57 @@ struct DashboardView: View {
             if let currentStats = filteredStats {
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: Theme.Spacing.md) {
-                        MetricTileButton(action: {
-                            selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: .sessions, scrollTarget: nil)
-                        }) {
-                            SummaryMetricCard(title: "Sessions", value: "\(currentStats.totalWorkouts)")
-                        }
-                        MetricTileButton(action: {
-                            selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: .avgDuration, scrollTarget: nil)
-                        }) {
-                            SummaryMetricCard(title: "Avg Duration", value: currentStats.avgWorkoutDuration)
-                        }
-                        MetricTileButton(action: {
-                            selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: .totalVolume, scrollTarget: nil)
-                        }) {
-                            SummaryMetricCard(title: "Volume", value: formatVolume(currentStats.totalVolume))
-                        }
+                        MetricTileButton(
+                            action: {
+                                selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: .sessions, scrollTarget: nil)
+                            },
+                            content: {
+                                SummaryMetricCard(title: "Sessions", value: "\(currentStats.totalWorkouts)")
+                            }
+                        )
+                        MetricTileButton(
+                            action: {
+                                selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: .avgDuration, scrollTarget: nil)
+                            },
+                            content: {
+                                SummaryMetricCard(title: "Avg Duration", value: currentStats.avgWorkoutDuration)
+                            }
+                        )
+                        MetricTileButton(
+                            action: {
+                                selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: .totalVolume, scrollTarget: nil)
+                            },
+                            content: {
+                                SummaryMetricCard(title: "Volume", value: formatVolume(currentStats.totalVolume))
+                            }
+                        )
                     }
 
                     LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: Theme.Spacing.md) {
-                        MetricTileButton(action: {
-                            selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: .sessions, scrollTarget: nil)
-                        }) {
-                            SummaryMetricCard(title: "Sessions", value: "\(currentStats.totalWorkouts)")
-                        }
-                        MetricTileButton(action: {
-                            selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: .avgDuration, scrollTarget: nil)
-                        }) {
-                            SummaryMetricCard(title: "Avg Duration", value: currentStats.avgWorkoutDuration)
-                        }
-                        MetricTileButton(action: {
-                            selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: .totalVolume, scrollTarget: nil)
-                        }) {
-                            SummaryMetricCard(title: "Volume", value: formatVolume(currentStats.totalVolume))
-                        }
+                        MetricTileButton(
+                            action: {
+                                selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: .sessions, scrollTarget: nil)
+                            },
+                            content: {
+                                SummaryMetricCard(title: "Sessions", value: "\(currentStats.totalWorkouts)")
+                            }
+                        )
+                        MetricTileButton(
+                            action: {
+                                selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: .avgDuration, scrollTarget: nil)
+                            },
+                            content: {
+                                SummaryMetricCard(title: "Avg Duration", value: currentStats.avgWorkoutDuration)
+                            }
+                        )
+                        MetricTileButton(
+                            action: {
+                                selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: .totalVolume, scrollTarget: nil)
+                            },
+                            content: {
+                                SummaryMetricCard(title: "Volume", value: formatVolume(currentStats.totalVolume))
+                            }
+                        )
                     }
                 }
             } else {
@@ -246,11 +264,14 @@ struct DashboardView: View {
             } else {
                 VStack(spacing: Theme.Spacing.sm) {
                     ForEach(changeSummaryMetrics) { metric in
-                        MetricTileButton(action: {
-                            selectedChangeMetric = metric
-                        }) {
-                            ChangeMetricRow(metric: metric)
-                        }
+                        MetricTileButton(
+                            action: {
+                                selectedChangeMetric = metric
+                            },
+                            content: {
+                                ChangeMetricRow(metric: metric)
+                            }
+                        )
                     }
                 }
             }
@@ -308,28 +329,31 @@ struct DashboardView: View {
             }
 
             // Training header and expand button below consistency
-            Button(action: {
-                withAnimation(Theme.Animation.spring) {
-                    isTrainingExpanded.toggle()
+            Button(
+                action: {
+                    withAnimation(Theme.Animation.spring) {
+                        isTrainingExpanded.toggle()
+                    }
+                    Haptics.selection()
+                },
+                label: {
+                    HStack {
+                        Text("Training")
+                            .font(Theme.Typography.sectionHeader)
+                            .foregroundColor(Theme.Colors.textPrimary)
+                            .tracking(1.0)
+                        Spacer()
+                        Text(isTrainingExpanded ? "Less" : "More")
+                            .font(Theme.Typography.metricLabel)
+                            .foregroundColor(Theme.Colors.accent)
+                            .textCase(.uppercase)
+                            .tracking(0.8)
+                        Image(systemName: isTrainingExpanded ? "chevron.up" : "chevron.down")
+                            .font(.caption.weight(.bold))
+                            .foregroundColor(Theme.Colors.accent)
+                    }
                 }
-                Haptics.selection()
-            }) {
-                HStack {
-                    Text("Training")
-                        .font(Theme.Typography.sectionHeader)
-                        .foregroundColor(Theme.Colors.textPrimary)
-                        .tracking(1.0)
-                    Spacer()
-                    Text(isTrainingExpanded ? "Less" : "More")
-                        .font(Theme.Typography.metricLabel)
-                        .foregroundColor(Theme.Colors.accent)
-                        .textCase(.uppercase)
-                        .tracking(0.8)
-                    Image(systemName: isTrainingExpanded ? "chevron.up" : "chevron.down")
-                        .font(.caption.weight(.bold))
-                        .foregroundColor(Theme.Colors.accent)
-                }
-            }
+            )
 
             if isTrainingExpanded {
                 VolumeProgressChart(workouts: filteredWorkouts) {
