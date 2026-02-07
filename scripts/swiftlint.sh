@@ -4,6 +4,15 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONFIG_FILE="$ROOT_DIR/.swiftlint.yml"
 
+# SwiftLint depends on SourceKit. When `xcode-select` points at CommandLineTools,
+# SourceKitten can crash. Prefer the full Xcode toolchain when available.
+if [[ -z "${DEVELOPER_DIR:-}" ]]; then
+  DEV_DIR="$(xcode-select -p 2>/dev/null || true)"
+  if [[ "$DEV_DIR" == *"CommandLineTools"* ]] && [[ -d "/Applications/Xcode.app/Contents/Developer" ]]; then
+    export DEVELOPER_DIR="/Applications/Xcode.app/Contents/Developer"
+  fi
+fi
+
 if ! command -v swiftlint >/dev/null 2>&1; then
   echo "SwiftLint is not installed. Install via Homebrew: brew install swiftlint" >&2
   exit 1

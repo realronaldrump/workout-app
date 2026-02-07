@@ -89,16 +89,16 @@
 /* Begin PBXProject section */
 		720441C92F04516A00817762 /* Project object */ = {
 			isa = PBXProject;
-			attributes = {
-				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 2620;
-				LastUpgradeCheck = 2620;
-				TargetAttributes = {
-					720441D02F04516A00817762 = {
-						CreatedOnToolsVersion = 26.2;
+				attributes = {
+					BuildIndependentTargetsInParallel = 1;
+					LastSwiftUpdateCheck = 2630;
+					LastUpgradeCheck = 2630;
+					TargetAttributes = {
+						720441D02F04516A00817762 = {
+							CreatedOnToolsVersion = 26.3;
+						};
 					};
 				};
-			};
 			buildConfigurationList = 720441CC2F04516A00817762 /* Build configuration list for PBXProject "workout-app" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -146,7 +146,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-				shellScript = "set -e\nexport PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\"\n\"${SRCROOT}/scripts/swiftlint.sh\" lint\n# Xcode warns if a script phase has no declared outputs.\ntouch \"${DERIVED_FILE_DIR}/swiftlint.stamp\"\n";
+			shellScript = "set -e\nexport PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\"\n\"${SRCROOT}/scripts/swiftlint.sh\" lint\n# Xcode warns if a script phase has no declared outputs.\ntouch \"${DERIVED_FILE_DIR}/swiftlint.stamp\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 

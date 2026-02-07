@@ -121,7 +121,7 @@ struct ExerciseTagEditorView: View {
                     }
                 }
 
-                Section("Actions") {
+                Section {
                     if isOverridden {
                         Button {
                             Haptics.selection()
@@ -137,6 +137,8 @@ struct ExerciseTagEditorView: View {
                     } label: {
                         Text("Clear Tags")
                     }
+                } header: {
+                    Text("Actions")
                 } footer: {
                     Text(isOverridden ? "Customized tags (overrides defaults)." : "Using default tags.")
                 }
