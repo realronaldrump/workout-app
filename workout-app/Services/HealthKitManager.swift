@@ -1078,8 +1078,8 @@ class HealthKitManager: ObservableObject {
         }
     }
 
-    // swiftlint:disable function_body_length
-    private func fetchDailySleepSummaries(from start: Date, to end: Date) async throws -> [Date: SleepSummary] {
+	    // swiftlint:disable:next cyclomatic_complexity
+	    private func fetchDailySleepSummaries(from start: Date, to end: Date) async throws -> [Date: SleepSummary] {
         guard let healthStore = healthStore else {
             throw HealthKitError.notAvailable
         }
@@ -1285,7 +1285,6 @@ class HealthKitManager: ObservableObject {
             healthStore.execute(query)
         }
     }
-    // swiftlint:enable function_body_length
 
     private func enumerateDays(in range: DateInterval) -> [Date] {
         let calendar = Calendar.current
@@ -1394,8 +1393,6 @@ class HealthKitManager: ObservableObject {
     }
 
 }
-
-// swiftlint:enable file_length type_body_length
 
 // MARK: - Errors
 
