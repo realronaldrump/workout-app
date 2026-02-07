@@ -46,6 +46,7 @@ struct WorkoutHRChart: View {
                 plotArea.clipped()
             }
             .frame(height: 200)
+            .clipped()
         }
         .padding(Theme.Spacing.lg)
         .softCard(elevation: 2)
