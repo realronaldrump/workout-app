@@ -17,10 +17,6 @@ struct FatigueLensView: View {
                 if let effort = summary.effortDensity {
                     FatigueMetricPill(title: "Effort Density", value: String(format: "%.1f", effort))
                 }
-
-                if let rpe = summary.averageRPE {
-                    FatigueMetricPill(title: "Avg RPE", value: String(format: "%.1f", rpe))
-                }
             }
 
             if let trend = summary.restTimeTrend {

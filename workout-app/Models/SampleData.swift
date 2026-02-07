@@ -19,8 +19,7 @@ enum SampleData {
                 weight: 185,
                 reps: 8,
                 distance: 0,
-                seconds: 0,
-                rpe: "8"
+                seconds: 0
             ),
             WorkoutSet(
                 date: pushDate,
@@ -31,8 +30,7 @@ enum SampleData {
                 weight: 195,
                 reps: 6,
                 distance: 0,
-                seconds: 0,
-                rpe: "8"
+                seconds: 0
             ),
             WorkoutSet(
                 date: pushDate,
@@ -43,8 +41,7 @@ enum SampleData {
                 weight: 65,
                 reps: 10,
                 distance: 0,
-                seconds: 0,
-                rpe: "7"
+                seconds: 0
             ),
             WorkoutSet(
                 date: pushDate,
@@ -55,8 +52,7 @@ enum SampleData {
                 weight: 70,
                 reps: 8,
                 distance: 0,
-                seconds: 0,
-                rpe: "8"
+                seconds: 0
             )
         ]
 
@@ -70,8 +66,7 @@ enum SampleData {
                 weight: 185,
                 reps: 8,
                 distance: 0,
-                seconds: 0,
-                rpe: "8"
+                seconds: 0
             ),
             WorkoutSet(
                 date: pullDate,
@@ -82,8 +77,7 @@ enum SampleData {
                 weight: 195,
                 reps: 6,
                 distance: 0,
-                seconds: 0,
-                rpe: "8"
+                seconds: 0
             ),
             WorkoutSet(
                 date: pullDate,
@@ -94,8 +88,7 @@ enum SampleData {
                 weight: 140,
                 reps: 10,
                 distance: 0,
-                seconds: 0,
-                rpe: "7"
+                seconds: 0
             ),
             WorkoutSet(
                 date: pullDate,
@@ -106,8 +99,7 @@ enum SampleData {
                 weight: 150,
                 reps: 8,
                 distance: 0,
-                seconds: 0,
-                rpe: "8"
+                seconds: 0
             )
         ]
 
@@ -121,8 +113,7 @@ enum SampleData {
                 weight: 245,
                 reps: 8,
                 distance: 0,
-                seconds: 0,
-                rpe: "8"
+                seconds: 0
             ),
             WorkoutSet(
                 date: legsDate,
@@ -133,8 +124,7 @@ enum SampleData {
                 weight: 265,
                 reps: 6,
                 distance: 0,
-                seconds: 0,
-                rpe: "8"
+                seconds: 0
             ),
             WorkoutSet(
                 date: legsDate,
@@ -145,8 +135,7 @@ enum SampleData {
                 weight: 185,
                 reps: 10,
                 distance: 0,
-                seconds: 0,
-                rpe: "7"
+                seconds: 0
             ),
             WorkoutSet(
                 date: legsDate,
@@ -157,8 +146,7 @@ enum SampleData {
                 weight: 195,
                 reps: 8,
                 distance: 0,
-                seconds: 0,
-                rpe: "8"
+                seconds: 0
             )
         ]
 

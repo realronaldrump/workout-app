@@ -336,9 +336,6 @@ struct WorkoutAnalytics {
 
     static func fatigueSummary(for workout: Workout, allWorkouts: [Workout]) -> FatigueSummary {
         var entries: [FatigueEntry] = []
-        let rpeValues = workout.exercises.flatMap { $0.sets }.compactMap { Double($0.rpe ?? "") }
-        let avgRPE = rpeValues.isEmpty ? nil : rpeValues.reduce(0, +) / Double(rpeValues.count)
-
         for exercise in workout.exercises {
             let sets = exercise.sets.sorted { $0.setOrder < $1.setOrder }
             guard let best = sets.map({ $0.weight * Double($0.reps) }).max(),
@@ -378,8 +375,7 @@ struct WorkoutAnalytics {
             entries: entries.sorted { $0.dropPercent > $1.dropPercent },
             restTimeIndex: restIndex,
             restTimeTrend: restTrend,
-            effortDensity: effortDensity(for: workout),
-            averageRPE: avgRPE
+            effortDensity: effortDensity(for: workout)
         )
     }
 

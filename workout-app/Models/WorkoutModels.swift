@@ -11,7 +11,6 @@ struct WorkoutSet: Identifiable, Codable, Hashable {
     let reps: Int
     let distance: Double
     let seconds: Double
-    let rpe: String?
 }
 
 struct Exercise: Identifiable, Hashable {

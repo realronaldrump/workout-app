@@ -321,8 +321,7 @@ private extension WorkoutDataManager {
                     weight: loggedSet.weight,
                     reps: loggedSet.reps,
                     distance: 0,
-                    seconds: 0,
-                    rpe: loggedSet.rpe.map { formatRPE($0) }
+                    seconds: 0
                 )
             }
             return Exercise(id: loggedExercise.id, name: loggedExercise.name, sets: sets.sorted { $0.setOrder < $1.setOrder })
@@ -348,12 +347,4 @@ private extension WorkoutDataManager {
         return "\(minutes)m"
     }
 
-    nonisolated static func formatRPE(_ rpe: Double) -> String {
-        // Ensure Double(...) parsing works downstream (fatigue summary).
-        let rounded = (rpe * 10).rounded() / 10
-        if rounded.truncatingRemainder(dividingBy: 1) == 0 {
-            return String(Int(rounded))
-        }
-        return String(format: "%.1f", locale: Locale(identifier: "en_US_POSIX"), rounded)
-    }
 }

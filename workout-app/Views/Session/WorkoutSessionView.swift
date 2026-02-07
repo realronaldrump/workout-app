@@ -415,7 +415,7 @@ private struct SessionExerciseCard: View {
 
             HStack(spacing: Theme.Spacing.sm) {
                 Button {
-                    sessionManager.addSet(exerciseId: exercise.id, prefill: SetPrefill(weight: rec.suggestedWeight, reps: defaultReps(rec.repRange), rpe: rec.rpeTarget))
+                    sessionManager.addSet(exerciseId: exercise.id, prefill: SetPrefill(weight: rec.suggestedWeight, reps: defaultReps(rec.repRange)))
                     Haptics.selection()
                 } label: {
                     HStack(spacing: 6) {
@@ -482,7 +482,12 @@ private struct SessionSetRow: View {
 
     @State private var weightText: String
     @State private var repsText: String
-    @State private var rpeText: String
+    @FocusState private var focusedField: Field?
+
+    private enum Field {
+        case weight
+        case reps
+    }
 
     init(exerciseId: UUID, exerciseName: String, set: ActiveSet, weightUnit: String) {
         self.exerciseId = exerciseId
@@ -491,7 +496,6 @@ private struct SessionSetRow: View {
         self.weightUnit = weightUnit
         _weightText = State(initialValue: set.weight.map(WorkoutValueFormatter.weightText) ?? "")
         _repsText = State(initialValue: set.reps.map { String($0) } ?? "")
-        _rpeText = State(initialValue: set.rpe.map(WorkoutValueFormatter.rpeText) ?? "")
     }
 
     var body: some View {
@@ -512,18 +516,13 @@ private struct SessionSetRow: View {
                 .frame(width: 34, alignment: .leading)
                 .monospacedDigit()
 
-            field(title: weightUnit, text: $weightText, keyboard: .decimalPad)
+            field(title: weightUnit, text: $weightText, keyboard: .decimalPad, focus: .weight)
                 .onChange(of: weightText) { _, _ in
                     commit()
                 }
 
-            field(title: "reps", text: $repsText, keyboard: .numberPad)
+            field(title: "reps", text: $repsText, keyboard: .numberPad, focus: .reps)
                 .onChange(of: repsText) { _, _ in
-                    commit()
-                }
-
-            field(title: "rpe", text: $rpeText, keyboard: .decimalPad, width: 64)
-                .onChange(of: rpeText) { _, _ in
                     commit()
                 }
 
@@ -551,15 +550,22 @@ private struct SessionSetRow: View {
             RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
                 .strokeBorder(Theme.Colors.border.opacity(0.7), lineWidth: 1)
         )
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { focusedField = nil }
+            }
+        }
     }
 
-    private func field(title: String, text: Binding<String>, keyboard: UIKeyboardType, width: CGFloat? = nil) -> some View {
+    private func field(title: String, text: Binding<String>, keyboard: UIKeyboardType, focus: Field, width: CGFloat? = nil) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title)
                 .font(Theme.Typography.microcopy)
                 .foregroundColor(Theme.Colors.textTertiary)
             TextField(title, text: text)
                 .keyboardType(keyboard)
+                .focused($focusedField, equals: focus)
                 .font(Theme.Typography.body)
                 .foregroundColor(Theme.Colors.textPrimary)
                 .monospacedDigit()
@@ -570,8 +576,7 @@ private struct SessionSetRow: View {
     private func commit() {
         let weight = parseDouble(weightText)
         let reps = parseInt(repsText)
-        let rpe = parseDouble(rpeText)
-        sessionManager.updateSet(exerciseId: exerciseId, setId: set.id, weight: weight, reps: reps, rpe: rpe)
+        sessionManager.updateSet(exerciseId: exerciseId, setId: set.id, weight: weight, reps: reps)
     }
 
     private func parseDouble(_ text: String) -> Double? {

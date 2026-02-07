@@ -229,14 +229,7 @@ struct ExerciseStatDetailView: View {
         var parts: [String] = []
         for set in sorted.prefix(3) {
             let weight = formatWeight(set.weight)
-            let rpe = set.rpe?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let rpePart: String
-            if let rpe, !rpe.isEmpty {
-                rpePart = " @\(rpe)"
-            } else {
-                rpePart = ""
-            }
-            parts.append("\(weight)x\(set.reps)\(rpePart)")
+            parts.append("\(weight)x\(set.reps)")
         }
         if sets.count > 3 {
             parts.append("+\(sets.count - 3) more")

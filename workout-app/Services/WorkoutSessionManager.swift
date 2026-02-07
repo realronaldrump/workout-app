@@ -21,12 +21,10 @@ enum WorkoutSessionError: LocalizedError {
 struct SetPrefill: Sendable {
     var weight: Double?
     var reps: Int?
-    var rpe: Double?
 
-    init(weight: Double? = nil, reps: Int? = nil, rpe: Double? = nil) {
+    init(weight: Double? = nil, reps: Int? = nil) {
         self.weight = weight
         self.reps = reps
-        self.rpe = rpe
     }
 }
 
@@ -130,7 +128,7 @@ final class WorkoutSessionManager: ObservableObject {
         guard let exerciseIndex = session.exercises.firstIndex(where: { $0.id == exerciseId }) else { return }
 
         let nextOrder = (session.exercises[exerciseIndex].sets.map(\.order).max() ?? 0) + 1
-        let newSet = ActiveSet(order: nextOrder, weight: prefill.weight, reps: prefill.reps, rpe: prefill.rpe)
+        let newSet = ActiveSet(order: nextOrder, weight: prefill.weight, reps: prefill.reps)
         session.exercises[exerciseIndex].sets.append(newSet)
 
         touch(&session)
@@ -138,14 +136,13 @@ final class WorkoutSessionManager: ObservableObject {
         schedulePersistDraft()
     }
 
-    func updateSet(exerciseId: UUID, setId: UUID, weight: Double?, reps: Int?, rpe: Double?) {
+    func updateSet(exerciseId: UUID, setId: UUID, weight: Double?, reps: Int?) {
         guard var session = activeSession else { return }
         guard let exerciseIndex = session.exercises.firstIndex(where: { $0.id == exerciseId }) else { return }
         guard let setIndex = session.exercises[exerciseIndex].sets.firstIndex(where: { $0.id == setId }) else { return }
 
         session.exercises[exerciseIndex].sets[setIndex].weight = weight
         session.exercises[exerciseIndex].sets[setIndex].reps = reps
-        session.exercises[exerciseIndex].sets[setIndex].rpe = rpe
 
         touch(&session)
         activeSession = session
@@ -218,7 +215,7 @@ final class WorkoutSessionManager: ObservableObject {
 
             let loggedSets: [LoggedSet] = completedSets.compactMap { set in
                 guard let weight = set.weight, let reps = set.reps, weight >= 0, reps > 0 else { return nil }
-                return LoggedSet(order: set.order, weight: weight, reps: reps, rpe: set.rpe)
+                return LoggedSet(order: set.order, weight: weight, reps: reps)
             }
 
             if !loggedSets.isEmpty {

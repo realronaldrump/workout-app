@@ -64,9 +64,6 @@ struct FatigueLensDetailView: View {
                     if let density = summary.effortDensity {
                         MetricPill(title: "Effort Density", value: String(format: "%.1f", density))
                     }
-                    if let rpe = summary.averageRPE {
-                        MetricPill(title: "Avg RPE", value: String(format: "%.1f", rpe))
-                    }
                 }
 
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: Theme.Spacing.md) {
@@ -75,9 +72,6 @@ struct FatigueLensDetailView: View {
                     }
                     if let density = summary.effortDensity {
                         MetricPill(title: "Effort Density", value: String(format: "%.1f", density))
-                    }
-                    if let rpe = summary.averageRPE {
-                        MetricPill(title: "Avg RPE", value: String(format: "%.1f", rpe))
                     }
                 }
             }

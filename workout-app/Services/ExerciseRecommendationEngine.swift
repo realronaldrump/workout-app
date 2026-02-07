@@ -10,7 +10,6 @@ struct ExerciseRecommendation: Hashable, Sendable {
     let repRange: ClosedRange<Int>
     let suggestedWeight: Double?
     let warmup: [WarmupRecommendation]
-    let rpeTarget: Double?
     let rationale: String
 }
 
@@ -50,13 +49,9 @@ enum ExerciseRecommendationEngine {
                 estimateOneRepMax(weight: lhs.weight, reps: lhs.reps) < estimateOneRepMax(weight: rhs.weight, reps: rhs.reps)
             }
 
-            if let topSet {
-                let lastRPE = topSet.rpe.flatMap { Double($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
-                let comfortable = lastRPE.map { $0 <= 8.5 } ?? (topSet.reps >= targetReps)
-                if comfortable, weightIncrement > 0 {
-                    let bumped = topSet.weight + weightIncrement
-                    suggested = max(suggested ?? 0, bumped)
-                }
+            if let topSet, topSet.reps >= targetReps, weightIncrement > 0 {
+                let bumped = topSet.weight + weightIncrement
+                suggested = max(suggested ?? 0, bumped)
             }
         }
 
@@ -75,8 +70,6 @@ enum ExerciseRecommendationEngine {
             warmup = []
         }
 
-        let rpeTarget: Double? = 8.0
-
         let rationale = makeRationale(
             best1RM: best1RM,
             targetReps: targetReps,
@@ -90,7 +83,6 @@ enum ExerciseRecommendationEngine {
             repRange: repRange,
             suggestedWeight: suggested,
             warmup: warmup,
-            rpeTarget: rpeTarget,
             rationale: rationale
         )
     }

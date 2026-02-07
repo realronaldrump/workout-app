@@ -162,7 +162,7 @@ struct WorkoutEditView: View {
     private func addSet(exerciseIndex: Int) {
         guard draft != nil else { return }
         let nextOrder = (draft!.exercises[exerciseIndex].sets.map(\.order).max() ?? 0) + 1
-        draft!.exercises[exerciseIndex].sets.append(LoggedSet(order: nextOrder, weight: 0, reps: 0, rpe: nil))
+        draft!.exercises[exerciseIndex].sets.append(LoggedSet(order: nextOrder, weight: 0, reps: 0))
     }
 
     private func deleteSet(exerciseIndex: Int, setIndex: Int) {
@@ -291,7 +291,12 @@ private struct LoggedSetEditorRow: View {
 
     @State private var weightText: String
     @State private var repsText: String
-    @State private var rpeText: String
+    @FocusState private var focusedField: Field?
+
+    private enum Field {
+        case weight
+        case reps
+    }
 
     init(order: Int, set: Binding<LoggedSet>, weightUnit: String, onDelete: @escaping () -> Void) {
         self.order = order
@@ -300,7 +305,6 @@ private struct LoggedSetEditorRow: View {
         self.onDelete = onDelete
         _weightText = State(initialValue: WorkoutValueFormatter.weightText(set.wrappedValue.weight))
         _repsText = State(initialValue: String(set.wrappedValue.reps))
-        _rpeText = State(initialValue: set.wrappedValue.rpe.map(WorkoutValueFormatter.rpeText) ?? "")
     }
 
     var body: some View {
@@ -311,14 +315,11 @@ private struct LoggedSetEditorRow: View {
                 .frame(width: 34, alignment: .leading)
                 .monospacedDigit()
 
-            field(title: weightUnit, text: $weightText, keyboard: .decimalPad)
+            field(title: weightUnit, text: $weightText, keyboard: .decimalPad, focus: .weight)
                 .onChange(of: weightText) { _, _ in commit() }
 
-            field(title: "reps", text: $repsText, keyboard: .numberPad)
+            field(title: "reps", text: $repsText, keyboard: .numberPad, focus: .reps)
                 .onChange(of: repsText) { _, _ in commit() }
-
-            field(title: "rpe", text: $rpeText, keyboard: .decimalPad, width: 64)
-                .onChange(of: rpeText) { _, _ in commit() }
 
             Button {
                 onDelete()
@@ -342,15 +343,22 @@ private struct LoggedSetEditorRow: View {
             RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
                 .strokeBorder(Theme.Colors.border.opacity(0.7), lineWidth: 1)
         )
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { focusedField = nil }
+            }
+        }
     }
 
-    private func field(title: String, text: Binding<String>, keyboard: UIKeyboardType, width: CGFloat? = nil) -> some View {
+    private func field(title: String, text: Binding<String>, keyboard: UIKeyboardType, focus: Field, width: CGFloat? = nil) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title)
                 .font(Theme.Typography.microcopy)
                 .foregroundColor(Theme.Colors.textTertiary)
             TextField(title, text: text)
                 .keyboardType(keyboard)
+                .focused($focusedField, equals: focus)
                 .font(Theme.Typography.body)
                 .foregroundColor(Theme.Colors.textPrimary)
                 .monospacedDigit()
@@ -361,11 +369,9 @@ private struct LoggedSetEditorRow: View {
     private func commit() {
         let weightValue = parseDouble(weightText) ?? 0
         let repsValue = parseInt(repsText) ?? 0
-        let rpe = parseDouble(rpeText)
 
         set.weight = weightValue
         set.reps = repsValue
-        set.rpe = rpe
     }
 
     private func parseDouble(_ text: String) -> Double? {

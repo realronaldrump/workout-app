@@ -209,7 +209,6 @@ struct FatigueSummary {
     let restTimeIndex: Double?
     let restTimeTrend: String?
     let effortDensity: Double?
-    let averageRPE: Double?
 }
 
 enum HabitFactorKind: String, Identifiable, CaseIterable {

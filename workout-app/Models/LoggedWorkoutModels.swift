@@ -51,13 +51,11 @@ struct LoggedSet: Codable, Identifiable, Hashable, Sendable {
     var order: Int
     var weight: Double
     var reps: Int
-    var rpe: Double?
 
-    init(id: UUID = UUID(), order: Int, weight: Double, reps: Int, rpe: Double? = nil) {
+    init(id: UUID = UUID(), order: Int, weight: Double, reps: Int) {
         self.id = id
         self.order = order
         self.weight = weight
         self.reps = reps
-        self.rpe = rpe
     }
 }

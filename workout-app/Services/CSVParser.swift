@@ -48,8 +48,7 @@ class CSVParser {
                 weight: weight,
                 reps: reps,
                 distance: distance,
-                seconds: seconds,
-                rpe: components.count > 9 && !components[9].isEmpty ? components[9] : nil
+                seconds: seconds
             )
 
             workoutSets.append(workoutSet)
