@@ -138,7 +138,7 @@ struct WorkoutSessionView: View {
                     } label: {
                         Image(systemName: "trash")
                             .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(Theme.Colors.textSecondary)
+                            .foregroundStyle(Theme.Colors.error)
                     }
                     .buttonStyle(.plain)
                     .disabled(sessionManager.activeSession == nil || isFinishing)
