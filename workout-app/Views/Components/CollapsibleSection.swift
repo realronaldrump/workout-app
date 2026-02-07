@@ -2,7 +2,7 @@ import SwiftUI
 
 struct CollapsibleSection<Content: View>: View {
     let title: String
-    var subtitle: String? = nil
+    var subtitle: String?
     @Binding var isExpanded: Bool
     let content: Content
 

@@ -3,7 +3,7 @@ import Charts
 
 struct VolumeProgressChart: View {
     let workouts: [Workout]
-    var onTap: (() -> Void)? = nil
+    var onTap: (() -> Void)?
     @State private var selectedMetric = VolumeMetric.totalVolume
 
     enum VolumeMetric: String, CaseIterable {
@@ -79,12 +79,12 @@ struct VolumeProgressChart: View {
                 AxisGridLine()
                 AxisValueLabel {
                     if selectedMetric == .totalVolume || selectedMetric == .avgVolume {
-                        if let v = value.as(Double.self) {
-                            Text(formatAxisValue(v))
+                        if let doubleValue = value.as(Double.self) {
+                            Text(formatAxisValue(doubleValue))
                         }
                     } else {
-                        if let v = value.as(Int.self) {
-                            Text("\(v)")
+                        if let intValue = value.as(Int.self) {
+                            Text("\(intValue)")
                         }
                     }
                 }

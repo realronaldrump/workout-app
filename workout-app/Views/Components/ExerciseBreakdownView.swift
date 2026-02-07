@@ -3,8 +3,9 @@ import Charts
 
 struct ExerciseBreakdownView: View {
     let workouts: [Workout]
-    var onTap: (() -> Void)? = nil
+    var onTap: (() -> Void)?
 
+    // swiftlint:disable:next large_tuple
     private var exerciseData: [(name: String, volume: Double, frequency: Int)] {
         let allExercises = workouts.flatMap { $0.exercises }
         let grouped = Dictionary(grouping: allExercises) { $0.name }
@@ -56,8 +57,8 @@ struct ExerciseBreakdownView: View {
             AxisMarks { value in
                 AxisGridLine()
                 AxisValueLabel {
-                    if let v = value.as(Double.self) {
-                        Text(formatVolume(v))
+                    if let axisValue = value.as(Double.self) {
+                        Text(formatVolume(axisValue))
                     }
                 }
             }

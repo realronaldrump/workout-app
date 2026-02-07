@@ -10,13 +10,13 @@ struct WorkoutHealthData: Identifiable, Codable {
     let workoutStartTime: Date
     let workoutEndTime: Date
     let syncedAt: Date
-    
+
     // MARK: - Heart Rate Data
     var avgHeartRate: Double?
     var maxHeartRate: Double?
     var minHeartRate: Double?
     var heartRateSamples: [HeartRateSample]
-    
+
     // MARK: - Calorie Data
     var activeCalories: Double?
     var basalCalories: Double?
@@ -26,34 +26,34 @@ struct WorkoutHealthData: Identifiable, Codable {
         }
         return active + basal
     }
-    
+
     // MARK: - Workout Metrics
     var distance: Double? // in meters
     var avgSpeed: Double? // in m/s
     var avgPower: Double? // in watts
     var stepCount: Int?
     var flightsClimbed: Int?
-    
+
     // MARK: - Recovery & Vitals
     var hrvSamples: [HRVSample]
     var avgHRV: Double? {
         guard !hrvSamples.isEmpty else { return nil }
         return hrvSamples.map { $0.value }.reduce(0, +) / Double(hrvSamples.count)
     }
-    
+
     var restingHeartRate: Double?
     var bloodOxygenSamples: [BloodOxygenSample]
     var avgBloodOxygen: Double? {
         guard !bloodOxygenSamples.isEmpty else { return nil }
         return bloodOxygenSamples.map { $0.value }.reduce(0, +) / Double(bloodOxygenSamples.count)
     }
-    
+
     var respiratoryRateSamples: [RespiratoryRateSample]
     var avgRespiratoryRate: Double? {
         guard !respiratoryRateSamples.isEmpty else { return nil }
         return respiratoryRateSamples.map { $0.value }.reduce(0, +) / Double(respiratoryRateSamples.count)
     }
-    
+
     // MARK: - Body Measurements (captured around workout time)
     var bodyMass: Double? // in kg
     var bodyFatPercentage: Double?
@@ -74,11 +74,11 @@ struct WorkoutHealthData: Identifiable, Codable {
     var vo2Max: Double?
     var heartRateRecovery: Double?
     var walkingHeartRateAverage: Double?
-    
+
     // MARK: - Workout from Apple Health
     var appleWorkoutType: String?
     var appleWorkoutDuration: TimeInterval?
-    
+
     init(
         id: UUID = UUID(),
         workoutId: UUID,
@@ -154,7 +154,7 @@ struct WorkoutHealthData: Identifiable, Codable {
         self.appleWorkoutType = appleWorkoutType
         self.appleWorkoutDuration = appleWorkoutDuration
     }
-    
+
     /// Checks if meaningful health data was synced
     var hasHealthData: Bool {
         avgHeartRate != nil ||
@@ -177,7 +177,7 @@ struct HeartRateSample: Identifiable, Codable {
     let id: UUID
     let timestamp: Date
     let value: Double // beats per minute
-    
+
     init(id: UUID = UUID(), timestamp: Date, value: Double) {
         self.id = id
         self.timestamp = timestamp
@@ -189,7 +189,7 @@ struct HRVSample: Identifiable, Codable {
     let id: UUID
     let timestamp: Date
     let value: Double // SDNN in milliseconds
-    
+
     init(id: UUID = UUID(), timestamp: Date, value: Double) {
         self.id = id
         self.timestamp = timestamp
@@ -201,7 +201,7 @@ struct BloodOxygenSample: Identifiable, Codable {
     let id: UUID
     let timestamp: Date
     let value: Double // percentage (0-100)
-    
+
     init(id: UUID = UUID(), timestamp: Date, value: Double) {
         self.id = id
         self.timestamp = timestamp
@@ -213,7 +213,7 @@ struct RespiratoryRateSample: Identifiable, Codable {
     let id: UUID
     let timestamp: Date
     let value: Double // breaths per minute
-    
+
     init(id: UUID = UUID(), timestamp: Date, value: Double) {
         self.id = id
         self.timestamp = timestamp
@@ -228,12 +228,12 @@ enum HealthSyncStatus: Codable {
     case syncing
     case synced(Date)
     case failed(String)
-    
+
     var isSynced: Bool {
         if case .synced = self { return true }
         return false
     }
-    
+
     var isSyncing: Bool {
         if case .syncing = self { return true }
         return false
@@ -247,7 +247,7 @@ enum HealthKitAuthorizationStatus {
     case authorized
     case denied
     case unavailable
-    
+
     var displayText: String {
         switch self {
         case .notDetermined:
@@ -260,7 +260,7 @@ enum HealthKitAuthorizationStatus {
             return "Not Available"
         }
     }
-    
+
     var iconName: String {
         switch self {
         case .notDetermined:
@@ -273,7 +273,7 @@ enum HealthKitAuthorizationStatus {
             return "exclamationmark.triangle.fill"
         }
     }
-    
+
     var iconColor: String {
         switch self {
         case .notDetermined:

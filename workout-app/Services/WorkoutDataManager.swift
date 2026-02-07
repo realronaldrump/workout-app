@@ -10,6 +10,7 @@ class WorkoutDataManager: ObservableObject {
 
     private let identityStore = WorkoutIdentityStore()
 
+    // swiftlint:disable:next cyclomatic_complexity
     nonisolated func processWorkoutSets(
         _ sets: [WorkoutSet],
         healthDataSnapshot: [WorkoutHealthData] = []
@@ -108,7 +109,7 @@ class WorkoutDataManager: ObservableObject {
             return (sortedWorkouts, newIdentityEntries)
         }
         let (processedWorkouts, newIdentityEntries) = await task.value
-        
+
         // Update UI on MainActor
         await MainActor.run {
             self.workouts = processedWorkouts
@@ -116,38 +117,38 @@ class WorkoutDataManager: ObservableObject {
             self.identityStore.merge(newIdentityEntries)
         }
     }
-    
+
     func getExerciseHistory(for exerciseName: String) -> [(date: Date, sets: [WorkoutSet])] {
         var history: [(date: Date, sets: [WorkoutSet])] = []
-        
+
         for workout in workouts {
             if let exercise = workout.exercises.first(where: { $0.name == exerciseName }) {
                 history.append((date: workout.date, sets: exercise.sets))
             }
         }
-        
+
         return history.sorted { $0.date < $1.date }
     }
-    
+
     func calculateStats() -> WorkoutStats {
         return calculateStats(for: workouts)
     }
-    
+
     func calculateStats(for filteredWorkouts: [Workout]) -> WorkoutStats {
         let allExercises = filteredWorkouts.flatMap { $0.exercises }
         let exerciseGroups = Dictionary(grouping: allExercises) { $0.name }
-        
+
         // Calculate favorite exercise (most performed)
         let favoriteExercise = exerciseGroups
             .map { (name: $0.key, count: $0.value.count) }
             .max { $0.count < $1.count }?.name
-        
+
         // Calculate strongest exercise
         let strongestExercise = exerciseGroups
             .map { (name: $0.key, maxWeight: $0.value.map { $0.maxWeight }.max() ?? 0) }
             .max { $0.maxWeight < $1.maxWeight }
             .map { (name: $0.name, weight: $0.maxWeight) }
-        
+
         // Calculate improvement
         var mostImprovedExercise: (name: String, improvement: Double)?
         for (exerciseName, exercises) in exerciseGroups {
@@ -156,7 +157,7 @@ class WorkoutDataManager: ObservableObject {
                 let date2 = exercise2.sets.map(\.date).min() ?? Date.distantPast
                 return date1 < date2
             }
-            
+
             if let first = sortedByDate.first?.oneRepMax,
                let last = sortedByDate.last?.oneRepMax,
                first > 0 {
@@ -170,14 +171,14 @@ class WorkoutDataManager: ObservableObject {
                 }
             }
         }
-        
+
         // Calculate streaks and consistency (use all workouts for streaks, filtered for other stats)
         let (currentStreak, longestStreak) = calculateStreaks()
         let workoutsPerWeek = calculateWorkoutsPerWeek(for: filteredWorkouts)
-        
+
         // Calculate average duration
         let avgDuration = calculateAverageDuration(for: filteredWorkouts)
-        
+
         return WorkoutStats(
             totalWorkouts: filteredWorkouts.count,
             totalExercises: allExercises.count,
@@ -193,35 +194,35 @@ class WorkoutDataManager: ObservableObject {
             lastWorkoutDate: filteredWorkouts.map(\.date).max()
         )
     }
-    
+
     private func calculateStreaks() -> (current: Int, longest: Int) {
         guard !workouts.isEmpty else { return (0, 0) }
-        
+
         // 1. Normalize all workout dates to start of day
         let calendar = Calendar.current
         let uniqueDays = Set(workouts.map { calendar.startOfDay(for: $0.date) })
-        
+
         // 2. Sort unique days
         let sortedDays = uniqueDays.sorted()
-        
+
         guard !sortedDays.isEmpty else { return (0, 0) }
-        
+
         var currentStreak = 0
         var longestStreak = 0
         var tempStreak = 1
         var lastDay = sortedDays[0]
-        
+
         // 3. Calculate consecutive days (allowing 1 day gap as rest day)
-        for i in 1..<sortedDays.count {
-            let currentDay = sortedDays[i]
+        for index in 1..<sortedDays.count {
+            let currentDay = sortedDays[index]
             let daysDiff = calendar.dateComponents([.day], from: lastDay, to: currentDay).day ?? 0
-            
+
             if daysDiff == 1 {
                 // Consecutive day
                 tempStreak += 1
             } else if daysDiff == 2 {
                 // One day gap (rest day), streak continues
-                tempStreak += 1 // Should we count the workout days or the span? 
+                tempStreak += 1 // Should we count the workout days or the span?
                 // Usually "streak" is "number of active days in a row" or "days without breaking the chain".
                 // If I run Mon, then Wed. Is my streak 2? Or is the chain just unbroken?
                 // The previous logic was `tempStreak += 1` if diff <= 2.
@@ -233,37 +234,37 @@ class WorkoutDataManager: ObservableObject {
             }
             lastDay = currentDay
         }
-        
+
         longestStreak = max(longestStreak, tempStreak)
-        
+
         // 4. Calculate current streak
         // Check if the streak is still active (last workout was today or yesterday or day before yesterday?)
         if let lastWorkoutDay = sortedDays.last {
             let today = calendar.startOfDay(for: Date())
             let daysSinceLast = calendar.dateComponents([.day], from: lastWorkoutDay, to: today).day ?? 0
-            
+
             // If last workout was today (0), yesterday (1), or day before (2 - allowed rest day)
             if daysSinceLast <= 2 {
                 currentStreak = tempStreak
             }
         }
-        
+
         return (currentStreak, longestStreak)
     }
-    
+
     private func calculateWorkoutsPerWeek(for filteredWorkouts: [Workout]) -> Double {
         guard !filteredWorkouts.isEmpty else { return 0 }
-        
+
         let sortedWorkouts = filteredWorkouts.sorted { $0.date < $1.date }
         guard let firstDate = sortedWorkouts.first?.date,
               let lastDate = sortedWorkouts.last?.date else { return 0 }
-        
+
         let weeksBetween = Calendar.current.dateComponents([.weekOfYear], from: firstDate, to: lastDate).weekOfYear ?? 1
         let totalWeeks = max(Double(weeksBetween), 1)
-        
+
         return Double(filteredWorkouts.count) / totalWeeks
     }
-    
+
     private func calculateAverageDuration(for filteredWorkouts: [Workout]) -> String {
         let durations = filteredWorkouts
             .map { WorkoutAnalytics.durationMinutes(from: $0.duration) }

@@ -4,11 +4,12 @@ import Combine
 
 /// Manages all interactions with Apple HealthKit
 /// Handles authorization, data fetching, and syncing health data during workout windows
+// swiftlint:disable file_length type_body_length
 @MainActor
 class HealthKitManager: ObservableObject {
-    
+
     // MARK: - Published Properties
-    
+
     @Published var authorizationStatus: HealthKitAuthorizationStatus = .notDetermined
     @Published var isSyncing = false
     @Published var isAutoSyncing = false
@@ -20,9 +21,9 @@ class HealthKitManager: ObservableObject {
     @Published var isDailySyncing = false
     @Published var dailySyncProgress: Double = 0
     @Published var lastDailySyncDate: Date?
-    
+
     // MARK: - Private Properties
-    
+
     private let healthStore: HKHealthStore?
     private let userDefaults = UserDefaults.standard
     private let lastSyncKey = "lastHealthSyncDate"
@@ -31,13 +32,13 @@ class HealthKitManager: ObservableObject {
     private let dailyHealthDataKey = "dailyHealthDataStore"
     private let dailyHealthStoreVersionKey = "dailyHealthStoreVersion"
     private let currentDailyHealthStoreVersion = 2
-    
+
     // MARK: - Health Data Types to Read
-    
+
     /// All HealthKit data types the app will request read access to
     private var allReadTypes: Set<HKObjectType> {
         var types = Set<HKObjectType>()
-        
+
         // Quantity Types
         let quantityTypes: [HKQuantityTypeIdentifier] = [
             // Heart & Cardiovascular
@@ -46,11 +47,11 @@ class HealthKitManager: ObservableObject {
             .walkingHeartRateAverage,
             .heartRateVariabilitySDNN,
             .heartRateRecoveryOneMinute,
-            
+
             // Energy
             .activeEnergyBurned,
             .basalEnergyBurned,
-            
+
             // Activity
             .stepCount,
             .distanceWalkingRunning,
@@ -59,7 +60,7 @@ class HealthKitManager: ObservableObject {
             .appleExerciseTime,
             .appleMoveTime,
             .appleStandTime,
-            
+
             // Workout Metrics
             .runningSpeed,
             .runningPower,
@@ -68,18 +69,18 @@ class HealthKitManager: ObservableObject {
             .runningStrideLength,
             .runningGroundContactTime,
             .runningVerticalOscillation,
-            
+
             // Vitals
             .oxygenSaturation,
             .respiratoryRate,
             .bodyTemperature,
-            
+
             // Body Measurements
             .bodyMass,
             .bodyFatPercentage,
             .leanBodyMass,
             .bodyMassIndex,
-            
+
             // Other
             .vo2Max,
             .walkingSpeed,
@@ -89,13 +90,13 @@ class HealthKitManager: ObservableObject {
             .stairAscentSpeed,
             .stairDescentSpeed
         ]
-        
+
         for identifier in quantityTypes {
             if let type = HKQuantityType.quantityType(forIdentifier: identifier) {
                 types.insert(type)
             }
         }
-        
+
         // Category Types
         let categoryTypes: [HKCategoryTypeIdentifier] = [
             .sleepAnalysis,
@@ -104,24 +105,24 @@ class HealthKitManager: ObservableObject {
             .highHeartRateEvent,
             .irregularHeartRhythmEvent
         ]
-        
+
         for identifier in categoryTypes {
             if let type = HKCategoryType.categoryType(forIdentifier: identifier) {
                 types.insert(type)
             }
         }
-        
+
         // Workout Type
         types.insert(HKObjectType.workoutType())
-        
+
         // Activity Summary
         types.insert(HKObjectType.activitySummaryType())
-        
+
         return types
     }
-    
+
     // MARK: - Initialization
-    
+
     init() {
         if HKHealthStore.isHealthDataAvailable() {
             self.healthStore = HKHealthStore()
@@ -133,14 +134,14 @@ class HealthKitManager: ObservableObject {
             self.authorizationStatus = .unavailable
         }
     }
-    
+
     // MARK: - Public Methods
-    
+
     /// Check if HealthKit is available on this device
     func isHealthKitAvailable() -> Bool {
         return HKHealthStore.isHealthDataAvailable() && healthStore != nil
     }
-    
+
     /// Refresh the current authorization status
     func refreshAuthorizationStatus() {
         checkAuthorizationStatus()
@@ -150,14 +151,14 @@ class HealthKitManager: ObservableObject {
     func getHealthData(for workoutId: UUID) -> WorkoutHealthData? {
         healthDataStore[workoutId]
     }
-    
+
     /// Request authorization to read health data
     func requestAuthorization() async throws {
         guard let healthStore = healthStore else {
             authorizationStatus = .unavailable
             throw HealthKitError.notAvailable
         }
-        
+
         do {
             try await healthStore.requestAuthorization(toShare: [], read: allReadTypes)
             checkAuthorizationStatus()
@@ -166,16 +167,17 @@ class HealthKitManager: ObservableObject {
             throw HealthKitError.authorizationFailed(error.localizedDescription)
         }
     }
-    
+
     /// Sync health data for a single workout
+    // swiftlint:disable function_body_length
     func syncHealthDataForWorkout(_ workout: Workout, persist: Bool = true) async throws -> WorkoutHealthData {
         guard healthStore != nil else {
             throw HealthKitError.notAvailable
         }
-        
+
         // Calculate workout time window
         let (startTime, endTime) = calculateWorkoutWindow(workout)
-        
+
         // Fetch all health data for this window
         var healthData = WorkoutHealthData(
             workoutId: workout.id,
@@ -183,7 +185,7 @@ class HealthKitManager: ObservableObject {
             workoutStartTime: startTime,
             workoutEndTime: endTime
         )
-        
+
         // Fetch heart rate data
         let heartRateSamples = try await fetchHeartRateSamples(from: startTime, to: endTime)
         healthData.heartRateSamples = heartRateSamples
@@ -193,7 +195,7 @@ class HealthKitManager: ObservableObject {
             healthData.maxHeartRate = values.max()
             healthData.minHeartRate = values.min()
         }
-        
+
         // Fetch calories
         healthData.activeCalories = try await fetchQuantitySum(
             type: .activeEnergyBurned,
@@ -201,14 +203,14 @@ class HealthKitManager: ObservableObject {
             to: endTime,
             unit: .kilocalorie()
         )
-        
+
         healthData.basalCalories = try await fetchQuantitySum(
             type: .basalEnergyBurned,
             from: startTime,
             to: endTime,
             unit: .kilocalorie()
         )
-        
+
         // Fetch distance
         healthData.distance = try await fetchQuantitySum(
             type: .distanceWalkingRunning,
@@ -216,7 +218,7 @@ class HealthKitManager: ObservableObject {
             to: endTime,
             unit: .meter()
         )
-        
+
         // Fetch step count
         if let steps = try await fetchQuantitySum(
             type: .stepCount,
@@ -226,7 +228,7 @@ class HealthKitManager: ObservableObject {
         ) {
             healthData.stepCount = Int(steps)
         }
-        
+
         // Fetch flights climbed
         if let flights = try await fetchQuantitySum(
             type: .flightsClimbed,
@@ -236,10 +238,10 @@ class HealthKitManager: ObservableObject {
         ) {
             healthData.flightsClimbed = Int(flights)
         }
-        
+
         // Fetch HRV samples
         healthData.hrvSamples = try await fetchHRVSamples(from: startTime, to: endTime)
-        
+
         // Fetch resting heart rate (from day of workout)
         healthData.restingHeartRate = try await fetchLatestQuantity(
             type: .restingHeartRate,
@@ -247,13 +249,13 @@ class HealthKitManager: ObservableObject {
             to: endTime,
             unit: HKUnit(from: "count/min")
         )
-        
+
         // Fetch blood oxygen samples
         healthData.bloodOxygenSamples = try await fetchBloodOxygenSamples(from: startTime, to: endTime)
-        
+
         // Fetch respiratory rate samples
         healthData.respiratoryRateSamples = try await fetchRespiratoryRateSamples(from: startTime, to: endTime)
-        
+
         // Fetch body measurements (from around workout time)
         let dayStart = Calendar.current.startOfDay(for: workout.date)
         let dayEnd = Calendar.current.date(byAdding: .day, value: 1, to: dayStart)
@@ -352,12 +354,12 @@ class HealthKitManager: ObservableObject {
             to: dayEnd,
             unit: HKUnit(from: "count/min")
         )
-        
+
         // Fetch Apple workout if it exists for this window
         if let appleWorkout = try await fetchAppleWorkout(from: startTime, to: endTime) {
             healthData.appleWorkoutType = appleWorkout.workoutActivityType.name
             healthData.appleWorkoutDuration = appleWorkout.duration
-            
+
             // Get additional metrics from Apple workout
             if let avgSpeed = appleWorkout.statistics(for: HKQuantityType(.runningSpeed))?.averageQuantity() {
                 healthData.avgSpeed = avgSpeed.doubleValue(for: HKUnit.meter().unitDivided(by: .second()))
@@ -366,7 +368,7 @@ class HealthKitManager: ObservableObject {
                 healthData.avgPower = avgPower.doubleValue(for: .watt())
             }
         }
-        
+
         // Store in local cache
         healthDataStore[workout.id] = healthData
         if persist {
@@ -374,17 +376,18 @@ class HealthKitManager: ObservableObject {
             lastSyncDate = Date()
             userDefaults.set(lastSyncDate, forKey: lastSyncKey)
         }
-        
+
         return healthData
     }
-    
+    // swiftlint:enable function_body_length
+
     // MARK: - Persistence
-    
+
     private func getDocumentsDirectory() -> URL {
         let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
         return paths[0]
     }
-    
+
     private var dataFileURL: URL {
         getDocumentsDirectory().appendingPathComponent("health_data_store.json")
     }
@@ -392,7 +395,7 @@ class HealthKitManager: ObservableObject {
     private var dailyDataFileURL: URL {
         getDocumentsDirectory().appendingPathComponent("daily_health_store.json")
     }
-    
+
     private func persistData() {
         let entries = Array(healthDataStore.values)
         let url = dataFileURL
@@ -418,7 +421,7 @@ class HealthKitManager: ObservableObject {
             }
         }
     }
-    
+
     private func loadPersistedData() {
         cleanupLegacyUserDefaults()
         do {
@@ -430,7 +433,7 @@ class HealthKitManager: ObservableObject {
         } catch {
             print("Failed to load persisted health data: \(error)")
         }
-        
+
         lastSyncDate = userDefaults.object(forKey: lastSyncKey) as? Date
     }
 
@@ -468,7 +471,7 @@ class HealthKitManager: ObservableObject {
 
         lastDailySyncDate = userDefaults.object(forKey: lastDailySyncKey) as? Date
     }
-    
+
     /// Clears all health data from memory and disk
     func clearAllData() {
         // Clear memory
@@ -481,12 +484,12 @@ class HealthKitManager: ObservableObject {
         lastDailySyncDate = nil
         dailySyncProgress = 0
         isDailySyncing = false
-        
+
         // Clear persistence
         cleanupLegacyUserDefaults()
         userDefaults.removeObject(forKey: lastSyncKey)
         userDefaults.removeObject(forKey: lastDailySyncKey)
-        
+
         do {
             if FileManager.default.fileExists(atPath: dataFileURL.path) {
                 try FileManager.default.removeItem(at: dataFileURL)
@@ -500,9 +503,9 @@ class HealthKitManager: ObservableObject {
             print("Failed to delete health data file: \(error)")
         }
     }
-    
+
     // MARK: - Sync Methods
-    
+
     @Published var syncedWorkoutsCount: Int = 0
 
     /// Lightweight background sync for the most recent workouts that are missing data.
@@ -535,22 +538,22 @@ class HealthKitManager: ObservableObject {
         userDefaults.set(lastSyncDate, forKey: lastSyncKey)
         persistData()
     }
-    
+
     /// Sync health data for all workouts
     func syncAllWorkouts(_ workouts: [Workout]) async throws -> [WorkoutHealthData] {
         guard isHealthKitAvailable() else {
             throw HealthKitError.notAvailable
         }
-        
+
         isSyncing = true
         defer { isSyncing = false }
         syncProgress = 0
         syncedWorkoutsCount = 0
         syncError = nil
-        
+
         var results: [WorkoutHealthData] = []
         let total = Double(workouts.count)
-        
+
         for (index, workout) in workouts.enumerated() {
             do {
                 let healthData = try await syncHealthDataForWorkout(workout, persist: false)
@@ -558,20 +561,20 @@ class HealthKitManager: ObservableObject {
             } catch {
                 print("Failed to sync workout \(workout.id): \(error)")
             }
-            
+
             // Update progress on main actor
             await MainActor.run {
                 self.syncedWorkoutsCount = index + 1
                 self.syncProgress = Double(index + 1) / total
             }
         }
-        
+
         lastSyncDate = Date()
         userDefaults.set(lastSyncDate, forKey: lastSyncKey)
-        
+
         // Persist final result
         persistData()
-        
+
         return results
     }
 
@@ -1076,6 +1079,7 @@ class HealthKitManager: ObservableObject {
         }
     }
 
+    // swiftlint:disable function_body_length
     private func fetchDailySleepSummaries(from start: Date, to end: Date) async throws -> [Date: SleepSummary] {
         guard let healthStore = healthStore else {
             throw HealthKitError.notAvailable
@@ -1282,6 +1286,7 @@ class HealthKitManager: ObservableObject {
             healthStore.execute(query)
         }
     }
+    // swiftlint:enable function_body_length
 
     private func enumerateDays(in range: DateInterval) -> [Date] {
         let calendar = Calendar.current
@@ -1391,13 +1396,15 @@ class HealthKitManager: ObservableObject {
 
 }
 
+// swiftlint:enable file_length type_body_length
+
 // MARK: - Errors
 
 enum HealthKitError: LocalizedError {
     case notAvailable
     case authorizationFailed(String)
     case queryFailed(String)
-    
+
     var errorDescription: String? {
         switch self {
         case .notAvailable:

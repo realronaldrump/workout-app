@@ -20,6 +20,7 @@ struct WorkoutCSVExporter {
     /// - Workout-level fields are only populated on the first set row of each workout.
     /// - Exercise + muscle tags are only populated on the first set row of each exercise.
     /// - Distance/Seconds columns are only included if any set uses them.
+    // swiftlint:disable:next cyclomatic_complexity
     nonisolated static func exportWorkoutHistoryCSV(
         workouts: [Workout],
         startDate: Date,

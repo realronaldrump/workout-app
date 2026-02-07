@@ -3,13 +3,13 @@ import Combine
 
 class ExerciseMetadataManager: ObservableObject {
     static let shared = ExerciseMetadataManager()
-    
+
     /// User overrides. If a key is present with an empty array, that exercise is explicitly untagged.
     @Published private(set) var muscleTagOverrides: [String: [MuscleTag]] = [:]
-    
+
     private let userDefaults = UserDefaults.standard
     private let metadataKey = "ExerciseMetadata"
-    
+
     private let defaultMappings: [String: [MuscleTag]] = [
         // Chest
         "Chest Press (Machine)": [.builtIn(.chest)],
@@ -18,7 +18,7 @@ class ExerciseMetadataManager: ObservableObject {
         "Dumbbell Press": [.builtIn(.chest)],
         "Chest Fly": [.builtIn(.chest)],
         "Push Ups": [.builtIn(.chest)],
-        
+
         // Back
         "Lat Pulldown (Machine)": [.builtIn(.back)],
         "Seated Row (Machine)": [.builtIn(.back)],
@@ -28,50 +28,50 @@ class ExerciseMetadataManager: ObservableObject {
         "Barbell Row": [.builtIn(.back)],
         "Deadlift (Barbell)": [.builtIn(.back)],
         "Reverse Fly (Machine)": [.builtIn(.back)],
-        
+
         // Shoulders
         "Shoulder Press (Machine)": [.builtIn(.shoulders)],
         "Overhead Press (Barbell)": [.builtIn(.shoulders)],
         "Lateral Raise (Machine)": [.builtIn(.shoulders)],
-        
+
         // Biceps
         "Bicep Curl (Machine)": [.builtIn(.biceps)],
         "Preacher Curl (Machine)": [.builtIn(.biceps)],
-        
+
         // Triceps
         "Triceps Press Machine": [.builtIn(.triceps)],
         "Triceps Extension (Machine)": [.builtIn(.triceps)],
-        
+
         // Quads
         "Leg Extension (Machine)": [.builtIn(.quads)],
         "Seated Leg Press (Machine)": [.builtIn(.quads)],
         "Squat (Barbell)": [.builtIn(.quads)],
         "Leg Press": [.builtIn(.quads)],
         "Lunges": [.builtIn(.quads)],
-        
+
         // Hamstrings
         "Seated Leg Curl (Machine)": [.builtIn(.hamstrings)],
         "Lying Leg Curl (Machine)": [.builtIn(.hamstrings)],
-        
+
         // Glutes
         "Hip Adductor (Machine)": [.builtIn(.glutes)],
         "Hip Abductor (Machine)": [.builtIn(.glutes)],
         "Glute Kickback (Machine)": [.builtIn(.glutes)],
-        
+
         // Calves
         "Calf Extension Machine": [.builtIn(.calves)],
-        
+
         // Cardio
         "Running (Treadmill)": [.builtIn(.cardio)],
         "Stair stepper": [.builtIn(.cardio)],
         "Cycling": [.builtIn(.cardio)],
         "Elliptical": [.builtIn(.cardio)]
     ]
-    
+
     init() {
         loadMappings()
     }
-    
+
     func resolvedTags(for exerciseName: String) -> [MuscleTag] {
         if let override = muscleTagOverrides[exerciseName] {
             return override
@@ -153,22 +153,22 @@ class ExerciseMetadataManager: ObservableObject {
         let grouped = Dictionary(grouping: all, by: { $0.id })
 
         let representatives = grouped.values.compactMap { variants -> MuscleTag? in
-            variants.sorted { lhs, rhs in
+            variants.min { lhs, rhs in
                 let insensitive = lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName)
                 if insensitive != .orderedSame { return insensitive == .orderedAscending }
                 let sensitive = lhs.displayName.localizedCompare(rhs.displayName)
                 if sensitive != .orderedSame { return sensitive == .orderedAscending }
                 return lhs.value.count < rhs.value.count
-            }.first
+            }
         }
 
         return representatives.sorted {
             $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
         }
     }
-    
+
     // MARK: - Persistence
-    
+
     private func loadMappings() {
         guard let data = userDefaults.data(forKey: metadataKey) else { return }
 
@@ -184,7 +184,7 @@ class ExerciseMetadataManager: ObservableObject {
             return
         }
     }
-    
+
     private func saveMappings() {
         if let data = try? JSONEncoder().encode(muscleTagOverrides) {
             userDefaults.set(data, forKey: metadataKey)
@@ -196,7 +196,7 @@ class ExerciseMetadataManager: ObservableObject {
         let cleaned: [MuscleTag] = tags.compactMap { tag in
             switch tag.kind {
             case .builtIn:
-                guard let _ = tag.builtInGroup else { return nil }
+                guard tag.builtInGroup != nil else { return nil }
                 return tag
             case .custom:
                 guard !tag.displayName.isEmpty else { return nil }
@@ -211,8 +211,8 @@ class ExerciseMetadataManager: ObservableObject {
 
         return cleaned.sorted { lhs, rhs in
             switch (lhs.builtInGroup, rhs.builtInGroup) {
-            case let (l?, r?):
-                return (builtInOrder[l] ?? 0) < (builtInOrder[r] ?? 0)
+            case let (left?, right?):
+                return (builtInOrder[left] ?? 0) < (builtInOrder[right] ?? 0)
             case (nil, nil):
                 return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
             case (nil, _?):

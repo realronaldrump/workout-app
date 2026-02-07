@@ -24,27 +24,27 @@ struct Exercise: Identifiable, Hashable {
         self.name = name
         self.sets = sets
     }
-    
+
     var maxWeight: Double {
         sets.map { $0.weight }.max() ?? 0
     }
-    
+
     nonisolated var totalVolume: Double {
         sets.reduce(0) { $0 + ($1.weight * Double($1.reps)) }
     }
-    
+
     var averageReps: Double {
         guard !sets.isEmpty else { return 0 }
         return Double(sets.reduce(0) { $0 + $1.reps }) / Double(sets.count)
     }
-    
+
     var oneRepMax: Double {
-        guard let bestSet = sets.max(by: { 
+        guard let bestSet = sets.max(by: {
             calculateOneRepMax(weight: $0.weight, reps: $0.reps) < calculateOneRepMax(weight: $1.weight, reps: $1.reps)
         }) else { return 0 }
         return calculateOneRepMax(weight: bestSet.weight, reps: bestSet.reps)
     }
-    
+
     private func calculateOneRepMax(weight: Double, reps: Int) -> Double {
         // Epley formula
         guard reps > 0 else { return weight }
@@ -72,11 +72,11 @@ struct Workout: Identifiable, Hashable {
         self.duration = duration
         self.exercises = exercises
     }
-    
+
     nonisolated var totalVolume: Double {
         exercises.reduce(0) { $0 + $1.totalVolume }
     }
-    
+
     var totalSets: Int {
         exercises.reduce(0) { $0 + $1.sets.count }
     }

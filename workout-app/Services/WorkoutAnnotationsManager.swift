@@ -15,6 +15,7 @@ final class WorkoutAnnotationsManager: ObservableObject {
         annotations[workoutId]
     }
 
+    // swiftlint:disable:next function_parameter_count
     func upsertAnnotation(
         for workoutId: UUID,
         stress: StressLevel?,

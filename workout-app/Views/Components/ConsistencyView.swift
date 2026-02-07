@@ -4,8 +4,8 @@ struct ConsistencyView: View {
     let stats: WorkoutStats
     let workouts: [Workout]
     var timeRange: TimeRangeOption = .month
-    var dateRange: DateInterval? = nil
-    var onTap: (() -> Void)? = nil
+    var dateRange: DateInterval?
+    var onTap: (() -> Void)?
 
     enum TimeRangeOption {
         case week, month, threeMonths, year, allTime

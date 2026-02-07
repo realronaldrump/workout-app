@@ -1,7 +1,20 @@
 import Foundation
 import SwiftUI
 
+// swiftlint:disable file_length type_body_length
 struct WorkoutAnalytics {
+    private struct RepRangeDescriptor {
+        let label: String
+        let range: ClosedRange<Int>
+        let tint: Color
+    }
+
+    private struct IntensityZoneDescriptor {
+        let label: String
+        let range: ClosedRange<Double>
+        let tint: Color
+    }
+
     nonisolated static func durationMinutes(from duration: String) -> Double {
         let trimmed = duration.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !trimmed.isEmpty else { return 0 }
@@ -57,13 +70,13 @@ struct WorkoutAnalytics {
 
     static func repRangeDistribution(for workouts: [Workout]) -> [RepRangeBucket] {
         let allSets = workouts.flatMap { $0.exercises }.flatMap { $0.sets }
-        let buckets: [(label: String, range: ClosedRange<Int>, tint: Color)] = [
-            ("1-3", 1...3, Theme.Colors.error),
-            ("4-6", 4...6, Theme.Colors.warning),
-            ("7-10", 7...10, Theme.Colors.accent),
-            ("11-15", 11...15, Theme.Colors.accentSecondary),
-            ("16-20", 16...20, Theme.Colors.success),
-            ("21+", 21...100, Theme.Colors.textSecondary)
+        let buckets: [RepRangeDescriptor] = [
+            RepRangeDescriptor(label: "1-3", range: 1...3, tint: Theme.Colors.error),
+            RepRangeDescriptor(label: "4-6", range: 4...6, tint: Theme.Colors.warning),
+            RepRangeDescriptor(label: "7-10", range: 7...10, tint: Theme.Colors.accent),
+            RepRangeDescriptor(label: "11-15", range: 11...15, tint: Theme.Colors.accentSecondary),
+            RepRangeDescriptor(label: "16-20", range: 16...20, tint: Theme.Colors.success),
+            RepRangeDescriptor(label: "21+", range: 21...100, tint: Theme.Colors.textSecondary)
         ]
 
         let total = max(allSets.count, 1)
@@ -87,12 +100,12 @@ struct WorkoutAnalytics {
         }
 
         let allSets = workouts.flatMap { $0.exercises }.flatMap { $0.sets }
-        let zones: [(label: String, range: ClosedRange<Double>, tint: Color)] = [
-            ("<50%", 0.0...0.49, Theme.Colors.textSecondary),
-            ("50-65%", 0.50...0.65, Theme.Colors.accentSecondary),
-            ("65-75%", 0.66...0.75, Theme.Colors.accent),
-            ("75-85%", 0.76...0.85, Theme.Colors.warning),
-            ("85%+", 0.86...1.5, Theme.Colors.error)
+        let zones: [IntensityZoneDescriptor] = [
+            IntensityZoneDescriptor(label: "<50%", range: 0.0...0.49, tint: Theme.Colors.textSecondary),
+            IntensityZoneDescriptor(label: "50-65%", range: 0.50...0.65, tint: Theme.Colors.accentSecondary),
+            IntensityZoneDescriptor(label: "65-75%", range: 0.66...0.75, tint: Theme.Colors.accent),
+            IntensityZoneDescriptor(label: "75-85%", range: 0.76...0.85, tint: Theme.Colors.warning),
+            IntensityZoneDescriptor(label: "85%+", range: 0.86...1.5, tint: Theme.Colors.error)
         ]
 
         var zoneCounts = Array(repeating: 0, count: zones.count)
@@ -241,10 +254,11 @@ struct WorkoutAnalytics {
         return "Last \(days)d"
     }
 
+    // swiftlint:disable:next cyclomatic_complexity
     static func consistencyIssues(for workouts: [Workout]) -> [ConsistencyIssue] {
         guard !workouts.isEmpty else { return [] }
         let calendar = Calendar.current
-        
+
         let sorted = workouts.sorted { $0.date < $1.date }
         let firstDate = sorted.first?.date ?? Date()
         let lastDate = sorted.last?.date ?? firstDate
@@ -578,6 +592,7 @@ struct WorkoutAnalytics {
         return insights
     }
 
+    // swiftlint:disable:next cyclomatic_complexity
     static func correlationDetail(
         kind: CorrelationKind,
         workouts: [Workout],

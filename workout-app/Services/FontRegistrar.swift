@@ -15,7 +15,7 @@ enum FontRegistrar {
         let candidateURLs: [URL?] = [
             Bundle.main.url(forResource: name, withExtension: ext),
             Bundle.main.url(forResource: name, withExtension: ext, subdirectory: "Resources/Fonts"),
-            Bundle.main.url(forResource: name, withExtension: ext, subdirectory: "Fonts"),
+            Bundle.main.url(forResource: name, withExtension: ext, subdirectory: "Fonts")
         ]
 
         guard let url = candidateURLs.compactMap({ $0 }).first else {
@@ -27,4 +27,3 @@ enum FontRegistrar {
         CTFontManagerRegisterFontsForURL(url as CFURL, .process, &error)
     }
 }
-
