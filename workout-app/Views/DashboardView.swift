@@ -603,7 +603,10 @@ struct DashboardView: View {
             do {
                 guard let directoryURL else { return Result<[WorkoutSet], Error>.success([]) }
 
-                let files = iCloudDocumentManager.listWorkoutFiles(in: directoryURL)
+                let importFiles = iCloudDocumentManager.listStrongImportFiles(in: directoryURL)
+                let files = (importFiles.isEmpty
+                    ? iCloudDocumentManager.listWorkoutFiles(in: directoryURL)
+                    : importFiles)
                     .sorted { url1, url2 in
                         let date1 = (try? url1.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? Date.distantPast
                         let date2 = (try? url2.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? Date.distantPast

@@ -122,7 +122,7 @@ struct WorkoutAnalytics {
     static func progressContributions(
         workouts: [Workout],
         weeks: Int,
-        mappings: [String: MuscleGroup]
+        mappings: [String: [MuscleTag]]
     ) -> [ProgressContribution] {
         guard let endDate = workouts.map({ $0.date }).max() else { return [] }
         let calendar = Calendar.current
@@ -149,22 +149,23 @@ struct WorkoutAnalytics {
             )
         }
 
-        var muscleTotals: [MuscleGroup: Double] = [:]
+        var muscleTotals: [MuscleTag: Double] = [:]
         for (exerciseName, delta) in exerciseDeltas {
-            if let group = mappings[exerciseName] {
-                muscleTotals[group, default: 0] += delta
+            let tags = mappings[exerciseName] ?? []
+            for tag in tags {
+                muscleTotals[tag, default: 0] += delta
             }
         }
 
-        let muscleContributions = muscleTotals.map { group, delta in
+        let muscleContributions = muscleTotals.map { tag, delta in
             ProgressContribution(
-                name: group.shortName,
+                name: tag.shortName,
                 delta: delta,
                 current: delta,
                 previous: 0,
                 percentChange: 0,
                 category: .muscleGroup,
-                tint: group.color
+                tint: tag.tint
             )
         }
 

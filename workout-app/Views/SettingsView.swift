@@ -61,6 +61,35 @@ struct SettingsView: View {
                         }
                         
                         Divider().padding(.leading, 50)
+
+                        NavigationLink(destination: ExportWorkoutsView(dataManager: dataManager, iCloudManager: iCloudManager)) {
+                            HStack {
+                                Image(systemName: "square.and.arrow.up")
+                                    .foregroundStyle(.white)
+                                    .frame(width: 30, height: 30)
+                                    .background(Theme.Colors.accentSecondary)
+                                    .cornerRadius(6)
+
+                                VStack(alignment: .leading) {
+                                    Text("Export Data")
+                                        .font(Theme.Typography.body)
+                                        .foregroundStyle(Theme.Colors.textPrimary)
+                                    Text("CSV backup")
+                                        .font(Theme.Typography.caption)
+                                        .foregroundStyle(Theme.Colors.textSecondary)
+                                }
+
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                                    .foregroundStyle(Theme.Colors.textTertiary)
+                            }
+                            .padding()
+                            .softCard()
+                        }
+                        .buttonStyle(PlainButtonStyle())
+
+                        Divider().padding(.leading, 50)
                         
                         SettingsRow(
                             icon: "heart.fill",

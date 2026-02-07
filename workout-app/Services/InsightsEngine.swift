@@ -25,7 +25,8 @@ class InsightsEngine: ObservableObject {
     func generateInsights() async {
         // Capture snapshot of data to pass to background tasks
         let workoutsSnapshot = dataManager.workouts
-        let muscleGroupMappings = ExerciseMetadataManager.shared.muscleGroupMappings
+        let exerciseNames = Set(workoutsSnapshot.flatMap { $0.exercises.map(\.name) })
+        let muscleTagMappings = ExerciseMetadataManager.shared.resolvedMappings(for: exerciseNames)
         let annotationsSnapshot = annotationsProvider()
         let gymNameSnapshot = gymNameProvider()
         
@@ -53,7 +54,7 @@ class InsightsEngine: ObservableObject {
                 
                 // Muscle Balance
                 group.addTask {
-                    if let balance = self.analyzeMuscleBalance(in: workoutsSnapshot, mappings: muscleGroupMappings) {
+                    if let balance = self.analyzeMuscleBalance(in: workoutsSnapshot, mappings: muscleTagMappings) {
                         return [balance]
                     }
                     return []
@@ -317,7 +318,7 @@ class InsightsEngine: ObservableObject {
     
     // MARK: - Muscle Balance Analysis
     
-    private nonisolated func analyzeMuscleBalance(in workouts: [Workout], mappings: [String: MuscleGroup]) -> Insight? {
+    private nonisolated func analyzeMuscleBalance(in workouts: [Workout], mappings: [String: [MuscleTag]]) -> Insight? {
         let muscleGroups = mappings
         
         guard !muscleGroups.isEmpty else { return nil }
@@ -331,7 +332,9 @@ class InsightsEngine: ObservableObject {
         
         for workout in recentWorkouts {
             for exercise in workout.exercises {
-                if let group = muscleGroups[exercise.name] {
+                let tags = muscleGroups[exercise.name] ?? []
+                for tag in tags {
+                    guard let group = tag.builtInGroup else { continue }
                     muscleGroupSets[group, default: 0] += exercise.sets.count
                 }
             }

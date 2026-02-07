@@ -20,13 +20,9 @@ struct PerformanceLabView: View {
         dataManager.workouts
     }
 
-    private var muscleMapping: [String: MuscleGroup] {
+    private var muscleMapping: [String: [MuscleTag]] {
         let names = Set(workouts.flatMap { $0.exercises.map { $0.name } })
-        return names.reduce(into: [String: MuscleGroup]()) { result, name in
-            if let group = ExerciseMetadataManager.shared.getMuscleGroup(for: name) {
-                result[name] = group
-            }
-        }
+        return ExerciseMetadataManager.shared.resolvedMappings(for: names)
     }
 
     var body: some View {
@@ -663,25 +659,28 @@ private struct ConsistencyIssueSection: View {
 
 private struct WeeklyMuscleVolumeChart: View {
     let workouts: [Workout]
-    let mappings: [String: MuscleGroup]
+    let mappings: [String: [MuscleTag]]
 
     private struct WeeklyPoint: Identifiable {
         let id = UUID()
         let weekStart: Date
-        let group: MuscleGroup
+        let group: MuscleTag
         let volume: Double
     }
 
     private var points: [WeeklyPoint] {
         let calendar = Calendar.current
-        var buckets: [Date: [MuscleGroup: Double]] = [:]
+        var buckets: [Date: [MuscleTag: Double]] = [:]
 
         for workout in workouts {
             let components = calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: workout.date)
             guard let weekStart = calendar.date(from: components) else { continue }
             for exercise in workout.exercises {
-                guard let group = mappings[exercise.name] else { continue }
-                buckets[weekStart, default: [:]][group, default: 0] += exercise.totalVolume
+                let tags = mappings[exercise.name] ?? []
+                guard !tags.isEmpty else { continue }
+                for tag in tags {
+                    buckets[weekStart, default: [:]][tag, default: 0] += exercise.totalVolume
+                }
             }
         }
 
@@ -706,7 +705,7 @@ private struct WeeklyMuscleVolumeChart: View {
                     x: .value("Week", point.weekStart),
                     y: .value("Volume", point.volume)
                 )
-                .foregroundStyle(point.group.color)
+                .foregroundStyle(point.group.tint)
             }
             .chartXAxis {
                 AxisMarks(values: .stride(by: .weekOfYear, count: 2)) { _ in

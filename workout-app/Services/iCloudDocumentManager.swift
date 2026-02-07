@@ -143,6 +143,13 @@ class iCloudDocumentManager: ObservableObject {
         }
     }
 
+    /// Strong imports are the canonical source the app auto-loads on launch.
+    /// Exported CSVs share the same extension but may include partial ranges.
+    nonisolated static func listStrongImportFiles(in directory: URL) -> [URL] {
+        listWorkoutFiles(in: directory)
+            .filter { $0.lastPathComponent.hasPrefix("strong_workouts_") }
+    }
+
     nonisolated static func saveWorkoutFile(data: Data, in directory: URL, fileName: String) throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let fileURL = directory.appendingPathComponent(fileName)

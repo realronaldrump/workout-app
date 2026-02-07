@@ -7,10 +7,10 @@ struct MuscleHeatmapView: View {
     let dateRange: DateInterval
     var onOpen: (() -> Void)? = nil
     
-    @State private var selectedMuscleGroup: MuscleGroup?
+    @State private var selectedMuscleTag: MuscleTag?
     @State private var isAppearing = false
     
-    private var muscleGroupStats: [MuscleGroup: MuscleStats] {
+    private var muscleGroupStats: [MuscleTag: MuscleStats] {
         calculateMuscleStats()
     }
     
@@ -32,6 +32,13 @@ struct MuscleHeatmapView: View {
     }
     
     var body: some View {
+        let stats = muscleGroupStats
+        let builtInTags = MuscleGroup.allCases.map { MuscleTag.builtIn($0) }
+        let customTags = stats.keys
+            .filter { $0.kind == .custom }
+            .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+        let tags = builtInTags + customTags
+
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             // Header
             HStack {
@@ -68,21 +75,21 @@ struct MuscleHeatmapView: View {
                 GridItem(.flexible()),
                 GridItem(.flexible())
             ], spacing: Theme.Spacing.md) {
-                ForEach(MuscleGroup.allCases, id: \.self) { group in
+                ForEach(tags, id: \.id) { tag in
                     MuscleGroupTile(
-                        muscleGroup: group,
-                        stats: muscleGroupStats[group],
-                        isSelected: selectedMuscleGroup == group
+                        muscleGroup: tag,
+                        stats: stats[tag],
+                        isSelected: selectedMuscleTag?.id == tag.id
                     ) {
                         withAnimation(Theme.Animation.spring) {
-                            selectedMuscleGroup = selectedMuscleGroup == group ? nil : group
+                            selectedMuscleTag = selectedMuscleTag?.id == tag.id ? nil : tag
                         }
                     }
                 }
             }
             
             // Selected detail
-            if let selected = selectedMuscleGroup, let stats = muscleGroupStats[selected] {
+            if let selected = selectedMuscleTag, let stats = stats[selected] {
                 MuscleDetailView(muscleGroup: selected, stats: stats)
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
@@ -97,27 +104,30 @@ struct MuscleHeatmapView: View {
         }
     }
     
-    private func calculateMuscleStats() -> [MuscleGroup: MuscleStats] {
+    private func calculateMuscleStats() -> [MuscleTag: MuscleStats] {
         let recentWorkouts = dataManager.workouts.filter { dateRange.contains($0.date) }
-        var muscleGroupData: [MuscleGroup: (sets: Int, exercises: Set<String>, lastDate: Date?)] = [:]
+        var muscleGroupData: [MuscleTag: (sets: Int, exercises: Set<String>, lastDate: Date?)] = [:]
         
         for group in MuscleGroup.allCases {
-            muscleGroupData[group] = (sets: 0, exercises: [], lastDate: nil)
+            muscleGroupData[MuscleTag.builtIn(group)] = (sets: 0, exercises: [], lastDate: nil)
         }
         
         for workout in recentWorkouts {
             for exercise in workout.exercises {
-                guard let group = ExerciseMetadataManager.shared.getMuscleGroup(for: exercise.name) else { continue }
-                if var current = muscleGroupData[group] {
+                let tags = ExerciseMetadataManager.shared.resolvedTags(for: exercise.name)
+                guard !tags.isEmpty else { continue }
+
+                for tag in tags {
+                    var current = muscleGroupData[tag] ?? (sets: 0, exercises: [], lastDate: nil)
                     current.sets += exercise.sets.count
                     current.exercises.insert(exercise.name)
                     if current.lastDate.map({ workout.date > $0 }) ?? true { current.lastDate = workout.date }
-                    muscleGroupData[group] = current
+                    muscleGroupData[tag] = current
                 }
             }
         }
         
-        var result: [MuscleGroup: MuscleStats] = [:]
+        var result: [MuscleTag: MuscleStats] = [:]
         let maxSets = muscleGroupData.values.map { $0.sets }.max() ?? 1
         
         for (group, data) in muscleGroupData {
@@ -144,13 +154,13 @@ struct MuscleStats {
 }
 
 struct MuscleGroupTile: View {
-    let muscleGroup: MuscleGroup
+    let muscleGroup: MuscleTag
     let stats: MuscleStats?
     let isSelected: Bool
     let onTap: () -> Void
     
     private var color: Color {
-        muscleGroup.color
+        muscleGroup.tint
     }
     
     private var opacity: Double {
@@ -198,7 +208,7 @@ struct MuscleGroupTile: View {
 }
 
 struct MuscleDetailView: View {
-    let muscleGroup: MuscleGroup
+    let muscleGroup: MuscleTag
     let stats: MuscleStats
     
     var body: some View {
@@ -223,7 +233,7 @@ struct MuscleDetailView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("\(stats.totalSets)")
                         .font(Theme.Typography.number)
-                        .foregroundColor(muscleGroup.color)
+                        .foregroundColor(muscleGroup.tint)
                     Text("sets")
                         .font(Theme.Typography.caption)
                         .foregroundColor(Theme.Colors.textSecondary)
@@ -244,7 +254,7 @@ struct MuscleDetailView: View {
                 HStack(spacing: 3) {
                     ForEach(0..<5, id: \.self) { i in
                         RoundedRectangle(cornerRadius: 2)
-                            .fill(Double(i) / 5.0 < stats.intensity ? muscleGroup.color : Theme.Colors.surface)
+                            .fill(Double(i) / 5.0 < stats.intensity ? muscleGroup.tint : Theme.Colors.surface)
                             .frame(width: 8, height: 20)
                     }
                 }
@@ -269,39 +279,5 @@ struct MuscleDetailView: View {
         }
         .padding(Theme.Spacing.lg)
         .softCard(elevation: 2)
-    }
-}
-
-extension MuscleGroup {
-    var iconName: String {
-        switch self {
-        case .chest: return "heart.fill"
-        case .back: return "arrow.left.and.right"
-        case .shoulders: return "figure.arms.open"
-        case .biceps: return "figure.strengthtraining.functional"
-        case .triceps: return "arrow.up.right"
-        case .quads: return "figure.walk"
-        case .hamstrings: return "figure.run"
-        case .glutes: return "figure.cooldown"
-        case .calves: return "shoeprints.fill"
-        case .core: return "circle.hexagongrid"
-        case .cardio: return "heart.text.square"
-        }
-    }
-    
-    var shortName: String {
-        switch self {
-        case .chest: return "Chest"
-        case .back: return "Back"
-        case .shoulders: return "Shoulders"
-        case .biceps: return "Biceps"
-        case .triceps: return "Triceps"
-        case .quads: return "Quads"
-        case .hamstrings: return "Hams"
-        case .glutes: return "Glutes"
-        case .calves: return "Calves"
-        case .core: return "Core"
-        case .cardio: return "Cardio"
-        }
     }
 }
