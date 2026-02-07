@@ -15,11 +15,11 @@ struct WorkoutDetailView: View {
     @State private var showingSessionInsights = false
     @State private var showingWorkoutHealthInsights = false
     @State private var showingFatigueInsights = false
-    
+
     var body: some View {
         ZStack {
             AdaptiveBackground()
-            
+
             ScrollView {
                 VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
                     // Workout summary card
@@ -35,9 +35,9 @@ struct WorkoutDetailView: View {
                                     .font(Theme.Typography.metric)
                                     .foregroundColor(Theme.Colors.textPrimary)
                             }
-                            
+
                             Spacer()
-                            
+
                             VStack(alignment: .center, spacing: 4) {
                                 Text("Exercises")
                                     .font(Theme.Typography.caption)
@@ -46,9 +46,9 @@ struct WorkoutDetailView: View {
                                     .font(Theme.Typography.metric)
                                     .foregroundColor(Theme.Colors.textPrimary)
                             }
-                            
+
                             Spacer()
-                            
+
                             VStack(alignment: .trailing, spacing: 4) {
                                 Text("Total Volume")
                                     .font(Theme.Typography.caption)
@@ -63,7 +63,7 @@ struct WorkoutDetailView: View {
                     }
 
                     GymAssignmentCard(workout: workout)
-                    
+
                     // Health Data Section
                     if healthManager.isHealthKitAvailable() {
                         healthDataSection
@@ -76,13 +76,13 @@ struct WorkoutDetailView: View {
                     }) {
                         FatigueLensView(summary: fatigueSummary)
                     }
-                    
+
                     // Exercises list
                     VStack(alignment: .leading, spacing: 16) {
                         Text("Exercises")
                             .font(Theme.Typography.title2)
                             .foregroundColor(Theme.Colors.textPrimary)
-                        
+
                         ForEach(workout.exercises) { exercise in
                             ExerciseCard(
                                 exercise: exercise,
@@ -138,9 +138,9 @@ struct WorkoutDetailView: View {
             FatigueLensDetailView(workout: workout, summary: fatigueSummary)
         }
     }
-    
+
     // MARK: - Health Data Section
-    
+
     @ViewBuilder
     private var healthDataSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
@@ -148,12 +148,12 @@ struct WorkoutDetailView: View {
                 Text("Health Data")
                     .font(Theme.Typography.title2)
                     .foregroundColor(Theme.Colors.textPrimary)
-                
+
                 Spacer()
-                
+
                 syncButton
             }
-            
+
             if let data = healthManager.getHealthData(for: workout.id) {
                 MetricTileButton(action: {
                     showingWorkoutHealthInsights = true
@@ -170,10 +170,10 @@ struct WorkoutDetailView: View {
     private var fatigueSummary: FatigueSummary {
         WorkoutAnalytics.fatigueSummary(for: workout, allWorkouts: dataManager.workouts)
     }
-    
+
     private var syncButton: some View {
         let hasData = healthManager.getHealthData(for: workout.id) != nil
-        
+
         return Button(action: syncHealthData) {
             HStack(spacing: 6) {
                 if healthManager.isSyncing {
@@ -182,7 +182,7 @@ struct WorkoutDetailView: View {
                     Image(systemName: hasData ? "arrow.triangle.2.circlepath" : "heart.text.square")
                         .font(.system(size: 14))
                 }
-                
+
                 Text(hasData ? "Re-sync" : "Sync")
                     .font(Theme.Typography.subheadline)
             }
@@ -197,17 +197,17 @@ struct WorkoutDetailView: View {
         .disabled(healthManager.isSyncing)
         .opacity(healthManager.isSyncing ? 0.7 : 1.0)
     }
-    
+
     private var noHealthDataCard: some View {
         VStack(spacing: Theme.Spacing.md) {
             Image(systemName: "heart.text.square")
                 .font(.system(size: 40))
                 .foregroundColor(Theme.Colors.textTertiary)
-            
+
             Text("health data 0")
                 .font(Theme.Typography.headline)
                 .foregroundColor(Theme.Colors.textSecondary)
-            
+
             Text("sync required")
                 .font(Theme.Typography.caption)
                 .foregroundColor(Theme.Colors.textTertiary)
@@ -217,9 +217,9 @@ struct WorkoutDetailView: View {
         .padding(Theme.Spacing.xl)
         .softCard(elevation: 2)
     }
-    
+
     // MARK: - Actions
-    
+
     private func syncHealthData() {
         Task {
             do {
@@ -227,7 +227,7 @@ struct WorkoutDetailView: View {
                 if healthManager.authorizationStatus != .authorized {
                     try await healthManager.requestAuthorization()
                 }
-                
+
                 _ = try await healthManager.syncHealthDataForWorkout(workout)
                 Haptics.notify(.success)
             } catch {
@@ -236,7 +236,7 @@ struct WorkoutDetailView: View {
             }
         }
     }
-    
+
     private func formatVolume(_ volume: Double) -> String {
         if volume >= 1000 {
             return String(format: "%.1fk lbs", volume / 1000)
@@ -251,7 +251,7 @@ struct ExerciseCard: View {
     var onViewHistory: ((String) -> Void)? = nil
     var onQuickStart: ((String) -> Void)? = nil
     @State private var isExpanded = false
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Button(action: {
@@ -264,27 +264,27 @@ struct ExerciseCard: View {
                             .font(Theme.Typography.condensed)
                             .tracking(-0.2)
                             .foregroundColor(Theme.Colors.textPrimary)
-                        
+
                         HStack(spacing: 16) {
                             Label("\(exercise.sets.count) sets", systemImage: "number")
                                 .font(Theme.Typography.caption)
                                 .foregroundColor(Theme.Colors.textSecondary)
-                            
+
                             Label(formatVolume(exercise.totalVolume), systemImage: "scalemass")
                                 .font(Theme.Typography.caption)
                                 .foregroundColor(Theme.Colors.textSecondary)
                         }
                     }
-                    
+
                     Spacer()
-                    
+
                     Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                         .font(.caption)
                         .foregroundColor(Theme.Colors.textTertiary)
                 }
             }
             .buttonStyle(PlainButtonStyle())
-            
+
             if isExpanded {
                 VStack(alignment: .leading, spacing: 8) {
                     ForEach(Array(exercise.sets.enumerated()), id: \.offset) { index, set in
@@ -293,19 +293,19 @@ struct ExerciseCard: View {
                                 .font(Theme.Typography.caption)
                                 .foregroundColor(Theme.Colors.textTertiary)
                                 .frame(width: 50, alignment: .leading)
-                            
+
                             Text("\(Int(set.weight)) lbs × \(set.reps)")
                                 .font(Theme.Typography.body)
                                 .monospacedDigit()
-                            
+
                             Spacer()
-                            
+
                             Text("\(Int(set.weight * Double(set.reps))) lbs")
                                 .font(Theme.Typography.caption)
                                 .foregroundColor(Theme.Colors.textSecondary)
                         }
                         .padding(.horizontal)
-                        
+
                         if index < exercise.sets.count - 1 {
                             Divider()
                         }
@@ -328,7 +328,7 @@ struct ExerciseCard: View {
             }
         }
     }
-    
+
     private func formatVolume(_ volume: Double) -> String {
         if volume >= 1000 {
             return String(format: "%.1fk", volume / 1000)

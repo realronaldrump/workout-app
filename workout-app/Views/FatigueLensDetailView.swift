@@ -155,4 +155,3 @@ private struct MetricPill: View {
         .softCard(elevation: 1)
     }
 }
-

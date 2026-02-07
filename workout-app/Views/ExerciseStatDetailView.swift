@@ -364,4 +364,3 @@ private struct EmptyStatCard: View {
         .softCard(elevation: 2)
     }
 }
-

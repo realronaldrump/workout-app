@@ -64,4 +64,3 @@ struct CollapsibleSection<Content: View>: View {
         isExpanded.toggle()
     }
 }
-

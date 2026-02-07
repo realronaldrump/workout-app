@@ -10,7 +10,7 @@ struct ExerciseDetailView: View {
     @State private var selectedChart = ChartType.weight
     @State private var selectedGymScope: GymScope = .all
     @State private var showingLocationPicker = false
-    
+
     enum ChartType: String, CaseIterable {
         case weight = "Max Weight"
         case volume = "Volume"
@@ -23,7 +23,7 @@ struct ExerciseDetailView: View {
         case unassigned
         case gym(UUID)
     }
-    
+
     init(
         exerciseName: String,
         dataManager: WorkoutDataManager,
@@ -96,7 +96,7 @@ struct ExerciseDetailView: View {
             return gymProfilesManager.gymName(for: id) == nil ? .deleted : .assigned
         }
     }
-    
+
     var body: some View {
         ZStack {
             AdaptiveBackground()
@@ -104,17 +104,17 @@ struct ExerciseDetailView: View {
             ScrollView {
                 VStack(spacing: Theme.Spacing.xl) {
                     ExerciseStatsCards(exerciseName: exerciseName, history: scopedHistory)
-                    
+
                     VStack(alignment: .leading, spacing: 16) {
                         HStack {
                             Text("Progress Chart")
                                 .font(Theme.Typography.title2)
                                 .foregroundColor(Theme.Colors.textPrimary)
-                            
+
                             Spacer()
 
                             locationMenu
-                            
+
                             Picker("Chart Type", selection: $selectedChart) {
                                 ForEach(ChartType.allCases, id: \.self) { type in
                                     Text(type.rawValue).tag(type)
@@ -128,7 +128,7 @@ struct ExerciseDetailView: View {
                                 .font(Theme.Typography.caption)
                                 .foregroundColor(Theme.Colors.warning)
                         }
-                        
+
                         ExerciseProgressChart(history: scopedHistory, chartType: selectedChart)
                             .frame(height: 250)
                             .padding(Theme.Spacing.lg)
@@ -150,9 +150,9 @@ struct ExerciseDetailView: View {
                             }
                         }
                     }
-                    
+
                     PersonalRecordsView(history: scopedHistory)
-                    
+
                     RecentSetsView(history: scopedHistory)
                 }
                 .padding(Theme.Spacing.xl)
@@ -226,7 +226,7 @@ struct ExerciseStatsCards: View {
     let history: [(date: Date, sets: [WorkoutSet])]
 
     @State private var selectedStat: ExerciseStatKind?
-    
+
     private var stats: (total: Int, maxWeight: Double, maxVolume: Double, avgReps: Double) {
         let allSets = history.flatMap { $0.sets }
         let maxWeight = allSets.map { $0.weight }.max() ?? 0
@@ -235,10 +235,10 @@ struct ExerciseStatsCards: View {
         }
         let maxVolume = volumes.max() ?? 0
         let avgReps = allSets.isEmpty ? 0 : Double(allSets.reduce(0) { $0 + $1.reps }) / Double(allSets.count)
-        
+
         return (allSets.count, maxWeight, maxVolume, avgReps)
     }
-    
+
     var body: some View {
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
             StatCard(
@@ -248,7 +248,7 @@ struct ExerciseStatsCards: View {
                 color: .blue,
                 onTap: { selectedStat = .totalSets }
             )
-            
+
             StatCard(
                 title: "Max Weight",
                 value: "\(Int(stats.maxWeight)) lbs",
@@ -256,7 +256,7 @@ struct ExerciseStatsCards: View {
                 color: .orange,
                 onTap: { selectedStat = .maxWeight }
             )
-            
+
             StatCard(
                 title: "Max Volume",
                 value: formatVolume(stats.maxVolume),
@@ -264,7 +264,7 @@ struct ExerciseStatsCards: View {
                 color: .green,
                 onTap: { selectedStat = .maxVolume }
             )
-            
+
             StatCard(
                 title: "Avg Reps",
                 value: String(format: "%.1f", stats.avgReps),
@@ -277,7 +277,7 @@ struct ExerciseStatsCards: View {
             ExerciseStatDetailView(kind: kind, exerciseName: exerciseName, history: history)
         }
     }
-    
+
     private func formatVolume(_ volume: Double) -> String {
         if volume >= 1000 {
             return String(format: "%.1fk lbs", volume / 1000)
@@ -289,7 +289,7 @@ struct ExerciseStatsCards: View {
 struct ExerciseProgressChart: View {
     let history: [(date: Date, sets: [WorkoutSet])]
     let chartType: ExerciseDetailView.ChartType
-    
+
     @State private var isAppearing = false
     @State private var selectedDataPoint: (date: Date, value: Double)?
     @State private var lastPRHapticDate: Date?
@@ -299,7 +299,7 @@ struct ExerciseProgressChart: View {
         case progress = "Progress"
         case trend = "Trend"
     }
-    
+
     private var chartData: [(date: Date, value: Double)] {
         history.map { session in
             let value: Double
@@ -326,11 +326,11 @@ struct ExerciseProgressChart: View {
             (id: index, date: point.date, value: point.value)
         }
     }
-    
+
     private var prDate: Date? {
         chartData.max(by: { $0.value < $1.value })?.date
     }
-    
+
     private var chartColor: Color {
         switch chartType {
         case .weight: return Theme.Colors.chest
@@ -346,14 +346,14 @@ struct ExerciseProgressChart: View {
             ChartSeries.trend.rawValue: Color.secondary.opacity(0.5)
         ]
     }
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             // Selected point info
             if let selected = selectedDataPoint {
                 selectedPointHeader(selected: selected)
             }
-            
+
             chartView
         }
         .onAppear {
@@ -365,7 +365,7 @@ struct ExerciseProgressChart: View {
             selectionClearTask?.cancel()
         }
     }
-    
+
     @ViewBuilder
     private func selectedPointHeader(selected: (date: Date, value: Double)) -> some View {
         HStack {
@@ -377,9 +377,9 @@ struct ExerciseProgressChart: View {
                     .font(Theme.Typography.title3)
                     .foregroundColor(chartColor)
             }
-            
+
             Spacer()
-            
+
             if selected.date == prDate {
                 PRMarkerView(date: selected.date)
             }
@@ -387,7 +387,7 @@ struct ExerciseProgressChart: View {
         .padding(.horizontal, 4)
         .transition(.opacity)
     }
-    
+
     private var chartView: some View {
         Chart {
             variabilityBandMarks
@@ -450,7 +450,7 @@ struct ExerciseProgressChart: View {
             }
         }
     }
-    
+
     @ChartContentBuilder
     private var variabilityBandMarks: some ChartContent {
         if chartType == .oneRepMax {
@@ -477,7 +477,7 @@ struct ExerciseProgressChart: View {
             .interpolationMethod(.catmullRom)
         }
     }
-    
+
     @ChartContentBuilder
     private var lineMarks: some ChartContent {
         ForEach(indexedChartData, id: \.id) { dataPoint in
@@ -490,7 +490,7 @@ struct ExerciseProgressChart: View {
             .interpolationMethod(.catmullRom)
         }
     }
-    
+
     @ChartContentBuilder
     private var pointMarks: some ChartContent {
         ForEach(indexedChartData, id: \.id) { dataPoint in
@@ -510,7 +510,7 @@ struct ExerciseProgressChart: View {
             }
         }
     }
-    
+
     @ChartContentBuilder
     private var trendLineMarks: some ChartContent {
         if let trend = calculateTrendLine(), isAppearing {
@@ -520,7 +520,7 @@ struct ExerciseProgressChart: View {
             )
             .foregroundStyle(by: .value("Series", ChartSeries.trend.rawValue))
             .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 5]))
-            
+
             LineMark(
                 x: .value("Date", trend.end.date),
                 y: .value("Trend", trend.end.value)
@@ -529,7 +529,7 @@ struct ExerciseProgressChart: View {
             .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 5]))
         }
     }
-    
+
     @ChartContentBuilder
     private var selectionRuleMark: some ChartContent {
         if let selected = selectedDataPoint {
@@ -538,7 +538,7 @@ struct ExerciseProgressChart: View {
                 .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
         }
     }
-    
+
     private func formatValue(_ value: Double) -> String {
         switch chartType {
         case .weight, .oneRepMax:
@@ -552,25 +552,25 @@ struct ExerciseProgressChart: View {
             return "\(Int(value)) reps"
         }
     }
-    
+
     private func calculateOneRepMax(weight: Double, reps: Int) -> Double {
         guard reps > 0 else { return weight }
         return weight * (1 + 0.0333 * Double(reps))
     }
-    
+
     private func calculateTrendLine() -> (start: (date: Date, value: Double), end: (date: Date, value: Double))? {
         guard chartData.count >= 2 else { return nil }
-        
+
         // Simple linear regression
         let n = Double(chartData.count)
         let sumX = chartData.enumerated().reduce(0.0) { $0 + Double($1.offset) }
         let sumY = chartData.reduce(0.0) { $0 + $1.value }
         let sumXY = chartData.enumerated().reduce(0.0) { $0 + (Double($1.offset) * $1.element.value) }
         let sumXX = chartData.enumerated().reduce(0.0) { $0 + (Double($1.offset) * Double($1.offset)) }
-        
+
         let slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX)
         let intercept = (sumY - slope * sumX) / n
-        
+
         let startValue = intercept
         let endValue = slope * (n - 1) + intercept
 
@@ -599,50 +599,50 @@ struct ExerciseProgressChart: View {
 
 struct PersonalRecordsView: View {
     let history: [(date: Date, sets: [WorkoutSet])]
-    
+
     private var records: [(title: String, value: String, date: Date)] {
         let allSets = history.flatMap { session in
             session.sets.map { (set: $0, date: session.date) }
         }
-        
+
         var records: [(title: String, value: String, date: Date)] = []
-        
+
         // Max weight
         if let maxWeightSet = allSets.max(by: { $0.set.weight < $1.set.weight }) {
             records.append(("Heaviest Weight", "\(Int(maxWeightSet.set.weight)) lbs × \(maxWeightSet.set.reps)", maxWeightSet.date))
         }
-        
+
         // Max volume single set
-        if let maxVolumeSet = allSets.max(by: { 
+        if let maxVolumeSet = allSets.max(by: {
             $0.set.weight * Double($0.set.reps) < $1.set.weight * Double($1.set.reps)
         }) {
             let volume = maxVolumeSet.set.weight * Double(maxVolumeSet.set.reps)
             records.append(("Max Volume (Single Set)", "\(Int(volume)) lbs", maxVolumeSet.date))
         }
-        
+
         // Max reps
         if let maxRepsSet = allSets.max(by: { $0.set.reps < $1.set.reps }) {
             records.append(("Most Reps", "\(maxRepsSet.set.reps) @ \(Int(maxRepsSet.set.weight)) lbs", maxRepsSet.date))
         }
-        
+
         // Best 1RM
-        if let best1RM = allSets.max(by: { 
+        if let best1RM = allSets.max(by: {
             calculateOneRepMax(weight: $0.set.weight, reps: $0.set.reps) <
             calculateOneRepMax(weight: $1.set.weight, reps: $1.set.reps)
         }) {
             let orm = calculateOneRepMax(weight: best1RM.set.weight, reps: best1RM.set.reps)
             records.append(("Est. 1RM", "\(Int(orm)) lbs", best1RM.date))
         }
-        
+
         return records
     }
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             Text("Personal Records")
                 .font(Theme.Typography.title2)
                 .foregroundColor(Theme.Colors.textPrimary)
-            
+
             VStack(spacing: Theme.Spacing.md) {
                 ForEach(records, id: \.title) { record in
                     HStack {
@@ -654,9 +654,9 @@ struct PersonalRecordsView: View {
                                 .font(Theme.Typography.headline)
                                 .foregroundColor(Theme.Colors.textPrimary)
                         }
-                        
+
                         Spacer()
-                        
+
                         Text(record.date.formatted(date: .abbreviated, time: .omitted))
                             .font(Theme.Typography.caption)
                             .foregroundColor(Theme.Colors.textTertiary)
@@ -667,7 +667,7 @@ struct PersonalRecordsView: View {
             }
         }
     }
-    
+
     private func calculateOneRepMax(weight: Double, reps: Int) -> Double {
         guard reps > 0 else { return weight }
         return weight * (1 + 0.0333 * Double(reps))
@@ -677,7 +677,7 @@ struct PersonalRecordsView: View {
 struct RecentSetsView: View {
     let history: [(date: Date, sets: [WorkoutSet])]
     @State private var visibleCount: Int = 5
-    
+
     private var sortedSessions: [(date: Date, sets: [WorkoutSet])] {
         history.sorted { $0.date > $1.date }
     }
@@ -689,33 +689,33 @@ struct RecentSetsView: View {
     private var canShowMore: Bool {
         sortedSessions.count > visibleCount
     }
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             Text("Recent Sessions")
                 .font(Theme.Typography.title2)
                 .foregroundColor(Theme.Colors.textPrimary)
-            
+
             VStack(spacing: Theme.Spacing.md) {
                 ForEach(recentSessions, id: \.date) { session in
                     VStack(alignment: .leading, spacing: 8) {
                         Text(session.date.formatted(date: .abbreviated, time: .shortened))
                             .font(Theme.Typography.subheadline)
                             .foregroundColor(Theme.Colors.textSecondary)
-                        
+
                         ForEach(Array(session.sets.enumerated()), id: \.offset) { index, set in
                             HStack {
                                 Text("Set \(index + 1)")
                                     .font(Theme.Typography.caption)
                                     .foregroundColor(Theme.Colors.textTertiary)
                                     .frame(width: 50, alignment: .leading)
-                                
+
                                 Text("\(Int(set.weight)) lbs × \(set.reps)")
                                     .font(Theme.Typography.body)
                                     .monospacedDigit()
-                                
+
                                 Spacer()
-                                
+
                                 Text("\(Int(set.weight * Double(set.reps))) lbs")
                                     .font(Theme.Typography.caption)
                                     .foregroundColor(Theme.Colors.textSecondary)

@@ -26,4 +26,3 @@ struct MuscleBalanceDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 }
-

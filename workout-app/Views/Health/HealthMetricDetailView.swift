@@ -147,7 +147,7 @@ struct HealthMetricDetailView: View {
 
 	    private var statsSection: some View {
 	        let includeDayForExtremes = metric == .bodyMass
-	
+
 	        return ViewThatFits(in: .horizontal) {
 	            HStack(spacing: Theme.Spacing.md) {
 	                MetricStatCard(title: "Average", value: averageValue.map(metric.format) ?? "--", unit: metric.displayUnit)

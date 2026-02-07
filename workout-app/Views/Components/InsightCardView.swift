@@ -3,9 +3,9 @@ import SwiftUI
 struct InsightCardView: View {
     let insight: Insight
     var onTap: (() -> Void)? = nil
-    
+
     @State private var isAppearing = false
-    
+
     private var iconColor: Color {
         switch insight.type.color {
         case "yellow": return Theme.Colors.gold
@@ -18,7 +18,7 @@ struct InsightCardView: View {
         default: return Theme.Colors.accent
         }
     }
-    
+
     var body: some View {
         Button(action: {
             Haptics.selection()
@@ -35,21 +35,21 @@ struct InsightCardView: View {
                             .strokeBorder(iconColor, lineWidth: 2)
                     )
                     .cornerRadius(Theme.CornerRadius.small)
-                
+
                 VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                     Text(insight.title)
                         .font(Theme.Typography.headline)
                         .foregroundColor(Theme.Colors.textPrimary)
-                    
+
                     Text(insight.message)
                         .font(Theme.Typography.subheadline)
                         .foregroundColor(Theme.Colors.textSecondary)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
                 }
-                
+
                 Spacer()
-                
+
                 if insight.actionLabel != nil {
                     Image(systemName: "chevron.right")
                         .font(.caption.weight(.semibold))
@@ -88,9 +88,9 @@ struct InsightsSectionView: View {
     @ObservedObject var insightsEngine: InsightsEngine
     let dataManager: WorkoutDataManager
     var onInsightTap: ((Insight) -> Void)? = nil
-    
+
     @State private var showAllInsights = false
-    
+
     private var displayedInsights: [Insight] {
         if showAllInsights {
             return insightsEngine.insights
@@ -98,7 +98,7 @@ struct InsightsSectionView: View {
             return Array(insightsEngine.insights.prefix(3))
         }
     }
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             HStack {
@@ -106,13 +106,13 @@ struct InsightsSectionView: View {
                     .font(Theme.Typography.sectionHeader)
                     .foregroundColor(Theme.Colors.textPrimary)
                     .tracking(1.0)
-                
+
                 Spacer()
-                
+
                 if insightsEngine.insights.count > 3 {
-                    Button(action: { 
+                    Button(action: {
                         withAnimation(Theme.Animation.spring) {
-                            showAllInsights.toggle() 
+                            showAllInsights.toggle()
                         }
                     }) {
                         Text(showAllInsights ? "Less" : "All \(insightsEngine.insights.count)")
@@ -121,7 +121,7 @@ struct InsightsSectionView: View {
                     }
                 }
             }
-            
+
             if insightsEngine.insights.isEmpty {
                 EmptyInsightsView()
             } else {
@@ -148,17 +148,17 @@ struct EmptyInsightsView: View {
             Image(systemName: "sparkles")
                 .font(.title2)
                 .foregroundColor(Theme.Colors.textTertiary)
-            
+
             VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                 Text("insights 0")
                     .font(Theme.Typography.headline)
                     .foregroundColor(Theme.Colors.textSecondary)
-                
+
                 Text("min sessions 4")
                     .font(Theme.Typography.subheadline)
                     .foregroundColor(Theme.Colors.textTertiary)
             }
-            
+
             Spacer()
         }
         .padding(Theme.Spacing.lg)
@@ -169,7 +169,7 @@ struct EmptyInsightsView: View {
 #Preview {
     ZStack {
         Theme.Colors.background.ignoresSafeArea()
-        
+
         ScrollView {
             VStack(spacing: 20) {
                 InsightCardView(insight: Insight(
@@ -183,7 +183,7 @@ struct EmptyInsightsView: View {
                     actionLabel: "Trend",
                     metric: 225
                 ))
-                
+
                 InsightCardView(insight: Insight(
                     id: UUID(),
                     type: .plateau,

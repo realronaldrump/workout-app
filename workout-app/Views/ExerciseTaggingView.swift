@@ -4,13 +4,13 @@ struct ExerciseTaggingView: View {
     @ObservedObject var dataManager: WorkoutDataManager
     @ObservedObject var metadataManager = ExerciseMetadataManager.shared
     @State private var searchText = ""
-    
+
     var uniqueExercises: [String] {
         let allExercises = dataManager.workouts.flatMap { $0.exercises.map { $0.name } }
         let unique = Set(allExercises)
         return Array(unique).sorted()
     }
-    
+
     var filteredExercises: [String] {
         if searchText.isEmpty {
             return uniqueExercises
@@ -18,7 +18,7 @@ struct ExerciseTaggingView: View {
             return uniqueExercises.filter { $0.localizedCaseInsensitiveContains(searchText) }
         }
     }
-    
+
     var body: some View {
         ZStack {
             AdaptiveBackground()
@@ -28,7 +28,7 @@ struct ExerciseTaggingView: View {
                         Text("0")
                             .foregroundStyle(.secondary)
                     }
-                    
+
                     ForEach(filteredExercises, id: \.self) { (exercise: String) in
                         NavigationLink(destination: ExerciseTagEditorView(exerciseName: exercise)) {
                             VStack(alignment: .leading, spacing: 4) {

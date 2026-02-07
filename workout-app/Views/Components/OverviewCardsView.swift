@@ -2,14 +2,14 @@ import SwiftUI
 
 struct OverviewCardsView: View {
     let stats: WorkoutStats
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             Text("Overview")
                 .font(Theme.Typography.sectionHeader)
                 .foregroundColor(Theme.Colors.textPrimary)
                 .tracking(1.0)
-            
+
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: Theme.Spacing.md) {
                 StatCard(
                     title: "Total Workouts",
@@ -17,7 +17,7 @@ struct OverviewCardsView: View {
                     icon: "figure.strengthtraining.traditional",
                     color: .blue
                 )
-                
+
                 StatCard(
                     title: "Current Streak",
                     value: "\(stats.currentStreak)",
@@ -25,14 +25,14 @@ struct OverviewCardsView: View {
                     icon: "flame.fill",
                     color: .orange
                 )
-                
+
                 StatCard(
                     title: "Total Volume",
                     value: formatVolume(stats.totalVolume),
                     icon: "scalemass.fill",
                     color: .green
                 )
-                
+
                 StatCard(
                     title: "Avg Duration",
                     value: stats.avgWorkoutDuration,
@@ -40,7 +40,7 @@ struct OverviewCardsView: View {
                     color: .purple
                 )
             }
-            
+
             if let lastWorkout = stats.lastWorkoutDate {
                 HStack(spacing: Theme.Spacing.sm) {
                     Image(systemName: "calendar")
@@ -52,7 +52,7 @@ struct OverviewCardsView: View {
             }
         }
     }
-    
+
     private func formatVolume(_ volume: Double) -> String {
         if volume >= 1000000 {
             return String(format: "%.1fM", volume / 1000000)
@@ -70,13 +70,13 @@ struct StatCard: View {
     let icon: String
     let color: Color
     var onTap: (() -> Void)? = nil
-    
+
     @State private var isAppearing = false
 
     // Keep tiles visually consistent while giving text enough vertical room
     // (prevents top/bottom clipping on metric screens).
     private let tileHeight: CGFloat = 128
-    
+
     var body: some View {
         Group {
             if let onTap {

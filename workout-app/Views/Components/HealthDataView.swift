@@ -5,7 +5,7 @@ import Charts
 struct HealthDataView: View {
     let healthData: WorkoutHealthData
     @State private var showingAllHeartRateSamples = false
-    
+
     var body: some View {
         VStack(spacing: Theme.Spacing.lg) {
             // Header
@@ -14,22 +14,22 @@ struct HealthDataView: View {
 	                    .foregroundColor(Theme.Colors.error)
                     Text("Health Metrics")
                         .font(Theme.Typography.headline)
-                
+
                 Spacer()
-                
+
                 if let syncedAt = healthData.syncedAt as Date? {
                     Text("sync \(syncedAt.formatted(.relative(presentation: .named)))")
                         .font(Theme.Typography.caption)
                         .foregroundColor(Theme.Colors.textTertiary)
                 }
             }
-            
+
             if !healthData.hasHealthData {
                 noDataView
             } else {
                 // Key Metrics Grid
                 metricsGrid
-                
+
                 // Heart Rate Chart
                 if !healthData.heartRateSamples.isEmpty {
                     heartRateSection
@@ -56,19 +56,19 @@ struct HealthDataView: View {
         .padding(Theme.Spacing.lg)
         .softCard(elevation: 2)
     }
-    
+
     // MARK: - No Data View
-    
+
     private var noDataView: some View {
         VStack(spacing: Theme.Spacing.md) {
             Image(systemName: "heart.slash")
                 .font(.system(size: 40))
                 .foregroundColor(Theme.Colors.textTertiary)
-            
+
             Text("health data 0")
                 .font(Theme.Typography.subheadline)
                 .foregroundColor(Theme.Colors.textSecondary)
-            
+
             Text("samples 0")
                 .font(Theme.Typography.caption)
                 .foregroundColor(Theme.Colors.textTertiary)
@@ -76,9 +76,9 @@ struct HealthDataView: View {
         }
         .padding(.vertical, Theme.Spacing.xl)
     }
-    
+
     // MARK: - Metrics Grid
-    
+
     private var metricsGrid: some View {
         LazyVGrid(columns: [
             GridItem(.flexible()),
@@ -94,7 +94,7 @@ struct HealthDataView: View {
                     color: .red
                 )
             }
-            
+
             // Calories
             if let calories = healthData.totalCalories ?? healthData.activeCalories {
                 metricCard(
@@ -105,7 +105,7 @@ struct HealthDataView: View {
                     color: .orange
                 )
             }
-            
+
             // Max Heart Rate
             if let maxHR = healthData.maxHeartRate {
                 metricCard(
@@ -116,7 +116,7 @@ struct HealthDataView: View {
                     color: .pink
                 )
             }
-            
+
             // HRV
             if let avgHRV = healthData.avgHRV {
                 metricCard(
@@ -127,7 +127,7 @@ struct HealthDataView: View {
                     color: .purple
                 )
             }
-            
+
             // Blood Oxygen
             if let avgSpO2 = healthData.avgBloodOxygen {
                 metricCard(
@@ -138,7 +138,7 @@ struct HealthDataView: View {
                     color: .blue
                 )
             }
-            
+
             // Respiratory Rate
             if let avgResp = healthData.avgRespiratoryRate {
                 metricCard(
@@ -149,7 +149,7 @@ struct HealthDataView: View {
                     color: .cyan
                 )
             }
-            
+
             // Distance (converted to miles)
             if let distance = healthData.distance, distance > 0 {
                 metricCard(
@@ -160,7 +160,7 @@ struct HealthDataView: View {
                     color: .green
                 )
             }
-            
+
             // Steps
             if let steps = healthData.stepCount, steps > 0 {
                 metricCard(
@@ -173,7 +173,7 @@ struct HealthDataView: View {
             }
         }
     }
-    
+
     private func metricCard(title: String, value: String, unit: String, icon: String, color: Color) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
             HStack(spacing: Theme.Spacing.xs) {
@@ -184,12 +184,12 @@ struct HealthDataView: View {
                     .font(Theme.Typography.caption)
                     .foregroundColor(Theme.Colors.textSecondary)
             }
-            
+
             HStack(alignment: .lastTextBaseline, spacing: 2) {
                 Text(value)
                     .font(Theme.Typography.number)
                     .foregroundColor(Theme.Colors.textPrimary)
-                
+
                 if !unit.isEmpty {
                     Text(unit)
                         .font(Theme.Typography.caption)
@@ -202,9 +202,9 @@ struct HealthDataView: View {
         .background(Theme.Colors.surface.opacity(0.6))
         .cornerRadius(Theme.CornerRadius.medium)
     }
-    
+
     // MARK: - Heart Rate Section
-    
+
     private var heartRateSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             Text("Zones")
@@ -214,9 +214,9 @@ struct HealthDataView: View {
             WorkoutHRChart(samples: healthData.heartRateSamples)
         }
     }
-    
+
     // MARK: - Additional Metrics
-    
+
     private var hasAdditionalMetrics: Bool {
         healthData.appleWorkoutType != nil ||
         healthData.bodyMass != nil ||
@@ -239,13 +239,13 @@ struct HealthDataView: View {
         healthData.heartRateRecovery != nil ||
         healthData.walkingHeartRateAverage != nil
     }
-    
+
     private var additionalMetricsSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             Text("Other Metrics")
                 .font(Theme.Typography.subheadline)
                 .foregroundColor(Theme.Colors.textSecondary)
-            
+
             VStack(spacing: Theme.Spacing.sm) {
                 if let workoutType = healthData.appleWorkoutType {
                     additionalMetricRow(
@@ -254,7 +254,7 @@ struct HealthDataView: View {
                         icon: "figure.mixed.cardio"
                     )
                 }
-                
+
                 if let duration = healthData.appleWorkoutDuration {
                     additionalMetricRow(
                         label: "Duration",
@@ -262,7 +262,7 @@ struct HealthDataView: View {
                         icon: "clock"
                     )
                 }
-                
+
                 if let restingHR = healthData.restingHeartRate {
                     additionalMetricRow(
                         label: "Resting HR",
@@ -270,7 +270,7 @@ struct HealthDataView: View {
                         icon: "heart"
                     )
                 }
-                
+
                 if let power = healthData.avgPower {
                     additionalMetricRow(
                         label: "Avg Power",
@@ -278,7 +278,7 @@ struct HealthDataView: View {
                         icon: "bolt.fill"
                     )
                 }
-                
+
                 if let bodyMass = healthData.bodyMass {
                     additionalMetricRow(
                         label: "Body Mass",
@@ -286,7 +286,7 @@ struct HealthDataView: View {
                         icon: "scalemass"
                     )
                 }
-                
+
                 if let bodyFat = healthData.bodyFatPercentage {
                     additionalMetricRow(
                         label: "Body Fat",
@@ -378,30 +378,30 @@ struct HealthDataView: View {
             }
         }
     }
-    
+
     private func additionalMetricRow(label: String, value: String, icon: String) -> some View {
         HStack {
             Image(systemName: icon)
                 .frame(width: 24)
                 .foregroundColor(Theme.Colors.textTertiary)
-            
+
             Text(label)
                 .font(Theme.Typography.body)
                 .foregroundColor(Theme.Colors.textSecondary)
-            
+
             Spacer()
-            
+
             Text(value)
                 .font(Theme.Typography.body)
                 .foregroundColor(Theme.Colors.textPrimary)
         }
         .padding(.vertical, Theme.Spacing.xs)
     }
-    
+
     private func formatDuration(_ seconds: TimeInterval) -> String {
         let hours = Int(seconds) / 3600
         let minutes = (Int(seconds) % 3600) / 60
-        
+
         if hours > 0 {
             return "\(hours)h \(minutes)m"
         }
@@ -414,7 +414,7 @@ struct HealthDataView: View {
 /// A compact view showing key health metrics, suitable for list items
 struct HealthDataSummaryView: View {
     let healthData: WorkoutHealthData
-    
+
     var body: some View {
         HStack(spacing: Theme.Spacing.lg) {
             if let avgHR = healthData.avgHeartRate {
@@ -425,7 +425,7 @@ struct HealthDataSummaryView: View {
                     color: .red
                 )
             }
-            
+
             if let calories = healthData.totalCalories ?? healthData.activeCalories {
                 compactMetric(
                     icon: "flame.fill",
@@ -434,7 +434,7 @@ struct HealthDataSummaryView: View {
                     color: .orange
                 )
             }
-            
+
             if let avgHRV = healthData.avgHRV {
                 compactMetric(
                     icon: "waveform.path.ecg",
@@ -445,17 +445,17 @@ struct HealthDataSummaryView: View {
             }
         }
     }
-    
+
     private func compactMetric(icon: String, value: String, unit: String, color: Color) -> some View {
         HStack(spacing: 4) {
             Image(systemName: icon)
                 .font(.system(size: 10))
                 .foregroundColor(color)
-            
+
             Text(value)
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundColor(Theme.Colors.textPrimary)
-            
+
             Text(unit)
                 .font(.system(size: 10))
                 .foregroundColor(Theme.Colors.textTertiary)
@@ -470,11 +470,11 @@ struct HealthSyncButton: View {
     @ObservedObject var healthManager: HealthKitManager
     let workout: Workout
     let onSync: ((WorkoutHealthData) -> Void)?
-    
+
     @State private var isSyncing = false
     @State private var showError = false
     @State private var errorMessage = ""
-    
+
     var body: some View {
         Button(action: syncHealthData) {
             HStack(spacing: Theme.Spacing.sm) {
@@ -484,7 +484,7 @@ struct HealthSyncButton: View {
                 } else {
                     Image(systemName: "heart.text.square")
                 }
-                
+
                 Text(isSyncing ? "syncing" : "sync")
                     .font(Theme.Typography.subheadline)
             }
@@ -504,24 +504,24 @@ struct HealthSyncButton: View {
             Text(errorMessage)
         }
     }
-    
+
     private func syncHealthData() {
         Task {
             isSyncing = true
-            
+
             do {
                 // Request authorization if needed
                 if healthManager.authorizationStatus != .authorized {
                     try await healthManager.requestAuthorization()
                 }
-                
+
                 let healthData = try await healthManager.syncHealthDataForWorkout(workout)
                 onSync?(healthData)
             } catch {
                 errorMessage = error.localizedDescription
                 showError = true
             }
-            
+
             isSyncing = false
         }
     }

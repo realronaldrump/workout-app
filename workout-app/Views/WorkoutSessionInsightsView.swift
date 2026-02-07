@@ -256,4 +256,3 @@ private struct EmptyStateCard: View {
         .softCard(elevation: 1)
     }
 }
-

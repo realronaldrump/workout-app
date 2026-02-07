@@ -8,7 +8,7 @@ struct StrongImportWizard: View {
     @EnvironmentObject var healthManager: HealthKitManager
     @EnvironmentObject var annotationsManager: WorkoutAnnotationsManager
     @EnvironmentObject var gymProfilesManager: GymProfilesManager
-    
+
     @State private var step = 0
     @State private var isImporting = false
     @State private var importError: String?
@@ -21,7 +21,7 @@ struct StrongImportWizard: View {
     @State private var healthSyncState: HealthSyncState = .idle
     @State private var healthSyncNote: String?
     @State private var syncTargetCount: Int?
-    
+
     var body: some View {
         NavigationStack {
             VStack {
@@ -36,7 +36,7 @@ struct StrongImportWizard: View {
                 }
                 .padding(.horizontal, Theme.Spacing.xl)
                 .padding(.top, Theme.Spacing.lg)
-                
+
                 TabView(selection: $step) {
                     welcomeStep.tag(0)
                     importStep.tag(1)
@@ -97,13 +97,13 @@ struct StrongImportWizard: View {
         case synced(Date)
         case failed(String)
     }
-    
+
     // MARK: - Steps
-    
+
     private var welcomeStep: some View {
         VStack(spacing: Theme.Spacing.xl) {
             Spacer()
-            
+
             Image(systemName: "square.and.arrow.down.on.square")
                 .font(.system(size: 80))
                 .foregroundStyle(Theme.Colors.accent)
@@ -113,22 +113,22 @@ struct StrongImportWizard: View {
                         .fill(Theme.Colors.accent.opacity(0.1))
                         .frame(width: 160, height: 160)
                 )
-            
+
             VStack(spacing: Theme.Spacing.md) {
                 Text("Import from Strong")
                     .font(Theme.Typography.title)
                     .foregroundStyle(Theme.Colors.textPrimary)
-                
+
                 Text("CSV export (Strong)")
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Colors.textSecondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal)
             }
-            
+
             Spacer()
-            
-            Button(action: { 
+
+            Button(action: {
                 withAnimation { step = 1 }
             }) {
                 Text("Next")
@@ -142,23 +142,23 @@ struct StrongImportWizard: View {
             .padding(Theme.Spacing.xl)
         }
     }
-    
+
     private var importStep: some View {
         VStack(spacing: Theme.Spacing.xl) {
             Spacer()
-            
+
             if isImporting {
                 VStack(spacing: Theme.Spacing.md) {
                     ProgressView(value: importPhase.rawValue)
                         .progressViewStyle(.linear)
                         .tint(Theme.Colors.accent)
                         .frame(maxWidth: 220)
-                    
+
                     Text(importPhase.message)
                         .font(Theme.Typography.body)
                         .foregroundStyle(Theme.Colors.textSecondary)
                         .multilineTextAlignment(.center)
-                    
+
                     if let fileName = importedFileName {
                         Text(fileName)
                             .font(Theme.Typography.caption)
@@ -184,7 +184,7 @@ struct StrongImportWizard: View {
                                 .fill(Theme.Colors.accent.opacity(0.5))
                         )
                     }
-                    
+
                     if let error = importError {
                         HStack {
                             Image(systemName: "exclamationmark.triangle.fill")
@@ -196,11 +196,11 @@ struct StrongImportWizard: View {
                 }
                 .padding(.horizontal)
             }
-            
+
             Spacer()
         }
     }
-    
+
     private var successStep: some View {
         ScrollView {
             VStack(spacing: Theme.Spacing.xl) {
@@ -208,12 +208,12 @@ struct StrongImportWizard: View {
                     .font(.system(size: 80))
                     .foregroundStyle(Theme.Colors.success)
                     .symbolEffect(.bounce, value: step)
-                
+
                 if let stats = importStats {
                     VStack(spacing: Theme.Spacing.md) {
                             Text("Import Complete")
                                 .font(Theme.Typography.title)
-                        
+
                         HStack(spacing: Theme.Spacing.xl) {
                             VStack {
                                 Text("\(stats.workouts)")
@@ -223,10 +223,10 @@ struct StrongImportWizard: View {
                                     .font(Theme.Typography.caption)
                                     .foregroundStyle(Theme.Colors.textSecondary)
                             }
-                            
+
                             Divider()
                                 .frame(height: 40)
-                            
+
                             VStack {
                                 Text("\(stats.exercises)")
                                     .font(Theme.Typography.title2)
@@ -240,7 +240,7 @@ struct StrongImportWizard: View {
                         .softCard()
                     }
                 }
-                
+
                 importDetailsCard
                 healthSyncStatusCard
 
@@ -268,7 +268,7 @@ struct StrongImportWizard: View {
                     .softCard(elevation: 2)
                 }
                 .buttonStyle(PlainButtonStyle())
-                
+
                 Button(action: { isPresented = false }) {
                     Text("Done")
                         .font(Theme.Typography.headline)
@@ -278,7 +278,7 @@ struct StrongImportWizard: View {
                         .foregroundColor(.white)
                         .cornerRadius(Theme.CornerRadius.large)
                 }
-                
+
                 if healthManager.isSyncing {
                     Text("sync background")
                         .font(Theme.Typography.caption)
@@ -299,7 +299,7 @@ struct StrongImportWizard: View {
                 Text("Import Details")
                     .font(Theme.Typography.headline)
             }
-            
+
             statusRow(title: "File", value: importedFileName ?? "CSV file")
             statusRow(title: "Storage", value: storageStatusText, valueColor: storageStatusColor)
             if let completedAt = importCompletedAt {
@@ -309,7 +309,7 @@ struct StrongImportWizard: View {
         .padding(Theme.Spacing.lg)
         .softCard()
     }
-    
+
     private var healthSyncStatusCard: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             HStack(spacing: Theme.Spacing.sm) {
@@ -318,38 +318,38 @@ struct StrongImportWizard: View {
                 Text("Apple Health Sync")
                     .font(Theme.Typography.headline)
             }
-            
+
             statusRow(title: "Status", value: healthSyncStatusText, valueColor: healthSyncStatusColor)
-            
+
             Text(healthSyncStatusDetail)
                 .font(Theme.Typography.caption)
                 .foregroundStyle(Theme.Colors.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
-            
+
             if healthManager.isSyncing {
                 ProgressView(value: healthManager.syncProgress)
                     .progressViewStyle(.linear)
                     .tint(Theme.Colors.error)
             }
-            
+
             let syncTotal = healthSyncTotalCount
             if syncTotal > 0 {
                 statusRow(title: "Workouts", value: "\(healthManager.syncedWorkoutsCount) of \(syncTotal)")
             }
-            
+
             if let note = healthSyncNote {
                 Text(note)
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Colors.textSecondary)
             }
-            
+
             if case .needsAuthorization = healthSyncState {
                 Text("Settings > Health > Data Access > workout-app")
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Colors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            
+
             if let lastSync = healthManager.lastSyncDate {
                 statusRow(title: "Last Sync", value: formatDate(lastSync))
             }
@@ -357,7 +357,7 @@ struct StrongImportWizard: View {
         .padding(Theme.Spacing.lg)
         .softCard()
     }
-    
+
     private func statusRow(title: String, value: String, valueColor: Color = Theme.Colors.textPrimary) -> some View {
         HStack {
             Text(title)
@@ -370,7 +370,7 @@ struct StrongImportWizard: View {
                 .multilineTextAlignment(.trailing)
         }
     }
-    
+
     private var storageStatusText: String {
         if let message = storageStatusMessage {
             return message
@@ -379,7 +379,7 @@ struct StrongImportWizard: View {
             ? "local"
             : "iCloud"
     }
-    
+
     private var storageStatusColor: Color {
         if let message = storageStatusMessage, message.hasPrefix("Save failed") {
             return Theme.Colors.error
@@ -389,7 +389,7 @@ struct StrongImportWizard: View {
         }
         return Theme.Colors.textPrimary
     }
-    
+
     private var healthSyncStatusText: String {
         if healthManager.isSyncing {
             return "Syncing"
@@ -409,7 +409,7 @@ struct StrongImportWizard: View {
             return "Failed"
         }
     }
-    
+
     private var healthSyncStatusDetail: String {
         if healthManager.isSyncing {
             return "syncing"
@@ -432,7 +432,7 @@ struct StrongImportWizard: View {
             return "failed \(message)"
         }
     }
-    
+
     private var healthSyncStatusColor: Color {
         if healthManager.isSyncing {
             return Theme.Colors.warning
@@ -456,13 +456,13 @@ struct StrongImportWizard: View {
     private var healthSyncTotalCount: Int {
         syncTargetCount ?? dataManager.workouts.count
     }
-    
+
     private func formatDate(_ date: Date) -> String {
         date.formatted(date: .abbreviated, time: .shortened)
     }
-    
+
     // MARK: - Logic
-    
+
     private func handleFileImport(_ result: Result<[URL], Error>) {
         switch result {
         case .success(let urls):
@@ -478,7 +478,7 @@ struct StrongImportWizard: View {
             importedFileName = url.lastPathComponent
             importPhase = .reading
             isImporting = true
-            
+
             // Security: access security scoped resource
             let hasAccess = url.startAccessingSecurityScopedResource()
 
@@ -572,7 +572,7 @@ struct StrongImportWizard: View {
                     }
                 }
             }
-            
+
         case .failure(let error):
             importError = error.localizedDescription
         }
@@ -581,7 +581,7 @@ struct StrongImportWizard: View {
     @MainActor
     private func startAutoHealthSyncIfNeeded() {
         healthSyncNote = nil
-        
+
         guard !dataManager.workouts.isEmpty else {
             healthSyncState = .idle
             return

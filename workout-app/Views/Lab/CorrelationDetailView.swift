@@ -271,4 +271,3 @@ private extension WorkoutAnalytics {
         return weight * (1 + 0.0333 * Double(reps))
     }
 }
-

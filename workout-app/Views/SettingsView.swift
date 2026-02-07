@@ -4,19 +4,19 @@ struct SettingsView: View {
     @ObservedObject var dataManager: WorkoutDataManager
     @ObservedObject var iCloudManager: iCloudDocumentManager
     @EnvironmentObject var healthManager: HealthKitManager
-    
+
     @State private var showingImportWizard = false
     @State private var showingHealthWizard = false
     @State private var showingHealthDashboard = false
     @State private var showingDeleteAlert = false
-    
+
     @AppStorage("weightUnit") private var weightUnit = "lbs"
     @AppStorage("dateFormat") private var dateFormat = "relative"
-    
+
     var body: some View {
         ZStack {
             AdaptiveBackground()
-            
+
             ScrollView {
                 VStack(spacing: Theme.Spacing.xxl) {
                 // Header
@@ -34,7 +34,7 @@ struct SettingsView: View {
                                 .strokeBorder(Theme.Colors.border, lineWidth: 2)
                         )
                         .shadow(color: Color.black.opacity(Theme.Colors.shadowOpacity), radius: 0, x: 4, y: 4)
-                    
+
                     Text("Settings")
                         .font(Theme.Typography.screenTitle)
                         .foregroundStyle(Theme.Colors.textPrimary)
@@ -42,14 +42,14 @@ struct SettingsView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, Theme.Spacing.xl)
-                
+
                 // Data Management Section
                 VStack(alignment: .leading, spacing: Theme.Spacing.md) {
                     Text("Data & Sync")
                         .font(Theme.Typography.headline)
                         .foregroundStyle(Theme.Colors.textSecondary)
                         .padding(.horizontal)
-                    
+
                     VStack(spacing: 1) {
                         SettingsRow(
                             icon: "square.and.arrow.down",
@@ -59,7 +59,7 @@ struct SettingsView: View {
                         ) {
                             showingImportWizard = true
                         }
-                        
+
                         Divider().padding(.leading, 50)
 
                         NavigationLink(destination: ExportWorkoutsView(dataManager: dataManager, iCloudManager: iCloudManager)) {
@@ -90,7 +90,7 @@ struct SettingsView: View {
                         .buttonStyle(PlainButtonStyle())
 
                         Divider().padding(.leading, 50)
-                        
+
                         SettingsRow(
                             icon: "heart.fill",
                             color: Theme.Colors.error,
@@ -100,9 +100,9 @@ struct SettingsView: View {
                         ) {
                             showingHealthWizard = true
                         }
-                        
+
                         Divider().padding(.leading, 50)
-                        
+
                         if healthManager.authorizationStatus == .authorized {
                             SettingsRow(
                                 icon: "chart.xyaxis.line",
@@ -112,10 +112,10 @@ struct SettingsView: View {
                             ) {
                                 showingHealthDashboard = true
                             }
-                            
+
                             Divider().padding(.leading, 50)
                         }
-                        
+
                         NavigationLink(destination: BackupFilesView(iCloudManager: iCloudManager)) {
                             HStack {
                                 Image(systemName: "icloud.fill")
@@ -123,7 +123,7 @@ struct SettingsView: View {
                                     .frame(width: 30, height: 30)
                                     .background(Theme.Colors.cardio)
                                     .cornerRadius(6)
-                                
+
                                 VStack(alignment: .leading) {
                                     Text("Backups")
                                         .font(Theme.Typography.body)
@@ -131,7 +131,7 @@ struct SettingsView: View {
                                         .font(Theme.Typography.caption)
                                         .foregroundStyle(Theme.Colors.textSecondary)
                                 }
-                                
+
                                 Spacer()
                                 Image(systemName: "chevron.right")
                                     .font(.caption)
@@ -143,14 +143,14 @@ struct SettingsView: View {
                         .buttonStyle(PlainButtonStyle())
                     }
                 }
-                
+
                 // Preferences Section
                 VStack(alignment: .leading, spacing: Theme.Spacing.md) {
                     Text("Preferences")
                         .font(Theme.Typography.headline)
                         .foregroundStyle(Theme.Colors.textSecondary)
                         .padding(.horizontal)
-                    
+
                     VStack(spacing: 1) {
                         // Custom Picker Row for Weight
                         HStack {
@@ -159,12 +159,12 @@ struct SettingsView: View {
                                 .frame(width: 30, height: 30)
                                 .background(Theme.Colors.success)
                                 .cornerRadius(6)
-                            
+
                             Text("Weight Unit")
                                 .font(Theme.Typography.body)
-                            
+
                             Spacer()
-                            
+
                             Picker("", selection: $weightUnit) {
                                 Text("lbs").tag("lbs")
                                 Text("kg").tag("kg")
@@ -174,9 +174,9 @@ struct SettingsView: View {
                         }
                         .padding()
                         .softCard()
-                        
+
                         Divider().padding(.leading, 50)
-                        
+
                         // Custom Picker Row for Date
                         HStack {
                             Image(systemName: "calendar")
@@ -184,12 +184,12 @@ struct SettingsView: View {
                                 .frame(width: 30, height: 30)
                                 .background(Theme.Colors.warning)
                                 .cornerRadius(6)
-                            
+
                             Text("Date Format")
                                 .font(Theme.Typography.body)
-                            
+
                             Spacer()
-                            
+
                             Picker("", selection: $dateFormat) {
                                 Text("Relative").tag("relative")
                                 Text("Absolute").tag("absolute")
@@ -199,9 +199,9 @@ struct SettingsView: View {
                         }
                         .padding()
                         .softCard()
-                        
+
                         Divider().padding(.leading, 50)
-                        
+
                         // Exercise Tags
                         NavigationLink(destination: GymProfilesView()) {
                             HStack {
@@ -210,7 +210,7 @@ struct SettingsView: View {
                                     .frame(width: 30, height: 30)
                                     .background(Theme.Colors.accent)
                                     .cornerRadius(6)
-                                
+
                                 VStack(alignment: .leading) {
                                     Text("Gym Profiles")
                                         .font(Theme.Typography.body)
@@ -219,9 +219,9 @@ struct SettingsView: View {
                                         .font(Theme.Typography.caption)
                                         .foregroundStyle(Theme.Colors.textSecondary)
                                 }
-                                
+
                                 Spacer()
-                                
+
                                 Image(systemName: "chevron.right")
                                     .font(.caption)
                                     .foregroundStyle(Theme.Colors.textTertiary)
@@ -230,9 +230,9 @@ struct SettingsView: View {
                             .softCard()
                         }
                         .buttonStyle(PlainButtonStyle())
-                        
+
                         Divider().padding(.leading, 50)
-                        
+
                         NavigationLink(destination: ExerciseTaggingView(dataManager: dataManager)) {
                             HStack {
                                 Image(systemName: "tag.fill")
@@ -240,7 +240,7 @@ struct SettingsView: View {
                                     .frame(width: 30, height: 30)
                                     .background(Theme.Colors.accentTertiary)
                                     .cornerRadius(6)
-                                
+
                                 VStack(alignment: .leading) {
                                     Text("Exercise Tags")
                                         .font(Theme.Typography.body)
@@ -249,9 +249,9 @@ struct SettingsView: View {
                                         .font(Theme.Typography.caption)
                                         .foregroundStyle(Theme.Colors.textSecondary)
                                 }
-                                
+
                                 Spacer()
-                                
+
                                 Image(systemName: "chevron.right")
                                     .font(.caption)
                                     .foregroundStyle(Theme.Colors.textTertiary)
@@ -262,7 +262,7 @@ struct SettingsView: View {
                         .buttonStyle(PlainButtonStyle())
                     }
                 }
-                
+
                 // Danger Zone
                 Button(action: { showingDeleteAlert = true }) {
                     Text("Clear All Data")
@@ -272,7 +272,7 @@ struct SettingsView: View {
                         .padding()
                         .softCard()
                 }
-                
+
                 VStack(spacing: Theme.Spacing.xs) {
                     Text("Davis's Big Beautiful Workout App")
                         .font(Theme.Typography.captionBold)
@@ -332,7 +332,7 @@ struct SettingsRow: View {
     let subtitle: String
     var value: String? = nil
     let action: () -> Void
-    
+
     var body: some View {
         Button(action: action) {
             HStack {
@@ -341,7 +341,7 @@ struct SettingsRow: View {
                     .frame(width: 30, height: 30)
                     .background(color)
                     .cornerRadius(6)
-                
+
                 VStack(alignment: .leading) {
                     Text(title)
                         .font(Theme.Typography.body)
@@ -350,14 +350,14 @@ struct SettingsRow: View {
                         .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.Colors.textSecondary)
                 }
-                
+
                 Spacer()
-                
+
                 if let value = value {
                     Text(value)
                         .foregroundStyle(Theme.Colors.textSecondary)
                 }
-                
+
                 Image(systemName: "chevron.right")
                     .font(.caption)
                     .foregroundStyle(Theme.Colors.textTertiary)

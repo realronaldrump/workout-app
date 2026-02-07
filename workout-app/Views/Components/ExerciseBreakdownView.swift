@@ -4,11 +4,11 @@ import Charts
 struct ExerciseBreakdownView: View {
     let workouts: [Workout]
     var onTap: (() -> Void)? = nil
-    
+
     private var exerciseData: [(name: String, volume: Double, frequency: Int)] {
         let allExercises = workouts.flatMap { $0.exercises }
         let grouped = Dictionary(grouping: allExercises) { $0.name }
-        
+
         return grouped.map { (name: String, exercises: [Exercise]) in
             let totalVolume = exercises.reduce(0) { $0 + $1.totalVolume }
             return (name: name, volume: totalVolume, frequency: exercises.count)
@@ -17,13 +17,13 @@ struct ExerciseBreakdownView: View {
         .prefix(10)
         .reversed()
     }
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             Text("Top Exercises by Volume")
                 .font(Theme.Typography.title2)
                 .foregroundColor(Theme.Colors.textPrimary)
-            
+
             if !exerciseData.isEmpty {
                 Group {
                     if let onTap {
@@ -65,7 +65,7 @@ struct ExerciseBreakdownView: View {
         .padding(Theme.Spacing.lg)
         .softCard(elevation: 2)
     }
-    
+
     private func formatVolume(_ volume: Double) -> String {
         if volume >= 1000 {
             return String(format: "%.1fk", volume / 1000)

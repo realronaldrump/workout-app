@@ -6,18 +6,18 @@ struct MuscleHeatmapView: View {
     let dataManager: WorkoutDataManager
     let dateRange: DateInterval
     var onOpen: (() -> Void)? = nil
-    
+
     @State private var selectedMuscleTag: MuscleTag?
     @State private var isAppearing = false
-    
+
     private var muscleGroupStats: [MuscleTag: MuscleStats] {
         calculateMuscleStats()
     }
-    
+
     private var dateRangeLabel: String {
         let calendar = Calendar.current
         let days = calendar.dateComponents([.day], from: dateRange.start, to: dateRange.end).day ?? 0
-        
+
         if days <= 7 {
             return "This week"
         } else if days <= 31 {
@@ -30,7 +30,7 @@ struct MuscleHeatmapView: View {
             return "All time"
         }
     }
-    
+
     var body: some View {
         let stats = muscleGroupStats
         let builtInTags = MuscleGroup.allCases.map { MuscleTag.builtIn($0) }
@@ -46,9 +46,9 @@ struct MuscleHeatmapView: View {
                     .font(Theme.Typography.sectionHeader)
                     .foregroundColor(Theme.Colors.textPrimary)
                     .tracking(1.0)
-                
+
                 Spacer()
-                
+
                 Text(dateRangeLabel)
                     .font(Theme.Typography.caption)
                     .foregroundColor(Theme.Colors.textTertiary)
@@ -68,7 +68,7 @@ struct MuscleHeatmapView: View {
                     .accessibilityLabel("Muscle balance details")
                 }
             }
-            
+
             // Muscle group grid
             LazyVGrid(columns: [
                 GridItem(.flexible()),
@@ -87,7 +87,7 @@ struct MuscleHeatmapView: View {
                     }
                 }
             }
-            
+
             // Selected detail
             if let selected = selectedMuscleTag, let stats = stats[selected] {
                 MuscleDetailView(muscleGroup: selected, stats: stats)
@@ -103,15 +103,15 @@ struct MuscleHeatmapView: View {
             }
         }
     }
-    
+
     private func calculateMuscleStats() -> [MuscleTag: MuscleStats] {
         let recentWorkouts = dataManager.workouts.filter { dateRange.contains($0.date) }
         var muscleGroupData: [MuscleTag: (sets: Int, exercises: Set<String>, lastDate: Date?)] = [:]
-        
+
         for group in MuscleGroup.allCases {
             muscleGroupData[MuscleTag.builtIn(group)] = (sets: 0, exercises: [], lastDate: nil)
         }
-        
+
         for workout in recentWorkouts {
             for exercise in workout.exercises {
                 let tags = ExerciseMetadataManager.shared.resolvedTags(for: exercise.name)
@@ -126,10 +126,10 @@ struct MuscleHeatmapView: View {
                 }
             }
         }
-        
+
         var result: [MuscleTag: MuscleStats] = [:]
         let maxSets = muscleGroupData.values.map { $0.sets }.max() ?? 1
-        
+
         for (group, data) in muscleGroupData {
             let intensity = maxSets > 0 ? Double(data.sets) / Double(maxSets) : 0
             result[group] = MuscleStats(
@@ -140,7 +140,7 @@ struct MuscleHeatmapView: View {
                 lastWorked: data.lastDate
             )
         }
-        
+
         return result
     }
 }
@@ -158,16 +158,16 @@ struct MuscleGroupTile: View {
     let stats: MuscleStats?
     let isSelected: Bool
     let onTap: () -> Void
-    
+
     private var color: Color {
         muscleGroup.tint
     }
-    
+
     private var opacity: Double {
         guard let stats = stats, stats.totalSets > 0 else { return 0.2 }
         return 0.3 + (stats.intensity * 0.7)
     }
-    
+
     var body: some View {
         Button(action: onTap) {
             VStack(spacing: Theme.Spacing.sm) {
@@ -175,12 +175,12 @@ struct MuscleGroupTile: View {
                 Image(systemName: muscleGroup.iconName)
                     .font(.system(size: 24, weight: .semibold))
                     .foregroundColor(color.opacity(opacity))
-                
+
                 // Name
                 Text(muscleGroup.shortName)
                     .font(Theme.Typography.captionBold)
                     .foregroundColor(Theme.Colors.textPrimary)
-                
+
                 // Sets count
                 if let stats = stats, stats.totalSets > 0 {
                     Text("\(stats.totalSets)")
@@ -210,7 +210,7 @@ struct MuscleGroupTile: View {
 struct MuscleDetailView: View {
     let muscleGroup: MuscleTag
     let stats: MuscleStats
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             // Header
@@ -218,16 +218,16 @@ struct MuscleDetailView: View {
                 Text(muscleGroup.displayName)
                     .font(Theme.Typography.headline)
                     .foregroundColor(Theme.Colors.textPrimary)
-                
+
                 Spacer()
-                
+
                 if let lastDate = stats.lastWorked {
                     Text(lastDate.formatted(date: .abbreviated, time: .omitted))
                         .font(Theme.Typography.caption)
                         .foregroundColor(Theme.Colors.textTertiary)
                 }
             }
-            
+
             // Stats row
             HStack(spacing: Theme.Spacing.xl) {
                 VStack(alignment: .leading, spacing: 2) {
@@ -238,7 +238,7 @@ struct MuscleDetailView: View {
                         .font(Theme.Typography.caption)
                         .foregroundColor(Theme.Colors.textSecondary)
                 }
-                
+
                 VStack(alignment: .leading, spacing: 2) {
                     Text("\(stats.exerciseCount)")
                         .font(Theme.Typography.number)
@@ -247,9 +247,9 @@ struct MuscleDetailView: View {
                         .font(Theme.Typography.caption)
                         .foregroundColor(Theme.Colors.textSecondary)
                 }
-                
+
                 Spacer()
-                
+
                 // Intensity indicator
                 HStack(spacing: 3) {
                     ForEach(0..<5, id: \.self) { i in
@@ -259,7 +259,7 @@ struct MuscleDetailView: View {
                     }
                 }
             }
-            
+
             // Exercise list
             if !stats.exercises.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {

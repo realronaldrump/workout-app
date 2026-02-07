@@ -80,7 +80,7 @@ struct ProfileView: View {
                     ProfileStat(title: "Workouts", value: "\(dataManager.workouts.count)")
                 }
                 .frame(maxWidth: .infinity)
-                
+
                 MetricTileButton(chevronPlacement: .bottomTrailing, action: {
                     showingExerciseList = true
                 }) {

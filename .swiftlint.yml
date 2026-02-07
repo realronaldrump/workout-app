@@ -33,6 +33,10 @@ identifier_name:
   max_length: 60
   excluded:
     - id
+    - i
+    - r
+    - g
+    - b
     - ok
     - x
     - y

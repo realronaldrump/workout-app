@@ -5,7 +5,7 @@ struct BackupFilesView: View {
     @State private var files: [URL] = []
     @State private var selectedFile: URL?
     @State private var showingDeleteAlert = false
-    
+
     var body: some View {
         ZStack {
             AdaptiveBackground()
@@ -59,7 +59,7 @@ struct BackupFilesView: View {
 struct BackupFileRow: View {
     let file: URL
     let onDelete: () -> Void
-    
+
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
@@ -67,7 +67,7 @@ struct BackupFileRow: View {
                     .font(Theme.Typography.condensed)
                     .tracking(-0.2)
                     .foregroundStyle(Theme.Colors.textPrimary)
-                
+
                 if let attributes = try? FileManager.default.attributesOfItem(atPath: file.path),
                    let fileSize = attributes[.size] as? Int,
                    let creationDate = attributes[.creationDate] as? Date {
@@ -80,9 +80,9 @@ struct BackupFileRow: View {
                     .foregroundStyle(Theme.Colors.textSecondary)
                 }
             }
-            
+
             Spacer()
-            
+
             Button(action: onDelete) {
                 Image(systemName: "trash")
                     .font(.body)

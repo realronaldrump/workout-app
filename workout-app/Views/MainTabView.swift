@@ -25,7 +25,7 @@ struct MainTabView: View {
         _annotationsManager = StateObject(wrappedValue: annotations)
         _gymProfilesManager = StateObject(wrappedValue: GymProfilesManager(annotationsManager: annotations))
     }
-    
+
     var body: some View {
         ZStack {
             TabView(selection: $selectedTab) {

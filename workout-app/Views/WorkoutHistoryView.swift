@@ -5,29 +5,29 @@ struct WorkoutHistoryView: View {
     var showsBackButton: Bool = false
     @State private var searchText = ""
     @Environment(\.dismiss) private var dismiss
-    
+
     private var groupedWorkouts: [(month: String, workouts: [Workout])] {
         let filtered = workouts.filter { workout in
-            searchText.isEmpty || 
+            searchText.isEmpty ||
             workout.name.localizedCaseInsensitiveContains(searchText) ||
             workout.exercises.contains { $0.name.localizedCaseInsensitiveContains(searchText) }
         }
-        
+
         let grouped = Dictionary(grouping: filtered) { workout in
             let calendar = Calendar.current
             return calendar.dateInterval(of: .month, for: workout.date)?.start
                 ?? calendar.startOfDay(for: workout.date)
         }
-        
+
         return grouped
             .sorted { $0.key > $1.key }
             .map { (month: $0.key.formatted(.dateTime.year().month(.wide)), workouts: $0.value.sorted { $0.date > $1.date }) }
     }
-    
+
     var body: some View {
         ZStack {
             AdaptiveBackground()
-            
+
             ScrollView(showsIndicators: false) {
                 LazyVStack(alignment: .leading, spacing: Theme.Spacing.xxl) {
                     header
@@ -47,7 +47,7 @@ struct WorkoutHistoryView: View {
                                     .font(Theme.Typography.sectionHeader)
                                     .foregroundStyle(Theme.Colors.textPrimary)
                                     .tracking(1.0)
-                                
+
                                 VStack(spacing: Theme.Spacing.md) {
                                     ForEach(group.workouts) { workout in
                                         WorkoutHistoryRow(workout: workout)
@@ -137,7 +137,7 @@ struct WorkoutHistoryRow: View {
     @EnvironmentObject var healthManager: HealthKitManager
     @EnvironmentObject var annotationsManager: WorkoutAnnotationsManager
     @EnvironmentObject var gymProfilesManager: GymProfilesManager
-    
+
     var body: some View {
         NavigationLink(destination: WorkoutDetailView(workout: workout)) {
             HStack {
@@ -146,20 +146,20 @@ struct WorkoutHistoryRow: View {
                         Text(workout.name)
                             .font(Theme.Typography.title3)
                             .foregroundStyle(Theme.Colors.textPrimary)
-                        
+
                         Spacer()
-                        
+
                         Text(workout.date.formatted(date: .omitted, time: .shortened))
                             .font(Theme.Typography.caption)
                             .foregroundStyle(Theme.Colors.textTertiary)
                     }
-                    
+
                     Text(workout.date.formatted(.dateTime.weekday(.wide)) + ", " + workout.date.formatted(.dateTime.day()))
                         .font(Theme.Typography.subheadline)
                         .foregroundStyle(Theme.Colors.textSecondary)
 
                     GymBadge(text: gymLabel, style: gymBadgeStyle)
-                    
+
                     HStack(spacing: 12) {
                         metric(workout.duration, systemImage: "clock")
                         metric("\(workout.exercises.count) exercises", systemImage: "figure.strengthtraining.traditional")
@@ -173,9 +173,9 @@ struct WorkoutHistoryRow: View {
                             .padding(.top, Theme.Spacing.xs)
                     }
                 }
-                
+
                 Spacer()
-                
+
                 Image(systemName: "chevron.right")
                     .font(.caption)
                     .foregroundStyle(Theme.Colors.textTertiary)
@@ -197,7 +197,7 @@ struct WorkoutHistoryRow: View {
                 .foregroundStyle(Theme.Colors.textSecondary)
         }
     }
-    
+
     private func formatVolume(_ volume: Double) -> String {
         if volume >= 1000 {
             return String(format: "%.1fk lbs", volume / 1000)

@@ -46,4 +46,3 @@ struct WorkoutsInRangeView: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 }
-

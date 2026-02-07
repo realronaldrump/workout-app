@@ -8,14 +8,14 @@
 import SwiftUI
 
 @main
-struct workout_appApp: App {
+struct WorkoutApp: App {
     @StateObject private var healthManager = HealthKitManager()
 
     init() {
         FontRegistrar.registerFontsIfNeeded()
         Theme.configureGlobalAppearance()
     }
-    
+
     var body: some Scene {
         WindowGroup {
             MainTabView()

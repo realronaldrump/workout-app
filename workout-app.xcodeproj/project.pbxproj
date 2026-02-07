@@ -146,7 +146,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "export PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\"\nif command -v swiftlint >/dev/null 2>&1; then\n  swiftlint --config \"${SRCROOT}/.swiftlint.yml\"\nelse\n  echo \"warning: SwiftLint not installed. Install from https://github.com/realm/SwiftLint\"\nfi\n\n# Xcode warns if a script phase has no declared outputs.\ntouch \"${DERIVED_FILE_DIR}/swiftlint.stamp\"\n";
+				shellScript = "set -e\nexport PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\"\n\"${SRCROOT}/scripts/swiftlint.sh\" lint\n# Xcode warns if a script phase has no declared outputs.\ntouch \"${DERIVED_FILE_DIR}/swiftlint.stamp\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
