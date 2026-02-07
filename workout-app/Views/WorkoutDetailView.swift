@@ -352,43 +352,47 @@ struct RecoveryInsightCard: View {
     let healthData: WorkoutHealthData
     @State private var didTriggerHaptic = false
 
-    // swiftlint:disable identifier_name
     private enum RecoveryGrade: String {
-        case a = "A"
+        case gradeA = "A"
         case b = "B"
-        case c = "C"
+        case gradeC = "C"
 
         var statusLabel: String {
             switch self {
-            case .a: return "Ready"
+            case .gradeA: return "Ready"
             case .b: return "Caution"
-            case .c: return "Needs recovery"
+            case .gradeC: return "Needs recovery"
             }
         }
 
         var explanation: String {
             switch self {
-            case .a:
+            case .gradeA:
                 return "A = steady recovery signals for this workout."
             case .b:
                 return "B = some fatigue signal; consider a lighter next session."
-            case .c:
+            case .gradeC:
                 return "C = elevated fatigue signal (high resting HR or low HRV)."
             }
         }
     }
-    // swiftlint:enable identifier_name
 
-    // swiftlint:disable:next large_tuple
-    private var insight: (grade: RecoveryGrade, message: String, tint: Color, icon: String) {
+    private struct RecoveryInsightSnapshot {
+        let grade: RecoveryGrade
+        let message: String
+        let tint: Color
+        let icon: String
+    }
+
+    private var insight: RecoveryInsightSnapshot {
         let hrv = Int(healthData.avgHRV ?? 0)
         let resting = Int(healthData.restingHeartRate ?? 0)
         let workload = Int(healthData.avgHeartRate ?? 0)
         let message = "hrv \(hrv) ms | rhr \(resting) bpm | avgHR \(workload) bpm"
 
         if resting > 70 || hrv < 35 {
-            return (
-                grade: .c,
+            return RecoveryInsightSnapshot(
+                grade: .gradeC,
                 message: message,
                 tint: Theme.Colors.warning,
                 icon: "bed.double.fill"
@@ -396,7 +400,7 @@ struct RecoveryInsightCard: View {
         }
 
         if workload > 150 {
-            return (
+            return RecoveryInsightSnapshot(
                 grade: .b,
                 message: message,
                 tint: Theme.Colors.accentSecondary,
@@ -404,8 +408,8 @@ struct RecoveryInsightCard: View {
             )
         }
 
-        return (
-            grade: .a,
+        return RecoveryInsightSnapshot(
+            grade: .gradeA,
             message: message,
             tint: Theme.Colors.success,
             icon: "checkmark.seal.fill"

@@ -283,27 +283,39 @@ extension View {
 // MARK: - Color Helpers
 
 extension Color {
+    private struct RGBAComponents {
+        let red: Double
+        let green: Double
+        let blue: Double
+        let alpha: Double
+    }
+
     func blended(with color: Color, amount: Double) -> Color {
         let clamped = min(max(amount, 0), 1)
-        let (r1, g1, b1, a1) = rgbaComponents()
-        let (r2, g2, b2, a2) = color.rgbaComponents()
+        let first = rgbaComponents()
+        let second = color.rgbaComponents()
 
         return Color(
-            red: r1 + (r2 - r1) * clamped,
-            green: g1 + (g2 - g1) * clamped,
-            blue: b1 + (b2 - b1) * clamped,
-            opacity: a1 + (a2 - a1) * clamped
+            red: first.red + (second.red - first.red) * clamped,
+            green: first.green + (second.green - first.green) * clamped,
+            blue: first.blue + (second.blue - first.blue) * clamped,
+            opacity: first.alpha + (second.alpha - first.alpha) * clamped
         )
     }
 
-    private func rgbaComponents() -> (Double, Double, Double, Double) {
+    private func rgbaComponents() -> RGBAComponents {
         let uiColor = UIColor(self)
         var red: CGFloat = 0
         var green: CGFloat = 0
         var blue: CGFloat = 0
         var alpha: CGFloat = 0
         uiColor.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
-        return (Double(red), Double(green), Double(blue), Double(alpha))
+        return RGBAComponents(
+            red: Double(red),
+            green: Double(green),
+            blue: Double(blue),
+            alpha: Double(alpha)
+        )
     }
 }
 
