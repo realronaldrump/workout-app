@@ -15,6 +15,7 @@ struct WorkoutSessionView: View {
 
     @State private var showingExercisePicker = false
     @State private var showingFinishSheet = false
+    @State private var showingDiscardAlert = false
     @State private var finishErrorMessage: String?
     @State private var isFinishing = false
 
@@ -105,10 +106,43 @@ struct WorkoutSessionView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Minimize") {
+                    Button {
                         sessionManager.isPresentingSessionUI = false
                         dismiss()
+                        Haptics.selection()
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(Theme.Colors.accent)
+
+                            Text("Minimize")
+                                .font(Theme.Typography.captionBold)
+                                .foregroundColor(Theme.Colors.textPrimary)
+                        }
+                        .padding(.horizontal, Theme.Spacing.md)
+                        .padding(.vertical, Theme.Spacing.xs)
+                        .background(Capsule().fill(Theme.Colors.surface))
+                        .overlay(
+                            Capsule()
+                                .strokeBorder(Theme.Colors.border, lineWidth: 2)
+                        )
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Minimize session")
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(role: .destructive) {
+                        showingDiscardAlert = true
+                        Haptics.selection()
+                    } label: {
+                        Image(systemName: "trash")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(Theme.Colors.textSecondary)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(sessionManager.activeSession == nil || isFinishing)
+                    .accessibilityLabel("Discard session")
                 }
             }
             .sheet(isPresented: $showingExercisePicker) {
@@ -125,6 +159,18 @@ struct WorkoutSessionView: View {
                     onDismissError: { finishErrorMessage = nil }
                 )
                 .presentationDetents([.medium])
+            }
+            .alert("Discard Session?", isPresented: $showingDiscardAlert) {
+                Button("Keep", role: .cancel) {}
+                Button("Discard", role: .destructive) {
+                    Task { @MainActor in
+                        await sessionManager.discardDraft()
+                        Haptics.notify(.warning)
+                        dismiss()
+                    }
+                }
+            } message: {
+                Text("This will permanently delete your in-progress session and all sets.")
             }
             .onAppear {
                 // If user never set this preference, keep it aligned with the unit.
@@ -287,7 +333,7 @@ struct WorkoutSessionView: View {
             defer { isFinishing = false }
 
             do {
-                let logged = try sessionManager.finish()
+                let logged = try await sessionManager.finish()
                 await logStore.upsert(logged)
                 dataManager.setLoggedWorkouts(logStore.workouts)
 

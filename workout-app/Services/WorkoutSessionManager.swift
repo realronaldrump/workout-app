@@ -34,6 +34,7 @@ final class WorkoutSessionManager: ObservableObject {
     @Published var isPresentingSessionUI: Bool = false
 
     private let fileName = "active_session_v1.json"
+    private let draftStore = ActiveSessionDraftStore()
     private var persistTask: Task<Void, Never>?
 
     func restoreDraft() async {
@@ -192,7 +193,7 @@ final class WorkoutSessionManager: ObservableObject {
         schedulePersistDraft()
     }
 
-    func finish() throws -> LoggedWorkout {
+    func finish() async throws -> LoggedWorkout {
         guard let session = activeSession else { throw WorkoutSessionError.noActiveSession }
 
         var totalLoggedSets = 0
@@ -240,14 +241,14 @@ final class WorkoutSessionManager: ObservableObject {
 
         activeSession = nil
         isPresentingSessionUI = false
-        deleteDraftFile()
+        await deleteDraftFile()
         return workout
     }
 
     func discardDraft() async {
         activeSession = nil
         isPresentingSessionUI = false
-        deleteDraftFile()
+        await deleteDraftFile()
     }
 
     // MARK: - Draft Persistence
@@ -255,8 +256,14 @@ final class WorkoutSessionManager: ObservableObject {
     private func schedulePersistDraft() {
         persistTask?.cancel()
         persistTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 450_000_000)
+            do {
+                try await Task.sleep(nanoseconds: 450_000_000)
+            } catch {
+                // Cancelled (or otherwise interrupted) debounced persist.
+                return
+            }
             guard let self else { return }
+            guard !Task.isCancelled else { return }
             await self.persistDraft()
         }
     }
@@ -276,27 +283,15 @@ final class WorkoutSessionManager: ObservableObject {
             return
         }
 
-        Task.detached(priority: .utility) {
-            do {
-                try data.write(to: url, options: [.atomic, .completeFileProtection])
-            } catch {
-                print("Failed to persist active session draft: \(error)")
-            }
-        }
+        await draftStore.write(data, to: url)
     }
 
-    private func deleteDraftFile() {
+    private func deleteDraftFile() async {
         persistTask?.cancel()
         persistTask = nil
 
         let url = fileURL()
-        do {
-            if FileManager.default.fileExists(atPath: url.path) {
-                try FileManager.default.removeItem(at: url)
-            }
-        } catch {
-            print("Failed to delete active session draft: \(error)")
-        }
+        await draftStore.delete(at: url)
     }
 
     private func fileURL() -> URL {
@@ -323,5 +318,25 @@ final class WorkoutSessionManager: ObservableObject {
 
     private func normalizedExerciseName(_ name: String) -> String {
         name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+}
+
+private actor ActiveSessionDraftStore {
+    func write(_ data: Data, to url: URL) {
+        do {
+            try data.write(to: url, options: [.atomic, .completeFileProtection])
+        } catch {
+            print("Failed to persist active session draft: \(error)")
+        }
+    }
+
+    func delete(at url: URL) {
+        do {
+            if FileManager.default.fileExists(atPath: url.path) {
+                try FileManager.default.removeItem(at: url)
+            }
+        } catch {
+            print("Failed to delete active session draft: \(error)")
+        }
     }
 }
