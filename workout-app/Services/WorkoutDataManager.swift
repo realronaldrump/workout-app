@@ -5,19 +5,22 @@ import Combine
 @MainActor
 class WorkoutDataManager: ObservableObject {
     @Published var workouts: [Workout] = []
+    @Published private(set) var importedWorkouts: [Workout] = []
+    @Published private(set) var loggedWorkouts: [Workout] = []
+    @Published private(set) var loggedWorkoutIds: Set<UUID> = []
     @Published var isLoading = false
     @Published var error: String?
 
     private let identityStore = WorkoutIdentityStore()
 
-    nonisolated func processWorkoutSets(
+    nonisolated func processImportedWorkoutSets(
         _ sets: [WorkoutSet],
         healthDataSnapshot: [WorkoutHealthData] = []
     ) async {
-        let (existingWorkouts, identitySnapshot): ([Workout], [String: UUID]) = await MainActor.run {
+        let (existingImported, identitySnapshot): ([Workout], [String: UUID]) = await MainActor.run {
             self.isLoading = true
             self.error = nil
-            return (self.workouts, self.identityStore.snapshot())
+            return (self.importedWorkouts, self.identityStore.snapshot())
         }
         // Run heavy grouping logic on a background thread
         let task = Task.detached(priority: .userInitiated) {
@@ -30,7 +33,7 @@ class WorkoutDataManager: ObservableObject {
             }
 
             var existingIdsByKey: [String: UUID] = [:]
-            for workout in existingWorkouts {
+            for workout in existingImported {
                 let key = WorkoutIdentity.workoutKey(date: workout.date, workoutName: workout.name, calendar: calendar)
                 existingIdsByKey[key] = workout.id
             }
@@ -111,10 +114,22 @@ class WorkoutDataManager: ObservableObject {
 
         // Update UI on MainActor
         await MainActor.run {
-            self.workouts = processedWorkouts
+            self.importedWorkouts = processedWorkouts
+            self.mergeSources()
             self.isLoading = false
             self.identityStore.merge(newIdentityEntries)
         }
+    }
+
+    func setLoggedWorkouts(_ logged: [LoggedWorkout]) {
+        let mapped = logged.map(Self.mapLoggedWorkoutToAnalyticsWorkout)
+        loggedWorkouts = mapped.sorted { $0.date > $1.date }
+        loggedWorkoutIds = Set(logged.map(\.id))
+        mergeSources()
+    }
+
+    private func mergeSources() {
+        workouts = (importedWorkouts + loggedWorkouts).sorted { $0.date > $1.date }
     }
 
     func getExerciseHistory(for exerciseName: String) -> [(date: Date, sets: [WorkoutSet])] {
@@ -280,8 +295,65 @@ class WorkoutDataManager: ObservableObject {
     }
     func clearAllData() {
         self.workouts = []
+        self.importedWorkouts = []
+        self.loggedWorkouts = []
+        self.loggedWorkoutIds = []
         self.isLoading = false
         self.error = nil
         self.identityStore.clear()
+    }
+}
+
+// MARK: - LoggedWorkout mapping
+
+private extension WorkoutDataManager {
+    nonisolated static func mapLoggedWorkoutToAnalyticsWorkout(_ logged: LoggedWorkout) -> Workout {
+        let duration = formatDuration(start: logged.startedAt, end: logged.endedAt)
+
+        let exercises: [Exercise] = logged.exercises.map { loggedExercise in
+            let sets: [WorkoutSet] = loggedExercise.sets.map { loggedSet in
+                WorkoutSet(
+                    date: logged.startedAt,
+                    workoutName: logged.name,
+                    duration: duration,
+                    exerciseName: loggedExercise.name,
+                    setOrder: loggedSet.order,
+                    weight: loggedSet.weight,
+                    reps: loggedSet.reps,
+                    distance: 0,
+                    seconds: 0,
+                    rpe: loggedSet.rpe.map { formatRPE($0) }
+                )
+            }
+            return Exercise(id: loggedExercise.id, name: loggedExercise.name, sets: sets.sorted { $0.setOrder < $1.setOrder })
+        }
+
+        return Workout(
+            id: logged.id,
+            date: logged.startedAt,
+            name: logged.name,
+            duration: duration,
+            exercises: exercises
+        )
+    }
+
+    nonisolated static func formatDuration(start: Date, end: Date) -> String {
+        let seconds = max(0, end.timeIntervalSince(start))
+        let minutes = Int(ceil(seconds / 60.0))
+        if minutes >= 60 {
+            let hours = minutes / 60
+            let minutesRemainder = minutes % 60
+            return minutesRemainder == 0 ? "\(hours)h" : "\(hours)h \(minutesRemainder)m"
+        }
+        return "\(minutes)m"
+    }
+
+    nonisolated static func formatRPE(_ rpe: Double) -> String {
+        // Ensure Double(...) parsing works downstream (fatigue summary).
+        let rounded = (rpe * 10).rounded() / 10
+        if rounded.truncatingRemainder(dividingBy: 1) == 0 {
+            return String(Int(rounded))
+        }
+        return String(format: "%.1f", locale: Locale(identifier: "en_US_POSIX"), rounded)
     }
 }

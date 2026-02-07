@@ -535,7 +535,7 @@ struct StrongImportWizard: View {
                             }
 
                             // Process workout sets (nonisolated async)
-                            await dataManager.processWorkoutSets(sets, healthDataSnapshot: healthSnapshot)
+                            await dataManager.processImportedWorkoutSets(sets, healthDataSnapshot: healthSnapshot)
 
                             await MainActor.run {
                                 let stats = dataManager.calculateStats()

@@ -101,7 +101,7 @@ struct PerformanceLabView: View {
     }
 
     private var headerSummary: String {
-        "\(workouts.count) sessions, \(healthManager.healthDataStore.count) health snapshots, \(annotationsManager.annotations.count) notes."
+        "\(workouts.count) sessions, \(healthManager.healthDataStore.count) health snapshots, \(annotationsManager.annotations.count) annotations."
     }
 
     private var progressMapSection: some View {
@@ -446,7 +446,7 @@ struct PerformanceLabView: View {
                 .foregroundColor(Theme.Colors.textPrimary)
 
             if insights.isEmpty {
-                Text("notes 0")
+                Text("check-ins 0")
                     .font(Theme.Typography.body)
                     .foregroundColor(Theme.Colors.textSecondary)
                     .padding(Theme.Spacing.lg)

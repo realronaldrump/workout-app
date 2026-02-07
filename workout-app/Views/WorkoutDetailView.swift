@@ -15,8 +15,18 @@ struct WorkoutDetailView: View {
     @State private var showingSessionInsights = false
     @State private var showingWorkoutHealthInsights = false
     @State private var showingFatigueInsights = false
+    @State private var showingEdit = false
+
+    private var resolvedWorkout: Workout {
+        dataManager.workouts.first(where: { $0.id == workout.id }) ?? workout
+    }
+
+    private var isLoggedWorkout: Bool {
+        dataManager.loggedWorkoutIds.contains(workout.id)
+    }
 
     var body: some View {
+        let workout = resolvedWorkout
         ZStack {
             AdaptiveBackground()
 
@@ -114,6 +124,16 @@ struct WorkoutDetailView: View {
                     .font(Theme.Typography.caption)
                     .foregroundColor(Theme.Colors.textTertiary)
             }
+
+            if isLoggedWorkout {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Edit") {
+                        showingEdit = true
+                        Haptics.selection()
+                    }
+                    .font(Theme.Typography.captionBold)
+                }
+            }
         }
         .onAppear {
             // Health data is now observed directly from healthManager
@@ -133,6 +153,9 @@ struct WorkoutDetailView: View {
         }
         .sheet(isPresented: $showingQuickStart) {
             QuickStartView(exerciseName: quickStartExercise)
+        }
+        .sheet(isPresented: $showingEdit) {
+            WorkoutEditView(workoutId: workout.id)
         }
         .navigationDestination(isPresented: $showingSessionInsights) {
             WorkoutSessionInsightsView(workout: workout)
@@ -177,7 +200,7 @@ struct WorkoutDetailView: View {
     }
 
     private var fatigueSummary: FatigueSummary {
-        WorkoutAnalytics.fatigueSummary(for: workout, allWorkouts: dataManager.workouts)
+        WorkoutAnalytics.fatigueSummary(for: resolvedWorkout, allWorkouts: dataManager.workouts)
     }
 
     private var syncButton: some View {

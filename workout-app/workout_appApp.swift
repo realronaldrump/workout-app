@@ -10,6 +10,7 @@ import SwiftUI
 @main
 struct WorkoutApp: App {
     @StateObject private var healthManager = HealthKitManager()
+    @StateObject private var sessionManager = WorkoutSessionManager()
 
     init() {
         FontRegistrar.registerFontsIfNeeded()
@@ -20,6 +21,7 @@ struct WorkoutApp: App {
         WindowGroup {
             MainTabView()
                 .environmentObject(healthManager)
+                .environmentObject(sessionManager)
         }
     }
 }

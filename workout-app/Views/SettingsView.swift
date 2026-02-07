@@ -4,6 +4,8 @@ struct SettingsView: View {
     @ObservedObject var dataManager: WorkoutDataManager
     @ObservedObject var iCloudManager: iCloudDocumentManager
     @EnvironmentObject var healthManager: HealthKitManager
+    @EnvironmentObject var logStore: WorkoutLogStore
+    @EnvironmentObject var sessionManager: WorkoutSessionManager
 
     @State private var showingImportWizard = false
     @State private var showingHealthWizard = false
@@ -11,6 +13,7 @@ struct SettingsView: View {
     @State private var showingDeleteAlert = false
 
     @AppStorage("weightUnit") private var weightUnit = "lbs"
+    @AppStorage("weightIncrement") private var weightIncrement: Double = 2.5
     @AppStorage("dateFormat") private var dateFormat = "relative"
 
     var body: some View {
@@ -177,6 +180,32 @@ struct SettingsView: View {
 
                         Divider().padding(.leading, 50)
 
+                        // Weight increment
+                        HStack {
+                            Image(systemName: "ruler.fill")
+                                .foregroundStyle(.white)
+                                .frame(width: 30, height: 30)
+                                .background(Theme.Colors.accentSecondary)
+                                .cornerRadius(6)
+
+                            Text("Weight Increment")
+                                .font(Theme.Typography.body)
+
+                            Spacer()
+
+                            Picker("", selection: $weightIncrement) {
+                                ForEach(incrementOptions, id: \.self) { option in
+                                    Text(incrementLabel(option)).tag(option)
+                                }
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.menu)
+                        }
+                        .padding()
+                        .softCard()
+
+                        Divider().padding(.leading, 50)
+
                         // Custom Picker Row for Date
                         HStack {
                             Image(systemName: "calendar")
@@ -313,6 +342,8 @@ struct SettingsView: View {
             Button("Clear", role: .destructive) {
                 Task {
                     await iCloudManager.deleteAllWorkoutFiles()
+                    await logStore.clearAll()
+                    await sessionManager.discardDraft()
                     await MainActor.run {
                         healthManager.clearAllData()
                         dataManager.clearAllData()
@@ -320,10 +351,37 @@ struct SettingsView: View {
                 }
             }
         } message: {
-            Text("WARNING: This will permanently delete all imported CSV files and health data from your device. This action cannot be undone.")
+            Text(
+                "WARNING: This will permanently delete all imported CSV files, logged workouts, " +
+                "active session drafts, and health data from your device. This action cannot be undone."
+            )
         }
         .onAppear {
             healthManager.refreshAuthorizationStatus()
+            normalizeIncrementIfNeeded()
+        }
+        .onChange(of: weightUnit) { _, _ in
+            normalizeIncrementIfNeeded()
+        }
+    }
+
+    private var incrementOptions: [Double] {
+        weightUnit == "kg" ? [0.5, 1.0, 2.5] : [1.25, 2.5, 5.0]
+    }
+
+    private func incrementLabel(_ value: Double) -> String {
+        if value.truncatingRemainder(dividingBy: 1) == 0 {
+            return "\(Int(value))"
+        }
+        return String(format: "%.2f", locale: Locale(identifier: "en_US_POSIX"), value)
+    }
+
+    private func normalizeIncrementIfNeeded() {
+        if !incrementOptions.contains(where: { abs($0 - weightIncrement) < 0.0001 }) {
+            weightIncrement = weightUnit == "kg" ? 1.0 : 2.5
+        }
+        if weightIncrement <= 0 {
+            weightIncrement = weightUnit == "kg" ? 1.0 : 2.5
         }
     }
 }

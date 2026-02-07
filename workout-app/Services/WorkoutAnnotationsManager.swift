@@ -21,8 +21,7 @@ final class WorkoutAnnotationsManager: ObservableObject {
         stress: StressLevel?,
         soreness: SorenessLevel?,
         caffeine: CaffeineIntake?,
-        mood: MoodLevel?,
-        notes: String?
+        mood: MoodLevel?
     ) {
         let existing = annotations[workoutId]
         let updated = WorkoutAnnotation(
@@ -33,8 +32,7 @@ final class WorkoutAnnotationsManager: ObservableObject {
             stress: stress,
             soreness: soreness,
             caffeine: caffeine,
-            mood: mood,
-            notes: notes
+            mood: mood
         )
         annotations[workoutId] = updated
         persist()
@@ -50,8 +48,7 @@ final class WorkoutAnnotationsManager: ObservableObject {
             stress: existing?.stress,
             soreness: existing?.soreness,
             caffeine: existing?.caffeine,
-            mood: existing?.mood,
-            notes: existing?.notes
+            mood: existing?.mood
         )
 
         if shouldRemoveAnnotation(updated) {
@@ -74,8 +71,7 @@ final class WorkoutAnnotationsManager: ObservableObject {
                 stress: existing?.stress,
                 soreness: existing?.soreness,
                 caffeine: existing?.caffeine,
-                mood: existing?.mood,
-                notes: existing?.notes
+                mood: existing?.mood
             )
 
             if shouldRemoveAnnotation(updated) {
@@ -93,7 +89,6 @@ final class WorkoutAnnotationsManager: ObservableObject {
         existing.soreness = nil
         existing.caffeine = nil
         existing.mood = nil
-        existing.notes = nil
 
         if shouldRemoveAnnotation(existing) {
             annotations.removeValue(forKey: workoutId)
@@ -162,12 +157,10 @@ final class WorkoutAnnotationsManager: ObservableObject {
     }
 
     private func shouldRemoveAnnotation(_ annotation: WorkoutAnnotation) -> Bool {
-        let notesEmpty = annotation.notes?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true
         return annotation.gymProfileId == nil &&
             annotation.stress == nil &&
             annotation.soreness == nil &&
             annotation.caffeine == nil &&
-            annotation.mood == nil &&
-            notesEmpty
+            annotation.mood == nil
     }
 }

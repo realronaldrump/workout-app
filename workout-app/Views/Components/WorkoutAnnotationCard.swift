@@ -81,27 +81,11 @@ struct WorkoutAnnotationCard: View {
     }
 
     private func save() {
-        let existing = annotationsManager.annotation(for: workout.id)
+        let existingGym = annotationsManager.annotation(for: workout.id)?.gymProfileId
         let hasNonGymFields = stress != nil || soreness != nil || caffeine != nil || mood != nil
-        let existingGym = existing?.gymProfileId
-        let existingNotes = existing?.notes
-        let existingNotesEmpty = existingNotes?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true
-        let shouldKeep = hasNonGymFields || !existingNotesEmpty
 
-        if !shouldKeep {
-            if existingGym == nil {
-                annotationsManager.removeAnnotation(for: workout.id)
-            } else {
-                annotationsManager.upsertAnnotation(
-                    for: workout.id,
-                    stress: nil,
-                    soreness: nil,
-                    caffeine: nil,
-                    mood: nil,
-                    // Preserve any legacy notes we might have in persisted storage.
-                    notes: existingNotes
-                )
-            }
+        if !hasNonGymFields && existingGym == nil {
+            annotationsManager.removeAnnotation(for: workout.id)
             return
         }
 
@@ -110,9 +94,7 @@ struct WorkoutAnnotationCard: View {
             stress: stress,
             soreness: soreness,
             caffeine: caffeine,
-            mood: mood,
-            // Notes input was removed; keep any existing value rather than silently deleting it.
-            notes: existingNotes
+            mood: mood
         )
     }
 }

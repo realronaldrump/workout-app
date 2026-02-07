@@ -98,7 +98,6 @@ struct WorkoutAnnotation: Identifiable, Codable {
     var soreness: SorenessLevel?
     var caffeine: CaffeineIntake?
     var mood: MoodLevel?
-    var notes: String?
 
     init(
         id: UUID = UUID(),
@@ -108,8 +107,7 @@ struct WorkoutAnnotation: Identifiable, Codable {
         stress: StressLevel? = nil,
         soreness: SorenessLevel? = nil,
         caffeine: CaffeineIntake? = nil,
-        mood: MoodLevel? = nil,
-        notes: String? = nil
+        mood: MoodLevel? = nil
     ) {
         self.id = id
         self.workoutId = workoutId
@@ -119,7 +117,6 @@ struct WorkoutAnnotation: Identifiable, Codable {
         self.soreness = soreness
         self.caffeine = caffeine
         self.mood = mood
-        self.notes = notes
     }
 }
 

@@ -11,6 +11,7 @@ enum AppTab: String, CaseIterable, Hashable {
 struct MainTabView: View {
     @StateObject private var dataManager = WorkoutDataManager()
     @StateObject private var iCloudManager = iCloudDocumentManager()
+    @StateObject private var logStore = WorkoutLogStore()
     @StateObject private var annotationsManager: WorkoutAnnotationsManager
     @StateObject private var gymProfilesManager: GymProfilesManager
     @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
@@ -18,6 +19,8 @@ struct MainTabView: View {
     @State private var pendingOnboarding = false
     @State private var selectedTab: AppTab = .home
     @State private var showSplash = true
+    @EnvironmentObject private var sessionManager: WorkoutSessionManager
+    @EnvironmentObject private var healthManager: HealthKitManager
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init() {
@@ -82,6 +85,7 @@ struct MainTabView: View {
             }
         }
         .environmentObject(dataManager)
+        .environmentObject(logStore)
         .environmentObject(annotationsManager)
         .environmentObject(gymProfilesManager)
         .tint(Theme.Colors.accent)
@@ -96,6 +100,7 @@ struct MainTabView: View {
         .onAppear {
             beginSplashIfNeeded()
             refreshOnboardingState()
+            bootstrapStoresIfNeeded()
         }
         .onChange(of: dataManager.workouts.count) { _, _ in
             refreshOnboardingState()
@@ -107,6 +112,27 @@ struct MainTabView: View {
                 iCloudManager: iCloudManager,
                 hasSeenOnboarding: $hasSeenOnboarding
             )
+        }
+        .overlay(alignment: .bottom) {
+            if sessionManager.activeSession != nil && !sessionManager.isPresentingSessionUI {
+                ActiveSessionBar()
+                    .padding(.horizontal, Theme.Spacing.lg)
+                    .padding(.bottom, Theme.Spacing.lg)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .zIndex(9)
+            }
+        }
+        .fullScreenCover(isPresented: $sessionManager.isPresentingSessionUI) {
+            // Explicitly re-inject shared ObservableObjects so session UI is robust to
+            // SwiftUI presentation/environment propagation quirks (e.g. presenting
+            // the session UI while another sheet is currently displayed).
+            WorkoutSessionView()
+                .environmentObject(sessionManager)
+                .environmentObject(healthManager)
+                .environmentObject(dataManager)
+                .environmentObject(logStore)
+                .environmentObject(annotationsManager)
+                .environmentObject(gymProfilesManager)
         }
     }
 
@@ -143,6 +169,14 @@ struct MainTabView: View {
                 try? await Task.sleep(nanoseconds: UInt64(fadeOutSeconds * 1_000_000_000))
                 showingOnboarding = true
             }
+        }
+    }
+
+    private func bootstrapStoresIfNeeded() {
+        Task { @MainActor in
+            await logStore.load()
+            dataManager.setLoggedWorkouts(logStore.workouts)
+            await sessionManager.restoreDraft()
         }
     }
 }

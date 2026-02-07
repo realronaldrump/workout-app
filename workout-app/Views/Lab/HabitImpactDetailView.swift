@@ -96,7 +96,7 @@ struct HabitImpactDetailView: View {
                 .foregroundStyle(Theme.Colors.textPrimary)
 
             if model.buckets.isEmpty {
-                EmptyStateCard(title: "No buckets", message: "Add more notes/tags to workouts to power this view.")
+                EmptyStateCard(title: "No buckets", message: "Add more check-ins to workouts to power this view.")
             } else {
                 ForEach(model.buckets) { bucket in
                     VStack(alignment: .leading, spacing: Theme.Spacing.md) {

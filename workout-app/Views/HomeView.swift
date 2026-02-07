@@ -393,7 +393,7 @@ struct HomeView: View {
         case .success(let sets):
             guard !sets.isEmpty else { return }
             let healthSnapshot = Array(healthManager.healthDataStore.values)
-            await dataManager.processWorkoutSets(sets, healthDataSnapshot: healthSnapshot)
+            await dataManager.processImportedWorkoutSets(sets, healthDataSnapshot: healthSnapshot)
             refreshInsights()
         case .failure(let error):
             print("Failed to load workout data: \(error)")
