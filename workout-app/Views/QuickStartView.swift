@@ -44,20 +44,23 @@ struct QuickStartView: View {
 
                         HStack(spacing: Theme.Spacing.sm) {
                             ForEach(SessionFocus.allCases, id: \.self) { option in
-                                Button(action: {
-                                    focus = option
-                                    Haptics.selection()
-                                }) {
-                                    Text(option.rawValue)
-                                        .font(Theme.Typography.subheadline)
-                                        .foregroundColor(focus == option ? Theme.Colors.textPrimary : Theme.Colors.textSecondary)
-                                        .padding(.horizontal, Theme.Spacing.md)
-                                        .padding(.vertical, Theme.Spacing.sm)
-                                        .background(
-                                            RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
-                                                .fill(focus == option ? Theme.Colors.elevated : Theme.Colors.surface.opacity(0.4))
-                                        )
-                                }
+                                Button(
+                                    action: {
+                                        focus = option
+                                        Haptics.selection()
+                                    },
+                                    label: {
+                                        Text(option.rawValue)
+                                            .font(Theme.Typography.subheadline)
+                                            .foregroundColor(focus == option ? Theme.Colors.textPrimary : Theme.Colors.textSecondary)
+                                            .padding(.horizontal, Theme.Spacing.md)
+                                            .padding(.vertical, Theme.Spacing.sm)
+                                            .background(
+                                                RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
+                                                    .fill(focus == option ? Theme.Colors.elevated : Theme.Colors.surface.opacity(0.4))
+                                            )
+                                    }
+                                )
                             }
                         }
                     }
@@ -91,21 +94,24 @@ struct QuickStartView: View {
                     .padding(Theme.Spacing.lg)
                     .softCard(elevation: 1)
 
-                    Button(action: {
-                        Haptics.notify(.success)
-                        dismiss()
-                    }) {
-                        HStack {
-                            Spacer()
-                            Text("Start Session")
-                                .font(Theme.Typography.headline)
-                                .foregroundColor(.white)
-                            Spacer()
+                    Button(
+                        action: {
+                            Haptics.notify(.success)
+                            dismiss()
+                        },
+                        label: {
+                            HStack {
+                                Spacer()
+                                Text("Start Session")
+                                    .font(Theme.Typography.headline)
+                                    .foregroundColor(.white)
+                                Spacer()
+                            }
+                            .padding()
+                            .background(Theme.Colors.accent)
+                            .cornerRadius(Theme.CornerRadius.large)
                         }
-                        .padding()
-                        .background(Theme.Colors.accent)
-                        .cornerRadius(Theme.CornerRadius.large)
-                    }
+                    )
                 }
                 .padding(Theme.Spacing.xl)
             }

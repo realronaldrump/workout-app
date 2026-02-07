@@ -264,14 +264,17 @@ struct SettingsView: View {
                 }
 
                 // Danger Zone
-                Button(action: { showingDeleteAlert = true }) {
-                    Text("Clear All Data")
-                        .font(Theme.Typography.bodyBold)
-                        .foregroundStyle(Theme.Colors.error)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .softCard()
-                }
+                Button(
+                    action: { showingDeleteAlert = true },
+                    label: {
+                        Text("Clear All Data")
+                            .font(Theme.Typography.bodyBold)
+                            .foregroundStyle(Theme.Colors.error)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .softCard()
+                    }
+                )
 
                 VStack(spacing: Theme.Spacing.xs) {
                     Text("Davis's Big Beautiful Workout App")
@@ -330,7 +333,7 @@ struct SettingsRow: View {
     let color: Color
     let title: String
     let subtitle: String
-    var value: String? = nil
+    var value: String?
     let action: () -> Void
 
     var body: some View {

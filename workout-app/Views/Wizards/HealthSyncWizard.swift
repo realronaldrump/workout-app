@@ -78,17 +78,20 @@ struct HealthSyncWizard: View {
 
             Spacer()
 
-            Button(action: {
-                withAnimation { step = 1 }
-            }) {
-                Text("Next")
-                    .font(Theme.Typography.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Theme.Colors.accent)
-                    .foregroundColor(.white)
-                    .cornerRadius(Theme.CornerRadius.large)
-            }
+            Button(
+                action: {
+                    withAnimation { step = 1 }
+                },
+                label: {
+                    Text("Next")
+                        .font(Theme.Typography.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Theme.Colors.accent)
+                        .foregroundColor(.white)
+                        .cornerRadius(Theme.CornerRadius.large)
+                }
+            )
             .padding(Theme.Spacing.xl)
         }
     }
@@ -189,15 +192,18 @@ struct HealthSyncWizard: View {
 
             Spacer()
 
-            Button(action: { isPresented = false }) {
-                Text("Done")
-                    .font(Theme.Typography.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Theme.Colors.success)
-                    .foregroundColor(.white)
-                    .cornerRadius(Theme.CornerRadius.large)
-            }
+            Button(
+                action: { isPresented = false },
+                label: {
+                    Text("Done")
+                        .font(Theme.Typography.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Theme.Colors.success)
+                        .foregroundColor(.white)
+                        .cornerRadius(Theme.CornerRadius.large)
+                }
+            )
             .padding(Theme.Spacing.xl)
         }
     }
@@ -220,7 +226,7 @@ struct HealthSyncWizard: View {
             do {
                 // The syncAllWorkouts method now updates published properties on healthManager
                 // We don't need to manually poll, but we do need to wait for it to finish
-                let _ = try await healthManager.syncAllWorkouts(workouts)
+                _ = try await healthManager.syncAllWorkouts(workouts)
 
                 let end = Date()
                 let start = Calendar.current.date(byAdding: .month, value: -12, to: end) ?? end.addingTimeInterval(-31_536_000)

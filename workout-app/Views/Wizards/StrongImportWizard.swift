@@ -128,17 +128,20 @@ struct StrongImportWizard: View {
 
             Spacer()
 
-            Button(action: {
-                withAnimation { step = 1 }
-            }) {
-                Text("Next")
-                    .font(Theme.Typography.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Theme.Colors.accent)
-                    .foregroundColor(.white)
-                    .cornerRadius(Theme.CornerRadius.large)
-            }
+            Button(
+                action: {
+                    withAnimation { step = 1 }
+                },
+                label: {
+                    Text("Next")
+                        .font(Theme.Typography.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Theme.Colors.accent)
+                        .foregroundColor(.white)
+                        .cornerRadius(Theme.CornerRadius.large)
+                }
+            )
             .padding(Theme.Spacing.xl)
         }
     }
@@ -168,22 +171,25 @@ struct StrongImportWizard: View {
                 }
             } else {
                 VStack(spacing: Theme.Spacing.lg) {
-                    Button(action: { showingFileImporter = true }) {
-                        VStack(spacing: Theme.Spacing.md) {
-                            Image(systemName: "doc.text.fill")
-                                .font(.largeTitle)
-                            Text("Select CSV File")
-                                .font(Theme.Typography.headline)
+                    Button(
+                        action: { showingFileImporter = true },
+                        label: {
+                            VStack(spacing: Theme.Spacing.md) {
+                                Image(systemName: "doc.text.fill")
+                                    .font(.largeTitle)
+                                Text("Select CSV File")
+                                    .font(Theme.Typography.headline)
+                            }
+                            .foregroundStyle(Theme.Colors.accent)
+                            .frame(maxWidth: .infinity)
+                            .padding(Theme.Spacing.xxl)
+                            .background(
+                                RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
+                                    .stroke(style: StrokeStyle(lineWidth: 2, dash: [10]))
+                                    .fill(Theme.Colors.accent.opacity(0.5))
+                            )
                         }
-                        .foregroundStyle(Theme.Colors.accent)
-                        .frame(maxWidth: .infinity)
-                        .padding(Theme.Spacing.xxl)
-                        .background(
-                            RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
-                                .stroke(style: StrokeStyle(lineWidth: 2, dash: [10]))
-                                .fill(Theme.Colors.accent.opacity(0.5))
-                        )
-                    }
+                    )
 
                     if let error = importError {
                         HStack {
@@ -269,15 +275,18 @@ struct StrongImportWizard: View {
                 }
                 .buttonStyle(PlainButtonStyle())
 
-                Button(action: { isPresented = false }) {
-                    Text("Done")
-                        .font(Theme.Typography.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Theme.Colors.success)
-                        .foregroundColor(.white)
-                        .cornerRadius(Theme.CornerRadius.large)
-                }
+                Button(
+                    action: { isPresented = false },
+                    label: {
+                        Text("Done")
+                            .font(Theme.Typography.headline)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Theme.Colors.success)
+                            .foregroundColor(.white)
+                            .cornerRadius(Theme.CornerRadius.large)
+                    }
+                )
 
                 if healthManager.isSyncing {
                     Text("sync background")
