@@ -2,7 +2,7 @@ import Foundation
 import HealthKit
 import Combine
 
-// swiftlint:disable file_length type_body_length
+// swiftlint:disable:this file_length type_body_length
 
 /// Manages all interactions with Apple HealthKit.
 /// Handles authorization, data fetching, and syncing health data during workout windows.

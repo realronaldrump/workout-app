@@ -455,7 +455,7 @@ struct RecoveryInsightCard: View {
         .padding(Theme.Spacing.lg)
         .softCard(elevation: 2)
         .onAppear {
-            if insight.grade == .c, !didTriggerHaptic {
+            if insight.grade == .gradeC, !didTriggerHaptic {
                 Haptics.notify(.warning)
                 didTriggerHaptic = true
             }

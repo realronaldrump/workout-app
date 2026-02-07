@@ -684,4 +684,4 @@ enum MuscleGroup: String, CaseIterable, Codable, Sendable {
     }
 }
 
-// swiftlint:enable file_length
+
