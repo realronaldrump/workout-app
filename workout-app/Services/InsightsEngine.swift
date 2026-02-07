@@ -682,20 +682,4 @@ enum MuscleGroup: String, CaseIterable, Codable, Sendable {
         case .cardio: return "Cardio"
         }
     }
-
-    nonisolated var iconName: String {
-        switch self {
-        case .chest: return "figure.strengthtraining.traditional"
-        case .back: return "figure.rowing"
-        case .shoulders: return "figure.arms.open"
-        case .biceps: return "figure.strengthtraining.functional"
-        case .triceps: return "figure.boxing"
-        case .quads: return "figure.walk"
-        case .hamstrings: return "figure.run"
-        case .glutes: return "figure.stairs"
-        case .calves: return "figure.stand"
-        case .core: return "figure.core.training"
-        case .cardio: return "heart.fill"
-        }
-    }
 }

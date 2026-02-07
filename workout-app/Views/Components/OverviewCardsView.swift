@@ -80,9 +80,7 @@ struct StatCard: View {
     var body: some View {
         Group {
             if let onTap {
-                MetricTileButton(action: onTap) {
-                    cardContent
-                }
+                MetricTileButton(action: onTap, content: { cardContent })
             } else {
                 cardContent
             }
