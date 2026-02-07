@@ -581,7 +581,7 @@ class HealthKitManager: ObservableObject {
 
     /// Sync daily aggregate health data for the given range
     func syncDailyHealthData(range: DateInterval) async throws {
-        guard let _ = healthStore else {
+        guard healthStore != nil else {
             throw HealthKitError.notAvailable
         }
         guard authorizationStatus == .authorized else {
