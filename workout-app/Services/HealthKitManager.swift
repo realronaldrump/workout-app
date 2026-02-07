@@ -2,9 +2,10 @@ import Foundation
 import HealthKit
 import Combine
 
-/// Manages all interactions with Apple HealthKit
-/// Handles authorization, data fetching, and syncing health data during workout windows
 // swiftlint:disable file_length type_body_length
+
+/// Manages all interactions with Apple HealthKit.
+/// Handles authorization, data fetching, and syncing health data during workout windows.
 @MainActor
 class HealthKitManager: ObservableObject {
 
@@ -169,7 +170,6 @@ class HealthKitManager: ObservableObject {
     }
 
     /// Sync health data for a single workout
-    // swiftlint:disable function_body_length
     func syncHealthDataForWorkout(_ workout: Workout, persist: Bool = true) async throws -> WorkoutHealthData {
         guard healthStore != nil else {
             throw HealthKitError.notAvailable
@@ -379,7 +379,6 @@ class HealthKitManager: ObservableObject {
 
         return healthData
     }
-    // swiftlint:enable function_body_length
 
     // MARK: - Persistence
 
@@ -525,7 +524,7 @@ class HealthKitManager: ObservableObject {
 
         for (index, workout) in recentMissing.enumerated() {
             do {
-                let _ = try await syncHealthDataForWorkout(workout, persist: false)
+                _ = try await syncHealthDataForWorkout(workout, persist: false)
             } catch {
                 print("Auto sync failed for workout \(workout.id): \(error)")
             }
