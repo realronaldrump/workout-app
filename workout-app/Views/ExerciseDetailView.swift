@@ -227,7 +227,14 @@ struct ExerciseStatsCards: View {
 
     @State private var selectedStat: ExerciseStatKind?
 
-    private var stats: (total: Int, maxWeight: Double, maxVolume: Double, avgReps: Double) {
+    private struct StatsSummary {
+        let totalSets: Int
+        let maxWeight: Double
+        let maxVolume: Double
+        let avgReps: Double
+    }
+
+    private var stats: StatsSummary {
         let allSets = history.flatMap { $0.sets }
         let maxWeight = allSets.map { $0.weight }.max() ?? 0
         let volumes = history.map { session in
@@ -236,14 +243,19 @@ struct ExerciseStatsCards: View {
         let maxVolume = volumes.max() ?? 0
         let avgReps = allSets.isEmpty ? 0 : Double(allSets.reduce(0) { $0 + $1.reps }) / Double(allSets.count)
 
-        return (allSets.count, maxWeight, maxVolume, avgReps)
+        return StatsSummary(
+            totalSets: allSets.count,
+            maxWeight: maxWeight,
+            maxVolume: maxVolume,
+            avgReps: avgReps
+        )
     }
 
     var body: some View {
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
             StatCard(
                 title: "Total Sets",
-                value: "\(stats.total)",
+                value: "\(stats.totalSets)",
                 icon: "number",
                 color: .blue,
                 onTap: { selectedStat = .totalSets }
@@ -291,16 +303,40 @@ struct ExerciseProgressChart: View {
     let chartType: ExerciseDetailView.ChartType
 
     @State private var isAppearing = false
-    @State private var selectedDataPoint: (date: Date, value: Double)?
+    @State private var selectedDataPoint: ChartPoint?
     @State private var lastPRHapticDate: Date?
     @State private var selectionClearTask: Task<Void, Never>?
+
+    private struct ChartPoint: Equatable {
+        let date: Date
+        let value: Double
+    }
+
+    private struct IndexedChartPoint: Identifiable {
+        let id: Int
+        let point: ChartPoint
+
+        var date: Date { point.date }
+        var value: Double { point.value }
+    }
+
+    private struct TrendLine {
+        let start: ChartPoint
+        let end: ChartPoint
+    }
+
+    private struct VariabilityBandPoint {
+        let date: Date
+        let lower: Double
+        let upper: Double
+    }
 
     private enum ChartSeries: String {
         case progress = "Progress"
         case trend = "Trend"
     }
 
-    private var chartData: [(date: Date, value: Double)] {
+    private var chartData: [ChartPoint] {
         history.map { session in
             let value: Double
             switch chartType {
@@ -317,13 +353,13 @@ struct ExerciseProgressChart: View {
             case .reps:
                 value = Double(session.sets.map { $0.reps }.max() ?? 0)
             }
-            return (date: session.date, value: value)
+            return ChartPoint(date: session.date, value: value)
         }
     }
 
-    private var indexedChartData: [(id: Int, date: Date, value: Double)] {
+    private var indexedChartData: [IndexedChartPoint] {
         chartData.enumerated().map { index, point in
-            (id: index, date: point.date, value: point.value)
+            IndexedChartPoint(id: index, point: point)
         }
     }
 
@@ -367,7 +403,7 @@ struct ExerciseProgressChart: View {
     }
 
     @ViewBuilder
-    private func selectedPointHeader(selected: (date: Date, value: Double)) -> some View {
+    private func selectedPointHeader(selected: ChartPoint) -> some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text(selected.date.formatted(date: .abbreviated, time: .omitted))
@@ -405,7 +441,7 @@ struct ExerciseProgressChart: View {
             }
         }
         .chartYAxis {
-            AxisMarks { value in
+            AxisMarks { _ in
                 AxisGridLine()
                 AxisValueLabel()
             }
@@ -558,31 +594,31 @@ struct ExerciseProgressChart: View {
         return weight * (1 + 0.0333 * Double(reps))
     }
 
-    private func calculateTrendLine() -> (start: (date: Date, value: Double), end: (date: Date, value: Double))? {
+    private func calculateTrendLine() -> TrendLine? {
         guard chartData.count >= 2 else { return nil }
 
         // Simple linear regression
-        let n = Double(chartData.count)
+        let pointCount = Double(chartData.count)
         let sumX = chartData.enumerated().reduce(0.0) { $0 + Double($1.offset) }
         let sumY = chartData.reduce(0.0) { $0 + $1.value }
         let sumXY = chartData.enumerated().reduce(0.0) { $0 + (Double($1.offset) * $1.element.value) }
         let sumXX = chartData.enumerated().reduce(0.0) { $0 + (Double($1.offset) * Double($1.offset)) }
 
-        let slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX)
-        let intercept = (sumY - slope * sumX) / n
+        let slope = (pointCount * sumXY - sumX * sumY) / (pointCount * sumXX - sumX * sumX)
+        let intercept = (sumY - slope * sumX) / pointCount
 
         let startValue = intercept
-        let endValue = slope * (n - 1) + intercept
+        let endValue = slope * (pointCount - 1) + intercept
 
         let startDate = chartData[0].date
         let endDate = chartData[chartData.count - 1].date
-        return (
-            start: (date: startDate, value: startValue),
-            end: (date: endDate, value: endValue)
+        return TrendLine(
+            start: ChartPoint(date: startDate, value: startValue),
+            end: ChartPoint(date: endDate, value: endValue)
         )
     }
 
-    private var variabilityBand: [(date: Date, lower: Double, upper: Double)] {
+    private var variabilityBand: [VariabilityBandPoint] {
         guard chartData.count >= 2 else { return [] }
         let values = chartData.map { $0.value }
         let window = 3
@@ -592,7 +628,7 @@ struct ExerciseProgressChart: View {
             let mean = slice.reduce(0, +) / Double(slice.count)
             let variance = slice.reduce(0) { $0 + pow($1 - mean, 2) } / Double(slice.count)
             let std = sqrt(variance)
-            return (date: chartData[index].date, lower: max(0, mean - std), upper: mean + std)
+            return VariabilityBandPoint(date: chartData[index].date, lower: max(0, mean - std), upper: mean + std)
         }
     }
 }
@@ -600,16 +636,27 @@ struct ExerciseProgressChart: View {
 struct PersonalRecordsView: View {
     let history: [(date: Date, sets: [WorkoutSet])]
 
-    private var records: [(title: String, value: String, date: Date)] {
+    private struct PersonalRecord: Identifiable {
+        let id = UUID()
+        let title: String
+        let value: String
+        let date: Date
+    }
+
+    private var records: [PersonalRecord] {
         let allSets = history.flatMap { session in
             session.sets.map { (set: $0, date: session.date) }
         }
 
-        var records: [(title: String, value: String, date: Date)] = []
+        var records: [PersonalRecord] = []
 
         // Max weight
         if let maxWeightSet = allSets.max(by: { $0.set.weight < $1.set.weight }) {
-            records.append(("Heaviest Weight", "\(Int(maxWeightSet.set.weight)) lbs × \(maxWeightSet.set.reps)", maxWeightSet.date))
+            records.append(PersonalRecord(
+                title: "Heaviest Weight",
+                value: "\(Int(maxWeightSet.set.weight)) lbs × \(maxWeightSet.set.reps)",
+                date: maxWeightSet.date
+            ))
         }
 
         // Max volume single set
@@ -617,12 +664,16 @@ struct PersonalRecordsView: View {
             $0.set.weight * Double($0.set.reps) < $1.set.weight * Double($1.set.reps)
         }) {
             let volume = maxVolumeSet.set.weight * Double(maxVolumeSet.set.reps)
-            records.append(("Max Volume (Single Set)", "\(Int(volume)) lbs", maxVolumeSet.date))
+            records.append(PersonalRecord(title: "Max Volume (Single Set)", value: "\(Int(volume)) lbs", date: maxVolumeSet.date))
         }
 
         // Max reps
         if let maxRepsSet = allSets.max(by: { $0.set.reps < $1.set.reps }) {
-            records.append(("Most Reps", "\(maxRepsSet.set.reps) @ \(Int(maxRepsSet.set.weight)) lbs", maxRepsSet.date))
+            records.append(PersonalRecord(
+                title: "Most Reps",
+                value: "\(maxRepsSet.set.reps) @ \(Int(maxRepsSet.set.weight)) lbs",
+                date: maxRepsSet.date
+            ))
         }
 
         // Best 1RM
@@ -631,7 +682,7 @@ struct PersonalRecordsView: View {
             calculateOneRepMax(weight: $1.set.weight, reps: $1.set.reps)
         }) {
             let orm = calculateOneRepMax(weight: best1RM.set.weight, reps: best1RM.set.reps)
-            records.append(("Est. 1RM", "\(Int(orm)) lbs", best1RM.date))
+            records.append(PersonalRecord(title: "Est. 1RM", value: "\(Int(orm)) lbs", date: best1RM.date))
         }
 
         return records
@@ -644,7 +695,7 @@ struct PersonalRecordsView: View {
                 .foregroundColor(Theme.Colors.textPrimary)
 
             VStack(spacing: Theme.Spacing.md) {
-                ForEach(records, id: \.title) { record in
+                ForEach(records) { record in
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(record.title)
@@ -748,18 +799,30 @@ struct RecentSetsView: View {
 struct ExerciseRangeBreakdown: View {
     let history: [(date: Date, sets: [WorkoutSet])]
 
+    private struct RepRangeDescriptor {
+        let label: String
+        let range: ClosedRange<Int>
+        let tint: Color
+    }
+
+    private struct IntensityZoneDescriptor {
+        let label: String
+        let range: ClosedRange<Double>
+        let tint: Color
+    }
+
     private var allSets: [WorkoutSet] {
         history.flatMap { $0.sets }
     }
 
     private var repBuckets: [RepRangeBucket] {
-        let buckets: [(label: String, range: ClosedRange<Int>, tint: Color)] = [
-            ("1-3", 1...3, Theme.Colors.error),
-            ("4-6", 4...6, Theme.Colors.warning),
-            ("7-10", 7...10, Theme.Colors.accent),
-            ("11-15", 11...15, Theme.Colors.accentSecondary),
-            ("16-20", 16...20, Theme.Colors.success),
-            ("21+", 21...100, Theme.Colors.textSecondary)
+        let buckets: [RepRangeDescriptor] = [
+            RepRangeDescriptor(label: "1-3", range: 1...3, tint: Theme.Colors.error),
+            RepRangeDescriptor(label: "4-6", range: 4...6, tint: Theme.Colors.warning),
+            RepRangeDescriptor(label: "7-10", range: 7...10, tint: Theme.Colors.accent),
+            RepRangeDescriptor(label: "11-15", range: 11...15, tint: Theme.Colors.accentSecondary),
+            RepRangeDescriptor(label: "16-20", range: 16...20, tint: Theme.Colors.success),
+            RepRangeDescriptor(label: "21+", range: 21...100, tint: Theme.Colors.textSecondary)
         ]
         let total = max(allSets.count, 1)
         return buckets.map { bucket in
@@ -776,12 +839,12 @@ struct ExerciseRangeBreakdown: View {
 
     private var intensityBuckets: [IntensityZoneBucket] {
         let best1RM = allSets.map { estimateOneRepMax(weight: $0.weight, reps: $0.reps) }.max() ?? 0
-        let zones: [(label: String, range: ClosedRange<Double>, tint: Color)] = [
-            ("<50%", 0.0...0.49, Theme.Colors.textSecondary),
-            ("50-65%", 0.50...0.65, Theme.Colors.accentSecondary),
-            ("65-75%", 0.66...0.75, Theme.Colors.accent),
-            ("75-85%", 0.76...0.85, Theme.Colors.warning),
-            ("85%+", 0.86...1.5, Theme.Colors.error)
+        let zones: [IntensityZoneDescriptor] = [
+            IntensityZoneDescriptor(label: "<50%", range: 0.0...0.49, tint: Theme.Colors.textSecondary),
+            IntensityZoneDescriptor(label: "50-65%", range: 0.50...0.65, tint: Theme.Colors.accentSecondary),
+            IntensityZoneDescriptor(label: "65-75%", range: 0.66...0.75, tint: Theme.Colors.accent),
+            IntensityZoneDescriptor(label: "75-85%", range: 0.76...0.85, tint: Theme.Colors.warning),
+            IntensityZoneDescriptor(label: "85%+", range: 0.86...1.5, tint: Theme.Colors.error)
         ]
 
         guard best1RM > 0 else { return [] }

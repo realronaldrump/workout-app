@@ -59,6 +59,7 @@ struct DailyHealthDetailView: View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: Theme.Spacing.md) {
                 DailyOverviewCard(title: "Steps", value: formatInt(day.steps), unit: "steps", icon: "figure.walk", tint: Theme.Colors.warning)
+                // swiftlint:disable:next line_length
                 DailyOverviewCard(title: "Sleep", value: day.sleepSummary.map { String(format: "%.1f", $0.totalHours) } ?? "--", unit: "h", icon: "moon.zzz.fill", tint: Theme.Colors.accentSecondary)
                 DailyOverviewCard(title: "Energy", value: formatInt(day.activeEnergy), unit: "cal", icon: "flame.fill", tint: Theme.Colors.warning)
                 DailyOverviewCard(title: "Resting HR", value: formatInt(day.restingHeartRate), unit: "bpm", icon: "heart", tint: Theme.Colors.error)
@@ -66,6 +67,7 @@ struct DailyHealthDetailView: View {
 
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: Theme.Spacing.md) {
                 DailyOverviewCard(title: "Steps", value: formatInt(day.steps), unit: "steps", icon: "figure.walk", tint: Theme.Colors.warning)
+                // swiftlint:disable:next line_length
                 DailyOverviewCard(title: "Sleep", value: day.sleepSummary.map { String(format: "%.1f", $0.totalHours) } ?? "--", unit: "h", icon: "moon.zzz.fill", tint: Theme.Colors.accentSecondary)
                 DailyOverviewCard(title: "Energy", value: formatInt(day.activeEnergy), unit: "cal", icon: "flame.fill", tint: Theme.Colors.warning)
                 DailyOverviewCard(title: "Resting HR", value: formatInt(day.restingHeartRate), unit: "bpm", icon: "heart", tint: Theme.Colors.error)

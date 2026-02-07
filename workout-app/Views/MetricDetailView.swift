@@ -509,8 +509,8 @@ private extension MetricDetailView {
                         AxisMarks { value in
                             AxisGridLine()
                             AxisValueLabel {
-                                if let v = value.as(Int.self) {
-                                    Text("\(v)")
+                                if let intValue = value.as(Int.self) {
+                                    Text("\(intValue)")
                                 }
                             }
                         }
@@ -557,8 +557,8 @@ private extension MetricDetailView {
                         AxisMarks { value in
                             AxisGridLine()
                             AxisValueLabel {
-                                if let v = value.as(Double.self) {
-                                    Text(formatVolume(v))
+                                if let axisValue = value.as(Double.self) {
+                                    Text(formatVolume(axisValue))
                                 }
                             }
                         }
@@ -598,8 +598,8 @@ private extension MetricDetailView {
                         AxisMarks { value in
                             AxisGridLine()
                             AxisValueLabel {
-                                if let v = value.as(Double.self) {
-                                    Text(formatDurationMinutes(v))
+                                if let axisValue = value.as(Double.self) {
+                                    Text(formatDurationMinutes(axisValue))
                                 }
                             }
                         }
@@ -639,8 +639,8 @@ private extension MetricDetailView {
                         AxisMarks { value in
                             AxisGridLine()
                             AxisValueLabel {
-                                if let v = value.as(Double.self) {
-                                    Text(formatDensity(v))
+                                if let axisValue = value.as(Double.self) {
+                                    Text(formatDensity(axisValue))
                                 }
                             }
                         }

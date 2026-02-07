@@ -23,44 +23,47 @@ struct WorkoutDetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
                     // Workout summary card
-                    MetricTileButton(action: {
-                        showingSessionInsights = true
-                    }) {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Duration")
-                                    .font(Theme.Typography.caption)
-                                    .foregroundColor(Theme.Colors.textTertiary)
-                                Text(workout.duration)
-                                    .font(Theme.Typography.metric)
-                                    .foregroundColor(Theme.Colors.textPrimary)
+                    MetricTileButton(
+                        action: {
+                            showingSessionInsights = true
+                        },
+                        content: {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Duration")
+                                        .font(Theme.Typography.caption)
+                                        .foregroundColor(Theme.Colors.textTertiary)
+                                    Text(workout.duration)
+                                        .font(Theme.Typography.metric)
+                                        .foregroundColor(Theme.Colors.textPrimary)
+                                }
+
+                                Spacer()
+
+                                VStack(alignment: .center, spacing: 4) {
+                                    Text("Exercises")
+                                        .font(Theme.Typography.caption)
+                                        .foregroundColor(Theme.Colors.textTertiary)
+                                    Text("\(workout.exercises.count)")
+                                        .font(Theme.Typography.metric)
+                                        .foregroundColor(Theme.Colors.textPrimary)
+                                }
+
+                                Spacer()
+
+                                VStack(alignment: .trailing, spacing: 4) {
+                                    Text("Total Volume")
+                                        .font(Theme.Typography.caption)
+                                        .foregroundColor(Theme.Colors.textTertiary)
+                                    Text(formatVolume(workout.totalVolume))
+                                        .font(Theme.Typography.metric)
+                                        .foregroundColor(Theme.Colors.textPrimary)
+                                }
                             }
-
-                            Spacer()
-
-                            VStack(alignment: .center, spacing: 4) {
-                                Text("Exercises")
-                                    .font(Theme.Typography.caption)
-                                    .foregroundColor(Theme.Colors.textTertiary)
-                                Text("\(workout.exercises.count)")
-                                    .font(Theme.Typography.metric)
-                                    .foregroundColor(Theme.Colors.textPrimary)
-                            }
-
-                            Spacer()
-
-                            VStack(alignment: .trailing, spacing: 4) {
-                                Text("Total Volume")
-                                    .font(Theme.Typography.caption)
-                                    .foregroundColor(Theme.Colors.textTertiary)
-                                Text(formatVolume(workout.totalVolume))
-                                    .font(Theme.Typography.metric)
-                                    .foregroundColor(Theme.Colors.textPrimary)
-                            }
+                            .padding(Theme.Spacing.lg)
+                            .softCard(elevation: 2)
                         }
-                        .padding(Theme.Spacing.lg)
-                        .softCard(elevation: 2)
-                    }
+                    )
 
                     GymAssignmentCard(workout: workout)
 
@@ -71,11 +74,14 @@ struct WorkoutDetailView: View {
 
                     WorkoutAnnotationCard(workout: workout)
 
-                    MetricTileButton(action: {
-                        showingFatigueInsights = true
-                    }) {
-                        FatigueLensView(summary: fatigueSummary)
-                    }
+                    MetricTileButton(
+                        action: {
+                            showingFatigueInsights = true
+                        },
+                        content: {
+                            FatigueLensView(summary: fatigueSummary)
+                        }
+                    )
 
                     // Exercises list
                     VStack(alignment: .leading, spacing: 16) {
@@ -155,11 +161,14 @@ struct WorkoutDetailView: View {
             }
 
             if let data = healthManager.getHealthData(for: workout.id) {
-                MetricTileButton(action: {
-                    showingWorkoutHealthInsights = true
-                }) {
-                    HealthDataView(healthData: data)
-                }
+                MetricTileButton(
+                    action: {
+                        showingWorkoutHealthInsights = true
+                    },
+                    content: {
+                        HealthDataView(healthData: data)
+                    }
+                )
                 RecoveryInsightCard(healthData: data)
             } else {
                 noHealthDataCard
@@ -245,44 +254,46 @@ struct WorkoutDetailView: View {
     }
 }
 
-
 struct ExerciseCard: View {
     let exercise: Exercise
-    var onViewHistory: ((String) -> Void)? = nil
-    var onQuickStart: ((String) -> Void)? = nil
+    var onViewHistory: ((String) -> Void)?
+    var onQuickStart: ((String) -> Void)?
     @State private var isExpanded = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Button(action: {
-                withAnimation { isExpanded.toggle() }
-                Haptics.selection()
-            }) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(exercise.name)
-                            .font(Theme.Typography.condensed)
-                            .tracking(-0.2)
-                            .foregroundColor(Theme.Colors.textPrimary)
+            Button(
+                action: {
+                    withAnimation { isExpanded.toggle() }
+                    Haptics.selection()
+                },
+                label: {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(exercise.name)
+                                .font(Theme.Typography.condensed)
+                                .tracking(-0.2)
+                                .foregroundColor(Theme.Colors.textPrimary)
 
-                        HStack(spacing: 16) {
-                            Label("\(exercise.sets.count) sets", systemImage: "number")
-                                .font(Theme.Typography.caption)
-                                .foregroundColor(Theme.Colors.textSecondary)
+                            HStack(spacing: 16) {
+                                Label("\(exercise.sets.count) sets", systemImage: "number")
+                                    .font(Theme.Typography.caption)
+                                    .foregroundColor(Theme.Colors.textSecondary)
 
-                            Label(formatVolume(exercise.totalVolume), systemImage: "scalemass")
-                                .font(Theme.Typography.caption)
-                                .foregroundColor(Theme.Colors.textSecondary)
+                                Label(formatVolume(exercise.totalVolume), systemImage: "scalemass")
+                                    .font(Theme.Typography.caption)
+                                    .foregroundColor(Theme.Colors.textSecondary)
+                            }
                         }
+
+                        Spacer()
+
+                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                            .font(.caption)
+                            .foregroundColor(Theme.Colors.textTertiary)
                     }
-
-                    Spacer()
-
-                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                        .font(.caption)
-                        .foregroundColor(Theme.Colors.textTertiary)
                 }
-            }
+            )
             .buttonStyle(PlainButtonStyle())
 
             if isExpanded {
@@ -341,6 +352,7 @@ struct RecoveryInsightCard: View {
     let healthData: WorkoutHealthData
     @State private var didTriggerHaptic = false
 
+    // swiftlint:disable identifier_name
     private enum RecoveryGrade: String {
         case a = "A"
         case b = "B"
@@ -365,7 +377,9 @@ struct RecoveryInsightCard: View {
             }
         }
     }
+    // swiftlint:enable identifier_name
 
+    // swiftlint:disable:next large_tuple
     private var insight: (grade: RecoveryGrade, message: String, tint: Color, icon: String) {
         let hrv = Int(healthData.avgHRV ?? 0)
         let resting = Int(healthData.restingHeartRate ?? 0)

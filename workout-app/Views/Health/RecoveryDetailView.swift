@@ -213,8 +213,8 @@ struct RecoveryDetailView: View {
                     AxisMarks { value in
                         AxisGridLine()
                         AxisValueLabel {
-                            if let v = value.as(Double.self) {
-                                Text("\(Int(v))")
+                            if let axisValue = value.as(Double.self) {
+                                Text("\(Int(axisValue))")
                             }
                         }
                     }

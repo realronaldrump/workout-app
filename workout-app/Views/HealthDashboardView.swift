@@ -1,6 +1,8 @@
 import SwiftUI
 import Charts
 
+// swiftlint:disable file_length
+
 struct HealthDashboardView: View {
     @EnvironmentObject var healthManager: HealthKitManager
     @EnvironmentObject var dataManager: WorkoutDataManager
@@ -255,11 +257,14 @@ struct HealthDashboardView: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: Theme.Spacing.md) {
                         ForEach(cards) { card in
-                            MetricTileButton(action: {
-                                handleHighlightTap(card)
-                            }) {
-                                HighlightCard(model: card)
-                            }
+                            MetricTileButton(
+                                action: {
+                                    handleHighlightTap(card)
+                                },
+                                content: {
+                                    HighlightCard(model: card)
+                                }
+                            )
                             .frame(width: 240)
                         }
                     }
@@ -285,11 +290,15 @@ struct HealthDashboardView: View {
 
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 160), spacing: Theme.Spacing.md)], spacing: Theme.Spacing.md) {
                 ForEach(cards) { card in
-                    MetricTileButton(chevronPlacement: .bottomTrailing, action: {
-                        handleQuickStatTap(card)
-                    }) {
-                        MetricSummaryCard(model: card)
-                    }
+                    MetricTileButton(
+                        chevronPlacement: .bottomTrailing,
+                        action: {
+                            handleQuickStatTap(card)
+                        },
+                        content: {
+                            MetricSummaryCard(model: card)
+                        }
+                    )
                 }
             }
         }
@@ -346,14 +355,17 @@ struct HealthDashboardView: View {
             } else {
                 ForEach(Array(currentHealthData.prefix(5)), id: \.workoutId) { data in
                     if let workout = workoutStore[data.workoutId] {
-                        MetricTileButton(action: {
-                            selectedWorkout = workout
-                        }) {
-                            WorkoutHealthCard(
-                                healthData: data,
-                                workout: workout
-                            )
-                        }
+                        MetricTileButton(
+                            action: {
+                                selectedWorkout = workout
+                            },
+                            content: {
+                                WorkoutHealthCard(
+                                    healthData: data,
+                                    workout: workout
+                                )
+                            }
+                        )
                     } else {
                         WorkoutHealthCard(
                             healthData: data,
@@ -556,11 +568,14 @@ struct HealthDashboardView: View {
         ]
     }
 
+    // swiftlint:disable:next cyclomatic_complexity
     private func detailFor(_ kind: HealthMetricKind) -> HealthMetricDetail? {
         switch kind {
         case .heartRate:
             let avgPoints = makePoints(currentHealthData, value: { $0.avgHeartRate }, label: "Avg HR")
             let maxPoints = makePoints(currentHealthData, value: { $0.maxHeartRate }, label: "Max HR")
+            let previousAvgPoints = makePoints(previousHealthData, value: { $0.avgHeartRate }, label: "Avg HR")
+            let previousMaxPoints = makePoints(previousHealthData, value: { $0.maxHeartRate }, label: "Max HR")
 
             guard !avgPoints.isEmpty || !maxPoints.isEmpty else { return nil }
 
@@ -573,12 +588,13 @@ struct HealthDashboardView: View {
                     HealthMetricSeries(label: "Max HR", unit: "bpm", color: .pink.opacity(0.7), points: maxPoints)
                 ],
                 comparisonSeries: [
-                    HealthMetricSeries(label: "Avg HR", unit: "bpm", color: .red, points: makePoints(previousHealthData, value: { $0.avgHeartRate }, label: "Avg HR")),
-                    HealthMetricSeries(label: "Max HR", unit: "bpm", color: .pink.opacity(0.7), points: makePoints(previousHealthData, value: { $0.maxHeartRate }, label: "Max HR"))
+                    HealthMetricSeries(label: "Avg HR", unit: "bpm", color: .red, points: previousAvgPoints),
+                    HealthMetricSeries(label: "Max HR", unit: "bpm", color: .pink.opacity(0.7), points: previousMaxPoints)
                 ]
             )
         case .sleep:
             let sleepPoints = makePoints(currentHealthData, value: { $0.sleepSummary?.totalHours }, label: "Sleep")
+            let previousSleepPoints = makePoints(previousHealthData, value: { $0.sleepSummary?.totalHours }, label: "Sleep")
             guard !sleepPoints.isEmpty else { return nil }
 
             return HealthMetricDetail(
@@ -589,7 +605,12 @@ struct HealthDashboardView: View {
                     HealthMetricSeries(label: "Sleep", unit: "h", color: Theme.Colors.accentSecondary, points: sleepPoints)
                 ],
                 comparisonSeries: [
-                    HealthMetricSeries(label: "Sleep", unit: "h", color: Theme.Colors.accentSecondary, points: makePoints(previousHealthData, value: { $0.sleepSummary?.totalHours }, label: "Sleep"))
+                    HealthMetricSeries(
+                        label: "Sleep",
+                        unit: "h",
+                        color: Theme.Colors.accentSecondary,
+                        points: previousSleepPoints
+                    )
                 ]
             )
         case .activity:
@@ -597,6 +618,12 @@ struct HealthDashboardView: View {
             let ratioPoints = makePoints(currentHealthData, value: { data in
                 guard let energy = data.dailyActiveEnergy else { return nil }
                 guard let workout = currentWorkouts.first(where: { $0.id == data.workoutId }) else { return nil }
+                return workout.totalVolume / max(energy, 1)
+            }, label: "Load Ratio")
+            let previousEnergyPoints = makePoints(previousHealthData, value: { $0.dailyActiveEnergy }, label: "Active Energy")
+            let previousRatioPoints = makePoints(previousHealthData, value: { data in
+                guard let energy = data.dailyActiveEnergy else { return nil }
+                guard let workout = previousWorkouts.first(where: { $0.id == data.workoutId }) else { return nil }
                 return workout.totalVolume / max(energy, 1)
             }, label: "Load Ratio")
 
@@ -611,18 +638,17 @@ struct HealthDashboardView: View {
                     HealthMetricSeries(label: "Load Ratio", unit: "ratio", color: Theme.Colors.accent, points: ratioPoints)
                 ],
                 comparisonSeries: [
-                    HealthMetricSeries(label: "Active Energy", unit: "cal", color: .orange, points: makePoints(previousHealthData, value: { $0.dailyActiveEnergy }, label: "Active Energy")),
-                    HealthMetricSeries(label: "Load Ratio", unit: "ratio", color: Theme.Colors.accent, points: makePoints(previousHealthData, value: { data in
-                        guard let energy = data.dailyActiveEnergy else { return nil }
-                        guard let workout = previousWorkouts.first(where: { $0.id == data.workoutId }) else { return nil }
-                        return workout.totalVolume / max(energy, 1)
-                    }, label: "Load Ratio"))
+                    HealthMetricSeries(label: "Active Energy", unit: "cal", color: .orange, points: previousEnergyPoints),
+                    HealthMetricSeries(label: "Load Ratio", unit: "ratio", color: Theme.Colors.accent, points: previousRatioPoints)
                 ]
             )
         case .cardio:
             let vo2Points = makePoints(currentHealthData, value: { $0.vo2Max }, label: "VO2 Max")
             let recoveryPoints = makePoints(currentHealthData, value: { $0.heartRateRecovery }, label: "HR Recovery")
             let walkingPoints = makePoints(currentHealthData, value: { $0.walkingHeartRateAverage }, label: "Walking HR")
+            let previousVO2Points = makePoints(previousHealthData, value: { $0.vo2Max }, label: "VO2 Max")
+            let previousRecoveryPoints = makePoints(previousHealthData, value: { $0.heartRateRecovery }, label: "HR Recovery")
+            let previousWalkingPoints = makePoints(previousHealthData, value: { $0.walkingHeartRateAverage }, label: "Walking HR")
 
             guard !vo2Points.isEmpty || !recoveryPoints.isEmpty || !walkingPoints.isEmpty else { return nil }
 
@@ -636,9 +662,24 @@ struct HealthDashboardView: View {
                     HealthMetricSeries(label: "Walking HR", unit: "bpm", color: Theme.Colors.warning, points: walkingPoints)
                 ],
                 comparisonSeries: [
-                    HealthMetricSeries(label: "VO2 Max", unit: "ml/kg/min", color: Theme.Colors.success, points: makePoints(previousHealthData, value: { $0.vo2Max }, label: "VO2 Max")),
-                    HealthMetricSeries(label: "HR Recovery", unit: "bpm", color: Theme.Colors.accentSecondary, points: makePoints(previousHealthData, value: { $0.heartRateRecovery }, label: "HR Recovery")),
-                    HealthMetricSeries(label: "Walking HR", unit: "bpm", color: Theme.Colors.warning, points: makePoints(previousHealthData, value: { $0.walkingHeartRateAverage }, label: "Walking HR"))
+                    HealthMetricSeries(
+                        label: "VO2 Max",
+                        unit: "ml/kg/min",
+                        color: Theme.Colors.success,
+                        points: previousVO2Points
+                    ),
+                    HealthMetricSeries(
+                        label: "HR Recovery",
+                        unit: "bpm",
+                        color: Theme.Colors.accentSecondary,
+                        points: previousRecoveryPoints
+                    ),
+                    HealthMetricSeries(
+                        label: "Walking HR",
+                        unit: "bpm",
+                        color: Theme.Colors.warning,
+                        points: previousWalkingPoints
+                    )
                 ]
             )
         case .body:
@@ -647,6 +688,14 @@ struct HealthDashboardView: View {
                 return mass * 2.20462
             }, label: "Weight")
             let bodyFatPoints = makePoints(currentHealthData, value: { data in
+                guard let percent = data.bodyFatPercentage else { return nil }
+                return percent * 100
+            }, label: "Body Fat")
+            let previousWeightPoints = makePoints(previousHealthData, value: { data in
+                guard let mass = data.bodyMass else { return nil }
+                return mass * 2.20462
+            }, label: "Weight")
+            let previousBodyFatPoints = makePoints(previousHealthData, value: { data in
                 guard let percent = data.bodyFatPercentage else { return nil }
                 return percent * 100
             }, label: "Body Fat")
@@ -662,26 +711,26 @@ struct HealthDashboardView: View {
                     HealthMetricSeries(label: "Body Fat", unit: "%", color: Theme.Colors.warning, points: bodyFatPoints)
                 ],
                 comparisonSeries: [
-                    HealthMetricSeries(label: "Weight", unit: "lb", color: Theme.Colors.accent, points: makePoints(previousHealthData, value: { data in
-                        guard let mass = data.bodyMass else { return nil }
-                        return mass * 2.20462
-                    }, label: "Weight")),
-                    HealthMetricSeries(label: "Body Fat", unit: "%", color: Theme.Colors.warning, points: makePoints(previousHealthData, value: { data in
-                        guard let percent = data.bodyFatPercentage else { return nil }
-                        return percent * 100
-                    }, label: "Body Fat"))
+                    HealthMetricSeries(label: "Weight", unit: "lb", color: Theme.Colors.accent, points: previousWeightPoints),
+                    HealthMetricSeries(label: "Body Fat", unit: "%", color: Theme.Colors.warning, points: previousBodyFatPoints)
                 ]
             )
         }
     }
 
-    private func trendSummary(for detail: HealthMetricDetail) -> (primary: String, secondary: String, points: [HealthTrendPoint])? {
+    private struct TrendSummarySnapshot {
+        let primary: String
+        let secondary: String
+        let points: [HealthTrendPoint]
+    }
+
+    private func trendSummary(for detail: HealthMetricDetail) -> TrendSummarySnapshot? {
         guard let primarySeries = detail.series.first(where: { !$0.points.isEmpty }) else { return nil }
-        let latest = primarySeries.points.sorted { $0.date > $1.date }.first
+        let latest = primarySeries.points.max(by: { $0.date < $1.date })
         let average = average(primarySeries.points.map { $0.value })
         let primaryValue = latest.map { formatValue($0.value, unit: primarySeries.unit) } ?? "--"
         let secondaryValue = average.map { "Avg \(formatValue($0, unit: primarySeries.unit))" } ?? "No average"
-        return (primaryValue, secondaryValue, primarySeries.points)
+        return TrendSummarySnapshot(primary: primaryValue, secondary: secondaryValue, points: primarySeries.points)
     }
 
     // MARK: - Helpers
@@ -694,7 +743,14 @@ struct HealthDashboardView: View {
         .sorted { $0.date < $1.date }
     }
 
-    private func calculateRecoveryScore(from data: [WorkoutHealthData]) -> (score: Int, label: String, message: String, color: Color)? {
+    private struct RecoveryScoreSnapshot {
+        let score: Int
+        let label: String
+        let message: String
+        let color: Color
+    }
+
+    private func calculateRecoveryScore(from data: [WorkoutHealthData]) -> RecoveryScoreSnapshot? {
         let recentData = Array(data.sorted { $0.workoutDate > $1.workoutDate }.prefix(3))
         guard !recentData.isEmpty else { return nil }
 
@@ -727,7 +783,7 @@ struct HealthDashboardView: View {
 
         message = "Avg HR \(Int(overallAvgHR)) bpm • \(avgHRs.count) sessions"
 
-        return (score, label, message, color)
+        return RecoveryScoreSnapshot(score: score, label: label, message: message, color: color)
     }
 
     private func average(_ values: [Double]) -> Double? {
@@ -1270,8 +1326,8 @@ private struct HealthMetricDetailScreen: View {
         .softCard(elevation: 1)
     }
 
-	    private func formatValue(_ value: Double, unit: String) -> String {
-	        switch unit {
+    private func formatValue(_ value: Double, unit: String) -> String {
+        switch unit {
         case "bpm":
             return "\(Int(value)) bpm"
         case "cal":
@@ -1286,19 +1342,19 @@ private struct HealthMetricDetailScreen: View {
             return String(format: "%.1f lb", value)
         case "%":
             return String(format: "%.1f%%", value)
-	        default:
-	            return String(format: "%.1f", value)
-	        }
-	    }
+        default:
+            return String(format: "%.1f", value)
+        }
+    }
 
-	    private func formatDay(_ date: Date) -> String {
-	        date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
-	    }
+    private func formatDay(_ date: Date) -> String {
+        date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
+    }
 
-	    private func comparisonDelta(currentSeries: HealthMetricSeries, comparisonSeries: HealthMetricSeries?) -> String? {
-	        guard let comparisonSeries else { return nil }
-	        let currentAvg = currentSeries.points.map { $0.value }
-	        let previousAvg = comparisonSeries.points.map { $0.value }
+    private func comparisonDelta(currentSeries: HealthMetricSeries, comparisonSeries: HealthMetricSeries?) -> String? {
+        guard let comparisonSeries else { return nil }
+        let currentAvg = currentSeries.points.map { $0.value }
+        let previousAvg = comparisonSeries.points.map { $0.value }
         guard !currentAvg.isEmpty, !previousAvg.isEmpty else { return nil }
         let currentValue = currentAvg.reduce(0, +) / Double(currentAvg.count)
         let previousValue = previousAvg.reduce(0, +) / Double(previousAvg.count)
@@ -1351,6 +1407,9 @@ private struct WorkoutHealthCard: View {
     let workout: Workout?
 
     var body: some View {
+        let date = healthData.workoutDate
+        let dateText = "\(date.formatted(date: .abbreviated, time: .omitted)) • \(date.formatted(date: .omitted, time: .shortened))"
+
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
@@ -1361,7 +1420,7 @@ private struct WorkoutHealthCard: View {
                             .lineLimit(1)
                             .truncationMode(.tail)
                     }
-                    Text("\(healthData.workoutDate.formatted(date: .abbreviated, time: .omitted)) • \(healthData.workoutDate.formatted(date: .omitted, time: .shortened))")
+                    Text(dateText)
                         .font(workout == nil ? Theme.Typography.headline : Theme.Typography.subheadline)
                         .foregroundStyle(workout == nil ? Theme.Colors.textPrimary : Theme.Colors.textSecondary)
                 }

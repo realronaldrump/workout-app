@@ -12,7 +12,7 @@ struct InsightMoment: Identifiable {
 struct InsightsStreamView: View {
     let insights: [Insight]
     let moments: [InsightMoment]
-    var onInsightTap: ((Insight) -> Void)? = nil
+    var onInsightTap: ((Insight) -> Void)?
 
     private var streamItems: [StreamItem] {
         var items: [StreamItem] = []

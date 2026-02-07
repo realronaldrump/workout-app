@@ -66,10 +66,10 @@ struct OverviewCardsView: View {
 struct StatCard: View {
     let title: String
     let value: String
-    var subtitle: String? = nil
+    var subtitle: String?
     let icon: String
     let color: Color
-    var onTap: (() -> Void)? = nil
+    var onTap: (() -> Void)?
 
     @State private var isAppearing = false
 
