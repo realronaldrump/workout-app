@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct InAppSplashView: View {
-    var statusText: String? = nil
+    var statusText: String?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isVisible = false

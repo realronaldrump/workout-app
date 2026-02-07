@@ -5,7 +5,7 @@ import SwiftUI
 struct MuscleHeatmapView: View {
     let dataManager: WorkoutDataManager
     let dateRange: DateInterval
-    var onOpen: (() -> Void)? = nil
+    var onOpen: (() -> Void)?
 
     @State private var selectedMuscleTag: MuscleTag?
     @State private var isAppearing = false
@@ -106,6 +106,7 @@ struct MuscleHeatmapView: View {
 
     private func calculateMuscleStats() -> [MuscleTag: MuscleStats] {
         let recentWorkouts = dataManager.workouts.filter { dateRange.contains($0.date) }
+        // swiftlint:disable:next large_tuple
         var muscleGroupData: [MuscleTag: (sets: Int, exercises: Set<String>, lastDate: Date?)] = [:]
 
         for group in MuscleGroup.allCases {

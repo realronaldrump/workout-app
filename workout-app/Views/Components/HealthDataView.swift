@@ -568,6 +568,7 @@ struct HeartRateZone: Identifiable {
         }
 
         let maxHR = maxSample
+        // swiftlint:disable:next large_tuple
         let thresholds: [(String, Double, Double, Color)] = [
             ("Z1", 0.5, 0.6, Theme.Colors.info),
             ("Z2", 0.6, 0.7, Theme.Colors.accentSecondary),

@@ -171,8 +171,8 @@ struct CorrelationDetailView: View {
                     AxisMarks { value in
                         AxisGridLine()
                         AxisValueLabel {
-                            if let v = value.as(Double.self) {
-                                Text(formatX(v))
+                            if let xValue = value.as(Double.self) {
+                                Text(formatX(xValue))
                             }
                         }
                     }
@@ -181,8 +181,8 @@ struct CorrelationDetailView: View {
                     AxisMarks { value in
                         AxisGridLine()
                         AxisValueLabel {
-                            if let v = value.as(Double.self) {
-                                Text(formatY(v))
+                            if let yValue = value.as(Double.self) {
+                                Text(formatY(yValue))
                             }
                         }
                     }

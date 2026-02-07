@@ -71,8 +71,8 @@ struct HabitImpactDetailView: View {
                     AxisMarks { value in
                         AxisGridLine()
                         AxisValueLabel {
-                            if let v = value.as(Double.self) {
-                                Text(String(format: "%.1f", v))
+                            if let axisValue = value.as(Double.self) {
+                                Text(String(format: "%.1f", axisValue))
                             }
                         }
                     }

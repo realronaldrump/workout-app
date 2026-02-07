@@ -10,24 +10,156 @@ enum SampleData {
         let legsDate = calendar.date(byAdding: .day, value: -6, to: now) ?? now
 
         let pushSets = [
-            WorkoutSet(date: pushDate, workoutName: "Push Strength", duration: "58m", exerciseName: "Bench Press", setOrder: 1, weight: 185, reps: 8, distance: 0, seconds: 0, rpe: "8"),
-            WorkoutSet(date: pushDate, workoutName: "Push Strength", duration: "58m", exerciseName: "Bench Press", setOrder: 2, weight: 195, reps: 6, distance: 0, seconds: 0, rpe: "8"),
-            WorkoutSet(date: pushDate, workoutName: "Push Strength", duration: "58m", exerciseName: "Incline DB Press", setOrder: 1, weight: 65, reps: 10, distance: 0, seconds: 0, rpe: "7"),
-            WorkoutSet(date: pushDate, workoutName: "Push Strength", duration: "58m", exerciseName: "Incline DB Press", setOrder: 2, weight: 70, reps: 8, distance: 0, seconds: 0, rpe: "8")
+            WorkoutSet(
+                date: pushDate,
+                workoutName: "Push Strength",
+                duration: "58m",
+                exerciseName: "Bench Press",
+                setOrder: 1,
+                weight: 185,
+                reps: 8,
+                distance: 0,
+                seconds: 0,
+                rpe: "8"
+            ),
+            WorkoutSet(
+                date: pushDate,
+                workoutName: "Push Strength",
+                duration: "58m",
+                exerciseName: "Bench Press",
+                setOrder: 2,
+                weight: 195,
+                reps: 6,
+                distance: 0,
+                seconds: 0,
+                rpe: "8"
+            ),
+            WorkoutSet(
+                date: pushDate,
+                workoutName: "Push Strength",
+                duration: "58m",
+                exerciseName: "Incline DB Press",
+                setOrder: 1,
+                weight: 65,
+                reps: 10,
+                distance: 0,
+                seconds: 0,
+                rpe: "7"
+            ),
+            WorkoutSet(
+                date: pushDate,
+                workoutName: "Push Strength",
+                duration: "58m",
+                exerciseName: "Incline DB Press",
+                setOrder: 2,
+                weight: 70,
+                reps: 8,
+                distance: 0,
+                seconds: 0,
+                rpe: "8"
+            )
         ]
 
         let pullSets = [
-            WorkoutSet(date: pullDate, workoutName: "Pull Power", duration: "52m", exerciseName: "Barbell Row", setOrder: 1, weight: 185, reps: 8, distance: 0, seconds: 0, rpe: "8"),
-            WorkoutSet(date: pullDate, workoutName: "Pull Power", duration: "52m", exerciseName: "Barbell Row", setOrder: 2, weight: 195, reps: 6, distance: 0, seconds: 0, rpe: "8"),
-            WorkoutSet(date: pullDate, workoutName: "Pull Power", duration: "52m", exerciseName: "Lat Pulldown", setOrder: 1, weight: 140, reps: 10, distance: 0, seconds: 0, rpe: "7"),
-            WorkoutSet(date: pullDate, workoutName: "Pull Power", duration: "52m", exerciseName: "Lat Pulldown", setOrder: 2, weight: 150, reps: 8, distance: 0, seconds: 0, rpe: "8")
+            WorkoutSet(
+                date: pullDate,
+                workoutName: "Pull Power",
+                duration: "52m",
+                exerciseName: "Barbell Row",
+                setOrder: 1,
+                weight: 185,
+                reps: 8,
+                distance: 0,
+                seconds: 0,
+                rpe: "8"
+            ),
+            WorkoutSet(
+                date: pullDate,
+                workoutName: "Pull Power",
+                duration: "52m",
+                exerciseName: "Barbell Row",
+                setOrder: 2,
+                weight: 195,
+                reps: 6,
+                distance: 0,
+                seconds: 0,
+                rpe: "8"
+            ),
+            WorkoutSet(
+                date: pullDate,
+                workoutName: "Pull Power",
+                duration: "52m",
+                exerciseName: "Lat Pulldown",
+                setOrder: 1,
+                weight: 140,
+                reps: 10,
+                distance: 0,
+                seconds: 0,
+                rpe: "7"
+            ),
+            WorkoutSet(
+                date: pullDate,
+                workoutName: "Pull Power",
+                duration: "52m",
+                exerciseName: "Lat Pulldown",
+                setOrder: 2,
+                weight: 150,
+                reps: 8,
+                distance: 0,
+                seconds: 0,
+                rpe: "8"
+            )
         ]
 
         let legsSets = [
-            WorkoutSet(date: legsDate, workoutName: "Leg Day", duration: "64m", exerciseName: "Back Squat", setOrder: 1, weight: 245, reps: 8, distance: 0, seconds: 0, rpe: "8"),
-            WorkoutSet(date: legsDate, workoutName: "Leg Day", duration: "64m", exerciseName: "Back Squat", setOrder: 2, weight: 265, reps: 6, distance: 0, seconds: 0, rpe: "8"),
-            WorkoutSet(date: legsDate, workoutName: "Leg Day", duration: "64m", exerciseName: "Romanian Deadlift", setOrder: 1, weight: 185, reps: 10, distance: 0, seconds: 0, rpe: "7"),
-            WorkoutSet(date: legsDate, workoutName: "Leg Day", duration: "64m", exerciseName: "Romanian Deadlift", setOrder: 2, weight: 195, reps: 8, distance: 0, seconds: 0, rpe: "8")
+            WorkoutSet(
+                date: legsDate,
+                workoutName: "Leg Day",
+                duration: "64m",
+                exerciseName: "Back Squat",
+                setOrder: 1,
+                weight: 245,
+                reps: 8,
+                distance: 0,
+                seconds: 0,
+                rpe: "8"
+            ),
+            WorkoutSet(
+                date: legsDate,
+                workoutName: "Leg Day",
+                duration: "64m",
+                exerciseName: "Back Squat",
+                setOrder: 2,
+                weight: 265,
+                reps: 6,
+                distance: 0,
+                seconds: 0,
+                rpe: "8"
+            ),
+            WorkoutSet(
+                date: legsDate,
+                workoutName: "Leg Day",
+                duration: "64m",
+                exerciseName: "Romanian Deadlift",
+                setOrder: 1,
+                weight: 185,
+                reps: 10,
+                distance: 0,
+                seconds: 0,
+                rpe: "7"
+            ),
+            WorkoutSet(
+                date: legsDate,
+                workoutName: "Leg Day",
+                duration: "64m",
+                exerciseName: "Romanian Deadlift",
+                setOrder: 2,
+                weight: 195,
+                reps: 8,
+                distance: 0,
+                seconds: 0,
+                rpe: "8"
+            )
         ]
 
         let workouts = [

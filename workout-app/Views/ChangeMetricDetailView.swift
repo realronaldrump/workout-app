@@ -163,8 +163,8 @@ struct ChangeMetricDetailView: View {
                     AxisMarks { value in
                         AxisGridLine()
                         AxisValueLabel {
-                            if let v = value.as(Double.self) {
-                                Text(axisLabel(v))
+                            if let axisValue = value.as(Double.self) {
+                                Text(axisLabel(axisValue))
                             }
                         }
                     }
@@ -415,11 +415,11 @@ struct ChangeMetricDetailView: View {
     private func seriesPoints(from workouts: [Workout], value: (Workout) -> Double) -> [ChartPoint] {
         let sorted = workouts.sorted { $0.date < $1.date }
         return sorted.compactMap { workout in
-            let v = value(workout)
-            guard v > 0 else { return nil }
+            let workoutValue = value(workout)
+            guard workoutValue > 0 else { return nil }
             guard window.current.contains(workout.date) || window.previous.contains(workout.date) else { return nil }
             let windowBucket: Window = window.current.contains(workout.date) ? .current : .previous
-            return ChartPoint(date: workout.date, value: v, window: windowBucket)
+            return ChartPoint(date: workout.date, value: workoutValue, window: windowBucket)
         }
     }
 

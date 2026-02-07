@@ -136,8 +136,8 @@ struct ExerciseStatDetailView: View {
                         AxisMarks { value in
                             AxisGridLine()
                             AxisValueLabel {
-                                if let v = value.as(Double.self) {
-                                    Text(formatAxisValue(v))
+                                if let axisValue = value.as(Double.self) {
+                                    Text(formatAxisValue(axisValue))
                                 }
                             }
                         }

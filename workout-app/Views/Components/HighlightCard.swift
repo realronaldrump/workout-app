@@ -16,12 +16,15 @@ struct HighlightCardView: View {
     var body: some View {
         Group {
             if let action = item.action {
-                Button(action: {
-                    Haptics.selection()
-                    action()
-                }) {
-                    content
-                }
+                Button(
+                    action: {
+                        Haptics.selection()
+                        action()
+                    },
+                    label: {
+                        content
+                    }
+                )
                 .buttonStyle(PlainButtonStyle())
             } else {
                 content

@@ -213,9 +213,25 @@ enum HealthMetric: String, CaseIterable, Identifiable {
         switch self {
         case .sleep:
             return nil
-        case .steps, .activeEnergy, .basalEnergy, .exerciseMinutes, .moveMinutes, .standMinutes, .distanceWalkingRunning, .flightsClimbed:
+        case .steps,
+             .activeEnergy,
+             .basalEnergy,
+             .exerciseMinutes,
+             .moveMinutes,
+             .standMinutes,
+             .distanceWalkingRunning,
+             .flightsClimbed:
             return .cumulativeSum
-        case .restingHeartRate, .walkingHeartRateAverage, .heartRateVariability, .heartRateRecovery, .bloodOxygen, .respiratoryRate, .bodyTemperature, .vo2Max, .bodyMass, .bodyFatPercentage:
+        case .restingHeartRate,
+             .walkingHeartRateAverage,
+             .heartRateVariability,
+             .heartRateRecovery,
+             .bloodOxygen,
+             .respiratoryRate,
+             .bodyTemperature,
+             .vo2Max,
+             .bodyMass,
+             .bodyFatPercentage:
             return .discreteAverage
         }
     }
@@ -310,6 +326,7 @@ enum HealthMetric: String, CaseIterable, Identifiable {
     }
 
     /// Formats a value that is already in display units (matches `displayValue(from:)`).
+    // swiftlint:disable:next cyclomatic_complexity
     func formatDisplay(_ displayValue: Double) -> String {
         switch self {
         case .steps:
@@ -343,6 +360,7 @@ enum HealthMetric: String, CaseIterable, Identifiable {
         }
     }
 
+    // swiftlint:disable:next cyclomatic_complexity
     func format(_ value: Double) -> String {
         switch self {
         case .steps:

@@ -581,7 +581,7 @@ class InsightsEngine: ObservableObject {
 
 // MARK: - Supporting Types
 
-struct Insight: Identifiable {
+struct Insight: Identifiable, Sendable {
     let id: UUID
     let type: InsightType
     let title: String
@@ -593,7 +593,7 @@ struct Insight: Identifiable {
     let metric: Double?
 }
 
-enum InsightType {
+enum InsightType: Sendable {
     case personalRecord
     case strengthGain
     case plateau
@@ -630,7 +630,7 @@ enum InsightType {
     }
 }
 
-enum MuscleGroup: String, CaseIterable, Codable {
+enum MuscleGroup: String, CaseIterable, Codable, Sendable {
     case chest
     case back
     case shoulders

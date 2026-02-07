@@ -2,7 +2,7 @@ import SwiftUI
 
 struct InsightCardView: View {
     let insight: Insight
-    var onTap: (() -> Void)? = nil
+    var onTap: (() -> Void)?
 
     @State private var isAppearing = false
 
@@ -20,45 +20,48 @@ struct InsightCardView: View {
     }
 
     var body: some View {
-        Button(action: {
-            Haptics.selection()
-            onTap?()
-        }) {
-            HStack(spacing: Theme.Spacing.lg) {
-                Image(systemName: insight.type.iconName)
-                    .font(.system(size: 20, weight: .bold))
-                    .foregroundColor(iconColor)
-                    .frame(width: 40, height: 40)
-                    .background(iconColor.opacity(0.12))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                            .strokeBorder(iconColor, lineWidth: 2)
-                    )
-                    .cornerRadius(Theme.CornerRadius.small)
+        Button(
+            action: {
+                Haptics.selection()
+                onTap?()
+            },
+            label: {
+                HStack(spacing: Theme.Spacing.lg) {
+                    Image(systemName: insight.type.iconName)
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundColor(iconColor)
+                        .frame(width: 40, height: 40)
+                        .background(iconColor.opacity(0.12))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                                .strokeBorder(iconColor, lineWidth: 2)
+                        )
+                        .cornerRadius(Theme.CornerRadius.small)
 
-                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                    Text(insight.title)
-                        .font(Theme.Typography.headline)
-                        .foregroundColor(Theme.Colors.textPrimary)
+                    VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                        Text(insight.title)
+                            .font(Theme.Typography.headline)
+                            .foregroundColor(Theme.Colors.textPrimary)
 
-                    Text(insight.message)
-                        .font(Theme.Typography.subheadline)
-                        .foregroundColor(Theme.Colors.textSecondary)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
+                        Text(insight.message)
+                            .font(Theme.Typography.subheadline)
+                            .foregroundColor(Theme.Colors.textSecondary)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.leading)
+                    }
+
+                    Spacer()
+
+                    if insight.actionLabel != nil {
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundColor(Theme.Colors.textTertiary)
+                    }
                 }
-
-                Spacer()
-
-                if insight.actionLabel != nil {
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                        .foregroundColor(Theme.Colors.textTertiary)
-                }
+                .padding(Theme.Spacing.lg)
+                .softCard(elevation: 2)
             }
-            .padding(Theme.Spacing.lg)
-            .softCard(elevation: 2)
-        }
+        )
         .buttonStyle(ScaleButtonStyle())
         .opacity(isAppearing ? 1 : 0)
         .offset(y: isAppearing ? 0 : 10)
@@ -87,7 +90,7 @@ struct ScaleButtonStyle: ButtonStyle {
 struct InsightsSectionView: View {
     @ObservedObject var insightsEngine: InsightsEngine
     let dataManager: WorkoutDataManager
-    var onInsightTap: ((Insight) -> Void)? = nil
+    var onInsightTap: ((Insight) -> Void)?
 
     @State private var showAllInsights = false
 
@@ -110,15 +113,18 @@ struct InsightsSectionView: View {
                 Spacer()
 
                 if insightsEngine.insights.count > 3 {
-                    Button(action: {
-                        withAnimation(Theme.Animation.spring) {
-                            showAllInsights.toggle()
+                    Button(
+                        action: {
+                            withAnimation(Theme.Animation.spring) {
+                                showAllInsights.toggle()
+                            }
+                        },
+                        label: {
+                            Text(showAllInsights ? "Less" : "All \(insightsEngine.insights.count)")
+                                .font(Theme.Typography.subheadline)
+                                .foregroundColor(Theme.Colors.accent)
                         }
-                    }) {
-                        Text(showAllInsights ? "Less" : "All \(insightsEngine.insights.count)")
-                            .font(Theme.Typography.subheadline)
-                            .foregroundColor(Theme.Colors.accent)
-                    }
+                    )
                 }
             }
 
@@ -126,7 +132,7 @@ struct InsightsSectionView: View {
                 EmptyInsightsView()
             } else {
                 VStack(spacing: Theme.Spacing.md) {
-                    ForEach(Array(displayedInsights.enumerated()), id: \.element.id) { index, insight in
+                    ForEach(Array(displayedInsights.enumerated()), id: \.element.id) { _, insight in
                         InsightCardView(insight: insight) {
                             onInsightTap?(insight)
                         }
