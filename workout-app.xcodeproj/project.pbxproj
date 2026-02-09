@@ -147,11 +147,13 @@
 				outputPaths = (
 					"$(DERIVED_FILE_DIR)/swiftlint.stamp",
 					"$(DERIVED_FILE_DIR)/swiftlint-cache",
+					"$(DERIVED_FILE_DIR)/swiftlint-tmp",
+					"$(DERIVED_FILE_DIR)/swiftlint-home",
 				);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-				shellScript = "set -e\nexport PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\"\nexport SWIFTLINT_INPUT_FILELIST=\"${SRCROOT}/scripts/swiftlint-input-files.xcfilelist\"\nexport SWIFTLINT_NO_CACHE=1\n\"${SRCROOT}/scripts/swiftlint.sh\" lint\n# Xcode warns if a script phase has no declared outputs.\ntouch \"${DERIVED_FILE_DIR}/swiftlint.stamp\"\n";
-		};
+				shellScript = "set -e\nexport PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\"\nexport SWIFTLINT_INPUT_FILELIST=\"${SRCROOT}/scripts/swiftlint-input-files.xcfilelist\"\nexport SWIFTLINT_NO_CACHE=1\n\n# With user-script sandboxing, SwiftLint/SourceKitten may try to write temp files.\n# Force temp+home into a declared output directory so sandbox permits it.\nexport TMPDIR=\"${DERIVED_FILE_DIR}/swiftlint-tmp\"\nmkdir -p \"${TMPDIR}\"\nexport HOME=\"${DERIVED_FILE_DIR}/swiftlint-home\"\nmkdir -p \"${HOME}\"\n\n\"${SRCROOT}/scripts/swiftlint.sh\" lint\n# Xcode warns if a script phase has no declared outputs.\ntouch \"${DERIVED_FILE_DIR}/swiftlint.stamp\"\n";
+			};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
