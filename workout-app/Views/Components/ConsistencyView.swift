@@ -3,6 +3,7 @@ import SwiftUI
 struct ConsistencyView: View {
     let stats: WorkoutStats
     let workouts: [Workout]
+    var streakWorkouts: [Workout]? = nil
     var timeRange: TimeRangeOption = .month
     var dateRange: DateInterval?
     var onTap: (() -> Void)?
@@ -96,6 +97,9 @@ struct ConsistencyView: View {
 
             // Streak Bar
             StreakBar(workouts: workouts, daysToShow: daysInRange, dateRange: dateRange)
+
+            // Non-interactive preview (safe inside the full-card tap target).
+            LongestStreaksPreview(workouts: streakWorkouts ?? workouts, maxCount: 2)
         }
         .padding(Theme.Spacing.lg)
         .softCard(elevation: 2)

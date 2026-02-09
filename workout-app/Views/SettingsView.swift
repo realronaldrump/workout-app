@@ -15,6 +15,7 @@ struct SettingsView: View {
     @AppStorage("weightUnit") private var weightUnit = "lbs"
     @AppStorage("weightIncrement") private var weightIncrement: Double = 2.5
     @AppStorage("dateFormat") private var dateFormat = "relative"
+    @AppStorage("intentionalRestDays") private var intentionalRestDays: Int = 1
 
     var body: some View {
         ZStack {
@@ -222,6 +223,37 @@ struct SettingsView: View {
                             Picker("", selection: $dateFormat) {
                                 Text("Relative").tag("relative")
                                 Text("Absolute").tag("absolute")
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.menu)
+                        }
+                        .padding()
+                        .softCard()
+
+                        Divider().padding(.leading, 50)
+
+                        // Intentional rest window (used for streak/consistency calculations)
+                        HStack {
+                            Image(systemName: "bed.double.fill")
+                                .foregroundStyle(.white)
+                                .frame(width: 30, height: 30)
+                                .background(Theme.Colors.accent)
+                                .cornerRadius(6)
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Intentional Rest")
+                                    .font(Theme.Typography.body)
+                                Text("Allow up to \(intentionalRestDays) day\(intentionalRestDays == 1 ? "" : "s") off without breaking streaks")
+                                    .font(Theme.Typography.caption)
+                                    .foregroundStyle(Theme.Colors.textSecondary)
+                            }
+
+                            Spacer()
+
+                            Picker("", selection: $intentionalRestDays) {
+                                ForEach(0...30, id: \.self) { days in
+                                    Text("\(days) day\(days == 1 ? "" : "s")").tag(days)
+                                }
                             }
                             .labelsHidden()
                             .pickerStyle(.menu)

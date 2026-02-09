@@ -25,6 +25,20 @@ struct WorkoutDetailView: View {
         dataManager.loggedWorkoutIds.contains(workout.id)
     }
 
+    private func workoutDateTimeToolbarText(for date: Date) -> String {
+        // Keep this compact so it fits in the nav-bar trailing container across screens/split views.
+        let calendar = Calendar.current
+        let now = Date()
+        let includeYear = calendar.component(.year, from: date) != calendar.component(.year, from: now)
+
+        let datePart = includeYear
+            ? date.formatted(.dateTime.year().month(.abbreviated).day())
+            : date.formatted(.dateTime.month(.abbreviated).day())
+
+        let timePart = date.formatted(.dateTime.hour().minute())
+        return "\(datePart) | \(timePart)"
+    }
+
     var body: some View {
         let workout = resolvedWorkout
         ZStack {
@@ -120,9 +134,13 @@ struct WorkoutDetailView: View {
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                Text(workout.date.formatted(date: .abbreviated, time: .shortened))
-                    .font(Theme.Typography.caption)
+                Text(workoutDateTimeToolbarText(for: workout.date))
+                    // Match app's brutalist typography (avoid generic system/nav-bar styling).
+                    .font(Theme.Typography.metricLabel)
                     .foregroundColor(Theme.Colors.textTertiary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                    .allowsTightening(true)
             }
 
             if isLoggedWorkout {

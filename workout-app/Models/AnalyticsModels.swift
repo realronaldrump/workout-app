@@ -239,6 +239,24 @@ struct CorrelationInsight: Identifiable, Hashable {
     let exerciseName: String?
 }
 
+// MARK: - Streak Runs
+
+/// A contiguous run of workout days where the gap between workout days never exceeds the configured rest window.
+/// `workoutDayCount` counts workout days, not calendar span.
+struct StreakRun: Identifiable, Hashable {
+    let id: String
+    let start: Date
+    let end: Date
+    let workoutDayCount: Int
+
+    init(start: Date, end: Date, workoutDayCount: Int) {
+        self.start = start
+        self.end = end
+        self.workoutDayCount = workoutDayCount
+        self.id = "\(Int(start.timeIntervalSince1970))-\(Int(end.timeIntervalSince1970))-\(workoutDayCount)"
+    }
+}
+
 struct HabitImpactInsight: Identifiable {
     let id = UUID()
     let kind: HabitFactorKind

@@ -55,6 +55,41 @@ struct WorkoutAnalytics {
         return workout.totalVolume / duration
     }
 
+    /// Returns streak runs using the same rule as the app's streak calculation:
+    /// consecutive workout-days, allowing up to `intentionalRestDays` between sessions.
+    /// `workoutDayCount` counts workout days, not total calendar days spanned.
+    static func streakRuns(for workouts: [Workout], intentionalRestDays: Int) -> [StreakRun] {
+        guard !workouts.isEmpty else { return [] }
+
+        let allowedGapDays = max(0, intentionalRestDays) + 1
+        let calendar = Calendar.current
+        let uniqueDays = Set(workouts.map { calendar.startOfDay(for: $0.date) })
+        let sortedDays = uniqueDays.sorted()
+        guard let first = sortedDays.first else { return [] }
+
+        var runs: [StreakRun] = []
+        var runStart = first
+        var runEnd = first
+        var count = 1
+
+        for day in sortedDays.dropFirst() {
+            let daysDiff = calendar.dateComponents([.day], from: runEnd, to: day).day ?? 0
+            let continues = daysDiff >= 1 && daysDiff <= allowedGapDays
+            if continues {
+                runEnd = day
+                count += 1
+            } else {
+                runs.append(StreakRun(start: runStart, end: runEnd, workoutDayCount: count))
+                runStart = day
+                runEnd = day
+                count = 1
+            }
+        }
+
+        runs.append(StreakRun(start: runStart, end: runEnd, workoutDayCount: count))
+        return runs
+    }
+
     static func effortDensitySeries(for workouts: [Workout]) -> [EffortDensityPoint] {
         workouts.sorted { $0.date < $1.date }.map { workout in
             EffortDensityPoint(

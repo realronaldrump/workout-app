@@ -212,6 +212,9 @@ class WorkoutDataManager: ObservableObject {
     private func calculateStreaks() -> (current: Int, longest: Int) {
         guard !workouts.isEmpty else { return (0, 0) }
 
+        let intentionalRestDays = max(0, UserDefaults.standard.integer(forKey: "intentionalRestDays"))
+        let allowedGapDays = intentionalRestDays + 1 // e.g. 1 rest day => allow workout days 2 days apart
+
         // 1. Normalize all workout dates to start of day
         let calendar = Calendar.current
         let uniqueDays = Set(workouts.map { calendar.startOfDay(for: $0.date) })
@@ -226,21 +229,14 @@ class WorkoutDataManager: ObservableObject {
         var tempStreak = 1
         var lastDay = sortedDays[0]
 
-        // 3. Calculate consecutive days (allowing 1 day gap as rest day)
+        // 3. Calculate consecutive workout-days, allowing a configurable rest window.
         for index in 1..<sortedDays.count {
             let currentDay = sortedDays[index]
             let daysDiff = calendar.dateComponents([.day], from: lastDay, to: currentDay).day ?? 0
 
-            if daysDiff == 1 {
-                // Consecutive day
+            if daysDiff >= 1 && daysDiff <= allowedGapDays {
+                // Within the allowed rest window, streak continues (streak counts workout days, not calendar span).
                 tempStreak += 1
-            } else if daysDiff == 2 {
-                // One day gap (rest day), streak continues
-                tempStreak += 1 // Should we count the workout days or the span?
-                // Usually "streak" is "number of active days in a row" or "days without breaking the chain".
-                // If I run Mon, then Wed. Is my streak 2? Or is the chain just unbroken?
-                // The previous logic was `tempStreak += 1` if diff <= 2.
-                // If I run Mon (1), Wed (2). Streak is 2. This implies "days participated in the streak".
             } else {
                 // Broken streak
                 longestStreak = max(longestStreak, tempStreak)
@@ -257,8 +253,8 @@ class WorkoutDataManager: ObservableObject {
             let today = calendar.startOfDay(for: Date())
             let daysSinceLast = calendar.dateComponents([.day], from: lastWorkoutDay, to: today).day ?? 0
 
-            // If last workout was today (0), yesterday (1), or day before (2 - allowed rest day)
-            if daysSinceLast <= 2 {
+            // If last workout was within the rest window, streak is still active.
+            if daysSinceLast <= allowedGapDays {
                 currentStreak = tempStreak
             }
         }
@@ -269,14 +265,30 @@ class WorkoutDataManager: ObservableObject {
     private func calculateWorkoutsPerWeek(for filteredWorkouts: [Workout]) -> Double {
         guard !filteredWorkouts.isEmpty else { return 0 }
 
-        let sortedWorkouts = filteredWorkouts.sorted { $0.date < $1.date }
-        guard let firstDate = sortedWorkouts.first?.date,
-              let lastDate = sortedWorkouts.last?.date else { return 0 }
+        let calendar = Calendar.current
+        let intentionalRestDays = max(0, UserDefaults.standard.integer(forKey: "intentionalRestDays"))
+        let allowedGapDays = intentionalRestDays + 1
 
-        let weeksBetween = Calendar.current.dateComponents([.weekOfYear], from: firstDate, to: lastDate).weekOfYear ?? 1
-        let totalWeeks = max(Double(weeksBetween), 1)
+        // Use unique workout-days to avoid over-counting gaps when multiple sessions happen in one day.
+        let uniqueDays = Set(filteredWorkouts.map { calendar.startOfDay(for: $0.date) })
+        let sortedDays = uniqueDays.sorted()
+        guard !sortedDays.isEmpty else { return 0 }
 
-        return Double(filteredWorkouts.count) / totalWeeks
+        // Effective span in days, capping gaps larger than the intentional rest window so long breaks don't
+        // dilute consistency/session frequency.
+        var effectiveDays = 1
+        var lastDay = sortedDays[0]
+        for index in 1..<sortedDays.count {
+            let day = sortedDays[index]
+            let diff = calendar.dateComponents([.day], from: lastDay, to: day).day ?? 0
+            if diff > 0 {
+                effectiveDays += min(diff, allowedGapDays)
+            }
+            lastDay = day
+        }
+
+        let effectiveWeeks = max(Double(effectiveDays) / 7.0, 1.0)
+        return Double(filteredWorkouts.count) / effectiveWeeks
     }
 
     private func calculateAverageDuration(for filteredWorkouts: [Workout]) -> String {

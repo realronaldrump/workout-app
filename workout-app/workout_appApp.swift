@@ -13,6 +13,11 @@ struct WorkoutApp: App {
     @StateObject private var sessionManager = WorkoutSessionManager()
 
     init() {
+        // Defaults for settings that are read outside SwiftUI views (e.g. analytics/services).
+        UserDefaults.standard.register(defaults: [
+            "intentionalRestDays": 1
+        ])
+
         FontRegistrar.registerFontsIfNeeded()
         Theme.configureGlobalAppearance()
     }

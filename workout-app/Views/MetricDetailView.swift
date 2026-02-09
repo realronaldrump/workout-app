@@ -90,6 +90,10 @@ struct MetricDetailView: View {
                 MetricPill(title: "Longest Streak", value: "\(stats.longestStreak) days")
             }
 
+            LongestStreaksSection(workouts: dataManager.workouts, collapsedCount: 4, maxExpandedCount: 12)
+                .padding(Theme.Spacing.lg)
+                .softCard(elevation: 2)
+
             CalendarHeatmap(workouts: workouts)
                 .padding(Theme.Spacing.lg)
                 .softCard(elevation: 2)

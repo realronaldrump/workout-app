@@ -316,6 +316,7 @@ struct DashboardView: View {
                 ConsistencyView(
                     stats: currentStats,
                     workouts: filteredWorkouts,
+                    streakWorkouts: dataManager.workouts,
                     timeRange: consistencyTimeRange,
                     dateRange: selectedDateRange
                 ) {
