@@ -3,6 +3,9 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONFIG_FILE="$ROOT_DIR/.swiftlint.yml"
+# In Xcode, build settings are exported as environment variables. When running
+# outside Xcode, `SRCROOT` may be unset even though our `.xcfilelist` uses it.
+SRCROOT="${SRCROOT:-$ROOT_DIR}"
 
 # SwiftLint writes a cache file during linting. Keep that cache in a location we
 # control (DerivedData when invoked from Xcode, otherwise a temp directory) so
@@ -38,17 +41,19 @@ fi
 # `--use-script-input-files` and avoid scanning the filesystem.
 use_script_input_files=false
 if [[ -n "${SWIFTLINT_INPUT_FILELIST:-}" ]] && [[ -f "${SWIFTLINT_INPUT_FILELIST}" ]]; then
-  mapfile -t _swift_files < "${SWIFTLINT_INPUT_FILELIST}"
   swift_count=0
-  for raw in "${_swift_files[@]}"; do
+  raw=""
+  # macOS still ships Bash 3.2 at /bin/bash, which doesn't support `mapfile`.
+  # Read the file list line-by-line to stay compatible.
+  while IFS= read -r raw || [[ -n "$raw" ]]; do
     [[ -z "$raw" ]] && continue
-    line="$raw"
+    line="${raw%$'\r'}"
     if [[ "$line" == '$(SRCROOT)/'* ]]; then
       line="${SRCROOT}/${line#'$(SRCROOT)/'}"
     fi
     export "SCRIPT_INPUT_FILE_${swift_count}=${line}"
     swift_count=$((swift_count + 1))
-  done
+  done < "${SWIFTLINT_INPUT_FILELIST}"
   export SCRIPT_INPUT_FILE_COUNT="${swift_count}"
   use_script_input_files=true
 elif [[ -n "${SCRIPT_INPUT_FILE_COUNT:-}" ]] && [[ "${SCRIPT_INPUT_FILE_COUNT}" -gt 0 ]]; then
