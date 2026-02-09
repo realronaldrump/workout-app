@@ -150,15 +150,15 @@ final class WorkoutSessionManager: ObservableObject {
         schedulePersistDraft()
     }
 
-    func updateSet(exerciseId: UUID, setId: UUID, weight: Double?, reps: Int?, distance: Double?, seconds: Double?) {
+    func updateSet(exerciseId: UUID, setId: UUID, prefill: SetPrefill) {
         guard var session = activeSession else { return }
         guard let exerciseIndex = session.exercises.firstIndex(where: { $0.id == exerciseId }) else { return }
         guard let setIndex = session.exercises[exerciseIndex].sets.firstIndex(where: { $0.id == setId }) else { return }
 
-        session.exercises[exerciseIndex].sets[setIndex].weight = weight
-        session.exercises[exerciseIndex].sets[setIndex].reps = reps
-        session.exercises[exerciseIndex].sets[setIndex].distance = distance
-        session.exercises[exerciseIndex].sets[setIndex].seconds = seconds
+        session.exercises[exerciseIndex].sets[setIndex].weight = prefill.weight
+        session.exercises[exerciseIndex].sets[setIndex].reps = prefill.reps
+        session.exercises[exerciseIndex].sets[setIndex].distance = prefill.distance
+        session.exercises[exerciseIndex].sets[setIndex].seconds = prefill.seconds
 
         touch(&session)
         activeSession = session

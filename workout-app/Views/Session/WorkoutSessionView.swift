@@ -730,10 +730,7 @@ private struct SessionSetRow: View {
             sessionManager.updateSet(
                 exerciseId: exerciseId,
                 setId: set.id,
-                weight: nil,
-                reps: reps,
-                distance: distance,
-                seconds: seconds
+                prefill: SetPrefill(weight: nil, reps: reps, distance: distance, seconds: seconds)
             )
         } else {
             let weight = parseDouble(weightText)
@@ -741,10 +738,7 @@ private struct SessionSetRow: View {
             sessionManager.updateSet(
                 exerciseId: exerciseId,
                 setId: set.id,
-                weight: weight,
-                reps: reps,
-                distance: nil,
-                seconds: nil
+                prefill: SetPrefill(weight: weight, reps: reps, distance: nil, seconds: nil)
             )
         }
     }

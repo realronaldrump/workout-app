@@ -1,6 +1,8 @@
 import SwiftUI
 import Charts
 
+// swiftlint:disable file_length
+
 struct ExerciseDetailView: View {
     let exerciseName: String
     @ObservedObject var dataManager: WorkoutDataManager
@@ -364,80 +366,80 @@ struct ExerciseStatsCards: View {
     }
 
     var body: some View {
-        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
-            if isCardio {
-                let c = cardioStats
+	        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
+	            if isCardio {
+	                let cardio = cardioStats
 
-                StatCard(
-                    title: "Sessions",
-                    value: "\(c.sessions)",
-                    icon: "calendar",
-                    color: Theme.Colors.cardio
-                )
+	                StatCard(
+	                    title: "Sessions",
+	                    value: "\(cardio.sessions)",
+	                    icon: "calendar",
+	                    color: Theme.Colors.cardio
+	                )
 
-                if c.totalDistance > 0 {
-                    StatCard(
-                        title: "Total Distance",
-                        value: WorkoutValueFormatter.distanceText(c.totalDistance),
-                        subtitle: "dist",
-                        icon: "location.fill",
-                        color: Theme.Colors.cardio
-                    )
-                }
+	                if cardio.totalDistance > 0 {
+	                    StatCard(
+	                        title: "Total Distance",
+	                        value: WorkoutValueFormatter.distanceText(cardio.totalDistance),
+	                        subtitle: "dist",
+	                        icon: "location.fill",
+	                        color: Theme.Colors.cardio
+	                    )
+	                }
 
-                if c.totalSeconds > 0 {
-                    StatCard(
-                        title: "Total Time",
-                        value: WorkoutValueFormatter.durationText(seconds: c.totalSeconds),
-                        icon: "clock.fill",
-                        color: Theme.Colors.cardio
-                    )
-                }
+	                if cardio.totalSeconds > 0 {
+	                    StatCard(
+	                        title: "Total Time",
+	                        value: WorkoutValueFormatter.durationText(seconds: cardio.totalSeconds),
+	                        icon: "clock.fill",
+	                        color: Theme.Colors.cardio
+	                    )
+	                }
 
-                if c.totalCount > 0 {
-                    StatCard(
-                        title: "Total \(cardioConfig.countLabel)",
-                        value: "\(c.totalCount)",
-                        subtitle: cardioConfig.countLabel,
-                        icon: "number",
-                        color: Theme.Colors.cardio
-                    )
-                }
+	                if cardio.totalCount > 0 {
+	                    StatCard(
+	                        title: "Total \(cardioConfig.countLabel)",
+	                        value: "\(cardio.totalCount)",
+	                        subtitle: cardioConfig.countLabel,
+	                        icon: "number",
+	                        color: Theme.Colors.cardio
+	                    )
+	                }
 
-                if c.sessions > 0 {
-                    switch cardioConfig.primary {
-                    case .distance:
-                        if c.bestDistance > 0 {
-                            StatCard(
-                                title: "Best Distance",
-                                value: WorkoutValueFormatter.distanceText(c.bestDistance),
-                                subtitle: "dist",
-                                icon: "trophy.fill",
-                                color: Theme.Colors.gold
-                            )
-                        }
-                    case .duration:
-                        if c.bestSeconds > 0 {
-                            StatCard(
-                                title: "Best Time",
-                                value: WorkoutValueFormatter.durationText(seconds: c.bestSeconds),
-                                icon: "trophy.fill",
-                                color: Theme.Colors.gold
-                            )
-                        }
-                    case .count:
-                        if c.bestCount > 0 {
-                            StatCard(
-                                title: "Best \(cardioConfig.countLabel)",
-                                value: "\(c.bestCount)",
-                                subtitle: cardioConfig.countLabel,
-                                icon: "trophy.fill",
-                                color: Theme.Colors.gold
-                            )
-                        }
-                    }
-                }
-            } else {
+	                if cardio.sessions > 0 {
+	                    switch cardioConfig.primary {
+	                    case .distance:
+	                        if cardio.bestDistance > 0 {
+	                            StatCard(
+	                                title: "Best Distance",
+	                                value: WorkoutValueFormatter.distanceText(cardio.bestDistance),
+	                                subtitle: "dist",
+	                                icon: "trophy.fill",
+	                                color: Theme.Colors.gold
+	                            )
+	                        }
+	                    case .duration:
+	                        if cardio.bestSeconds > 0 {
+	                            StatCard(
+	                                title: "Best Time",
+	                                value: WorkoutValueFormatter.durationText(seconds: cardio.bestSeconds),
+	                                icon: "trophy.fill",
+	                                color: Theme.Colors.gold
+	                            )
+	                        }
+	                    case .count:
+	                        if cardio.bestCount > 0 {
+	                            StatCard(
+	                                title: "Best \(cardioConfig.countLabel)",
+	                                value: "\(cardio.bestCount)",
+	                                subtitle: cardioConfig.countLabel,
+	                                icon: "trophy.fill",
+	                                color: Theme.Colors.gold
+	                            )
+	                        }
+	                    }
+	                }
+	            } else {
                 StatCard(
                     title: "Total Sets",
                     value: "\(stats.totalSets)",
@@ -858,12 +860,19 @@ struct PersonalRecordsView: View {
     @ObservedObject private var metadataManager = ExerciseMetadataManager.shared
     @ObservedObject private var metricManager = ExerciseMetricManager.shared
 
-    private struct PersonalRecord: Identifiable {
-        let id = UUID()
-        let title: String
-        let value: String
-        let date: Date
-    }
+	    private struct PersonalRecord: Identifiable {
+	        let id = UUID()
+	        let title: String
+	        let value: String
+	        let date: Date
+	    }
+
+	    private struct CardioSessionMetrics {
+	        let date: Date
+	        let distance: Double
+	        let seconds: Double
+	        let repCount: Int
+	    }
 
     private var isCardio: Bool {
         metadataManager
@@ -876,14 +885,14 @@ struct PersonalRecordsView: View {
         return metricManager.resolvedCardioConfiguration(for: exerciseName, historySets: sets)
     }
 
-    private var records: [PersonalRecord] {
-        if isCardio {
-            let sessions = history.map { session -> (date: Date, distance: Double, seconds: Double, count: Int) in
-                let distance = session.sets.reduce(0.0) { $0 + $1.distance }
-                let seconds = session.sets.reduce(0.0) { $0 + $1.seconds }
-                let count = session.sets.reduce(0) { $0 + $1.reps }
-                return (session.date, distance, seconds, count)
-            }
+	    private var records: [PersonalRecord] {
+	        if isCardio {
+	            let sessions: [CardioSessionMetrics] = history.map { session in
+	                let distance = session.sets.reduce(0.0) { $0 + $1.distance }
+	                let seconds = session.sets.reduce(0.0) { $0 + $1.seconds }
+	                let repCount = session.sets.reduce(0) { $0 + $1.reps }
+	                return CardioSessionMetrics(date: session.date, distance: distance, seconds: seconds, repCount: repCount)
+	            }
 
             var records: [PersonalRecord] = []
 
@@ -903,13 +912,13 @@ struct PersonalRecordsView: View {
                 ))
             }
 
-            if let bestCount = sessions.max(by: { $0.count < $1.count }), bestCount.count > 0 {
-                records.append(PersonalRecord(
-                    title: "Most \(cardioConfig.countLabel)",
-                    value: "\(bestCount.count) \(cardioConfig.countLabel)",
-                    date: bestCount.date
-                ))
-            }
+	            if let bestCount = sessions.max(by: { $0.repCount < $1.repCount }), bestCount.repCount > 0 {
+	                records.append(PersonalRecord(
+	                    title: "Most \(cardioConfig.countLabel)",
+	                    value: "\(bestCount.repCount) \(cardioConfig.countLabel)",
+	                    date: bestCount.date
+	                ))
+	            }
 
             return records
         } else {
@@ -1214,3 +1223,5 @@ struct ExerciseRangeBreakdown: View {
         return weight * (1 + 0.0333 * Double(reps))
     }
 }
+
+// swiftlint:enable file_length

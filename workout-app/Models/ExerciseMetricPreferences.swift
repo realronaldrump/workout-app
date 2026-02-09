@@ -59,4 +59,3 @@ struct ResolvedCardioMetricConfiguration: Hashable, Sendable {
     let secondary: CardioMetricKind
     let countLabel: String
 }
-

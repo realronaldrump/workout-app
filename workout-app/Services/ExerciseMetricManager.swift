@@ -113,4 +113,3 @@ final class ExerciseMetricManager: ObservableObject {
         }
     }
 }
-

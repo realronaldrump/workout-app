@@ -3,7 +3,7 @@ import SwiftUI
 struct ConsistencyView: View {
     let stats: WorkoutStats
     let workouts: [Workout]
-    var streakWorkouts: [Workout]? = nil
+    var streakWorkouts: [Workout]?
     var timeRange: TimeRangeOption = .month
     var dateRange: DateInterval?
     var onTap: (() -> Void)?
