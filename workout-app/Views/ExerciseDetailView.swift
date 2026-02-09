@@ -6,16 +6,21 @@ struct ExerciseDetailView: View {
     @ObservedObject var dataManager: WorkoutDataManager
     @ObservedObject var annotationsManager: WorkoutAnnotationsManager
     @ObservedObject var gymProfilesManager: GymProfilesManager
+    @ObservedObject private var metadataManager = ExerciseMetadataManager.shared
+    @ObservedObject private var metricManager = ExerciseMetricManager.shared
     @StateObject private var insightsEngine: InsightsEngine
     @State private var selectedChart = ChartType.weight
     @State private var selectedGymScope: GymScope = .all
     @State private var showingLocationPicker = false
 
-    enum ChartType: String, CaseIterable {
+    enum ChartType: String, CaseIterable, Hashable {
         case weight = "Max Weight"
         case volume = "Volume"
         case oneRepMax = "1RM"
         case reps = "Reps"
+        case distance = "Distance"
+        case duration = "Duration"
+        case count = "Count"
     }
 
     enum GymScope: Hashable {
@@ -68,6 +73,35 @@ struct ExerciseDetailView: View {
         insightsEngine.insights.filter { $0.exerciseName == exerciseName }
     }
 
+    private var isCardio: Bool {
+        metadataManager
+            .resolvedTags(for: exerciseName)
+            .contains(where: { $0.builtInGroup == .cardio })
+    }
+
+    private var cardioConfig: ResolvedCardioMetricConfiguration {
+        let sets = scopedHistory.flatMap(\.sets)
+        return metricManager.resolvedCardioConfiguration(for: exerciseName, historySets: sets)
+    }
+
+    private var availableChartTypes: [ChartType] {
+        if !isCardio {
+            return [.weight, .volume, .oneRepMax, .reps]
+        }
+
+        let sets = scopedHistory.flatMap(\.sets)
+        let hasDistance = sets.contains(where: { $0.distance > 0 })
+        let hasDuration = sets.contains(where: { $0.seconds > 0 })
+        let hasCount = sets.contains(where: { $0.reps > 0 })
+
+        var types: [ChartType] = []
+        if hasDistance { types.append(.distance) }
+        if hasDuration { types.append(.duration) }
+        if hasCount { types.append(.count) }
+
+        return types.isEmpty ? [.duration] : types
+    }
+
     private var locationLabel: String {
         switch selectedGymScope {
         case .all:
@@ -116,7 +150,7 @@ struct ExerciseDetailView: View {
                             locationMenu
 
                             Picker("Chart Type", selection: $selectedChart) {
-                                ForEach(ChartType.allCases, id: \.self) { type in
+                                ForEach(availableChartTypes, id: \.self) { type in
                                     Text(type.rawValue).tag(type)
                                 }
                             }
@@ -129,13 +163,19 @@ struct ExerciseDetailView: View {
                                 .foregroundColor(Theme.Colors.warning)
                         }
 
-                        ExerciseProgressChart(history: scopedHistory, chartType: selectedChart)
+                        ExerciseProgressChart(
+                            history: scopedHistory,
+                            chartType: selectedChart,
+                            countLabel: isCardio ? cardioConfig.countLabel : nil
+                        )
                             .frame(height: 250)
                             .padding(Theme.Spacing.lg)
                             .softCard(elevation: 2)
                     }
 
-                    ExerciseRangeBreakdown(history: scopedHistory)
+                    if !isCardio {
+                        ExerciseRangeBreakdown(history: scopedHistory)
+                    }
 
                     if !exerciseInsights.isEmpty {
                         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
@@ -151,9 +191,15 @@ struct ExerciseDetailView: View {
                         }
                     }
 
-                    PersonalRecordsView(history: scopedHistory)
+                    PersonalRecordsView(
+                        exerciseName: exerciseName,
+                        history: scopedHistory
+                    )
 
-                    RecentSetsView(history: scopedHistory)
+                    RecentSetsView(
+                        exerciseName: exerciseName,
+                        history: scopedHistory
+                    )
                 }
                 .padding(Theme.Spacing.xl)
             }
@@ -161,8 +207,16 @@ struct ExerciseDetailView: View {
         .navigationTitle(exerciseName)
         .navigationBarTitleDisplayMode(.large)
         .onAppear {
+            if !availableChartTypes.contains(selectedChart) {
+                selectedChart = availableChartTypes.first ?? (isCardio ? .duration : .weight)
+            }
             Task {
                 await insightsEngine.generateInsights()
+            }
+        }
+        .onChange(of: availableChartTypes) { _, newValue in
+            if !newValue.contains(selectedChart) {
+                selectedChart = newValue.first ?? selectedChart
             }
         }
         .onChange(of: selectedChart) { _, _ in
@@ -224,6 +278,8 @@ struct ExerciseDetailView: View {
 struct ExerciseStatsCards: View {
     let exerciseName: String
     let history: [(date: Date, sets: [WorkoutSet])]
+    @ObservedObject private var metadataManager = ExerciseMetadataManager.shared
+    @ObservedObject private var metricManager = ExerciseMetricManager.shared
 
     @State private var selectedStat: ExerciseStatKind?
 
@@ -232,6 +288,27 @@ struct ExerciseStatsCards: View {
         let maxWeight: Double
         let maxVolume: Double
         let avgReps: Double
+    }
+
+    private struct CardioSummary {
+        let sessions: Int
+        let totalDistance: Double
+        let totalSeconds: Double
+        let totalCount: Int
+        let bestDistance: Double
+        let bestSeconds: Double
+        let bestCount: Int
+    }
+
+    private var isCardio: Bool {
+        metadataManager
+            .resolvedTags(for: exerciseName)
+            .contains(where: { $0.builtInGroup == .cardio })
+    }
+
+    private var cardioConfig: ResolvedCardioMetricConfiguration {
+        let sets = history.flatMap(\.sets)
+        return metricManager.resolvedCardioConfiguration(for: exerciseName, historySets: sets)
     }
 
     private var stats: StatsSummary {
@@ -251,39 +328,148 @@ struct ExerciseStatsCards: View {
         )
     }
 
+    private var cardioStats: CardioSummary {
+        let sessions = history.count
+        let totalDistance = history.reduce(0.0) { sum, session in
+            sum + session.sets.reduce(0.0) { $0 + $1.distance }
+        }
+        let totalSeconds = history.reduce(0.0) { sum, session in
+            sum + session.sets.reduce(0.0) { $0 + $1.seconds }
+        }
+        let totalCount = history.reduce(0) { sum, session in
+            sum + session.sets.reduce(0) { $0 + $1.reps }
+        }
+
+        let bestDistance = history.map { session in
+            session.sets.reduce(0.0) { $0 + $1.distance }
+        }.max() ?? 0
+
+        let bestSeconds = history.map { session in
+            session.sets.reduce(0.0) { $0 + $1.seconds }
+        }.max() ?? 0
+
+        let bestCount = history.map { session in
+            session.sets.reduce(0) { $0 + $1.reps }
+        }.max() ?? 0
+
+        return CardioSummary(
+            sessions: sessions,
+            totalDistance: totalDistance,
+            totalSeconds: totalSeconds,
+            totalCount: totalCount,
+            bestDistance: bestDistance,
+            bestSeconds: bestSeconds,
+            bestCount: bestCount
+        )
+    }
+
     var body: some View {
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
-            StatCard(
-                title: "Total Sets",
-                value: "\(stats.totalSets)",
-                icon: "number",
-                color: .blue,
-                onTap: { selectedStat = .totalSets }
-            )
+            if isCardio {
+                let c = cardioStats
 
-            StatCard(
-                title: "Max Weight",
-                value: "\(Int(stats.maxWeight)) lbs",
-                icon: "scalemass.fill",
-                color: .orange,
-                onTap: { selectedStat = .maxWeight }
-            )
+                StatCard(
+                    title: "Sessions",
+                    value: "\(c.sessions)",
+                    icon: "calendar",
+                    color: Theme.Colors.cardio
+                )
 
-            StatCard(
-                title: "Max Volume",
-                value: formatVolume(stats.maxVolume),
-                icon: "chart.bar.fill",
-                color: .green,
-                onTap: { selectedStat = .maxVolume }
-            )
+                if c.totalDistance > 0 {
+                    StatCard(
+                        title: "Total Distance",
+                        value: WorkoutValueFormatter.distanceText(c.totalDistance),
+                        subtitle: "dist",
+                        icon: "location.fill",
+                        color: Theme.Colors.cardio
+                    )
+                }
 
-            StatCard(
-                title: "Avg Reps",
-                value: String(format: "%.1f", stats.avgReps),
-                icon: "repeat",
-                color: .purple,
-                onTap: { selectedStat = .avgReps }
-            )
+                if c.totalSeconds > 0 {
+                    StatCard(
+                        title: "Total Time",
+                        value: WorkoutValueFormatter.durationText(seconds: c.totalSeconds),
+                        icon: "clock.fill",
+                        color: Theme.Colors.cardio
+                    )
+                }
+
+                if c.totalCount > 0 {
+                    StatCard(
+                        title: "Total \(cardioConfig.countLabel)",
+                        value: "\(c.totalCount)",
+                        subtitle: cardioConfig.countLabel,
+                        icon: "number",
+                        color: Theme.Colors.cardio
+                    )
+                }
+
+                if c.sessions > 0 {
+                    switch cardioConfig.primary {
+                    case .distance:
+                        if c.bestDistance > 0 {
+                            StatCard(
+                                title: "Best Distance",
+                                value: WorkoutValueFormatter.distanceText(c.bestDistance),
+                                subtitle: "dist",
+                                icon: "trophy.fill",
+                                color: Theme.Colors.gold
+                            )
+                        }
+                    case .duration:
+                        if c.bestSeconds > 0 {
+                            StatCard(
+                                title: "Best Time",
+                                value: WorkoutValueFormatter.durationText(seconds: c.bestSeconds),
+                                icon: "trophy.fill",
+                                color: Theme.Colors.gold
+                            )
+                        }
+                    case .count:
+                        if c.bestCount > 0 {
+                            StatCard(
+                                title: "Best \(cardioConfig.countLabel)",
+                                value: "\(c.bestCount)",
+                                subtitle: cardioConfig.countLabel,
+                                icon: "trophy.fill",
+                                color: Theme.Colors.gold
+                            )
+                        }
+                    }
+                }
+            } else {
+                StatCard(
+                    title: "Total Sets",
+                    value: "\(stats.totalSets)",
+                    icon: "number",
+                    color: .blue,
+                    onTap: { selectedStat = .totalSets }
+                )
+
+                StatCard(
+                    title: "Max Weight",
+                    value: "\(Int(stats.maxWeight)) lbs",
+                    icon: "scalemass.fill",
+                    color: .orange,
+                    onTap: { selectedStat = .maxWeight }
+                )
+
+                StatCard(
+                    title: "Max Volume",
+                    value: formatVolume(stats.maxVolume),
+                    icon: "chart.bar.fill",
+                    color: .green,
+                    onTap: { selectedStat = .maxVolume }
+                )
+
+                StatCard(
+                    title: "Avg Reps",
+                    value: String(format: "%.1f", stats.avgReps),
+                    icon: "repeat",
+                    color: .purple,
+                    onTap: { selectedStat = .avgReps }
+                )
+            }
         }
         .navigationDestination(item: $selectedStat) { kind in
             ExerciseStatDetailView(kind: kind, exerciseName: exerciseName, history: history)
@@ -301,6 +487,7 @@ struct ExerciseStatsCards: View {
 struct ExerciseProgressChart: View {
     let history: [(date: Date, sets: [WorkoutSet])]
     let chartType: ExerciseDetailView.ChartType
+    var countLabel: String?
 
     @State private var isAppearing = false
     @State private var selectedDataPoint: ChartPoint?
@@ -352,6 +539,12 @@ struct ExerciseProgressChart: View {
                 value = bestSet.map { calculateOneRepMax(weight: $0.weight, reps: $0.reps) } ?? 0
             case .reps:
                 value = Double(session.sets.map { $0.reps }.max() ?? 0)
+            case .distance:
+                value = session.sets.reduce(0) { $0 + $1.distance }
+            case .duration:
+                value = session.sets.reduce(0) { $0 + $1.seconds }
+            case .count:
+                value = Double(session.sets.reduce(0) { $0 + $1.reps })
             }
             return ChartPoint(date: session.date, value: value)
         }
@@ -373,6 +566,9 @@ struct ExerciseProgressChart: View {
         case .volume: return Theme.Colors.quads
         case .oneRepMax: return Theme.Colors.gold
         case .reps: return Theme.Colors.back
+        case .distance: return Theme.Colors.cardio
+        case .duration: return Theme.Colors.cardio
+        case .count: return Theme.Colors.cardio
         }
     }
 
@@ -441,9 +637,13 @@ struct ExerciseProgressChart: View {
             }
         }
         .chartYAxis {
-            AxisMarks { _ in
+            AxisMarks { value in
                 AxisGridLine()
-                AxisValueLabel()
+                AxisValueLabel {
+                    if let axisValue = value.as(Double.self) {
+                        Text(formatAxisValue(axisValue))
+                    }
+                }
             }
         }
         .chartOverlay { proxy in
@@ -586,6 +786,25 @@ struct ExerciseProgressChart: View {
             return "\(Int(value)) lbs"
         case .reps:
             return "\(Int(value)) reps"
+        case .distance:
+            return "\(WorkoutValueFormatter.distanceText(value)) dist"
+        case .duration:
+            return WorkoutValueFormatter.durationText(seconds: value)
+        case .count:
+            let label = (countLabel?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
+                ? (countLabel ?? "count")
+                : "count"
+            return "\(Int(value)) \(label)"
+        }
+    }
+
+    private func formatAxisValue(_ value: Double) -> String {
+        // Keep axis labels compact but still meaningful.
+        switch chartType {
+        case .duration:
+            return WorkoutValueFormatter.durationText(seconds: value)
+        default:
+            return formatValue(value)
         }
     }
 
@@ -634,7 +853,10 @@ struct ExerciseProgressChart: View {
 }
 
 struct PersonalRecordsView: View {
+    let exerciseName: String
     let history: [(date: Date, sets: [WorkoutSet])]
+    @ObservedObject private var metadataManager = ExerciseMetadataManager.shared
+    @ObservedObject private var metricManager = ExerciseMetricManager.shared
 
     private struct PersonalRecord: Identifiable {
         let id = UUID()
@@ -643,49 +865,97 @@ struct PersonalRecordsView: View {
         let date: Date
     }
 
+    private var isCardio: Bool {
+        metadataManager
+            .resolvedTags(for: exerciseName)
+            .contains(where: { $0.builtInGroup == .cardio })
+    }
+
+    private var cardioConfig: ResolvedCardioMetricConfiguration {
+        let sets = history.flatMap(\.sets)
+        return metricManager.resolvedCardioConfiguration(for: exerciseName, historySets: sets)
+    }
+
     private var records: [PersonalRecord] {
-        let allSets = history.flatMap { session in
-            session.sets.map { (set: $0, date: session.date) }
+        if isCardio {
+            let sessions = history.map { session -> (date: Date, distance: Double, seconds: Double, count: Int) in
+                let distance = session.sets.reduce(0.0) { $0 + $1.distance }
+                let seconds = session.sets.reduce(0.0) { $0 + $1.seconds }
+                let count = session.sets.reduce(0) { $0 + $1.reps }
+                return (session.date, distance, seconds, count)
+            }
+
+            var records: [PersonalRecord] = []
+
+            if let bestDistance = sessions.max(by: { $0.distance < $1.distance }), bestDistance.distance > 0 {
+                records.append(PersonalRecord(
+                    title: "Longest Distance",
+                    value: "\(WorkoutValueFormatter.distanceText(bestDistance.distance)) dist",
+                    date: bestDistance.date
+                ))
+            }
+
+            if let bestTime = sessions.max(by: { $0.seconds < $1.seconds }), bestTime.seconds > 0 {
+                records.append(PersonalRecord(
+                    title: "Longest Time",
+                    value: WorkoutValueFormatter.durationText(seconds: bestTime.seconds),
+                    date: bestTime.date
+                ))
+            }
+
+            if let bestCount = sessions.max(by: { $0.count < $1.count }), bestCount.count > 0 {
+                records.append(PersonalRecord(
+                    title: "Most \(cardioConfig.countLabel)",
+                    value: "\(bestCount.count) \(cardioConfig.countLabel)",
+                    date: bestCount.date
+                ))
+            }
+
+            return records
+        } else {
+            let allSets = history.flatMap { session in
+                session.sets.map { (set: $0, date: session.date) }
+            }
+
+            var records: [PersonalRecord] = []
+
+            // Max weight
+            if let maxWeightSet = allSets.max(by: { $0.set.weight < $1.set.weight }) {
+                records.append(PersonalRecord(
+                    title: "Heaviest Weight",
+                    value: "\(Int(maxWeightSet.set.weight)) lbs × \(maxWeightSet.set.reps)",
+                    date: maxWeightSet.date
+                ))
+            }
+
+            // Max volume single set
+            if let maxVolumeSet = allSets.max(by: {
+                $0.set.weight * Double($0.set.reps) < $1.set.weight * Double($1.set.reps)
+            }) {
+                let volume = maxVolumeSet.set.weight * Double(maxVolumeSet.set.reps)
+                records.append(PersonalRecord(title: "Max Volume (Single Set)", value: "\(Int(volume)) lbs", date: maxVolumeSet.date))
+            }
+
+            // Max reps
+            if let maxRepsSet = allSets.max(by: { $0.set.reps < $1.set.reps }) {
+                records.append(PersonalRecord(
+                    title: "Most Reps",
+                    value: "\(maxRepsSet.set.reps) @ \(Int(maxRepsSet.set.weight)) lbs",
+                    date: maxRepsSet.date
+                ))
+            }
+
+            // Best 1RM
+            if let best1RM = allSets.max(by: {
+                calculateOneRepMax(weight: $0.set.weight, reps: $0.set.reps) <
+                calculateOneRepMax(weight: $1.set.weight, reps: $1.set.reps)
+            }) {
+                let orm = calculateOneRepMax(weight: best1RM.set.weight, reps: best1RM.set.reps)
+                records.append(PersonalRecord(title: "Est. 1RM", value: "\(Int(orm)) lbs", date: best1RM.date))
+            }
+
+            return records
         }
-
-        var records: [PersonalRecord] = []
-
-        // Max weight
-        if let maxWeightSet = allSets.max(by: { $0.set.weight < $1.set.weight }) {
-            records.append(PersonalRecord(
-                title: "Heaviest Weight",
-                value: "\(Int(maxWeightSet.set.weight)) lbs × \(maxWeightSet.set.reps)",
-                date: maxWeightSet.date
-            ))
-        }
-
-        // Max volume single set
-        if let maxVolumeSet = allSets.max(by: {
-            $0.set.weight * Double($0.set.reps) < $1.set.weight * Double($1.set.reps)
-        }) {
-            let volume = maxVolumeSet.set.weight * Double(maxVolumeSet.set.reps)
-            records.append(PersonalRecord(title: "Max Volume (Single Set)", value: "\(Int(volume)) lbs", date: maxVolumeSet.date))
-        }
-
-        // Max reps
-        if let maxRepsSet = allSets.max(by: { $0.set.reps < $1.set.reps }) {
-            records.append(PersonalRecord(
-                title: "Most Reps",
-                value: "\(maxRepsSet.set.reps) @ \(Int(maxRepsSet.set.weight)) lbs",
-                date: maxRepsSet.date
-            ))
-        }
-
-        // Best 1RM
-        if let best1RM = allSets.max(by: {
-            calculateOneRepMax(weight: $0.set.weight, reps: $0.set.reps) <
-            calculateOneRepMax(weight: $1.set.weight, reps: $1.set.reps)
-        }) {
-            let orm = calculateOneRepMax(weight: best1RM.set.weight, reps: best1RM.set.reps)
-            records.append(PersonalRecord(title: "Est. 1RM", value: "\(Int(orm)) lbs", date: best1RM.date))
-        }
-
-        return records
     }
 
     var body: some View {
@@ -726,7 +996,10 @@ struct PersonalRecordsView: View {
 }
 
 struct RecentSetsView: View {
+    let exerciseName: String
     let history: [(date: Date, sets: [WorkoutSet])]
+    @ObservedObject private var metadataManager = ExerciseMetadataManager.shared
+    @ObservedObject private var metricManager = ExerciseMetricManager.shared
     @State private var visibleCount: Int = 5
 
     private var sortedSessions: [(date: Date, sets: [WorkoutSet])] {
@@ -739,6 +1012,17 @@ struct RecentSetsView: View {
 
     private var canShowMore: Bool {
         sortedSessions.count > visibleCount
+    }
+
+    private var isCardio: Bool {
+        metadataManager
+            .resolvedTags(for: exerciseName)
+            .contains(where: { $0.builtInGroup == .cardio })
+    }
+
+    private var cardioConfig: ResolvedCardioMetricConfiguration {
+        let sets = history.flatMap(\.sets)
+        return metricManager.resolvedCardioConfiguration(for: exerciseName, historySets: sets)
     }
 
     var body: some View {
@@ -761,15 +1045,23 @@ struct RecentSetsView: View {
                                     .foregroundColor(Theme.Colors.textTertiary)
                                     .frame(width: 50, alignment: .leading)
 
-                                Text("\(Int(set.weight)) lbs × \(set.reps)")
-                                    .font(Theme.Typography.body)
-                                    .monospacedDigit()
+                                if isCardio {
+                                    Text(cardioSetSummary(set))
+                                        .font(Theme.Typography.body)
+                                        .monospacedDigit()
 
-                                Spacer()
+                                    Spacer()
+                                } else {
+                                    Text("\(Int(set.weight)) lbs × \(set.reps)")
+                                        .font(Theme.Typography.body)
+                                        .monospacedDigit()
 
-                                Text("\(Int(set.weight * Double(set.reps))) lbs")
-                                    .font(Theme.Typography.caption)
-                                    .foregroundColor(Theme.Colors.textSecondary)
+                                    Spacer()
+
+                                    Text("\(Int(set.weight * Double(set.reps))) lbs")
+                                        .font(Theme.Typography.caption)
+                                        .foregroundColor(Theme.Colors.textSecondary)
+                                }
                             }
                         }
                     }
@@ -793,6 +1085,20 @@ struct RecentSetsView: View {
                 }
             }
         }
+    }
+
+    private func cardioSetSummary(_ set: WorkoutSet) -> String {
+        var parts: [String] = []
+        if set.distance > 0 {
+            parts.append("\(WorkoutValueFormatter.distanceText(set.distance)) dist")
+        }
+        if set.seconds > 0 {
+            parts.append(WorkoutValueFormatter.durationText(seconds: set.seconds))
+        }
+        if parts.isEmpty, set.reps > 0 {
+            parts.append("\(set.reps) \(cardioConfig.countLabel)")
+        }
+        return parts.isEmpty ? "—" : parts.joined(separator: " | ")
     }
 }
 

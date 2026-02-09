@@ -104,6 +104,18 @@ struct WorkoutAnalytics {
 
     static func repRangeDistribution(for workouts: [Workout]) -> [RepRangeBucket] {
         let allSets = workouts.flatMap { $0.exercises }.flatMap { $0.sets }
+
+        // Rep range distribution is a strength metric; exclude cardio-tagged exercises so
+        // count-based cardio (e.g. "floors") doesn't pollute the rep histogram.
+        let exerciseNames = Set(workouts.flatMap { $0.exercises.map(\.name) })
+        let cardioNames: Set<String> = Set(
+            exerciseNames.filter { name in
+                ExerciseMetadataManager.shared
+                    .resolvedTags(for: name)
+                    .contains(where: { $0.builtInGroup == .cardio })
+            }
+        )
+        let strengthSets = allSets.filter { !cardioNames.contains($0.exerciseName) }
         let buckets: [RepRangeDescriptor] = [
             RepRangeDescriptor(label: "1-3", range: 1...3, tint: Theme.Colors.error),
             RepRangeDescriptor(label: "4-6", range: 4...6, tint: Theme.Colors.warning),
@@ -113,9 +125,9 @@ struct WorkoutAnalytics {
             RepRangeDescriptor(label: "21+", range: 21...100, tint: Theme.Colors.textSecondary)
         ]
 
-        let total = max(allSets.count, 1)
+        let total = max(strengthSets.count, 1)
         return buckets.map { bucket in
-            let count = allSets.filter { bucket.range.contains($0.reps) }.count
+            let count = strengthSets.filter { bucket.range.contains($0.reps) }.count
             return RepRangeBucket(
                 label: bucket.label,
                 range: bucket.range,

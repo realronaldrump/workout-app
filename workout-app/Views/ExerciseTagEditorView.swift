@@ -4,7 +4,9 @@ struct ExerciseTagEditorView: View {
     let exerciseName: String
 
     @ObservedObject private var metadataManager = ExerciseMetadataManager.shared
+    @ObservedObject private var metricManager = ExerciseMetricManager.shared
     @State private var customTagText = ""
+    @State private var cardioCountLabelDraft: String = ""
 
     private var selectedTags: [MuscleTag] {
         metadataManager.resolvedTags(for: exerciseName)
@@ -26,6 +28,14 @@ struct ExerciseTagEditorView: View {
         metadataManager.isOverridden(for: exerciseName)
     }
 
+    private var isCardioExercise: Bool {
+        selectedTags.contains(where: { $0.builtInGroup == .cardio })
+    }
+
+    private var cardioPrefs: ExerciseCardioMetricPreferences {
+        metricManager.preferences(for: exerciseName)
+    }
+
     var body: some View {
         ZStack {
             AdaptiveBackground()
@@ -38,6 +48,10 @@ struct ExerciseTagEditorView: View {
 
                     customTagsSection
 
+                    if isCardioExercise {
+                        cardioTrackingSection
+                    }
+
                     actionsSection
                 }
                 .padding(Theme.Spacing.xl)
@@ -45,6 +59,9 @@ struct ExerciseTagEditorView: View {
         }
         .navigationTitle(exerciseName)
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            cardioCountLabelDraft = cardioPrefs.countLabel
+        }
     }
 
     private var selectedSection: some View {
@@ -215,6 +232,84 @@ struct ExerciseTagEditorView: View {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    private var cardioTrackingSection: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            Text("Cardio Tracking")
+                .font(Theme.Typography.title3)
+                .foregroundStyle(Theme.Colors.textPrimary)
+
+            VStack(spacing: Theme.Spacing.sm) {
+                HStack(spacing: Theme.Spacing.md) {
+                    Image(systemName: "figure.run")
+                        .foregroundStyle(.white)
+                        .frame(width: 30, height: 30)
+                        .background(Theme.Colors.cardio)
+                        .cornerRadius(Theme.CornerRadius.large)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Primary metric")
+                            .font(Theme.Typography.body)
+                            .foregroundStyle(Theme.Colors.textPrimary)
+                        Text("Used for summaries and defaults. Auto will infer from your existing sets.")
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Colors.textSecondary)
+                            .lineLimit(2)
+                    }
+
+                    Spacer(minLength: 0)
+                }
+
+                Picker("Primary metric", selection: Binding(
+                    get: { cardioPrefs.primaryMetric },
+                    set: { selection in
+                        Haptics.selection()
+                        metricManager.setPrimaryMetric(for: exerciseName, to: selection)
+                    }
+                )) {
+                    ForEach(ExerciseCardioMetricPreferences.PrimaryMetricSelection.allCases, id: \.self) { option in
+                        Text(option.displayName).tag(option)
+                    }
+                }
+                .pickerStyle(.menu)
+                .padding(.horizontal, Theme.Spacing.lg)
+                .padding(.vertical, Theme.Spacing.md)
+                .softCard(elevation: 1)
+
+                HStack(alignment: .top, spacing: Theme.Spacing.md) {
+                    Image(systemName: "textformat")
+                        .foregroundStyle(.white)
+                        .frame(width: 30, height: 30)
+                        .background(Theme.Colors.accentSecondary)
+                        .cornerRadius(Theme.CornerRadius.large)
+
+                    VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                        Text("Count label")
+                            .font(Theme.Typography.body)
+                            .foregroundStyle(Theme.Colors.textPrimary)
+                        Text("If you track cardio using a count (stored in reps), rename it. Example: floors.")
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Colors.textSecondary)
+                            .lineLimit(2)
+
+                        TextField("e.g., floors", text: $cardioCountLabelDraft)
+                            .textInputAutocapitalization(.never)
+                            .disableAutocorrection(true)
+                            .font(Theme.Typography.callout)
+                            .foregroundStyle(Theme.Colors.textPrimary)
+                            .onChange(of: cardioCountLabelDraft) { _, newValue in
+                                metricManager.setCountLabel(for: exerciseName, to: newValue)
+                            }
+                    }
+                    .layoutPriority(1)
+
+                    Spacer(minLength: 0)
+                }
+                .padding(Theme.Spacing.lg)
+                .softCard(elevation: 1)
             }
         }
     }

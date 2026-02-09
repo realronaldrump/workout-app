@@ -5,6 +5,7 @@ enum WorkoutSessionError: LocalizedError {
     case noActiveSession
     case noCompletedSets
     case completedSetMissingFields(exercise: String, setOrder: Int)
+    case completedSetMissingCardioFields(exercise: String, setOrder: Int)
 
     var errorDescription: String? {
         switch self {
@@ -14,6 +15,8 @@ enum WorkoutSessionError: LocalizedError {
             return "Log at least one completed set before finishing."
         case .completedSetMissingFields(let exercise, let setOrder):
             return "Set \(setOrder) in \(exercise) is marked complete but missing weight/reps."
+        case .completedSetMissingCardioFields(let exercise, let setOrder):
+            return "Set \(setOrder) in \(exercise) is marked complete but missing cardio metrics."
         }
     }
 }
@@ -21,10 +24,14 @@ enum WorkoutSessionError: LocalizedError {
 struct SetPrefill: Sendable {
     var weight: Double?
     var reps: Int?
+    var distance: Double?
+    var seconds: Double?
 
-    init(weight: Double? = nil, reps: Int? = nil) {
+    init(weight: Double? = nil, reps: Int? = nil, distance: Double? = nil, seconds: Double? = nil) {
         self.weight = weight
         self.reps = reps
+        self.distance = distance
+        self.seconds = seconds
     }
 }
 
@@ -129,7 +136,13 @@ final class WorkoutSessionManager: ObservableObject {
         guard let exerciseIndex = session.exercises.firstIndex(where: { $0.id == exerciseId }) else { return }
 
         let nextOrder = (session.exercises[exerciseIndex].sets.map(\.order).max() ?? 0) + 1
-        let newSet = ActiveSet(order: nextOrder, weight: prefill.weight, reps: prefill.reps)
+        let newSet = ActiveSet(
+            order: nextOrder,
+            weight: prefill.weight,
+            reps: prefill.reps,
+            distance: prefill.distance,
+            seconds: prefill.seconds
+        )
         session.exercises[exerciseIndex].sets.append(newSet)
 
         touch(&session)
@@ -137,13 +150,15 @@ final class WorkoutSessionManager: ObservableObject {
         schedulePersistDraft()
     }
 
-    func updateSet(exerciseId: UUID, setId: UUID, weight: Double?, reps: Int?) {
+    func updateSet(exerciseId: UUID, setId: UUID, weight: Double?, reps: Int?, distance: Double?, seconds: Double?) {
         guard var session = activeSession else { return }
         guard let exerciseIndex = session.exercises.firstIndex(where: { $0.id == exerciseId }) else { return }
         guard let setIndex = session.exercises[exerciseIndex].sets.firstIndex(where: { $0.id == setId }) else { return }
 
         session.exercises[exerciseIndex].sets[setIndex].weight = weight
         session.exercises[exerciseIndex].sets[setIndex].reps = reps
+        session.exercises[exerciseIndex].sets[setIndex].distance = distance
+        session.exercises[exerciseIndex].sets[setIndex].seconds = seconds
 
         touch(&session)
         activeSession = session
@@ -204,19 +219,41 @@ final class WorkoutSessionManager: ObservableObject {
                 .sorted { $0.order < $1.order }
                 .filter { $0.isCompleted }
 
-            // If any completed set is missing fields, error loudly.
-            for set in completedSets {
-                guard let weight = set.weight,
-                      let reps = set.reps,
-                      weight >= 0,
-                      reps > 0 else {
-                    throw WorkoutSessionError.completedSetMissingFields(exercise: exercise.name, setOrder: set.order)
-                }
-            }
+            let isCardio = isCardioExercise(exercise.name)
+            var loggedSets: [LoggedSet] = []
+            loggedSets.reserveCapacity(completedSets.count)
 
-            let loggedSets: [LoggedSet] = completedSets.compactMap { set in
-                guard let weight = set.weight, let reps = set.reps, weight >= 0, reps > 0 else { return nil }
-                return LoggedSet(order: set.order, weight: weight, reps: reps)
+            // Validate + map completed sets.
+            for set in completedSets {
+                if isCardio {
+                    let reps = max(set.reps ?? 0, 0)
+                    let distance = max(set.distance ?? 0, 0)
+                    let seconds = max(set.seconds ?? 0, 0)
+
+                    let hasAnyMetric = reps > 0 || distance > 0 || seconds > 0
+                    guard hasAnyMetric else {
+                        throw WorkoutSessionError.completedSetMissingCardioFields(exercise: exercise.name, setOrder: set.order)
+                    }
+
+                    let weight = max(set.weight ?? 0, 0)
+                    loggedSets.append(
+                        LoggedSet(
+                            order: set.order,
+                            weight: weight,
+                            reps: reps,
+                            distance: distance > 0 ? distance : nil,
+                            seconds: seconds > 0 ? seconds : nil
+                        )
+                    )
+                } else {
+                    guard let weight = set.weight,
+                          let reps = set.reps,
+                          weight >= 0,
+                          reps > 0 else {
+                        throw WorkoutSessionError.completedSetMissingFields(exercise: exercise.name, setOrder: set.order)
+                    }
+                    loggedSets.append(LoggedSet(order: set.order, weight: weight, reps: reps))
+                }
             }
 
             if !loggedSets.isEmpty {
@@ -318,6 +355,12 @@ final class WorkoutSessionManager: ObservableObject {
 
     private func normalizedExerciseName(_ name: String) -> String {
         name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    private func isCardioExercise(_ name: String) -> Bool {
+        ExerciseMetadataManager.shared
+            .resolvedTags(for: name)
+            .contains(where: { $0.builtInGroup == .cardio })
     }
 }
 

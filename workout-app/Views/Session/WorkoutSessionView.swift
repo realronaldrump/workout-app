@@ -305,22 +305,48 @@ struct WorkoutSessionView: View {
                 startedAt: Date(),
                 exerciseCount: 0,
                 completedSetCount: 0,
-                volume: 0
+                strengthVolume: 0,
+                cardioDistance: 0,
+                cardioSeconds: 0,
+                cardioCount: 0
             )
         }
 
-        let completedSets = session.exercises.flatMap(\.sets).filter { $0.isCompleted }
-        let completedCount = completedSets.count
-        let volume = completedSets.reduce(0.0) { sum, set in
-            guard let weight = set.weight, let reps = set.reps else { return sum }
-            return sum + (weight * Double(reps))
+        let metadata = ExerciseMetadataManager.shared
+        var completedCount = 0
+        var strengthVolume = 0.0
+        var cardioDistance = 0.0
+        var cardioSeconds = 0.0
+        var cardioCount = 0
+
+        for exercise in session.exercises {
+            let isCardio = metadata
+                .resolvedTags(for: exercise.name)
+                .contains(where: { $0.builtInGroup == .cardio })
+
+            let completedSets = exercise.sets.filter { $0.isCompleted }
+            completedCount += completedSets.count
+
+            if isCardio {
+                cardioDistance += completedSets.reduce(0.0) { $0 + ($1.distance ?? 0) }
+                cardioSeconds += completedSets.reduce(0.0) { $0 + ($1.seconds ?? 0) }
+                cardioCount += completedSets.reduce(0) { $0 + ($1.reps ?? 0) }
+            } else {
+                strengthVolume += completedSets.reduce(0.0) { sum, set in
+                    guard let weight = set.weight, let reps = set.reps else { return sum }
+                    return sum + (weight * Double(reps))
+                }
+            }
         }
 
         return FinishSessionSummary(
             startedAt: session.startedAt,
             exerciseCount: session.exercises.count,
             completedSetCount: completedCount,
-            volume: volume
+            strengthVolume: strengthVolume,
+            cardioDistance: cardioDistance,
+            cardioSeconds: cardioSeconds,
+            cardioCount: cardioCount
         )
     }
 
@@ -392,12 +418,21 @@ private struct SessionExerciseCard: View {
     @EnvironmentObject private var dataManager: WorkoutDataManager
     @EnvironmentObject private var annotationsManager: WorkoutAnnotationsManager
     @EnvironmentObject private var gymProfilesManager: GymProfilesManager
+    @ObservedObject private var metadataManager = ExerciseMetadataManager.shared
+    @ObservedObject private var metricManager = ExerciseMetricManager.shared
 
     @State private var showingHistory = false
 
 	    var body: some View {
 	        let history = dataManager.getExerciseHistory(for: exercise.name)
-	        let rec = ExerciseRecommendationEngine.recommend(
+            let tags = metadataManager.resolvedTags(for: exercise.name)
+            let isCardio = tags.contains(where: { $0.builtInGroup == .cardio })
+            let historySets = history.flatMap(\.sets)
+            let cardioConfig = isCardio
+                ? metricManager.resolvedCardioConfiguration(for: exercise.name, historySets: historySets)
+                : nil
+
+	        let rec = isCardio ? nil : ExerciseRecommendationEngine.recommend(
 	            exerciseName: exercise.name,
 	            history: history,
 	            weightIncrement: weightIncrement
@@ -411,11 +446,17 @@ private struct SessionExerciseCard: View {
                         .tracking(-0.2)
                         .foregroundColor(Theme.Colors.textPrimary)
 
-                    Text(recommendationLine(rec))
-                        .font(Theme.Typography.captionBold)
-                        .foregroundColor(Theme.Colors.textSecondary)
+                    if let rec {
+                        Text(recommendationLine(rec))
+                            .font(Theme.Typography.captionBold)
+                            .foregroundColor(Theme.Colors.textSecondary)
+                    } else {
+                        Text("Cardio")
+                            .font(Theme.Typography.captionBold)
+                            .foregroundColor(Theme.Colors.textSecondary)
+                    }
 
-                    if !rec.warmup.isEmpty {
+                    if let rec, !rec.warmup.isEmpty {
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: Theme.Spacing.xs) {
                                 ForEach(Array(rec.warmup.enumerated()), id: \.offset) { _, item in
@@ -431,10 +472,17 @@ private struct SessionExerciseCard: View {
                         }
                     }
 
-                    Text(rec.rationale)
-                        .font(Theme.Typography.microcopy)
-                        .foregroundColor(Theme.Colors.textTertiary)
-                        .lineLimit(2)
+                    if let rec {
+                        Text(rec.rationale)
+                            .font(Theme.Typography.microcopy)
+                            .foregroundColor(Theme.Colors.textTertiary)
+                            .lineLimit(2)
+                    } else if let cardioConfig {
+                        Text(cardioRationale(cardioConfig))
+                            .font(Theme.Typography.microcopy)
+                            .foregroundColor(Theme.Colors.textTertiary)
+                            .lineLimit(2)
+                    }
                 }
 
                 Spacer()
@@ -455,13 +503,23 @@ private struct SessionExerciseCard: View {
 
             VStack(spacing: Theme.Spacing.sm) {
                 ForEach(exercise.sets.sorted { $0.order < $1.order }) { set in
-                    SessionSetRow(exerciseId: exercise.id, exerciseName: exercise.name, set: set, weightUnit: weightUnit)
+                    SessionSetRow(
+                        exerciseId: exercise.id,
+                        exerciseName: exercise.name,
+                        set: set,
+                        weightUnit: weightUnit,
+                        cardioConfig: cardioConfig
+                    )
                 }
             }
 
             HStack(spacing: Theme.Spacing.sm) {
                 Button {
-                    sessionManager.addSet(exerciseId: exercise.id, prefill: SetPrefill(weight: rec.suggestedWeight, reps: defaultReps(rec.repRange)))
+                    if let rec {
+                        sessionManager.addSet(exerciseId: exercise.id, prefill: SetPrefill(weight: rec.suggestedWeight, reps: defaultReps(rec.repRange)))
+                    } else {
+                        sessionManager.addSet(exerciseId: exercise.id)
+                    }
                     Haptics.selection()
                 } label: {
                     HStack(spacing: 6) {
@@ -504,6 +562,17 @@ private struct SessionExerciseCard: View {
         return "Suggested: \(sets)x \(reps)"
     }
 
+    private func cardioRationale(_ config: ResolvedCardioMetricConfiguration) -> String {
+        switch config.primary {
+        case .distance:
+            return "Track distance (+ time optional)."
+        case .duration:
+            return "Track time (+ distance optional)."
+        case .count:
+            return "Track \(config.countLabel) (+ time optional)."
+        }
+    }
+
     private func formatWeight(_ weight: Double) -> String {
         if weight.truncatingRemainder(dividingBy: 1) == 0 {
             return String(Int(weight))
@@ -523,25 +592,39 @@ private struct SessionSetRow: View {
     let exerciseName: String
     let set: ActiveSet
     let weightUnit: String
+    let cardioConfig: ResolvedCardioMetricConfiguration?
 
     @EnvironmentObject private var sessionManager: WorkoutSessionManager
 
     @State private var weightText: String
     @State private var repsText: String
+    @State private var distanceText: String
+    @State private var durationText: String
     @FocusState private var focusedField: Field?
 
     private enum Field {
         case weight
         case reps
+        case distance
+        case duration
     }
 
-    init(exerciseId: UUID, exerciseName: String, set: ActiveSet, weightUnit: String) {
+    init(
+        exerciseId: UUID,
+        exerciseName: String,
+        set: ActiveSet,
+        weightUnit: String,
+        cardioConfig: ResolvedCardioMetricConfiguration?
+    ) {
         self.exerciseId = exerciseId
         self.exerciseName = exerciseName
         self.set = set
         self.weightUnit = weightUnit
+        self.cardioConfig = cardioConfig
         _weightText = State(initialValue: set.weight.map(WorkoutValueFormatter.weightText) ?? "")
         _repsText = State(initialValue: set.reps.map { String($0) } ?? "")
+        _distanceText = State(initialValue: set.distance.map(WorkoutValueFormatter.distanceText) ?? "")
+        _durationText = State(initialValue: set.seconds.map(WorkoutValueFormatter.durationText) ?? "")
     }
 
     var body: some View {
@@ -562,15 +645,20 @@ private struct SessionSetRow: View {
                 .frame(width: 34, alignment: .leading)
                 .monospacedDigit()
 
-            field(title: weightUnit, text: $weightText, keyboard: .decimalPad, focus: .weight)
-                .onChange(of: weightText) { _, _ in
-                    commit()
-                }
+            if let cardioConfig {
+                cardioField(kind: cardioConfig.primary, countLabel: cardioConfig.countLabel)
+                cardioField(kind: cardioConfig.secondary, countLabel: cardioConfig.countLabel)
+            } else {
+                field(title: weightUnit, text: $weightText, keyboard: .decimalPad, focus: .weight)
+                    .onChange(of: weightText) { _, _ in
+                        commit()
+                    }
 
-            field(title: "reps", text: $repsText, keyboard: .numberPad, focus: .reps)
-                .onChange(of: repsText) { _, _ in
-                    commit()
-                }
+                field(title: "reps", text: $repsText, keyboard: .numberPad, focus: .reps)
+                    .onChange(of: repsText) { _, _ in
+                        commit()
+                    }
+            }
 
             Menu {
                 Button("Delete Set", role: .destructive) {
@@ -619,10 +707,46 @@ private struct SessionSetRow: View {
         .frame(width: width)
     }
 
+    @ViewBuilder
+    private func cardioField(kind: CardioMetricKind, countLabel: String) -> some View {
+        switch kind {
+        case .distance:
+            field(title: "dist", text: $distanceText, keyboard: .decimalPad, focus: .distance, width: 84)
+                .onChange(of: distanceText) { _, _ in commit() }
+        case .duration:
+            field(title: "time", text: $durationText, keyboard: .numbersAndPunctuation, focus: .duration, width: 92)
+                .onChange(of: durationText) { _, _ in commit() }
+        case .count:
+            field(title: countLabel, text: $repsText, keyboard: .numberPad, focus: .reps, width: 72)
+                .onChange(of: repsText) { _, _ in commit() }
+        }
+    }
+
     private func commit() {
-        let weight = parseDouble(weightText)
-        let reps = parseInt(repsText)
-        sessionManager.updateSet(exerciseId: exerciseId, setId: set.id, weight: weight, reps: reps)
+        if cardioConfig != nil {
+            let distance = parseDouble(distanceText)
+            let seconds = WorkoutValueFormatter.parseDurationSeconds(durationText)
+            let reps = parseInt(repsText)
+            sessionManager.updateSet(
+                exerciseId: exerciseId,
+                setId: set.id,
+                weight: nil,
+                reps: reps,
+                distance: distance,
+                seconds: seconds
+            )
+        } else {
+            let weight = parseDouble(weightText)
+            let reps = parseInt(repsText)
+            sessionManager.updateSet(
+                exerciseId: exerciseId,
+                setId: set.id,
+                weight: weight,
+                reps: reps,
+                distance: nil,
+                seconds: nil
+            )
+        }
     }
 
     private func parseDouble(_ text: String) -> Double? {
@@ -728,7 +852,10 @@ private struct FinishSessionSummary: Hashable {
     let startedAt: Date
     let exerciseCount: Int
     let completedSetCount: Int
-    let volume: Double
+    let strengthVolume: Double
+    let cardioDistance: Double
+    let cardioSeconds: Double
+    let cardioCount: Int
 }
 
 private struct FinishSessionSheet: View {
@@ -764,7 +891,24 @@ private struct FinishSessionSheet: View {
                     statRow(title: "Elapsed", value: elapsedLabel(from: summary.startedAt))
                     statRow(title: "Exercises", value: "\(summary.exerciseCount)")
                     statRow(title: "Completed sets", value: "\(summary.completedSetCount)")
-                    statRow(title: "Volume", value: formatVolume(summary.volume))
+                    if summary.strengthVolume > 0 {
+                        statRow(title: "Volume", value: formatVolume(summary.strengthVolume))
+                    }
+                    if summary.cardioDistance > 0 {
+                        statRow(
+                            title: "Distance",
+                            value: "\(WorkoutValueFormatter.distanceText(summary.cardioDistance)) dist"
+                        )
+                    }
+                    if summary.cardioSeconds > 0 {
+                        statRow(
+                            title: "Cardio time",
+                            value: WorkoutValueFormatter.durationText(seconds: summary.cardioSeconds)
+                        )
+                    }
+                    if summary.cardioCount > 0 {
+                        statRow(title: "Count", value: "\(summary.cardioCount)")
+                    }
                 }
                 .padding(Theme.Spacing.lg)
                 .softCard(elevation: 1)

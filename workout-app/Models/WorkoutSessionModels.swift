@@ -48,6 +48,8 @@ struct ActiveSet: Codable, Identifiable, Hashable, Sendable {
     var order: Int
     var weight: Double?
     var reps: Int?
+    var distance: Double?
+    var seconds: Double?
     var isCompleted: Bool
     var completedAt: Date?
 
@@ -56,6 +58,8 @@ struct ActiveSet: Codable, Identifiable, Hashable, Sendable {
         order: Int,
         weight: Double? = nil,
         reps: Int? = nil,
+        distance: Double? = nil,
+        seconds: Double? = nil,
         isCompleted: Bool = false,
         completedAt: Date? = nil
     ) {
@@ -63,6 +67,8 @@ struct ActiveSet: Codable, Identifiable, Hashable, Sendable {
         self.order = order
         self.weight = weight
         self.reps = reps
+        self.distance = distance
+        self.seconds = seconds
         self.isCompleted = isCompleted
         self.completedAt = completedAt
     }

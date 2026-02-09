@@ -332,8 +332,8 @@ private extension WorkoutDataManager {
                     setOrder: loggedSet.order,
                     weight: loggedSet.weight,
                     reps: loggedSet.reps,
-                    distance: 0,
-                    seconds: 0
+                    distance: loggedSet.distance ?? 0,
+                    seconds: loggedSet.seconds ?? 0
                 )
             }
             return Exercise(id: loggedExercise.id, name: loggedExercise.name, sets: sets.sorted { $0.setOrder < $1.setOrder })

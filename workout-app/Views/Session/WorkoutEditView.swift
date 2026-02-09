@@ -4,6 +4,8 @@ struct WorkoutEditView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var logStore: WorkoutLogStore
     @EnvironmentObject private var dataManager: WorkoutDataManager
+    @ObservedObject private var metadataManager = ExerciseMetadataManager.shared
+    @ObservedObject private var metricManager = ExerciseMetricManager.shared
 
     let workoutId: UUID
 
@@ -151,7 +153,7 @@ struct WorkoutEditView: View {
 
     private func bindingForSet(exerciseIndex: Int, setIndex: Int) -> Binding<LoggedSet> {
         Binding(
-            get: { draft?.exercises[exerciseIndex].sets[setIndex] ?? LoggedSet(order: 1, weight: 0, reps: 0) },
+            get: { draft?.exercises[exerciseIndex].sets[setIndex] ?? LoggedSet(order: 1, weight: 0, reps: 0, distance: nil, seconds: nil) },
             set: { newValue in
                 guard draft != nil else { return }
                 draft!.exercises[exerciseIndex].sets[setIndex] = newValue
@@ -162,7 +164,7 @@ struct WorkoutEditView: View {
     private func addSet(exerciseIndex: Int) {
         guard draft != nil else { return }
         let nextOrder = (draft!.exercises[exerciseIndex].sets.map(\.order).max() ?? 0) + 1
-        draft!.exercises[exerciseIndex].sets.append(LoggedSet(order: nextOrder, weight: 0, reps: 0))
+        draft!.exercises[exerciseIndex].sets.append(LoggedSet(order: nextOrder, weight: 0, reps: 0, distance: nil, seconds: nil))
     }
 
     private func deleteSet(exerciseIndex: Int, setIndex: Int) {
@@ -198,10 +200,24 @@ struct WorkoutEditView: View {
         }
 
         for exercise in workout.exercises {
+            let isCardio = metadataManager
+                .resolvedTags(for: exercise.name)
+                .contains(where: { $0.builtInGroup == .cardio })
+
             for set in exercise.sets {
-                if set.weight <= 0 || set.reps <= 0 {
-                    errorMessage = "All sets must have weight and reps."
-                    return
+                if isCardio {
+                    let count = max(set.reps, 0)
+                    let distance = max(set.distance ?? 0, 0)
+                    let seconds = max(set.seconds ?? 0, 0)
+                    if count <= 0 && distance <= 0 && seconds <= 0 {
+                        errorMessage = "All completed cardio sets must have distance, time, or count."
+                        return
+                    }
+                } else {
+                    if set.weight < 0 || set.reps <= 0 {
+                        errorMessage = "All sets must have weight and reps."
+                        return
+                    }
                 }
             }
         }
@@ -236,8 +252,29 @@ private struct LoggedExerciseEditorCard: View {
     let onDeleteSet: (Int) -> Void
 
     @AppStorage("weightUnit") private var weightUnit: String = "lbs"
+    @ObservedObject private var metadataManager = ExerciseMetadataManager.shared
+    @ObservedObject private var metricManager = ExerciseMetricManager.shared
 
     var body: some View {
+        let isCardio = metadataManager
+            .resolvedTags(for: exercise.name)
+            .contains(where: { $0.builtInGroup == .cardio })
+        let config = isCardio
+            ? metricManager.resolvedCardioConfiguration(for: exercise.name, historySets: exercise.sets.map { set in
+                WorkoutSet(
+                    date: Date(),
+                    workoutName: "",
+                    duration: "",
+                    exerciseName: exercise.name,
+                    setOrder: set.order,
+                    weight: set.weight,
+                    reps: set.reps,
+                    distance: set.distance ?? 0,
+                    seconds: set.seconds ?? 0
+                )
+            })
+            : nil
+
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             HStack {
                 Text(exercise.name)
@@ -270,6 +307,7 @@ private struct LoggedExerciseEditorCard: View {
                         order: exercise.sets[sIndex].order,
                         set: setBinding(sIndex),
                         weightUnit: weightUnit,
+                        cardioConfig: config,
                         onDelete: {
                             onDeleteSet(sIndex)
                             Haptics.selection()
@@ -287,24 +325,38 @@ private struct LoggedSetEditorRow: View {
     let order: Int
     @Binding var set: LoggedSet
     let weightUnit: String
+    let cardioConfig: ResolvedCardioMetricConfiguration?
     let onDelete: () -> Void
 
     @State private var weightText: String
     @State private var repsText: String
+    @State private var distanceText: String
+    @State private var durationText: String
     @FocusState private var focusedField: Field?
 
     private enum Field {
         case weight
         case reps
+        case distance
+        case duration
     }
 
-    init(order: Int, set: Binding<LoggedSet>, weightUnit: String, onDelete: @escaping () -> Void) {
+    init(
+        order: Int,
+        set: Binding<LoggedSet>,
+        weightUnit: String,
+        cardioConfig: ResolvedCardioMetricConfiguration?,
+        onDelete: @escaping () -> Void
+    ) {
         self.order = order
         _set = set
         self.weightUnit = weightUnit
+        self.cardioConfig = cardioConfig
         self.onDelete = onDelete
         _weightText = State(initialValue: WorkoutValueFormatter.weightText(set.wrappedValue.weight))
         _repsText = State(initialValue: String(set.wrappedValue.reps))
+        _distanceText = State(initialValue: set.wrappedValue.distance.map(WorkoutValueFormatter.distanceText) ?? "")
+        _durationText = State(initialValue: set.wrappedValue.seconds.map(WorkoutValueFormatter.durationText) ?? "")
     }
 
     var body: some View {
@@ -315,11 +367,16 @@ private struct LoggedSetEditorRow: View {
                 .frame(width: 34, alignment: .leading)
                 .monospacedDigit()
 
-            field(title: weightUnit, text: $weightText, keyboard: .decimalPad, focus: .weight)
-                .onChange(of: weightText) { _, _ in commit() }
+            if let cardioConfig {
+                cardioField(kind: cardioConfig.primary, countLabel: cardioConfig.countLabel)
+                cardioField(kind: cardioConfig.secondary, countLabel: cardioConfig.countLabel)
+            } else {
+                field(title: weightUnit, text: $weightText, keyboard: .decimalPad, focus: .weight)
+                    .onChange(of: weightText) { _, _ in commit() }
 
-            field(title: "reps", text: $repsText, keyboard: .numberPad, focus: .reps)
-                .onChange(of: repsText) { _, _ in commit() }
+                field(title: "reps", text: $repsText, keyboard: .numberPad, focus: .reps)
+                    .onChange(of: repsText) { _, _ in commit() }
+            }
 
             Button {
                 onDelete()
@@ -366,12 +423,40 @@ private struct LoggedSetEditorRow: View {
         .frame(width: width)
     }
 
-    private func commit() {
-        let weightValue = parseDouble(weightText) ?? 0
-        let repsValue = parseInt(repsText) ?? 0
+    @ViewBuilder
+    private func cardioField(kind: CardioMetricKind, countLabel: String) -> some View {
+        switch kind {
+        case .distance:
+            field(title: "dist", text: $distanceText, keyboard: .decimalPad, focus: .distance, width: 84)
+                .onChange(of: distanceText) { _, _ in commit() }
+        case .duration:
+            field(title: "time", text: $durationText, keyboard: .numbersAndPunctuation, focus: .duration, width: 92)
+                .onChange(of: durationText) { _, _ in commit() }
+        case .count:
+            field(title: countLabel, text: $repsText, keyboard: .numberPad, focus: .reps, width: 72)
+                .onChange(of: repsText) { _, _ in commit() }
+        }
+    }
 
-        set.weight = weightValue
-        set.reps = repsValue
+    private func commit() {
+        if cardioConfig != nil {
+            let repsValue = parseInt(repsText) ?? 0
+            let distanceValue = parseDouble(distanceText)
+            let secondsValue = WorkoutValueFormatter.parseDurationSeconds(durationText)
+
+            set.weight = 0
+            set.reps = repsValue
+            set.distance = distanceValue
+            set.seconds = secondsValue
+        } else {
+            let weightValue = parseDouble(weightText) ?? 0
+            let repsValue = parseInt(repsText) ?? 0
+
+            set.weight = weightValue
+            set.reps = repsValue
+            set.distance = nil
+            set.seconds = nil
+        }
     }
 
     private func parseDouble(_ text: String) -> Double? {

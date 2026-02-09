@@ -300,6 +300,18 @@ struct ExerciseCard: View {
     var onViewHistory: ((String) -> Void)?
     var onQuickStart: ((String) -> Void)?
     @State private var isExpanded = false
+    @ObservedObject private var metadataManager = ExerciseMetadataManager.shared
+    @ObservedObject private var metricManager = ExerciseMetricManager.shared
+
+    private var isCardio: Bool {
+        metadataManager
+            .resolvedTags(for: exercise.name)
+            .contains(where: { $0.builtInGroup == .cardio })
+    }
+
+    private var cardioConfig: ResolvedCardioMetricConfiguration {
+        metricManager.resolvedCardioConfiguration(for: exercise.name, historySets: exercise.sets)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -321,9 +333,13 @@ struct ExerciseCard: View {
                                     .font(Theme.Typography.caption)
                                     .foregroundColor(Theme.Colors.textSecondary)
 
-                                Label(formatVolume(exercise.totalVolume), systemImage: "scalemass")
-                                    .font(Theme.Typography.caption)
-                                    .foregroundColor(Theme.Colors.textSecondary)
+                                if isCardio {
+                                    cardioSummaryChips
+                                } else {
+                                    Label(formatVolume(exercise.totalVolume), systemImage: "scalemass")
+                                        .font(Theme.Typography.caption)
+                                        .foregroundColor(Theme.Colors.textSecondary)
+                                }
                             }
                         }
 
@@ -346,15 +362,23 @@ struct ExerciseCard: View {
                                 .foregroundColor(Theme.Colors.textTertiary)
                                 .frame(width: 50, alignment: .leading)
 
-                            Text("\(Int(set.weight)) lbs × \(set.reps)")
-                                .font(Theme.Typography.body)
-                                .monospacedDigit()
+                            if isCardio {
+                                Text(cardioSetSummary(set))
+                                    .font(Theme.Typography.body)
+                                    .monospacedDigit()
 
-                            Spacer()
+                                Spacer()
+                            } else {
+                                Text("\(Int(set.weight)) lbs × \(set.reps)")
+                                    .font(Theme.Typography.body)
+                                    .monospacedDigit()
 
-                            Text("\(Int(set.weight * Double(set.reps))) lbs")
-                                .font(Theme.Typography.caption)
-                                .foregroundColor(Theme.Colors.textSecondary)
+                                Spacer()
+
+                                Text("\(Int(set.weight * Double(set.reps))) lbs")
+                                    .font(Theme.Typography.caption)
+                                    .foregroundColor(Theme.Colors.textSecondary)
+                            }
                         }
                         .padding(.horizontal)
 
@@ -379,6 +403,44 @@ struct ExerciseCard: View {
                 onQuickStart?(exercise.name)
             }
         }
+    }
+
+    private var cardioSummaryChips: some View {
+        let totalDistance = exercise.sets.reduce(0.0) { $0 + $1.distance }
+        let totalSeconds = exercise.sets.reduce(0.0) { $0 + $1.seconds }
+        let totalCount = exercise.sets.reduce(0) { $0 + $1.reps }
+
+        return HStack(spacing: 10) {
+            if totalDistance > 0 {
+                Label("\(WorkoutValueFormatter.distanceText(totalDistance)) dist", systemImage: "location.fill")
+                    .font(Theme.Typography.caption)
+                    .foregroundColor(Theme.Colors.textSecondary)
+            }
+            if totalSeconds > 0 {
+                Label(WorkoutValueFormatter.durationText(seconds: totalSeconds), systemImage: "clock.fill")
+                    .font(Theme.Typography.caption)
+                    .foregroundColor(Theme.Colors.textSecondary)
+            }
+            if totalCount > 0 {
+                Label("\(totalCount) \(cardioConfig.countLabel)", systemImage: "number")
+                    .font(Theme.Typography.caption)
+                    .foregroundColor(Theme.Colors.textSecondary)
+            }
+        }
+    }
+
+    private func cardioSetSummary(_ set: WorkoutSet) -> String {
+        var parts: [String] = []
+        if set.distance > 0 {
+            parts.append("\(WorkoutValueFormatter.distanceText(set.distance)) dist")
+        }
+        if set.seconds > 0 {
+            parts.append(WorkoutValueFormatter.durationText(seconds: set.seconds))
+        }
+        if parts.isEmpty, set.reps > 0 {
+            parts.append("\(set.reps) \(cardioConfig.countLabel)")
+        }
+        return parts.isEmpty ? "—" : parts.joined(separator: " | ")
     }
 
     private func formatVolume(_ volume: Double) -> String {
