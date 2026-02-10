@@ -320,6 +320,9 @@ struct InteractiveTimeSeriesChart: View {
             }
             .font(Theme.Typography.caption)
             .foregroundStyle(Theme.Colors.textSecondary)
+            .textCase(.uppercase)
+            .tracking(0.8)
+            .buttonStyle(.plain)
             .disabled(abs(effectiveVisibleLength - fullLength) < 1)
         }
 

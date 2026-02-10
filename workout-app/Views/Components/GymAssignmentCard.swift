@@ -166,7 +166,9 @@ private struct GymQuickAddSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    AppPillButton(title: "Cancel", systemImage: "xmark", variant: .subtle) {
+                        dismiss()
+                    }
                 }
             }
         }

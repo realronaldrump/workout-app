@@ -381,6 +381,23 @@ struct WorkoutAnalytics {
         return issues
     }
 
+    private static func isCardioExerciseName(_ name: String) -> Bool {
+        ExerciseMetadataManager.shared
+            .resolvedTags(for: name)
+            .contains(where: { $0.builtInGroup == .cardio })
+    }
+
+    /// Rest/set is intended as a strength signal.
+    /// If any cardio is present in the workout, don't compute it (cardio duration can dominate session time,
+    /// and some cardio exports don't include time so we can't reliably correct for it).
+    private static func restTimeIndexStrengthOnly(for workout: Workout) -> Double? {
+        let hasCardio = workout.exercises.contains { isCardioExerciseName($0.name) }
+        guard !hasCardio else { return nil }
+
+        let duration = durationMinutes(from: workout.duration)
+        return workout.totalSets > 0 ? duration / Double(workout.totalSets) : nil
+    }
+
     static func fatigueSummary(for workout: Workout, allWorkouts: [Workout]) -> FatigueSummary {
         var entries: [FatigueEntry] = []
         for exercise in workout.exercises {
@@ -403,11 +420,10 @@ struct WorkoutAnalytics {
             }
         }
 
-        let duration = durationMinutes(from: workout.duration)
-        let restIndex = workout.totalSets > 0 ? duration / Double(workout.totalSets) : nil
+        let restIndex = restTimeIndexStrengthOnly(for: workout)
 
         let similar = allWorkouts.filter { $0.name == workout.name }
-        let baseline = median(similar.map { durationMinutes(from: $0.duration) / max(Double($0.totalSets), 1) })
+        let baseline = median(similar.compactMap { restTimeIndexStrengthOnly(for: $0) })
 
         let restTrend: String?
         if let restIndex, baseline > 0 {

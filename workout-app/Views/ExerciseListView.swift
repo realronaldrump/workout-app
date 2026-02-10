@@ -106,7 +106,29 @@ struct ExerciseListView: View {
                         }
                     }
                 } label: {
-                    Label("Sort", systemImage: "arrow.up.arrow.down")
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.up.arrow.down")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(Theme.Colors.accent)
+                        Text("Sort")
+                            .font(Theme.Typography.captionBold)
+                            .foregroundStyle(Theme.Colors.textPrimary)
+                            .textCase(.uppercase)
+                            .tracking(0.8)
+                    }
+                    .padding(.horizontal, Theme.Spacing.md)
+                    .padding(.vertical, Theme.Spacing.xs)
+                    .background(Capsule().fill(Theme.Colors.surface))
+                    .overlay(
+                        Capsule()
+                            .strokeBorder(Theme.Colors.border, lineWidth: 2)
+                    )
+                    .shadow(
+                        color: Color.black.opacity(Theme.Colors.shadowOpacity),
+                        radius: 0,
+                        x: 2,
+                        y: 2
+                    )
                 }
             }
         }

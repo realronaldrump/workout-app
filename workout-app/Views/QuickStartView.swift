@@ -34,9 +34,9 @@ struct QuickStartView: View {
 
                         Spacer()
 
-                        Button("Close") { dismiss() }
-                            .font(Theme.Typography.subheadline)
-                            .foregroundColor(Theme.Colors.textSecondary)
+                        AppPillButton(title: "Close", systemImage: "xmark", variant: .subtle) {
+                            dismiss()
+                        }
                     }
 
                     if let active = sessionManager.activeSession {

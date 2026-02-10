@@ -122,20 +122,32 @@ struct GymBulkAssignView: View {
             Button("Select All") {
                 selectedWorkouts = Set(filteredWorkouts.map(\.id))
             }
-            .font(Theme.Typography.caption)
+            .font(Theme.Typography.captionBold)
+            .foregroundStyle(Theme.Colors.accent)
+            .textCase(.uppercase)
+            .tracking(0.8)
+            .buttonStyle(.plain)
 
             Button("Clear") {
                 selectedWorkouts.removeAll()
             }
-            .font(Theme.Typography.caption)
+            .font(Theme.Typography.captionBold)
+            .foregroundStyle(Theme.Colors.textSecondary)
+            .textCase(.uppercase)
+            .tracking(0.8)
+            .buttonStyle(.plain)
 
             Button {
                 showingAssignPicker = true
             } label: {
                 Label("Assign", systemImage: "mappin.and.ellipse")
-                    .font(Theme.Typography.caption)
+                    .font(Theme.Typography.captionBold)
+                    .textCase(.uppercase)
+                    .tracking(0.8)
             }
             .disabled(selectedWorkouts.isEmpty)
+            .foregroundStyle(selectedWorkouts.isEmpty ? Theme.Colors.textTertiary : Theme.Colors.accent)
+            .buttonStyle(.plain)
         }
         .padding(.horizontal, Theme.Spacing.md)
         .padding(.vertical, Theme.Spacing.sm)

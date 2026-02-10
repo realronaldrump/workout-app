@@ -671,7 +671,9 @@ private struct HealthCustomRangeSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") { dismiss() }
+                    AppPillButton(title: "Done", systemImage: "checkmark") {
+                        dismiss()
+                    }
                 }
             }
         }

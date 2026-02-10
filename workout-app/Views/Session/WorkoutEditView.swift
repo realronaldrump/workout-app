@@ -127,7 +127,9 @@ struct WorkoutEditView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Close") { dismiss() }
+                    AppPillButton(title: "Close", systemImage: "xmark", variant: .subtle) {
+                        dismiss()
+                    }
                 }
             }
             .alert("Delete Workout?", isPresented: $showingDeleteAlert) {
@@ -404,6 +406,9 @@ private struct LoggedSetEditorRow: View {
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
                 Button("Done") { focusedField = nil }
+                    .font(Theme.Typography.captionBold)
+                    .foregroundStyle(Theme.Colors.accent)
+                    .buttonStyle(.plain)
             }
         }
     }

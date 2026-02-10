@@ -120,7 +120,7 @@ struct HealthDashboardView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
+                    AppPillButton(title: "Done", systemImage: "checkmark") {
                         dismiss()
                     }
                 }
@@ -1160,7 +1160,9 @@ private struct CustomRangeSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") { dismiss() }
+                    AppPillButton(title: "Done", systemImage: "checkmark") {
+                        dismiss()
+                    }
                 }
             }
         }

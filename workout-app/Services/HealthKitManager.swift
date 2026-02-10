@@ -161,7 +161,8 @@ class HealthKitManager: ObservableObject {
 
         do {
             try await healthStore.requestAuthorization(toShare: [], read: allReadTypes)
-            checkAuthorizationStatus()
+            // Await status update so callers can safely continue without a race.
+            await checkAuthorizationStatusAsync()
         } catch {
             authorizationStatus = .denied
             throw HealthKitError.authorizationFailed(error.localizedDescription)

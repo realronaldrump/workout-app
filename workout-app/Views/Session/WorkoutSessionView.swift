@@ -252,6 +252,9 @@ struct WorkoutSessionView: View {
                 }
                 .font(Theme.Typography.captionBold)
                 .foregroundColor(Theme.Colors.textSecondary)
+                .textCase(.uppercase)
+                .tracking(0.8)
+                .buttonStyle(.plain)
             }
 
             VStack(spacing: Theme.Spacing.md) {
@@ -684,13 +687,16 @@ private struct SessionSetRow: View {
             RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
                 .strokeBorder(Theme.Colors.border.opacity(0.7), lineWidth: 1)
         )
-        .toolbar {
-            ToolbarItemGroup(placement: .keyboard) {
-                Spacer()
-                Button("Done") { focusedField = nil }
+            .toolbar {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") { focusedField = nil }
+                        .font(Theme.Typography.captionBold)
+                        .foregroundStyle(Theme.Colors.accent)
+                        .buttonStyle(.plain)
+                }
             }
         }
-    }
 
     private func field(title: String, text: Binding<String>, keyboard: UIKeyboardType, focus: Field, width: CGFloat? = nil) -> some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -876,9 +882,9 @@ private struct FinishSessionSheet: View {
                             .foregroundColor(Theme.Colors.textSecondary)
                     }
                     Spacer()
-                    Button("Close") { dismiss() }
-                        .font(Theme.Typography.captionBold)
-                        .foregroundColor(Theme.Colors.textSecondary)
+                    AppPillButton(title: "Close", systemImage: "xmark", variant: .subtle) {
+                        dismiss()
+                    }
                 }
 
                 VStack(spacing: Theme.Spacing.sm) {
@@ -913,10 +919,9 @@ private struct FinishSessionSheet: View {
                         Text(errorMessage)
                             .fixedSize(horizontal: false, vertical: true)
                         Spacer()
-                        Button("Dismiss") {
+                        AppPillButton(title: "Dismiss", systemImage: "xmark", variant: .danger) {
                             onDismissError()
                         }
-                        .font(Theme.Typography.captionBold)
                     }
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Colors.error)

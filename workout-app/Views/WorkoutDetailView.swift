@@ -145,11 +145,10 @@ struct WorkoutDetailView: View {
 
             if isLoggedWorkout {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Edit") {
+                    AppPillButton(title: "Edit", systemImage: "pencil") {
                         showingEdit = true
                         Haptics.selection()
                     }
-                    .font(Theme.Typography.captionBold)
                 }
             }
         }

@@ -1,5 +1,8 @@
 import CoreText
 import Foundation
+#if canImport(UIKit)
+import UIKit
+#endif
 
 enum FontRegistrar {
     private static var didRegister = false
@@ -7,6 +10,14 @@ enum FontRegistrar {
     static func registerFontsIfNeeded() {
         guard !didRegister else { return }
         didRegister = true
+
+        // If the font is already available (e.g. via UIAppFonts in Info.plist),
+        // don't re-register it (which can produce "file already registered" logs).
+        #if canImport(UIKit)
+        if UIFont(name: "BebasNeue-Regular", size: 12) != nil {
+            return
+        }
+        #endif
 
         registerFont(named: "BebasNeue-Regular", ext: "ttf")
     }

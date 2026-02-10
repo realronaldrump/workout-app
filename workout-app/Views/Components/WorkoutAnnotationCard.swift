@@ -28,6 +28,9 @@ struct WorkoutAnnotationCard: View {
                 }
                 .font(Theme.Typography.caption)
                 .foregroundColor(Theme.Colors.textTertiary)
+                .textCase(.uppercase)
+                .tracking(0.8)
+                .buttonStyle(.plain)
             }
 
             HStack(spacing: Theme.Spacing.sm) {

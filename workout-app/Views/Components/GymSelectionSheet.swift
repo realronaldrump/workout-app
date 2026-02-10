@@ -125,7 +125,9 @@ struct GymSelectionSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Close") { dismiss() }
+                    AppPillButton(title: "Close", systemImage: "xmark", variant: .subtle) {
+                        dismiss()
+                    }
                 }
             }
         }

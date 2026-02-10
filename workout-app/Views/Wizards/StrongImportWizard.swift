@@ -50,7 +50,9 @@ struct StrongImportWizard: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Close") { isPresented = false }
+                    AppPillButton(title: "Close", systemImage: "xmark", variant: .subtle) {
+                        isPresented = false
+                    }
                 }
             }
         }
@@ -620,6 +622,8 @@ struct StrongImportWizard: View {
             do {
                 if healthManager.authorizationStatus == .notDetermined {
                     healthSyncState = .needsAuthorization
+                    // Avoid triggering Health authorization UI during view transitions.
+                    try? await Task.sleep(nanoseconds: 250_000_000)
                     try await healthManager.requestAuthorization()
                 }
 

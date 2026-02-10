@@ -57,6 +57,13 @@ extension HealthKitManager {
                 options: .cumulativeSum
             ) { _, result, error in
                 if let error {
+                    if let auth = Self.authorizationFailure(from: error) {
+                        Task { @MainActor in
+                            self.authorizationStatus = auth.status
+                        }
+                        continuation.resume(throwing: auth.error)
+                        return
+                    }
                     if Self.isNoDataError(error) {
                         continuation.resume(returning: nil)
                         return
@@ -98,6 +105,13 @@ extension HealthKitManager {
                 sortDescriptors: [sortDescriptor]
             ) { _, samples, error in
                 if let error {
+                    if let auth = Self.authorizationFailure(from: error) {
+                        Task { @MainActor in
+                            self.authorizationStatus = auth.status
+                        }
+                        continuation.resume(throwing: auth.error)
+                        return
+                    }
                     if Self.isNoDataError(error) {
                         continuation.resume(returning: nil)
                         return
@@ -138,6 +152,13 @@ extension HealthKitManager {
                 sortDescriptors: [sortDescriptor]
             ) { _, samples, error in
                 if let error {
+                    if let auth = Self.authorizationFailure(from: error) {
+                        Task { @MainActor in
+                            self.authorizationStatus = auth.status
+                        }
+                        continuation.resume(throwing: auth.error)
+                        return
+                    }
                     if Self.isNoDataError(error) {
                         continuation.resume(returning: [])
                         return
@@ -171,6 +192,13 @@ extension HealthKitManager {
                 sortDescriptors: [sortDescriptor]
             ) { _, samples, error in
                 if let error {
+                    if let auth = Self.authorizationFailure(from: error) {
+                        Task { @MainActor in
+                            self.authorizationStatus = auth.status
+                        }
+                        continuation.resume(throwing: auth.error)
+                        return
+                    }
                     if Self.isNoDataError(error) {
                         continuation.resume(returning: nil)
                         return
@@ -281,6 +309,13 @@ extension HealthKitManager {
 
             query.initialResultsHandler = { _, results, error in
                 if let error {
+                    if let auth = Self.authorizationFailure(from: error) {
+                        Task { @MainActor in
+                            self.authorizationStatus = auth.status
+                        }
+                        continuation.resume(throwing: auth.error)
+                        return
+                    }
                     if Self.isNoDataError(error) {
                         continuation.resume(returning: [:])
                         return
@@ -339,6 +374,13 @@ extension HealthKitManager {
                 sortDescriptors: [sortDescriptor]
             ) { _, samples, error in
                 if let error {
+                    if let auth = Self.authorizationFailure(from: error) {
+                        Task { @MainActor in
+                            self.authorizationStatus = auth.status
+                        }
+                        continuation.resume(throwing: auth.error)
+                        return
+                    }
                     if Self.isNoDataError(error) {
                         continuation.resume(returning: [:])
                         return
@@ -579,5 +621,26 @@ extension HealthKitManager {
         let nsError = error as NSError
         return nsError.domain == HKErrorDomain &&
             nsError.code == HKError.Code.errorNoData.rawValue
+    }
+
+    private nonisolated static func authorizationFailure(from error: Error) -> (status: HealthKitAuthorizationStatus, error: HealthKitError)? {
+        let nsError = error as NSError
+        guard nsError.domain == HKErrorDomain else { return nil }
+
+        if nsError.code == HKError.Code.errorAuthorizationDenied.rawValue {
+            return (
+                status: .denied,
+                error: .authorizationFailed("Access denied. Enable permissions in Settings > Health > Data Access & Devices > workout-app.")
+            )
+        }
+
+        if nsError.code == HKError.Code.errorAuthorizationNotDetermined.rawValue {
+            return (
+                status: .notDetermined,
+                error: .authorizationFailed("Authorization not determined. Please authorize Apple Health access.")
+            )
+        }
+
+        return nil
     }
 }

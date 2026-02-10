@@ -8,6 +8,7 @@ struct HealthSyncWizard: View {
 
     @State private var step = 0
     @State private var errorMessage: String?
+    @State private var hasStartedSync = false
 
     var body: some View {
         NavigationStack {
@@ -40,10 +41,28 @@ struct HealthSyncWizard: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    if step < 2 { // Don't allow closing during sync
-                        Button("Close") { isPresented = false }
+                    // Don't allow closing during an active sync unless we've hit an error.
+                    if step < 2 || errorMessage != nil {
+                        AppPillButton(title: "Close", systemImage: "xmark", variant: .subtle) {
+                            isPresented = false
+                        }
                     }
                 }
+            }
+            .alert("Health Sync Failed", isPresented: Binding(
+                get: { errorMessage != nil },
+                set: { newValue in
+                    if !newValue { errorMessage = nil }
+                }
+            )) {
+                Button("Close", role: .cancel) { isPresented = false }
+                Button("Retry") {
+                    errorMessage = nil
+                    hasStartedSync = false
+                    withAnimation { step = healthManager.authorizationStatus == .authorized ? 2 : 1 }
+                }
+            } message: {
+                Text(errorMessage ?? "Unknown error")
             }
         }
     }
@@ -182,10 +201,10 @@ struct HealthSyncWizard: View {
                 .foregroundStyle(Theme.Colors.success)
                 .symbolEffect(.bounce)
 
-            Text("Sync Complete")
+            Text(workouts.isEmpty ? "Connected" : "Sync Complete")
                 .font(Theme.Typography.title)
 
-            Text("Health data is ready.")
+            Text(workouts.isEmpty ? "We'll start syncing once you import or log workouts." : "Health data is ready.")
                 .font(Theme.Typography.body)
                 .foregroundStyle(Theme.Colors.textSecondary)
                 .multilineTextAlignment(.center)
@@ -214,7 +233,14 @@ struct HealthSyncWizard: View {
         Task {
             do {
                 try await healthManager.requestAuthorization()
-                withAnimation { step = 2 }
+                // If the user hasn't imported or logged workouts yet, there's nothing workout-scoped to sync.
+                // Mark as connected and let sync happen later once workouts exist.
+                if workouts.isEmpty {
+                    withAnimation { step = 3 }
+                    Haptics.notify(.success)
+                } else {
+                    withAnimation { step = 2 }
+                }
             } catch {
                 errorMessage = error.localizedDescription
             }
@@ -222,8 +248,19 @@ struct HealthSyncWizard: View {
     }
 
     private func startSync() {
+        guard !hasStartedSync else { return }
+        hasStartedSync = true
+
         Task {
             do {
+                guard healthManager.authorizationStatus == .authorized else {
+                    await MainActor.run {
+                        self.hasStartedSync = false
+                        withAnimation { self.step = 1 }
+                    }
+                    return
+                }
+
                 // The syncAllWorkouts method now updates published properties on healthManager
                 // We don't need to manually poll, but we do need to wait for it to finish
                 _ = try await healthManager.syncAllWorkouts(workouts)

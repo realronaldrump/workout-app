@@ -3,6 +3,7 @@ import Foundation
 enum WorkoutExportError: LocalizedError {
     case invalidDateRange
     case noWorkoutsInRange
+    case noExercisesInRange
 
     var errorDescription: String? {
         switch self {
@@ -10,6 +11,8 @@ enum WorkoutExportError: LocalizedError {
             return "Invalid date range"
         case .noWorkoutsInRange:
             return "No workouts found in that date range"
+        case .noExercisesInRange:
+            return "No exercises found in that date range"
         }
     }
 }
@@ -77,7 +80,9 @@ struct WorkoutCSVExporter {
 
         for workout in filtered {
             var didPrintWorkoutInfo = false
-            let exercises = workout.exercises.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+            // Preserve the order exercises were logged/recorded in the workout model.
+            // (Some previous versions alphabetized here, which made exports differ from what users logged.)
+            let exercises = workout.exercises
             for exercise in exercises {
                 var didPrintExerciseInfo = false
                 let sets = exercise.sets.sorted { lhs, rhs in
@@ -144,6 +149,77 @@ struct WorkoutCSVExporter {
         let end = dateFormatter.string(from: calendar.startOfDay(for: endDateInclusive))
         let stamp = Int(Date().timeIntervalSince1970)
         return "workout_export_basic_\(start)_\(end)_\(stamp).csv"
+    }
+
+    /// Export a unique list of exercise names within a date range.
+    /// If `includeTags` is true, adds a `Tags` column (blank if no tags).
+    nonisolated static func exportExerciseListCSV(
+        workouts: [Workout],
+        startDate: Date,
+        endDateInclusive: Date,
+        includeTags: Bool,
+        exerciseTagsByName: [String: String] = [:],
+        calendar: Calendar = .current
+    ) throws -> Data {
+        let range = try normalizedDayRange(startDate: startDate, endDateInclusive: endDateInclusive, calendar: calendar)
+
+        let filtered = workouts
+            .filter { workout in
+                workout.date >= range.start && workout.date < range.endExclusive
+            }
+
+        let exerciseNames = Set(filtered.flatMap { $0.exercises.map(\.name) })
+        let sortedNames = exerciseNames.sorted { lhs, rhs in
+            let insensitive = lhs.localizedCaseInsensitiveCompare(rhs)
+            if insensitive != .orderedSame { return insensitive == .orderedAscending }
+            return lhs.localizedCompare(rhs) == .orderedAscending
+        }
+
+        guard !sortedNames.isEmpty else {
+            throw WorkoutExportError.noExercisesInRange
+        }
+
+        var lines: [String] = []
+        lines.reserveCapacity(sortedNames.count + 1)
+
+        if includeTags {
+            lines.append(["Exercise", "Tags"].joined(separator: ","))
+            for name in sortedNames {
+                let tags = exerciseTagsByName[name] ?? ""
+                lines.append([csvEscape(name), csvEscape(tags)].joined(separator: ","))
+            }
+        } else {
+            lines.append("Exercise")
+            for name in sortedNames {
+                lines.append(csvEscape(name))
+            }
+        }
+
+        let csvString = lines.joined(separator: "\n")
+        guard let data = csvString.data(using: .utf8) else {
+            throw CocoaError(.fileWriteInapplicableStringEncoding)
+        }
+        return data
+    }
+
+    nonisolated static func makeExerciseListExportFileName(
+        startDate: Date,
+        endDateInclusive: Date,
+        includeTags: Bool,
+        calendar: Calendar = .current
+    ) throws -> String {
+        _ = try normalizedDayRange(startDate: startDate, endDateInclusive: endDateInclusive, calendar: calendar)
+
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyyMMdd"
+        dateFormatter.timeZone = TimeZone.current
+        dateFormatter.locale = Locale(identifier: "en_US_POSIX")
+
+        let start = dateFormatter.string(from: calendar.startOfDay(for: startDate))
+        let end = dateFormatter.string(from: calendar.startOfDay(for: endDateInclusive))
+        let stamp = Int(Date().timeIntervalSince1970)
+        let suffix = includeTags ? "tags" : "names"
+        return "exercise_export_\(suffix)_\(start)_\(end)_\(stamp).csv"
     }
 
     // MARK: - Helpers

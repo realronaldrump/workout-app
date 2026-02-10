@@ -74,10 +74,8 @@ struct GymProfilesView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button {
+                AppPillIconButton(systemImage: "plus", accessibilityLabel: "Add gym") {
                     showingAddSheet = true
-                } label: {
-                    Image(systemName: "plus")
                 }
             }
         }
@@ -253,7 +251,9 @@ private struct GymProfileEditorView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    AppPillButton(title: "Cancel", systemImage: "xmark", variant: .subtle) {
+                        dismiss()
+                    }
                 }
             }
         }

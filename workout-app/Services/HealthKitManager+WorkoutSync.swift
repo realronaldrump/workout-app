@@ -7,6 +7,9 @@ extension HealthKitManager {
         guard healthStore != nil else {
             throw HealthKitError.notAvailable
         }
+        guard authorizationStatus == .authorized else {
+            throw HealthKitError.authorizationFailed("Health access is not authorized.")
+        }
 
         // Calculate workout time window
         let (startTime, endTime) = calculateWorkoutWindow(workout)
@@ -249,6 +252,9 @@ extension HealthKitManager {
         guard isHealthKitAvailable() else {
             throw HealthKitError.notAvailable
         }
+        guard authorizationStatus == .authorized else {
+            throw HealthKitError.authorizationFailed("Health access is not authorized.")
+        }
 
         isSyncing = true
         defer { isSyncing = false }
@@ -257,6 +263,15 @@ extension HealthKitManager {
         syncError = nil
 
         var results: [WorkoutHealthData] = []
+        guard !workouts.isEmpty else {
+            // Avoid 0/0 progress UI and division-by-zero paths.
+            syncProgress = 1
+            lastSyncDate = Date()
+            userDefaults.set(lastSyncDate, forKey: lastSyncKey)
+            persistData()
+            return []
+        }
+
         let total = Double(workouts.count)
 
         for (index, workout) in workouts.enumerated() {

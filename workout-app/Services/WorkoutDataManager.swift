@@ -53,9 +53,43 @@ class WorkoutDataManager: ObservableObject {
                 // Group by exercise within workout
                 let groupedByExercise = Dictionary(grouping: workoutSets) { $0.exerciseName }
 
+                // Preserve exercise order based on when each exercise first appears in the set stream.
+                // Strong exports include per-set timestamps; sorting by (date, original index) gives a stable
+                // "logged" ordering even when multiple sets share the same timestamp.
+                var firstSeenRankByExerciseName: [String: Int] = [:]
+                firstSeenRankByExerciseName.reserveCapacity(groupedByExercise.count)
+                var nextRank = 0
+
+                let orderedSets = workoutSets
+                    .enumerated()
+                    .sorted { lhs, rhs in
+                        if lhs.element.date != rhs.element.date { return lhs.element.date < rhs.element.date }
+                        return lhs.offset < rhs.offset
+                    }
+
+                for item in orderedSets {
+                    let name = item.element.exerciseName
+                    if firstSeenRankByExerciseName[name] == nil {
+                        firstSeenRankByExerciseName[name] = nextRank
+                        nextRank += 1
+                    }
+                }
+
+                let orderedExerciseNames = groupedByExercise.keys.sorted { lhs, rhs in
+                    let lRank = firstSeenRankByExerciseName[lhs] ?? Int.max
+                    let rRank = firstSeenRankByExerciseName[rhs] ?? Int.max
+                    if lRank != rRank { return lRank < rRank }
+                    return lhs.localizedCaseInsensitiveCompare(rhs) == .orderedAscending
+                }
+
                 var exercises: [Exercise] = []
-                for (exerciseName, exerciseSets) in groupedByExercise {
-                    let sortedSets = exerciseSets.sorted { $0.setOrder < $1.setOrder }
+                exercises.reserveCapacity(orderedExerciseNames.count)
+                for exerciseName in orderedExerciseNames {
+                    guard let exerciseSets = groupedByExercise[exerciseName] else { continue }
+                    let sortedSets = exerciseSets.sorted { lhs, rhs in
+                        if lhs.setOrder != rhs.setOrder { return lhs.setOrder < rhs.setOrder }
+                        return lhs.date < rhs.date
+                    }
                     exercises.append(Exercise(name: exerciseName, sets: sortedSets))
                 }
 

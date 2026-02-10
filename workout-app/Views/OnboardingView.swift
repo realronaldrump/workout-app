@@ -12,12 +12,24 @@ struct OnboardingView: View {
     @State private var step = 0
     @State private var showingImportWizard = false
     @State private var showingHealthWizard = false
+    @State private var welcomeVisible = false
+    @State private var welcomeFloating = false
 
     private let totalSteps = 3
+    private var isSplashStep: Bool { step == 0 }
 
     var body: some View {
         ZStack {
-            AdaptiveBackground()
+            Group {
+                if isSplashStep {
+                    SplashBackground()
+                        .transition(.opacity)
+                } else {
+                    AdaptiveBackground()
+                        .transition(.opacity)
+                }
+            }
+            .animation(reduceMotion ? .easeOut(duration: 0.2) : .easeInOut(duration: 0.25), value: isSplashStep)
 
             VStack(spacing: Theme.Spacing.lg) {
                 topBar
@@ -32,6 +44,11 @@ struct OnboardingView: View {
                 footer
             }
             .padding(.vertical, Theme.Spacing.xl)
+        }
+        .onChange(of: step) { _, newValue in
+            if newValue == 0 {
+                startWelcomeAnimation()
+            }
         }
         .fullScreenCover(isPresented: $showingImportWizard) {
             StrongImportWizard(
@@ -71,15 +88,18 @@ struct OnboardingView: View {
                     completeOnboarding()
                 }
                 .font(Theme.Typography.subheadline)
-                .foregroundStyle(Theme.Colors.textSecondary)
+                .foregroundStyle(isSplashStep ? Color.white.opacity(0.86) : Theme.Colors.textSecondary)
                 .padding(.horizontal, Theme.Spacing.lg)
                 .frame(minHeight: 44)
+                .buttonStyle(.plain)
             }
 
             HStack(spacing: 8) {
                 ForEach(0..<totalSteps, id: \.self) { index in
                     RoundedRectangle(cornerRadius: 2)
-                        .fill(index <= step ? Theme.Colors.accent : Theme.Colors.border.opacity(0.7))
+                        .fill(index <= step
+                              ? (isSplashStep ? Color.white : Theme.Colors.accent)
+                              : (isSplashStep ? Color.white.opacity(0.28) : Theme.Colors.border.opacity(0.7)))
                         .frame(height: 4)
                         .animation(reduceMotion ? .easeOut(duration: 0.2) : .spring(), value: step)
                 }
@@ -93,11 +113,11 @@ struct OnboardingView: View {
             Button(action: handlePrimaryAction) {
                 Text(primaryButtonTitle)
                     .font(Theme.Typography.headline)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(isSplashStep ? Theme.Colors.textPrimary : .white)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, Theme.Spacing.md)
                     .frame(minHeight: 52)
-                    .background(primaryButtonColor)
+                    .background(isSplashStep ? Theme.Colors.surface : primaryButtonColor)
                     .cornerRadius(Theme.CornerRadius.xlarge)
                     .overlay(
                         RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge)
@@ -110,7 +130,7 @@ struct OnboardingView: View {
                 Button(action: handleSecondaryAction) {
                     Text(secondary)
                         .font(Theme.Typography.subheadline)
-                        .foregroundStyle(Theme.Colors.textSecondary)
+                        .foregroundStyle(isSplashStep ? Color.white.opacity(0.86) : Theme.Colors.textSecondary)
                         .frame(minHeight: 44)
                 }
                 .buttonStyle(.plain)
@@ -123,23 +143,35 @@ struct OnboardingView: View {
         VStack(spacing: Theme.Spacing.xl) {
             Spacer()
 
-            WordmarkLockup(showTagline: false)
+            WordmarkLockup(showTagline: true, isOnSplash: true)
                 .padding(.horizontal, Theme.Spacing.xl)
+                .opacity(welcomeVisible ? 1 : 0)
+                .scaleEffect(welcomeVisible || reduceMotion ? 1 : 0.98)
+                .offset(y: welcomeFloating ? -4 : 0)
+                .animation(reduceMotion ? .easeOut(duration: 0.25) : .spring(response: 0.55, dampingFraction: 0.82), value: welcomeVisible)
+                .animation(reduceMotion ? nil : .easeInOut(duration: 2.4).repeatForever(autoreverses: true), value: welcomeFloating)
 
             VStack(spacing: Theme.Spacing.sm) {
-                Text("Train with clarity.")
-                    .font(Theme.Typography.heroTitle)
+                Text("TRAIN WITH CLARITY")
+                    .font(Theme.Typography.sectionHeader)
                     .foregroundStyle(Theme.Colors.textPrimary)
+                    .tracking(1.0)
                     .multilineTextAlignment(.center)
 
                 Text("See what's changed, what's working, and what to do next.")
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Colors.textSecondary)
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal, Theme.Spacing.xl)
+                    .frame(maxWidth: 520)
             }
+            .padding(Theme.Spacing.xl)
+            .softCard(cornerRadius: Theme.CornerRadius.xlarge, elevation: 1)
+            .padding(.horizontal, Theme.Spacing.xl)
 
             Spacer()
+        }
+        .onAppear {
+            startWelcomeAnimation()
         }
     }
 
@@ -328,6 +360,18 @@ struct OnboardingView: View {
     private func completeOnboarding() {
         hasSeenOnboarding = true
         isPresented = false
+    }
+
+    private func startWelcomeAnimation() {
+        welcomeVisible = true
+        welcomeFloating = false
+        guard !reduceMotion else { return }
+
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 650_000_000)
+            // Mirror the returning-user splash's gentle float to keep the brand moment consistent.
+            welcomeFloating = true
+        }
     }
 }
 
