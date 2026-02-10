@@ -8,6 +8,8 @@
 	<string>This app does not write health data, but this permission is required by iOS.</string>
 	<key>CFBundleDisplayName</key>
 	<string>Davis's Big Beautiful Workout App</string>
+	<key>CFBundleName</key>
+	<string>Davis's Big Beautiful Workout App</string>
 	<key>CFBundleIdentifier</key>
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>UIRequiredDeviceCapabilities</key>
