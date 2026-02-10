@@ -13,6 +13,10 @@ struct GymBulkAssignView: View {
     @State private var didInitializeRange = false
     @State private var showingAssignPicker = false
 
+    private var earliestWorkoutDate: Date? {
+        dataManager.workouts.map(\.date).min()
+    }
+
     var body: some View {
         ZStack {
             AdaptiveBackground()
@@ -54,29 +58,20 @@ struct GymBulkAssignView: View {
                 .font(Theme.Typography.title3)
                 .foregroundColor(Theme.Colors.textPrimary)
 
-            TextField("Search workouts or exercises", text: $searchText)
-                .padding(Theme.Spacing.md)
-                .background(Theme.Colors.surface.opacity(0.6))
-                .cornerRadius(Theme.CornerRadius.medium)
+            searchField
 
-            DatePicker(
-                "Start",
-                selection: $startDate,
-                in: ...Date(),
-                displayedComponents: .date
+            BrutalistDateRangePickerRow(
+                title: "Date Range",
+                startDate: $startDate,
+                endDate: $endDate,
+                earliestSelectableDate: earliestWorkoutDate.map { Calendar.current.startOfDay(for: $0) },
+                latestSelectableDate: Date()
             )
-            .datePickerStyle(.compact)
 
-            DatePicker(
-                "End",
-                selection: $endDate,
-                in: startDate...Date(),
-                displayedComponents: .date
-            )
-            .datePickerStyle(.compact)
-
-            Toggle("Unassigned only", isOn: $showUnassignedOnly)
-                .toggleStyle(.switch)
+            Toggle(isOn: $showUnassignedOnly) {
+                Text("Unassigned only")
+            }
+            .toggleStyle(BrutalistToggleStyle())
 
             Text("Matches \(filteredWorkouts.count) workouts")
                 .font(Theme.Typography.caption)
@@ -84,6 +79,36 @@ struct GymBulkAssignView: View {
         }
         .padding(Theme.Spacing.lg)
         .softCard(elevation: 2)
+    }
+
+    private var searchField: some View {
+        HStack(spacing: Theme.Spacing.sm) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(Theme.Colors.textTertiary)
+
+            TextField("Search workouts or exercises", text: $searchText)
+                .textInputAutocapitalization(.never)
+                .disableAutocorrection(true)
+                .font(Theme.Typography.callout)
+                .foregroundStyle(Theme.Colors.textPrimary)
+                .tint(Theme.Colors.accent)
+
+            if !searchText.isEmpty {
+                Button {
+                    searchText = ""
+                    Haptics.selection()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(Theme.Colors.textTertiary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Clear search")
+            }
+        }
+        .padding(.horizontal, Theme.Spacing.lg)
+        .padding(.vertical, Theme.Spacing.md)
+        .glassBackground(cornerRadius: Theme.CornerRadius.xlarge, elevation: 1)
     }
 
     private var selectionHeader: some View {
@@ -242,7 +267,7 @@ struct GymBulkAssignView: View {
     private func initializeDateRangeIfNeeded() {
         guard !didInitializeRange else { return }
         didInitializeRange = true
-        guard let earliest = dataManager.workouts.map(\.date).min() else { return }
+        guard let earliest = earliestWorkoutDate else { return }
         let calendar = Calendar.current
         startDate = calendar.startOfDay(for: earliest)
         endDate = Date()
