@@ -233,6 +233,13 @@ struct HealthSyncWizard: View {
         Task {
             do {
                 try await healthManager.requestAuthorization()
+                // Route data powers gym auto-tagging/discovery; request it alongside base Health auth.
+                // If denied, continue onboarding/sync with non-route metrics.
+                do {
+                    try await healthManager.requestWorkoutRouteAuthorization()
+                } catch {
+                    print("Workout route authorization unavailable during onboarding: \(error)")
+                }
                 // If the user hasn't imported or logged workouts yet, there's nothing workout-scoped to sync.
                 // Mark as connected and let sync happen later once workouts exist.
                 if workouts.isEmpty {

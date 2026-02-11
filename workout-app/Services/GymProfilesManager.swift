@@ -2,6 +2,7 @@ import Combine
 import Foundation
 import SwiftUI
 import CoreLocation
+import MapKit
 
 @MainActor
 final class GymProfilesManager: ObservableObject {
@@ -94,6 +95,67 @@ final class GymProfilesManager: ObservableObject {
         annotationsManager.clearGymAssignments(for: gym.id)
     }
 
+    /// Finds an existing gym near the selected coordinate and updates it, or creates a new profile.
+    @discardableResult
+    func upsertGymFromMapSelection(
+        name: String,
+        address: String?,
+        coordinate: CLLocationCoordinate2D,
+        proximityThresholdMeters: Double = 120
+    ) -> GymProfile {
+        let normalizedName = normalizedLookupValue(name)
+        let normalizedAddress = normalizedLookupValue(address)
+        let selectedLocation = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+
+        if let nearbyMatch = gyms.first(where: { gym in
+            guard let lat = gym.latitude, let lon = gym.longitude else { return false }
+            let existingLocation = CLLocation(latitude: lat, longitude: lon)
+            return existingLocation.distance(from: selectedLocation) <= proximityThresholdMeters
+        }) {
+            updateGym(
+                id: nearbyMatch.id,
+                name: normalizedName.isEmpty ? nearbyMatch.name : name,
+                address: normalizedAddress.isEmpty ? nearbyMatch.address : address,
+                latitude: coordinate.latitude,
+                longitude: coordinate.longitude
+            )
+            return gyms.first(where: { $0.id == nearbyMatch.id }) ?? nearbyMatch
+        }
+
+        if !normalizedAddress.isEmpty,
+           let addressMatch = gyms.first(where: { normalizedLookupValue($0.address) == normalizedAddress }) {
+            updateGym(
+                id: addressMatch.id,
+                name: normalizedName.isEmpty ? addressMatch.name : name,
+                address: address,
+                latitude: coordinate.latitude,
+                longitude: coordinate.longitude
+            )
+            return gyms.first(where: { $0.id == addressMatch.id }) ?? addressMatch
+        }
+
+        if !normalizedName.isEmpty,
+           let nameMatchWithoutCoordinates = gyms.first(where: {
+               normalizedLookupValue($0.name) == normalizedName && ($0.latitude == nil || $0.longitude == nil)
+           }) {
+            updateGym(
+                id: nameMatchWithoutCoordinates.id,
+                name: name,
+                address: address ?? nameMatchWithoutCoordinates.address,
+                latitude: coordinate.latitude,
+                longitude: coordinate.longitude
+            )
+            return gyms.first(where: { $0.id == nameMatchWithoutCoordinates.id }) ?? nameMatchWithoutCoordinates
+        }
+
+        return addGym(
+            name: normalizedName.isEmpty ? "Gym" : name,
+            address: address,
+            latitude: coordinate.latitude,
+            longitude: coordinate.longitude
+        )
+    }
+
     private func fileURL() -> URL {
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         return documents.appendingPathComponent(fileName)
@@ -161,11 +223,34 @@ final class GymProfilesManager: ObservableObject {
     }
 
     private func geocodeAddress(_ address: String) async -> CLLocationCoordinate2D? {
-        await withCheckedContinuation { continuation in
-            let geocoder = CLGeocoder()
-            geocoder.geocodeAddressString(address) { placemarks, _ in
-                continuation.resume(returning: placemarks?.first?.location?.coordinate)
+        if #available(iOS 26.0, *) {
+            guard let request = MKGeocodingRequest(addressString: address) else { return nil }
+            return await withCheckedContinuation { continuation in
+                request.getMapItems { mapItems, _ in
+                    continuation.resume(returning: mapItems?.first?.location.coordinate)
+                }
             }
         }
+
+        let request = MKLocalSearch.Request()
+        request.naturalLanguageQuery = address
+        request.resultTypes = [.address, .pointOfInterest]
+        do {
+            let response = try await MKLocalSearch(request: request).start()
+            if #available(iOS 26.0, *) {
+                return response.mapItems.first?.location.coordinate
+            } else {
+                return response.mapItems.first?.placemark.coordinate
+            }
+        } catch {
+            return nil
+        }
+    }
+
+    private func normalizedLookupValue(_ value: String?) -> String {
+        guard let value else { return "" }
+        return value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
     }
 }

@@ -192,8 +192,8 @@ extension HealthKitManager {
             unit: HKUnit(from: "count/min")
         )
 
-        // Fetch Apple workout if it exists for this window
-        if let appleWorkout = try await fetchAppleWorkout(from: startTime, to: endTime) {
+        // Fetch the best-matching Apple workout (with a relaxed fallback for timestamp drift).
+        if let appleWorkout = try await fetchBestMatchingAppleWorkout(for: workout) {
             healthData.appleWorkoutType = appleWorkout.workoutActivityType.name
             healthData.appleWorkoutDuration = appleWorkout.duration
             healthData.appleWorkoutUUID = appleWorkout.uuid
@@ -274,6 +274,14 @@ extension HealthKitManager {
         syncedWorkoutsCount = 0
         syncError = nil
 
+        // Route access is optional for sync completeness, but request it once up front.
+        // If denied, the rest of Health sync still proceeds.
+        do {
+            try await requestWorkoutRouteAuthorization()
+        } catch {
+            print("Workout route authorization unavailable during sync: \(error)")
+        }
+
         var results: [WorkoutHealthData] = []
         guard !workouts.isEmpty else {
             // Avoid 0/0 progress UI and division-by-zero paths.
@@ -307,6 +315,104 @@ extension HealthKitManager {
         persistData()
 
         return results
+    }
+
+    /// Best-effort route-location hydration for recent workouts.
+    /// Used by Gym discovery so it can work even when route points weren't previously cached.
+    func hydrateRouteStartLocationsForRecentWorkouts(
+        _ workouts: [Workout],
+        maxWorkouts: Int = 120
+    ) async throws -> Int {
+        guard isHealthKitAvailable() else {
+            throw HealthKitError.notAvailable
+        }
+        guard authorizationStatus == .authorized else {
+            throw HealthKitError.authorizationFailed("Health access is not authorized.")
+        }
+
+        try await requestWorkoutRouteAuthorization()
+
+        let sorted = workouts.sorted { $0.date > $1.date }
+        let targets = sorted
+            .prefix(maxWorkouts)
+            .filter { workout in
+                guard let cached = healthDataStore[workout.id] else { return true }
+                return cached.workoutRouteStartLatitude == nil || cached.workoutRouteStartLongitude == nil
+            }
+
+        guard !targets.isEmpty else { return 0 }
+
+        let windows = targets.map { $0.estimatedWindow(defaultMinutes: 60) }
+        guard let minStart = windows.map(\.start).min(), let maxEnd = windows.map(\.end).max() else {
+            return 0
+        }
+
+        let relaxedTolerance: TimeInterval = 12 * 60 * 60
+        let appleWorkouts = try await fetchAppleWorkouts(
+            from: minStart.addingTimeInterval(-relaxedTolerance),
+            to: maxEnd.addingTimeInterval(relaxedTolerance)
+        )
+
+        guard !appleWorkouts.isEmpty else { return 0 }
+
+        let appleByUUID = Dictionary(uniqueKeysWithValues: appleWorkouts.map { ($0.uuid, $0) })
+        var routeStartByAppleUUID: [UUID: CLLocation] = [:]
+        var appleUUIDsWithNoRoute: Set<UUID> = []
+        var updated = 0
+
+        for workout in targets {
+            let cached = healthDataStore[workout.id]
+
+            let appleWorkout: HKWorkout?
+            if let appleUUID = cached?.appleWorkoutUUID, let exact = appleByUUID[appleUUID] {
+                appleWorkout = exact
+            } else {
+                appleWorkout = bestMatchingAppleWorkout(
+                    for: workout,
+                    candidates: appleWorkouts,
+                    strictStartDifferenceSeconds: 20 * 60,
+                    relaxedStartDifferenceSeconds: relaxedTolerance
+                )
+            }
+
+            guard let appleWorkout else { continue }
+
+            let appleUUID = appleWorkout.uuid
+            let startLocation: CLLocation?
+            if let existing = routeStartByAppleUUID[appleUUID] {
+                startLocation = existing
+            } else if appleUUIDsWithNoRoute.contains(appleUUID) {
+                startLocation = nil
+            } else {
+                let fetched = try await fetchWorkoutRouteStartLocation(for: appleWorkout)
+                if let fetched {
+                    routeStartByAppleUUID[appleUUID] = fetched
+                } else {
+                    appleUUIDsWithNoRoute.insert(appleUUID)
+                }
+                startLocation = fetched
+            }
+
+            guard let startLocation else { continue }
+
+            var healthData = cached ?? WorkoutHealthData(
+                workoutId: workout.id,
+                workoutDate: workout.date,
+                workoutStartTime: workout.estimatedWindow(defaultMinutes: 60).start,
+                workoutEndTime: workout.estimatedWindow(defaultMinutes: 60).end
+            )
+            healthData.appleWorkoutUUID = appleWorkout.uuid
+            healthData.workoutRouteStartLatitude = startLocation.coordinate.latitude
+            healthData.workoutRouteStartLongitude = startLocation.coordinate.longitude
+            healthDataStore[workout.id] = healthData
+            updated += 1
+        }
+
+        if updated > 0 {
+            persistData()
+        }
+
+        return updated
     }
 
     private func calculateWorkoutWindow(_ workout: Workout) -> (Date, Date) {

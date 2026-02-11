@@ -109,7 +109,7 @@ struct AutoGymTaggingReportView: View {
             VStack(spacing: Theme.Spacing.sm) {
                 summaryRow(label: "Tagged", value: report.assigned)
                 summaryRow(label: "No matching Apple Watch workout", value: report.skippedNoMatchingWorkout)
-                summaryRow(label: "No route/start location in Apple Health", value: report.skippedNoRoute)
+                summaryRow(label: "No route/start location (or route permission unavailable)", value: report.skippedNoRoute)
                 summaryRow(label: "No gym within range", value: report.skippedNoGymMatch)
                 summaryRow(label: "Gyms missing location data", value: report.skippedGymsMissingLocation)
             }
@@ -199,4 +199,3 @@ struct AutoGymTaggingReportView: View {
         }
     }
 }
-

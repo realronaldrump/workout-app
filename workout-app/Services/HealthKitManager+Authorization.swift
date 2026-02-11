@@ -48,7 +48,13 @@ extension HealthKitManager {
         }
 
         do {
-            try await healthStore.requestAuthorization(toShare: [], read: [HKSeriesType.workoutRoute()])
+            // HealthKit requires workout read authorization alongside workout-route authorization.
+            // Requesting only route can raise NSInvalidArgumentException at runtime.
+            let routeReadTypes: Set<HKObjectType> = [
+                HKObjectType.workoutType(),
+                HKSeriesType.workoutRoute()
+            ]
+            try await healthStore.requestAuthorization(toShare: [], read: routeReadTypes)
         } catch {
             throw HealthKitError.authorizationFailed(error.localizedDescription)
         }

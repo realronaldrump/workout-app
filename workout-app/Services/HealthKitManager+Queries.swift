@@ -136,6 +136,77 @@ extension HealthKitManager {
         }
     }
 
+    /// Match an imported workout to the most likely Apple workout.
+    /// Uses a strict start-time pass first, then a relaxed pass to handle timezone/drift issues.
+    func bestMatchingAppleWorkout(
+        for workout: Workout,
+        candidates: [HKWorkout],
+        strictStartDifferenceSeconds: TimeInterval = 20 * 60,
+        relaxedStartDifferenceSeconds: TimeInterval = 8 * 60 * 60
+    ) -> HKWorkout? {
+        let window = workout.estimatedWindow(defaultMinutes: 60)
+
+        struct ScoredCandidate {
+            let workout: HKWorkout
+            let score: Double
+            let startDiff: TimeInterval
+        }
+
+        func scoreCandidate(_ candidate: HKWorkout) -> ScoredCandidate {
+            let startDiff = abs(candidate.startDate.timeIntervalSince(window.start))
+            let durationDiff = abs(candidate.duration - window.duration)
+            let candidateInterval = DateInterval(start: candidate.startDate, end: candidate.endDate)
+            let overlap = candidateInterval.intersection(with: window)?.duration ?? 0
+            // Lower is better. Prefer close start time, similar duration, and overlap.
+            let score = startDiff + (durationDiff * 0.35) - (overlap * 0.25)
+            return ScoredCandidate(workout: candidate, score: score, startDiff: startDiff)
+        }
+
+        let strictMatches = candidates
+            .map(scoreCandidate)
+            .filter { $0.startDiff <= strictStartDifferenceSeconds }
+            .sorted { $0.score < $1.score }
+
+        if let strictBest = strictMatches.first {
+            return strictBest.workout
+        }
+
+        let relaxedMatches = candidates
+            .map(scoreCandidate)
+            .filter { $0.startDiff <= relaxedStartDifferenceSeconds }
+            .sorted { $0.score < $1.score }
+
+        guard let relaxedBest = relaxedMatches.first else { return nil }
+
+        // Avoid low-confidence assignments when the top two relaxed candidates are too close.
+        if relaxedMatches.count > 1 {
+            let second = relaxedMatches[1]
+            if (second.score - relaxedBest.score) < (20 * 60) {
+                return nil
+            }
+        }
+
+        return relaxedBest.workout
+    }
+
+    /// Queries Apple workouts around an imported workout and returns the best match.
+    func fetchBestMatchingAppleWorkout(
+        for workout: Workout,
+        strictStartDifferenceSeconds: TimeInterval = 20 * 60,
+        relaxedStartDifferenceSeconds: TimeInterval = 8 * 60 * 60
+    ) async throws -> HKWorkout? {
+        let window = workout.estimatedWindow(defaultMinutes: 60)
+        let queryStart = window.start.addingTimeInterval(-relaxedStartDifferenceSeconds)
+        let queryEnd = window.end.addingTimeInterval(relaxedStartDifferenceSeconds)
+        let candidates = try await fetchAppleWorkouts(from: queryStart, to: queryEnd)
+        return bestMatchingAppleWorkout(
+            for: workout,
+            candidates: candidates,
+            strictStartDifferenceSeconds: strictStartDifferenceSeconds,
+            relaxedStartDifferenceSeconds: relaxedStartDifferenceSeconds
+        )
+    }
+
     func fetchWorkoutRoutes(for workout: HKWorkout) async throws -> [HKWorkoutRoute] {
         guard let healthStore = healthStore else {
             throw HealthKitError.notAvailable
