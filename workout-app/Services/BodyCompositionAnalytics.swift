@@ -355,15 +355,16 @@ enum BodyCompositionAnalytics {
 
     static func forecast(
         latestDay: Date,
+        currentValue: Double,
         regression: LinearRegressionResult,
-        windowStart: Date,
         horizons: [Int] = [7, 30, 90],
         calendar: Calendar = .current
     ) -> [ForecastPoint] {
+        // Use the regression slope, but anchor to the current value so the forecast starts from
+        // "where you are today" instead of potentially jumping to the regression line.
         horizons.map { days in
             let date = calendar.date(byAdding: .day, value: days, to: latestDay) ?? latestDay
-            let x = Double(daysBetween(windowStart, date, calendar: calendar))
-            let predicted = (regression.slopePerDay * x) + regression.intercept
+            let predicted = currentValue + (regression.slopePerDay * Double(days))
             return ForecastPoint(
                 id: "\(days)d",
                 horizonDays: days,

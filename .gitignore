@@ -24,3 +24,6 @@ build/
 *.xcuserdata/
 .build/
 Packages/
+
+# Temporary files
+tmp/

@@ -78,6 +78,12 @@ struct WorkoutHealthData: Identifiable, Codable {
     // MARK: - Workout from Apple Health
     var appleWorkoutType: String?
     var appleWorkoutDuration: TimeInterval?
+    var appleWorkoutUUID: UUID?
+
+    // MARK: - Workout Route (Start Location)
+    /// If present, derived from an `HKWorkoutRoute` associated with the matching Apple workout.
+    var workoutRouteStartLatitude: Double?
+    var workoutRouteStartLongitude: Double?
 
     init(
         id: UUID = UUID(),
@@ -115,7 +121,10 @@ struct WorkoutHealthData: Identifiable, Codable {
         heartRateRecovery: Double? = nil,
         walkingHeartRateAverage: Double? = nil,
         appleWorkoutType: String? = nil,
-        appleWorkoutDuration: TimeInterval? = nil
+        appleWorkoutDuration: TimeInterval? = nil,
+        appleWorkoutUUID: UUID? = nil,
+        workoutRouteStartLatitude: Double? = nil,
+        workoutRouteStartLongitude: Double? = nil
     ) {
         self.id = id
         self.workoutId = workoutId
@@ -153,6 +162,9 @@ struct WorkoutHealthData: Identifiable, Codable {
         self.walkingHeartRateAverage = walkingHeartRateAverage
         self.appleWorkoutType = appleWorkoutType
         self.appleWorkoutDuration = appleWorkoutDuration
+        self.appleWorkoutUUID = appleWorkoutUUID
+        self.workoutRouteStartLatitude = workoutRouteStartLatitude
+        self.workoutRouteStartLongitude = workoutRouteStartLongitude
     }
 
     /// Checks if meaningful health data was synced

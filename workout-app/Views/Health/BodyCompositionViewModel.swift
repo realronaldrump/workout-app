@@ -149,16 +149,15 @@ final class BodyCompositionViewModel: ObservableObject {
 
             // Latest trend + forecasts are based on the latest point in the displayed range, but use
             // the trailing 30-day window (buffered by analysisRange).
-            let latestDay = points.last?.date ?? displayRange.end
             let latestTrend = BodyCompositionAnalytics.trendSummaryForLatest(representatives: daily, windowDays: 30)
             if let latestTrend,
-               let latestReg = regressions[calendarStartOfDay(latestDay)] {
+               let latestPoint = points.last,
+               let latestReg = regressions[calendarStartOfDay(latestPoint.date)] {
                 trendSummary = latestTrend
-                let windowStart = latestTrend.windowStart
                 forecastPoints = BodyCompositionAnalytics.forecast(
-                    latestDay: latestTrend.windowEnd,
-                    regression: latestReg,
-                    windowStart: windowStart
+                    latestDay: latestPoint.date,
+                    currentValue: latestPoint.value,
+                    regression: latestReg
                 )
             } else {
                 trendSummary = nil

@@ -39,4 +39,18 @@ extension HealthKitManager {
             authorizationStatus = .notDetermined
         }
     }
+
+    /// Requests read access for Workout Route samples (location series attached to workouts).
+    /// Kept separate from `allReadTypes` so declining route permission doesn’t break the rest of Health sync.
+    func requestWorkoutRouteAuthorization() async throws {
+        guard let healthStore = healthStore else {
+            throw HealthKitError.notAvailable
+        }
+
+        do {
+            try await healthStore.requestAuthorization(toShare: [], read: [HKSeriesType.workoutRoute()])
+        } catch {
+            throw HealthKitError.authorizationFailed(error.localizedDescription)
+        }
+    }
 }

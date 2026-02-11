@@ -1,5 +1,6 @@
 import Foundation
 import HealthKit
+import CoreLocation
 
 extension HealthKitManager {
     /// Sync health data for a single workout
@@ -195,6 +196,7 @@ extension HealthKitManager {
         if let appleWorkout = try await fetchAppleWorkout(from: startTime, to: endTime) {
             healthData.appleWorkoutType = appleWorkout.workoutActivityType.name
             healthData.appleWorkoutDuration = appleWorkout.duration
+            healthData.appleWorkoutUUID = appleWorkout.uuid
 
             // Get additional metrics from Apple workout
             if let avgSpeed = appleWorkout.statistics(for: HKQuantityType(.runningSpeed))?.averageQuantity() {
@@ -202,6 +204,16 @@ extension HealthKitManager {
             }
             if let avgPower = appleWorkout.statistics(for: HKQuantityType(.runningPower))?.averageQuantity() {
                 healthData.avgPower = avgPower.doubleValue(for: .watt())
+            }
+
+            // Try to capture the start location (if Health has a route sample for this workout).
+            do {
+                if let startLocation = try await fetchWorkoutRouteStartLocation(for: appleWorkout) {
+                    healthData.workoutRouteStartLatitude = startLocation.coordinate.latitude
+                    healthData.workoutRouteStartLongitude = startLocation.coordinate.longitude
+                }
+            } catch {
+                // Route data is optional; don't fail the overall health sync.
             }
         }
 
@@ -298,49 +310,9 @@ extension HealthKitManager {
     }
 
     private func calculateWorkoutWindow(_ workout: Workout) -> (Date, Date) {
-        let startTime = workout.date
-        let durationMinutes = parseDurationMinutes(workout.duration) ?? 60
-        let safeMinutes = durationMinutes > 0 ? durationMinutes : 60
-        let endTime = startTime.addingTimeInterval(TimeInterval(safeMinutes * 60))
-        return (startTime, endTime)
+        let window = workout.estimatedWindow(defaultMinutes: 60)
+        return (window.start, window.end)
     }
 
-    private func parseDurationMinutes(_ duration: String) -> Int? {
-        let trimmed = duration.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !trimmed.isEmpty else { return nil }
-
-        // Handle HH:mm:ss or H:mm:ss format (e.g., "01:15:00" or "1:15:00")
-        if trimmed.contains(":") {
-            let parts = trimmed.split(separator: ":").compactMap { Int($0) }
-            if parts.count == 3 {
-                // HH:mm:ss
-                return parts[0] * 60 + parts[1]
-            } else if parts.count == 2 {
-                // mm:ss
-                return parts[0]
-            }
-        }
-
-        var hours = 0
-        var minutes = 0
-        var matched = false
-
-        if let hourMatch = trimmed.range(of: "(\\d+)\\s*h", options: .regularExpression) {
-            let hourString = String(trimmed[hourMatch]).replacingOccurrences(of: "h", with: "")
-            hours = Int(hourString.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
-            matched = true
-        }
-
-        if let minuteMatch = trimmed.range(of: "(\\d+)\\s*m", options: .regularExpression) {
-            let minuteString = String(trimmed[minuteMatch]).replacingOccurrences(of: "m", with: "")
-            minutes = Int(minuteString.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
-            matched = true
-        }
-
-        if matched {
-            return (hours * 60) + minutes
-        }
-
-        return Int(trimmed)
-    }
+    // Duration parsing lives on Workout (Models/WorkoutModels.swift).
 }

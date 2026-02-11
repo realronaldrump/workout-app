@@ -1,5 +1,6 @@
 import Foundation
 import HealthKit
+import CoreLocation
 
 extension HealthKitManager {
     func fetchHeartRateSamples(from start: Date, to end: Date) async throws -> [HeartRateSample] {
@@ -90,18 +91,65 @@ extension HealthKitManager {
     }
 
     func fetchAppleWorkout(from start: Date, to end: Date) async throws -> HKWorkout? {
+        let workouts = try await fetchAppleWorkouts(from: start, to: end, limit: 1, ascending: true)
+        return workouts.first
+    }
+
+    func fetchAppleWorkouts(
+        from start: Date,
+        to end: Date,
+        limit: Int = HKObjectQueryNoLimit,
+        ascending: Bool = true
+    ) async throws -> [HKWorkout] {
         guard let healthStore = healthStore else {
             throw HealthKitError.notAvailable
         }
 
         let predicate = HKQuery.predicateForSamples(withStart: start, end: end, options: [])
-        let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
 
         return try await withCheckedThrowingContinuation { continuation in
             let query = HKSampleQuery(
                 sampleType: HKObjectType.workoutType(),
                 predicate: predicate,
-                limit: 1,
+                limit: limit,
+                sortDescriptors: [NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: ascending)]
+            ) { _, samples, error in
+                if let error {
+                    if let auth = Self.authorizationFailure(from: error) {
+                        Task { @MainActor in
+                            self.authorizationStatus = auth.status
+                        }
+                        continuation.resume(throwing: auth.error)
+                        return
+                    }
+                    if Self.isNoDataError(error) {
+                        continuation.resume(returning: [])
+                        return
+                    }
+                    continuation.resume(throwing: HealthKitError.queryFailed(error.localizedDescription))
+                    return
+                }
+
+                continuation.resume(returning: samples as? [HKWorkout] ?? [])
+            }
+            healthStore.execute(query)
+        }
+    }
+
+    func fetchWorkoutRoutes(for workout: HKWorkout) async throws -> [HKWorkoutRoute] {
+        guard let healthStore = healthStore else {
+            throw HealthKitError.notAvailable
+        }
+
+        let routeType = HKSeriesType.workoutRoute()
+        let predicate = HKQuery.predicateForObjects(from: workout)
+        let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
+
+        return try await withCheckedThrowingContinuation { continuation in
+            let query = HKSampleQuery(
+                sampleType: routeType,
+                predicate: predicate,
+                limit: HKObjectQueryNoLimit,
                 sortDescriptors: [sortDescriptor]
             ) { _, samples, error in
                 if let error {
@@ -113,16 +161,81 @@ extension HealthKitManager {
                         return
                     }
                     if Self.isNoDataError(error) {
-                        continuation.resume(returning: nil)
+                        continuation.resume(returning: [])
                         return
                     }
                     continuation.resume(throwing: HealthKitError.queryFailed(error.localizedDescription))
                     return
                 }
 
-                let workout = samples?.first as? HKWorkout
-                continuation.resume(returning: workout)
+                continuation.resume(returning: samples as? [HKWorkoutRoute] ?? [])
             }
+
+            healthStore.execute(query)
+        }
+    }
+
+    func fetchWorkoutRouteStartLocation(for workout: HKWorkout) async throws -> CLLocation? {
+        let routes = try await fetchWorkoutRoutes(for: workout)
+        guard let firstRoute = routes.first else { return nil }
+        return try await fetchFirstLocation(for: firstRoute)
+    }
+
+    private func fetchFirstLocation(for route: HKWorkoutRoute) async throws -> CLLocation? {
+        guard let healthStore = healthStore else {
+            throw HealthKitError.notAvailable
+        }
+
+        if #available(iOS 15.4, macOS 13.0, watchOS 8.5, visionOS 1.0, *) {
+            let descriptor = HKWorkoutRouteQueryDescriptor(route)
+            let locations = descriptor.results(for: healthStore)
+            for try await location in locations {
+                return location
+            }
+            return nil
+        }
+
+        return try await fetchFirstLocationLegacy(for: route, healthStore: healthStore)
+    }
+
+    private func fetchFirstLocationLegacy(for route: HKWorkoutRoute, healthStore: HKHealthStore) async throws -> CLLocation? {
+        try await withCheckedThrowingContinuation { continuation in
+            var didResume = false
+
+            let query = HKWorkoutRouteQuery(route: route) { query, locationsOrNil, done, errorOrNil in
+                if let errorOrNil {
+                    if didResume { return }
+                    didResume = true
+                    if let auth = Self.authorizationFailure(from: errorOrNil) {
+                        Task { @MainActor in
+                            self.authorizationStatus = auth.status
+                        }
+                        continuation.resume(throwing: auth.error)
+                        return
+                    }
+                    if Self.isNoDataError(errorOrNil) {
+                        continuation.resume(returning: nil)
+                        return
+                    }
+                    continuation.resume(throwing: HealthKitError.queryFailed(errorOrNil.localizedDescription))
+                    return
+                }
+
+                if let first = locationsOrNil?.first {
+                    if didResume { return }
+                    didResume = true
+                    healthStore.stop(query)
+                    continuation.resume(returning: first)
+                    return
+                }
+
+                if done {
+                    if didResume { return }
+                    didResume = true
+                    continuation.resume(returning: nil)
+                }
+            }
+
             healthStore.execute(query)
         }
     }

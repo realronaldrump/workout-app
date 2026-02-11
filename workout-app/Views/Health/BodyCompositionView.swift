@@ -359,7 +359,12 @@ struct BodyCompositionView: View {
 
     private var chartSection: some View {
         let forecastEnd = model.forecastPoints.first(where: { $0.horizonDays == 90 })?.date
-        let domainEnd = max(displayRange.end, forecastEnd ?? displayRange.end)
+        // Only extend the domain into the future when the Forecast overlay is actually visible.
+        // Otherwise, we end up with a confusing "blank" region after the last real measurement.
+        let domainEnd: Date = {
+            guard showForecast, let forecastEnd else { return displayRange.end }
+            return max(displayRange.end, forecastEnd)
+        }()
 
         return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             Text("Trend Chart")
@@ -399,12 +404,15 @@ struct BodyCompositionView: View {
     }
 
     private var overlayToggles: some View {
-        ViewThatFits(in: .horizontal) {
+        let canShowTrend = model.trendSummary != nil
+        let canShowForecast = !model.forecastPoints.isEmpty
+
+        return ViewThatFits(in: .horizontal) {
             HStack(spacing: Theme.Spacing.md) {
                 overlayPill("7d MA", isOn: $showMA7, tint: Theme.Colors.accentSecondary)
                 overlayPill("30d RA", isOn: $showRA30, tint: Theme.Colors.accentTertiary)
-                overlayPill("Trend", isOn: $showTrend, tint: Theme.Colors.textSecondary)
-                overlayPill("Forecast", isOn: $showForecast, tint: Theme.Colors.textTertiary)
+                overlayPill("Trend", isOn: $showTrend, tint: Theme.Colors.textSecondary, isEnabled: canShowTrend)
+                overlayPill("Forecast", isOn: $showForecast, tint: Theme.Colors.textTertiary, isEnabled: canShowForecast)
             }
 
             VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
@@ -413,20 +421,21 @@ struct BodyCompositionView: View {
                     overlayPill("30d RA", isOn: $showRA30, tint: Theme.Colors.accentTertiary)
                 }
                 HStack(spacing: Theme.Spacing.md) {
-                    overlayPill("Trend", isOn: $showTrend, tint: Theme.Colors.textSecondary)
-                    overlayPill("Forecast", isOn: $showForecast, tint: Theme.Colors.textTertiary)
+                    overlayPill("Trend", isOn: $showTrend, tint: Theme.Colors.textSecondary, isEnabled: canShowTrend)
+                    overlayPill("Forecast", isOn: $showForecast, tint: Theme.Colors.textTertiary, isEnabled: canShowForecast)
                 }
             }
         }
     }
 
-    private func overlayPill(_ title: String, isOn: Binding<Bool>, tint: Color) -> some View {
+    private func overlayPill(_ title: String, isOn: Binding<Bool>, tint: Color, isEnabled: Bool = true) -> some View {
         Button {
+            guard isEnabled else { return }
             isOn.wrappedValue.toggle()
             Haptics.selection()
         } label: {
             HStack(spacing: 6) {
-                if isOn.wrappedValue {
+                if isOn.wrappedValue && isEnabled {
                     Image(systemName: "checkmark")
                         .font(.caption2.weight(.bold))
                 }
@@ -438,18 +447,18 @@ struct BodyCompositionView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             }
-            .foregroundStyle(isOn.wrappedValue ? Color.white : Theme.Colors.textSecondary)
+            .foregroundStyle(isOn.wrappedValue && isEnabled ? Color.white : Theme.Colors.textSecondary)
             .padding(.horizontal, Theme.Spacing.md)
             .padding(.vertical, Theme.Spacing.xs)
             .frame(minHeight: 44)
             .frame(maxWidth: .infinity)
             .background(
                 Capsule()
-                    .fill(isOn.wrappedValue ? tint : Theme.Colors.cardBackground)
+                    .fill(isOn.wrappedValue && isEnabled ? tint : Theme.Colors.cardBackground)
             )
             .overlay(
                 Capsule()
-                    .strokeBorder(Theme.Colors.border, lineWidth: 2)
+                    .strokeBorder(Theme.Colors.border.opacity(isEnabled ? 1 : 0.35), lineWidth: 2)
             )
             .shadow(
                 color: Color.black.opacity(Theme.Colors.shadowOpacity),
@@ -459,6 +468,8 @@ struct BodyCompositionView: View {
             )
         }
         .buttonStyle(.plain)
+        .opacity(isEnabled ? 1 : 0.55)
+        .disabled(!isEnabled)
         .accessibilityLabel(Text(title))
         .accessibilityValue(Text(isOn.wrappedValue ? "On" : "Off"))
     }
@@ -534,6 +545,18 @@ struct BodyCompositionView: View {
                     .padding(Theme.Spacing.lg)
                     .softCard(elevation: 1)
             } else {
+                let yDomain: ClosedRange<Double> = {
+                    let values = chartPoints.map(\.value)
+                    guard let minValue = values.min(), let maxValue = values.max() else { return 0...1 }
+                    if minValue == maxValue {
+                        let padding = max(abs(minValue) * 0.05, 1)
+                        return (minValue - padding)...(maxValue + padding)
+                    }
+                    let span = maxValue - minValue
+                    let padding = span * 0.12
+                    return (minValue - padding)...(maxValue + padding)
+                }()
+
                 let dateRangeInDays: Int = {
                     guard let first = chartPoints.first?.date,
                           let last = chartPoints.last?.date else { return 1 }
@@ -593,16 +616,20 @@ struct BodyCompositionView: View {
                         y: .value("Avg", point.value)
                     )
                     .foregroundStyle(Theme.Colors.accent)
-                    .interpolationMethod(.catmullRom)
+                    .interpolationMethod(.linear)
 
-                    PointMark(
-                        x: .value("Date", point.date),
-                        y: .value("Avg", point.value)
-                    )
-                    .foregroundStyle(Theme.Colors.accent)
-                    .symbolSize(24)
+                    // Points help in sparse buckets, but become visual noise in long weekly ranges.
+                    if chartPoints.count <= 70 {
+                        PointMark(
+                            x: .value("Date", point.date),
+                            y: .value("Avg", point.value)
+                        )
+                        .foregroundStyle(Theme.Colors.accent)
+                        .symbolSize(24)
+                    }
                 }
                 .frame(height: 200)
+                .chartYScale(domain: yDomain)
                 .chartXAxis {
                     AxisMarks(values: .stride(by: xAxisComponent, count: xAxisStride)) { _ in
                         AxisGridLine()
@@ -790,6 +817,8 @@ private struct BodyStatCard: View {
             Text(value)
                 .font(Theme.Typography.numberSmall)
                 .foregroundStyle(Theme.Colors.textPrimary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
         }
         .padding(Theme.Spacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -837,6 +866,8 @@ private struct DeltaCard: View {
             Text(deltaText)
                 .font(Theme.Typography.numberSmall)
                 .foregroundStyle(tint)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
         }
         .padding(Theme.Spacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)

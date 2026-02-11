@@ -58,15 +58,12 @@ struct BodyCompositionTrendChart: View {
         if showRA30 { values.append(contentsOf: ra30.map(\.value)) }
 
         if let trend, showTrend {
-            values.append(trend.intercept)
+            values.append(predictedValue(on: trend.windowStart, trend: trend))
             values.append(predictedValue(on: trend.windowEnd, trend: trend))
         }
 
-        if showForecast, let trend {
-            if let day90 = forecast.first(where: { $0.horizonDays == 90 }) {
-                values.append(day90.predicted)
-            }
-            values.append(predictedValue(on: trend.windowEnd, trend: trend))
+        if showForecast, !forecast.isEmpty {
+            values.append(contentsOf: forecast.map(\.predicted))
         }
 
         guard let minValue = values.min(), let maxValue = values.max() else {
@@ -90,12 +87,6 @@ struct BodyCompositionTrendChart: View {
                 .foregroundStyle(Theme.Colors.textSecondary)
 
             Chart {
-                if showForecast, !forecast.isEmpty, let latestDate = points.last?.date {
-                    RuleMark(x: .value("Latest", latestDate))
-                        .foregroundStyle(Theme.Colors.border.opacity(0.15))
-                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
-                }
-
                 if !points.isEmpty {
                     ForEach(points) { point in
                         AreaMark(
@@ -106,6 +97,19 @@ struct BodyCompositionTrendChart: View {
                         .foregroundStyle(color.opacity(0.14))
                         .interpolationMethod(.catmullRom)
                     }
+                }
+
+                if showForecast, !forecast.isEmpty, let latestDate = points.last?.date {
+                    RuleMark(x: .value("Latest", latestDate))
+                        .foregroundStyle(Theme.Colors.border.opacity(0.22))
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
+                        .annotation(position: .top, alignment: .leading) {
+                            Text("LATEST")
+                                .font(Theme.Typography.metricLabel)
+                                .foregroundStyle(Theme.Colors.textTertiary)
+                                .textCase(.uppercase)
+                                .tracking(0.8)
+                        }
                 }
 
                 ForEach(points) { point in
@@ -162,8 +166,9 @@ struct BodyCompositionTrendChart: View {
                 }
 
                 if let trend, showForecast, let day90 = forecast.first(where: { $0.horizonDays == 90 }) {
-                    let startValue = predictedValue(on: trend.windowEnd, trend: trend)
-                    let start = TimeSeriesPoint(date: trend.windowEnd, value: startValue)
+                    let startDate = points.last?.date ?? trend.windowEnd
+                    let startValue = points.last?.value ?? predictedValue(on: trend.windowEnd, trend: trend)
+                    let start = TimeSeriesPoint(date: startDate, value: startValue)
                     let end = TimeSeriesPoint(date: day90.date, value: day90.predicted)
 
                     LineMark(
@@ -186,6 +191,15 @@ struct BodyCompositionTrendChart: View {
                     )
                     .foregroundStyle(Theme.Colors.textSecondary)
                     .symbolSize(55)
+                }
+
+                if let selectedPoint {
+                    PointMark(
+                        x: .value("Selected", selectedPoint.date),
+                        y: .value("Selected", selectedPoint.value)
+                    )
+                    .foregroundStyle(color)
+                    .symbolSize(85)
                 }
 
                 if let selectedPoint {
@@ -268,7 +282,19 @@ struct BodyCompositionTrendChart: View {
     }
 
     private var fullXDomain: ClosedRange<Date> {
-        if let fullDomain { return fullDomain }
+        if let fullDomain {
+            // Only pad when we have an endpoint mark that would otherwise be pinned to the boundary
+            // (notably the +90d forecast point when Forecast is enabled).
+            let pad: TimeInterval = 12 * 60 * 60
+
+            var upperPad: TimeInterval = 0
+
+            if showForecast, let maxForecastDate = forecast.map(\.date).max(), abs(maxForecastDate.timeIntervalSince(fullDomain.upperBound)) < 1 {
+                upperPad = pad
+            }
+
+            return fullDomain.lowerBound...fullDomain.upperBound.addingTimeInterval(upperPad)
+        }
         guard let first = points.first?.date, let last = points.last?.date else {
             let now = Date()
             return now...now

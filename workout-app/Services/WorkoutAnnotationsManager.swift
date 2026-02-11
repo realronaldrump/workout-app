@@ -51,6 +51,21 @@ final class WorkoutAnnotationsManager: ObservableObject {
         persist()
     }
 
+    /// Applies multiple per-workout gym assignments, persisting once at the end.
+    func applyGymAssignments(_ assignments: [UUID: UUID?]) {
+        guard !assignments.isEmpty else { return }
+
+        for (workoutId, gymProfileId) in assignments {
+            if gymProfileId == nil {
+                annotations.removeValue(forKey: workoutId)
+            } else {
+                annotations[workoutId] = WorkoutAnnotation(workoutId: workoutId, gymProfileId: gymProfileId)
+            }
+        }
+
+        persist()
+    }
+
     private func fileURL() -> URL {
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         return documents.appendingPathComponent(fileName)

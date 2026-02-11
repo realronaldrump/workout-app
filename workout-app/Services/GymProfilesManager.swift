@@ -1,6 +1,7 @@
 import Combine
 import Foundation
 import SwiftUI
+import CoreLocation
 
 @MainActor
 final class GymProfilesManager: ObservableObject {
@@ -123,6 +124,48 @@ final class GymProfilesManager: ObservableObject {
             gyms = try decoder.decode([GymProfile].self, from: data)
         } catch {
             print("Failed to load gym profiles: \(error)")
+        }
+    }
+
+    /// Best-effort coordinate lookup for all gyms.
+    /// If a gym has no lat/lon but has an address, attempts a geocode and persists the result.
+    func resolveGymCoordinates() async -> [UUID: CLLocationCoordinate2D] {
+        var resolved: [UUID: CLLocationCoordinate2D] = [:]
+        let gymsSnapshot = gyms
+        resolved.reserveCapacity(gymsSnapshot.count)
+
+        for gym in gymsSnapshot {
+            if let lat = gym.latitude, let lon = gym.longitude {
+                resolved[gym.id] = CLLocationCoordinate2D(latitude: lat, longitude: lon)
+                continue
+            }
+
+            guard let address = gym.address?.trimmingCharacters(in: .whitespacesAndNewlines), !address.isEmpty else {
+                continue
+            }
+
+            if let coordinate = await geocodeAddress(address) {
+                resolved[gym.id] = coordinate
+                // Persist the geocoded coordinate for future runs.
+                updateGym(
+                    id: gym.id,
+                    name: gym.name,
+                    address: gym.address,
+                    latitude: coordinate.latitude,
+                    longitude: coordinate.longitude
+                )
+            }
+        }
+
+        return resolved
+    }
+
+    private func geocodeAddress(_ address: String) async -> CLLocationCoordinate2D? {
+        await withCheckedContinuation { continuation in
+            let geocoder = CLGeocoder()
+            geocoder.geocodeAddressString(address) { placemarks, _ in
+                continuation.resume(returning: placemarks?.first?.location?.coordinate)
+            }
         }
     }
 }
