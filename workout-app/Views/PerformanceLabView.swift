@@ -13,8 +13,6 @@ struct PerformanceLabView: View {
     @State private var selectedWorkout: Workout?
     @State private var selectedExercise: ExerciseSelection?
     @State private var selectedChangeMetric: ChangeMetric?
-    @State private var selectedHabitFactor: HabitFactorKind?
-    @State private var selectedCorrelation: CorrelationInsight?
 
     private var workouts: [Workout] {
         dataManager.workouts
@@ -37,17 +35,9 @@ struct PerformanceLabView: View {
 
                     changeSection
 
-                    consistencySection
-
-                    effortDensitySection
-
                     volumeBalanceSection
 
                     repRangeSection
-
-                    habitImpactSection
-
-                    correlationSection
 
                     mostImprovedSection
                 }
@@ -79,12 +69,6 @@ struct PerformanceLabView: View {
                 window: WorkoutAnalytics.rollingChangeWindow(for: workouts, windowDays: changeWindow) ?? fallbackWindow,
                 workouts: workouts
             )
-        }
-        .navigationDestination(item: $selectedHabitFactor) { kind in
-            HabitImpactDetailView(kind: kind, workouts: workouts, annotations: annotationsManager.annotations)
-        }
-        .navigationDestination(item: $selectedCorrelation) { insight in
-            CorrelationDetailView(insight: insight, workouts: workouts, healthData: healthManager.healthDataStore)
         }
     }
 
@@ -281,100 +265,6 @@ struct PerformanceLabView: View {
         }
     }
 
-    private var consistencySection: some View {
-        let issues = WorkoutAnalytics.consistencyIssues(for: workouts)
-        let grouped = Dictionary(grouping: issues, by: { $0.type })
-
-        return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Consistency")
-                .font(Theme.Typography.title2)
-                .foregroundColor(Theme.Colors.textPrimary)
-
-            if issues.isEmpty {
-                Text("issues 0")
-                    .font(Theme.Typography.body)
-                    .foregroundColor(Theme.Colors.textSecondary)
-                    .padding(Theme.Spacing.lg)
-                    .softCard(elevation: 2)
-            } else {
-                ForEach([ConsistencyIssueType.missedDay, .shortenedSession, .skippedExercises], id: \.self) { type in
-                    if let bucket = grouped[type] {
-                        ConsistencyIssueSection(title: typeTitle(type), issues: bucket, onWorkoutTap: { workoutId in
-                            if let workoutId, let workout = workouts.first(where: { $0.id == workoutId }) {
-                                selectedWorkout = workout
-                            }
-                        })
-                    }
-                }
-            }
-        }
-    }
-
-    private var effortDensitySection: some View {
-        let series = WorkoutAnalytics.effortDensitySeries(for: workouts)
-        let topWorkouts = series.sorted { $0.value > $1.value }.prefix(5)
-
-        return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Density")
-                .font(Theme.Typography.title2)
-                .foregroundColor(Theme.Colors.textPrimary)
-
-            if series.isEmpty {
-                Text("density n 0")
-                    .font(Theme.Typography.body)
-                    .foregroundColor(Theme.Colors.textSecondary)
-                    .padding(Theme.Spacing.lg)
-                    .softCard(elevation: 2)
-            } else {
-                Chart(series) { point in
-                    LineMark(
-                        x: .value("Date", point.date),
-                        y: .value("Density", point.value)
-                    )
-                    .foregroundStyle(Theme.Colors.accent)
-                    PointMark(
-                        x: .value("Date", point.date),
-                        y: .value("Density", point.value)
-                    )
-                    .foregroundStyle(Theme.Colors.accent)
-                }
-                .frame(height: 180)
-                .padding(Theme.Spacing.lg)
-                .softCard(elevation: 2)
-
-                Text("Top Density")
-                    .font(Theme.Typography.title3)
-                    .foregroundColor(Theme.Colors.textPrimary)
-
-                ForEach(topWorkouts, id: \.workoutId) { point in
-                    if let workout = workouts.first(where: { $0.id == point.workoutId }) {
-                        Button {
-                            selectedWorkout = workout
-                        } label: {
-                            HStack {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(workout.name)
-                                        .font(Theme.Typography.headline)
-                                        .foregroundColor(Theme.Colors.textPrimary)
-                                    Text("\(formatDensity(point.value)) | \(workout.duration)")
-                                        .font(Theme.Typography.caption)
-                                        .foregroundColor(Theme.Colors.textSecondary)
-                                }
-                                Spacer()
-                                Image(systemName: "chevron.right")
-                                    .font(.caption)
-                                    .foregroundColor(Theme.Colors.textTertiary)
-                            }
-                            .padding(Theme.Spacing.lg)
-                            .softCard(elevation: 1)
-                        }
-                        .buttonStyle(PlainButtonStyle())
-                    }
-                }
-            }
-        }
-    }
-
     private var volumeBalanceSection: some View {
         let allTimeRange: DateInterval = {
             let now = Date()
@@ -434,100 +324,6 @@ struct PerformanceLabView: View {
         }
     }
 
-    private var habitImpactSection: some View {
-        let insights = WorkoutAnalytics.habitImpactInsights(
-            workouts: workouts,
-            annotations: annotationsManager.annotations
-        )
-
-        return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Habit Factors")
-                .font(Theme.Typography.title2)
-                .foregroundColor(Theme.Colors.textPrimary)
-
-            if insights.isEmpty {
-                Text("check-ins 0")
-                    .font(Theme.Typography.body)
-                    .foregroundColor(Theme.Colors.textSecondary)
-                    .padding(Theme.Spacing.lg)
-                    .softCard(elevation: 2)
-            } else {
-                ForEach(insights) { insight in
-                    MetricTileButton(
-                        action: {
-                            selectedHabitFactor = insight.kind
-                        },
-                        content: {
-                            HStack(spacing: Theme.Spacing.md) {
-                                Circle()
-                                    .fill(insight.tint)
-                                    .frame(width: 10, height: 10)
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(insight.title)
-                                        .font(Theme.Typography.headline)
-                                        .foregroundColor(Theme.Colors.textPrimary)
-                                    Text(insight.detail)
-                                        .font(Theme.Typography.caption)
-                                        .foregroundColor(Theme.Colors.textSecondary)
-                                }
-                                Spacer()
-                                Text(insight.value)
-                                    .font(Theme.Typography.captionBold)
-                                    .foregroundColor(Theme.Colors.textPrimary)
-                            }
-                            .padding(Theme.Spacing.lg)
-                            .softCard(elevation: 1)
-                        }
-                    )
-                }
-            }
-        }
-    }
-
-    private var correlationSection: some View {
-        let insights = WorkoutAnalytics.correlationInsights(
-            workouts: workouts,
-            healthData: healthManager.healthDataStore
-        )
-
-        return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Correlations")
-                .font(Theme.Typography.title2)
-                .foregroundColor(Theme.Colors.textPrimary)
-
-            if insights.isEmpty {
-                Text("health samples 0")
-                    .font(Theme.Typography.body)
-                    .foregroundColor(Theme.Colors.textSecondary)
-                    .padding(Theme.Spacing.lg)
-                    .softCard(elevation: 2)
-            } else {
-                ForEach(insights) { insight in
-                    MetricTileButton(
-                        action: {
-                            selectedCorrelation = insight
-                        },
-                        content: {
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text(insight.title)
-                                    .font(Theme.Typography.headline)
-                                    .foregroundColor(Theme.Colors.textPrimary)
-                                Text(insight.detail)
-                                    .font(Theme.Typography.caption)
-                                    .foregroundColor(Theme.Colors.textSecondary)
-                                Text("r=\(String(format: "%.2f", insight.correlation)) | n=\(insight.supportingCount)")
-                                    .font(Theme.Typography.caption)
-                                    .foregroundColor(Theme.Colors.textTertiary)
-                            }
-                            .padding(Theme.Spacing.lg)
-                            .softCard(elevation: 1)
-                        }
-                    )
-                }
-            }
-        }
-    }
-
     private var mostImprovedSection: some View {
         let improvements = WorkoutAnalytics.progressContributions(
             workouts: workouts,
@@ -576,18 +372,6 @@ struct PerformanceLabView: View {
         }
     }
 
-    private func typeTitle(_ type: ConsistencyIssueType) -> String {
-        switch type {
-        case .missedDay: return "Missed Days"
-        case .shortenedSession: return "Shortened Sessions"
-        case .skippedExercises: return "Skipped Exercises"
-        }
-    }
-
-    private func formatDensity(_ value: Double) -> String {
-        String(format: "%.1f", value)
-    }
-
     private func formatDelta(_ value: Double) -> String {
         let sign = value >= 0 ? "+" : ""
         return "\(sign)\(Int(value))"
@@ -623,46 +407,6 @@ private struct ChangeMetricCard: View {
             if value >= 1000 { return String(format: "%.1fk", value / 1000) }
         }
         return String(format: "%.1f", value)
-    }
-}
-
-private struct ConsistencyIssueSection: View {
-    let title: String
-    let issues: [ConsistencyIssue]
-    let onWorkoutTap: (UUID?) -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text(title)
-                .font(Theme.Typography.headline)
-                .foregroundColor(Theme.Colors.textPrimary)
-
-            ForEach(issues.prefix(4)) { issue in
-                Button {
-                    onWorkoutTap(issue.workoutId)
-                } label: {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(issue.title)
-                                .font(Theme.Typography.subheadline)
-                                .foregroundColor(Theme.Colors.textPrimary)
-                            Text(issue.detail)
-                                .font(Theme.Typography.caption)
-                                .foregroundColor(Theme.Colors.textSecondary)
-                        }
-                        Spacer()
-                        if issue.workoutId != nil {
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundColor(Theme.Colors.textTertiary)
-                        }
-                    }
-                    .padding(Theme.Spacing.lg)
-                    .softCard(elevation: 1)
-                }
-                .buttonStyle(PlainButtonStyle())
-            }
-        }
     }
 }
 

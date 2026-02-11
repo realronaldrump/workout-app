@@ -13,7 +13,6 @@ struct HealthDashboardView: View {
     @State private var selectedDetailKind: HealthMetricKind?
     @State private var selectedWorkout: Workout?
     @State private var showingWorkoutsInRange = false
-    @State private var selectedRecoverySection: RecoveryDetailSection?
     @State private var showingCustomRange = false
     @State private var customRange: DateInterval = {
         let end = Date()
@@ -67,10 +66,6 @@ struct HealthDashboardView: View {
     private var previousWorkouts: [Workout] {
         guard let previousRange else { return [] }
         return allWorkouts.filter { previousRange.contains($0.date) }
-    }
-
-    private var currentHealthDataStore: [UUID: WorkoutHealthData] {
-        Dictionary(uniqueKeysWithValues: currentHealthData.map { ($0.workoutId, $0) })
     }
 
     private var rangeLabel: String {
@@ -143,14 +138,6 @@ struct HealthDashboardView: View {
             }
             .navigationDestination(item: $selectedWorkout) { workout in
                 WorkoutDetailView(workout: workout)
-            }
-            .navigationDestination(item: $selectedRecoverySection) { section in
-                RecoveryDetailView(
-                    rangeLabel: rangeLabel,
-                    workouts: currentWorkouts,
-                    healthData: currentHealthDataStore,
-                    initialSection: section
-                )
             }
             .navigationDestination(isPresented: $showingWorkoutsInRange) {
                 WorkoutsInRangeView(workouts: currentWorkouts, rangeLabel: rangeLabel)
@@ -379,8 +366,6 @@ struct HealthDashboardView: View {
 
     private func handleHighlightTap(_ card: HighlightCardModel) {
         switch card.category {
-        case .recovery:
-            selectedRecoverySection = .score
         case .sleep:
             selectedDetailKind = .sleep
         case .activity:
@@ -412,8 +397,6 @@ struct HealthDashboardView: View {
             selectedDetailKind = .cardio
         case .body:
             selectedDetailKind = .body
-        case .recovery:
-            selectedRecoverySection = card.title.contains("Debt") ? .debt : .score
         case .all:
             break
         }
@@ -430,7 +413,7 @@ struct HealthDashboardView: View {
                 .font(Theme.Typography.title2)
                 .foregroundStyle(Theme.Colors.textPrimary)
 
-            Text("Connect Apple Health to see recovery, sleep, cardio, and body trends.")
+            Text("Connect Apple Health to see sleep, cardio, activity, heart rate, and body trends.")
                 .font(Theme.Typography.body)
                 .foregroundStyle(Theme.Colors.textSecondary)
                 .multilineTextAlignment(.center)
@@ -458,23 +441,23 @@ struct HealthDashboardView: View {
     // MARK: - Models
 
     private var highlightCards: [HighlightCardModel] {
-        let recovery = calculateRecoveryScore(from: currentHealthData)
+        let avgWorkoutHR = average(currentHealthData.compactMap { $0.avgHeartRate })
         let avgSleep = average(currentHealthData.compactMap { $0.sleepSummary?.totalHours })
         let avgEnergy = average(currentHealthData.compactMap { $0.dailyActiveEnergy })
 
         return [
             HighlightCardModel(
-                title: "Recovery Status",
-                value: recovery.map { "\($0.score)%" } ?? "--",
-                subtitle: recovery?.message ?? "Sync more sessions to calculate",
-                icon: "waveform.path.ecg",
-                tint: recovery?.color ?? Theme.Colors.textTertiary,
-                category: .recovery
+                title: "Avg Workout HR",
+                value: avgWorkoutHR.map { "\(Int($0)) bpm" } ?? "--",
+                subtitle: "Average workout heart rate in this range",
+                icon: "heart.fill",
+                tint: Theme.Colors.error,
+                category: .heart
             ),
             HighlightCardModel(
                 title: "Avg Sleep",
                 value: avgSleep.map { String(format: "%.1fh", $0) } ?? "--",
-                subtitle: "Rest quality in this range",
+                subtitle: "Average sleep duration in this range",
                 icon: "moon.zzz.fill",
                 tint: Theme.Colors.accentSecondary,
                 category: .sleep
@@ -482,7 +465,7 @@ struct HealthDashboardView: View {
             HighlightCardModel(
                 title: "Daily Energy",
                 value: avgEnergy.map { "\(Int($0)) cal" } ?? "--",
-                subtitle: "Average active energy",
+                subtitle: "Average active energy in this range",
                 icon: "flame.fill",
                 tint: Theme.Colors.warning,
                 category: .activity
@@ -503,13 +486,6 @@ struct HealthDashboardView: View {
         let peakHR = currentHealthData.compactMap { $0.maxHeartRate }.max()
         let prevPeakHR = previousHealthData.compactMap { $0.maxHeartRate }.max()
 
-        let recoveryDebt = WorkoutAnalytics.recoveryDebtSnapshot(
-            workouts: currentWorkouts,
-            healthData: currentHealthDataStore
-        )
-
-        let recovery = calculateRecoveryScore(from: currentHealthData)
-
         return [
             MetricSummaryModel(
                 title: "Workouts",
@@ -523,7 +499,7 @@ struct HealthDashboardView: View {
             MetricSummaryModel(
                 title: "Avg Workout HR",
                 value: avgHR.map { "\(Int($0)) bpm" } ?? "--",
-                subtitle: "Lower can mean better recovery",
+                subtitle: "Average heart rate during workouts",
                 icon: "heart.fill",
                 tint: Theme.Colors.error,
                 delta: deltaText(current: avgHR, previous: prevAvgHR, lowerIsBetter: true),
@@ -546,24 +522,6 @@ struct HealthDashboardView: View {
                 tint: Theme.Colors.accentSecondary,
                 delta: deltaText(current: peakHR, previous: prevPeakHR, lowerIsBetter: true),
                 category: .heart
-            ),
-            MetricSummaryModel(
-                title: "Recovery Debt",
-                value: recoveryDebt.map { "\($0.score)" } ?? "--",
-                subtitle: recoveryDebt?.label ?? "Not enough data yet",
-                icon: "sparkles",
-                tint: recoveryDebt?.tint ?? Theme.Colors.textTertiary,
-                delta: nil,
-                category: .recovery
-            ),
-            MetricSummaryModel(
-                title: "Recovery Score",
-                value: recovery.map { "\($0.score)%" } ?? "--",
-                subtitle: recovery?.label ?? "Sync more sessions",
-                icon: "figure.cooldown",
-                tint: recovery?.color ?? Theme.Colors.textTertiary,
-                delta: nil,
-                category: .recovery
             )
         ]
     }
@@ -582,7 +540,7 @@ struct HealthDashboardView: View {
             return HealthMetricDetail(
                 kind: kind,
                 summary: "Avg and peak heart rate across workouts.",
-                explanation: "Lower average heart rates during similar workouts can signal improved efficiency or better recovery.",
+                explanation: "Each point is taken from the workout's synced heart rate summary (average and max).",
                 series: [
                     HealthMetricSeries(label: "Avg HR", unit: "bpm", color: .red, points: avgPoints),
                     HealthMetricSeries(label: "Max HR", unit: "bpm", color: .pink.opacity(0.7), points: maxPoints)
@@ -600,7 +558,7 @@ struct HealthDashboardView: View {
             return HealthMetricDetail(
                 kind: kind,
                 summary: "Total sleep hours leading into workouts.",
-                explanation: "Aim for consistent sleep. Spikes and dips often show up in recovery and performance.",
+                explanation: "Sleep points reflect total sleep time captured in Apple Health leading into workout days.",
                 series: [
                     HealthMetricSeries(label: "Sleep", unit: "h", color: Theme.Colors.accentSecondary, points: sleepPoints)
                 ],
@@ -632,7 +590,7 @@ struct HealthDashboardView: View {
             return HealthMetricDetail(
                 kind: kind,
                 summary: "Daily energy vs training output.",
-                explanation: "When energy drops but training load rises, recovery can lag. Balance the two.",
+                explanation: "Load Ratio is workout volume divided by daily active energy to normalize output across days.",
                 series: [
                     HealthMetricSeries(label: "Active Energy", unit: "cal", color: .orange, points: energyPoints),
                     HealthMetricSeries(label: "Load Ratio", unit: "ratio", color: Theme.Colors.accent, points: ratioPoints)
@@ -654,8 +612,8 @@ struct HealthDashboardView: View {
 
             return HealthMetricDetail(
                 kind: kind,
-                summary: "Cardio fitness and recovery signals.",
-                explanation: "Rising VO2 Max and faster heart rate recovery usually signal improved aerobic fitness.",
+                summary: "Cardio-related metrics from Apple Health near workout days.",
+                explanation: "VO2 Max, heart rate recovery, and walking heart rate are commonly used to track aerobic trends.",
                 series: [
                     HealthMetricSeries(label: "VO2 Max", unit: "ml/kg/min", color: Theme.Colors.success, points: vo2Points),
                     HealthMetricSeries(label: "HR Recovery", unit: "bpm", color: Theme.Colors.accentSecondary, points: recoveryPoints),
@@ -705,7 +663,7 @@ struct HealthDashboardView: View {
             return HealthMetricDetail(
                 kind: kind,
                 summary: "Body composition trends near workout days.",
-                explanation: "Look for gradual, steady shifts rather than daily spikes.",
+                explanation: "Weight and body fat points come from Apple Health samples near workout days and can vary with measurement timing.",
                 series: [
                     HealthMetricSeries(label: "Weight", unit: "lb", color: Theme.Colors.accent, points: weightPoints),
                     HealthMetricSeries(label: "Body Fat", unit: "%", color: Theme.Colors.warning, points: bodyFatPoints)
@@ -741,49 +699,6 @@ struct HealthDashboardView: View {
             return HealthTrendPoint(date: item.workoutDate, value: value, label: label)
         }
         .sorted { $0.date < $1.date }
-    }
-
-    private struct RecoveryScoreSnapshot {
-        let score: Int
-        let label: String
-        let message: String
-        let color: Color
-    }
-
-    private func calculateRecoveryScore(from data: [WorkoutHealthData]) -> RecoveryScoreSnapshot? {
-        let recentData = Array(data.sorted { $0.workoutDate > $1.workoutDate }.prefix(3))
-        guard !recentData.isEmpty else { return nil }
-
-        let avgHRs = recentData.compactMap { $0.avgHeartRate }
-        guard !avgHRs.isEmpty else { return nil }
-        let overallAvgHR = avgHRs.reduce(0, +) / Double(avgHRs.count)
-
-        var score: Int
-        var label: String
-        var message: String
-        var color: Color
-
-        if overallAvgHR < 120 {
-            score = 90
-            color = Theme.Colors.success
-            label = "Ready"
-        } else if overallAvgHR < 140 {
-            score = 75
-            color = Theme.Colors.success
-            label = "Solid"
-        } else if overallAvgHR < 155 {
-            score = 60
-            color = Theme.Colors.warning
-            label = "Caution"
-        } else {
-            score = 45
-            color = Theme.Colors.error
-            label = "Take it easy"
-        }
-
-        message = "Avg HR \(Int(overallAvgHR)) bpm • \(avgHRs.count) sessions"
-
-        return RecoveryScoreSnapshot(score: score, label: label, message: message, color: color)
     }
 
     private func average(_ values: [Double]) -> Double? {
@@ -845,7 +760,6 @@ struct HealthDashboardView: View {
 
 enum HealthCategory: String, CaseIterable, Identifiable {
     case all
-    case recovery
     case heart
     case sleep
     case activity
@@ -858,7 +772,6 @@ enum HealthCategory: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .all: return "All"
-        case .recovery: return "Recovery"
         case .heart: return "Heart"
         case .sleep: return "Sleep"
         case .activity: return "Activity"
@@ -871,7 +784,6 @@ enum HealthCategory: String, CaseIterable, Identifiable {
     var icon: String {
         switch self {
         case .all: return "square.grid.2x2"
-        case .recovery: return "waveform.path.ecg"
         case .heart: return "heart.fill"
         case .sleep: return "moon.zzz.fill"
         case .activity: return "flame.fill"
@@ -894,7 +806,7 @@ enum HealthMetricKind: String, Identifiable, Hashable {
     var title: String {
         switch self {
         case .heartRate: return "Heart Rate Trends"
-        case .sleep: return "Sleep & Recovery"
+        case .sleep: return "Sleep"
         case .activity: return "Activity vs Training"
         case .cardio: return "Cardio Progress"
         case .body: return "Body Composition"

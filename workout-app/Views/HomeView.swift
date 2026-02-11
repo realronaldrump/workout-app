@@ -446,8 +446,6 @@ struct HomeView: View {
             return Theme.Colors.success
         case .baseline:
             return Theme.Colors.accentSecondary
-        default:
-            return Theme.Colors.accent
         }
     }
 }

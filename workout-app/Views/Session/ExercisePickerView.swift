@@ -89,7 +89,8 @@ struct ExercisePickerView: View {
     }
 
     private var allExercises: [String] {
-        let names = dataManager.workouts.flatMap { $0.exercises.map(\.name) }
+        // Include a curated default catalog so the picker is useful before any workouts exist.
+        let names = dataManager.workouts.flatMap { $0.exercises.map(\.name) } + ExerciseMetadataManager.defaultExerciseNames
         let unique = Set(names.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty })
         return unique.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
     }

@@ -180,6 +180,10 @@ private struct StreakBar: View {
     let daysToShow: Int
     let dateRange: DateInterval?
 
+    // Intentionally uses one-letter day labels even though some repeat (S/T).
+    // Use indices in `ForEach` to keep SwiftUI identity stable.
+    private static let weekdaySymbols = ["S", "M", "T", "W", "T", "F", "S"]
+
     private var calendar: Calendar {
         var calendar = Calendar.current
         calendar.firstWeekday = 1 // Sunday
@@ -232,8 +236,8 @@ private struct StreakBar: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             // Day labels
             HStack(spacing: 0) {
-                ForEach(["S", "M", "T", "W", "T", "F", "S"], id: \.self) { day in
-                    Text(day)
+                ForEach(Self.weekdaySymbols.indices, id: \.self) { index in
+                    Text(Self.weekdaySymbols[index])
                         .font(.system(size: 10, weight: .medium))
                         .foregroundColor(Theme.Colors.textTertiary)
                         .frame(maxWidth: .infinity)

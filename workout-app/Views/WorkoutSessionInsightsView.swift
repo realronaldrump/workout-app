@@ -102,7 +102,6 @@ struct WorkoutSessionInsightsView: View {
     }
 
     private var statsSection: some View {
-        let density = WorkoutAnalytics.effortDensity(for: workout)
         let minutes = WorkoutAnalytics.durationMinutes(from: workout.duration)
 
         return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
@@ -114,13 +113,12 @@ struct WorkoutSessionInsightsView: View {
                 HStack(spacing: Theme.Spacing.md) {
                     MetricStatPill(title: "Duration", value: workout.duration)
                     MetricStatPill(title: "Volume", value: formatVolume(workout.totalVolume))
-                    MetricStatPill(title: "Density", value: String(format: "%.1f", density))
+                    MetricStatPill(title: "Minutes", value: minutes > 0 ? "\(Int(round(minutes)))" : "--")
                 }
 
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: Theme.Spacing.md) {
                     MetricStatPill(title: "Duration", value: workout.duration)
                     MetricStatPill(title: "Volume", value: formatVolume(workout.totalVolume))
-                    MetricStatPill(title: "Density", value: String(format: "%.1f", density))
                     MetricStatPill(title: "Minutes", value: minutes > 0 ? "\(Int(round(minutes)))" : "--")
                 }
             }

@@ -192,14 +192,14 @@ struct EmptyInsightsView: View {
 
                 InsightCardView(insight: Insight(
                     id: UUID(),
-                    type: .plateau,
-                    title: "Plateau",
-                    message: "Shoulder Press max 50 lbs | delta 0 | n=4",
+                    type: .strengthGain,
+                    title: "1RM",
+                    message: "Shoulder Press 55 lbs | delta +5",
                     exerciseName: "Shoulder Press",
                     date: Date(),
                     priority: 6,
                     actionLabel: "History",
-                    metric: 50
+                    metric: 55
                 ))
             }
             .padding()
