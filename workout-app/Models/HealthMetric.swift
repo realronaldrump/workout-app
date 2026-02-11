@@ -290,7 +290,14 @@ enum HealthMetric: String, CaseIterable, Identifiable {
 
     var supportsSamples: Bool {
         switch self {
-        case .restingHeartRate, .walkingHeartRateAverage, .heartRateVariability, .bloodOxygen, .respiratoryRate, .bodyTemperature:
+        case .restingHeartRate,
+             .walkingHeartRateAverage,
+             .heartRateVariability,
+             .bloodOxygen,
+             .respiratoryRate,
+             .bodyTemperature,
+             .bodyMass,
+             .bodyFatPercentage:
             return true
         default:
             return false
