@@ -14,7 +14,6 @@ struct WorkoutDetailView: View {
     @State private var quickStartExercise: String?
     @State private var showingSessionInsights = false
     @State private var showingWorkoutHealthInsights = false
-    @State private var showingFatigueInsights = false
     @State private var showingEdit = false
 
     private var resolvedWorkout: Workout {
@@ -96,17 +95,6 @@ struct WorkoutDetailView: View {
                         healthDataSection
                     }
 
-                    WorkoutAnnotationCard(workout: workout)
-
-                    MetricTileButton(
-                        action: {
-                            showingFatigueInsights = true
-                        },
-                        content: {
-                            FatigueLensView(summary: fatigueSummary)
-                        }
-                    )
-
                     // Exercises list
                     VStack(alignment: .leading, spacing: 16) {
                         Text("Exercises")
@@ -180,9 +168,6 @@ struct WorkoutDetailView: View {
         .navigationDestination(isPresented: $showingWorkoutHealthInsights) {
             WorkoutHealthInsightsView(workout: workout)
         }
-        .navigationDestination(isPresented: $showingFatigueInsights) {
-            FatigueLensDetailView(workout: workout, summary: fatigueSummary)
-        }
     }
 
     // MARK: - Health Data Section
@@ -209,15 +194,10 @@ struct WorkoutDetailView: View {
                         HealthDataView(healthData: data)
                     }
                 )
-                RecoveryInsightCard(healthData: data)
             } else {
                 noHealthDataCard
             }
         }
-    }
-
-    private var fatigueSummary: FatigueSummary {
-        WorkoutAnalytics.fatigueSummary(for: resolvedWorkout, allWorkouts: dataManager.workouts)
     }
 
     private var syncButton: some View {
@@ -447,121 +427,6 @@ struct ExerciseCard: View {
             return String(format: "%.1fk", volume / 1000)
         }
         return "\(Int(volume))"
-    }
-}
-
-struct RecoveryInsightCard: View {
-    let healthData: WorkoutHealthData
-    @State private var didTriggerHaptic = false
-
-    private enum RecoveryGrade: String {
-        case gradeA = "A"
-        case b = "B"
-        case gradeC = "C"
-
-        var statusLabel: String {
-            switch self {
-            case .gradeA: return "Ready"
-            case .b: return "Caution"
-            case .gradeC: return "Needs recovery"
-            }
-        }
-
-        var explanation: String {
-            switch self {
-            case .gradeA:
-                return "A = steady recovery signals for this workout."
-            case .b:
-                return "B = some fatigue signal; consider a lighter next session."
-            case .gradeC:
-                return "C = elevated fatigue signal (high resting HR or low HRV)."
-            }
-        }
-    }
-
-    private struct RecoveryInsightSnapshot {
-        let grade: RecoveryGrade
-        let message: String
-        let tint: Color
-        let icon: String
-    }
-
-    private var insight: RecoveryInsightSnapshot {
-        let hrv = Int(healthData.avgHRV ?? 0)
-        let resting = Int(healthData.restingHeartRate ?? 0)
-        let workload = Int(healthData.avgHeartRate ?? 0)
-        let message = "hrv \(hrv) ms | rhr \(resting) bpm | avgHR \(workload) bpm"
-
-        if resting > 70 || hrv < 35 {
-            return RecoveryInsightSnapshot(
-                grade: .gradeC,
-                message: message,
-                tint: Theme.Colors.warning,
-                icon: "bed.double.fill"
-            )
-        }
-
-        if workload > 150 {
-            return RecoveryInsightSnapshot(
-                grade: .b,
-                message: message,
-                tint: Theme.Colors.accentSecondary,
-                icon: "bolt.heart"
-            )
-        }
-
-        return RecoveryInsightSnapshot(
-            grade: .gradeA,
-            message: message,
-            tint: Theme.Colors.success,
-            icon: "checkmark.seal.fill"
-        )
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            HStack {
-                Image(systemName: insight.icon)
-                    .foregroundColor(insight.tint)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Recovery Grade")
-                        .font(Theme.Typography.headline)
-                        .foregroundColor(Theme.Colors.textPrimary)
-                    Text(insight.grade.statusLabel)
-                        .font(Theme.Typography.caption)
-                        .foregroundColor(Theme.Colors.textSecondary)
-                }
-
-                Spacer()
-
-                Text(insight.grade.rawValue)
-                    .font(Theme.Typography.headline)
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(
-                        Capsule()
-                            .fill(insight.tint)
-                    )
-            }
-
-            Text(insight.message)
-                .font(Theme.Typography.body)
-                .foregroundColor(Theme.Colors.textSecondary)
-
-            Text(insight.grade.explanation)
-                .font(Theme.Typography.caption)
-                .foregroundColor(Theme.Colors.textTertiary)
-        }
-        .padding(Theme.Spacing.lg)
-        .softCard(elevation: 2)
-        .onAppear {
-            if insight.grade == .gradeC, !didTriggerHaptic {
-                Haptics.notify(.warning)
-                didTriggerHaptic = true
-            }
-        }
     }
 }
 

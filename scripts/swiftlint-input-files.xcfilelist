@@ -45,7 +45,6 @@ $(SRCROOT)/workout-app/Views/Components/BrutalistSegmentedPicker.swift
 $(SRCROOT)/workout-app/Views/Components/CollapsibleSection.swift
 $(SRCROOT)/workout-app/Views/Components/ConsistencyView.swift
 $(SRCROOT)/workout-app/Views/Components/ExerciseBreakdownView.swift
-$(SRCROOT)/workout-app/Views/Components/FatigueLensView.swift
 $(SRCROOT)/workout-app/Views/Components/GymAssignmentCard.swift
 $(SRCROOT)/workout-app/Views/Components/GymBadge.swift
 $(SRCROOT)/workout-app/Views/Components/GymSelectionSheet.swift
@@ -63,7 +62,6 @@ $(SRCROOT)/workout-app/Views/Components/RecentWorkoutsView.swift
 $(SRCROOT)/workout-app/Views/Components/ShareSheet.swift
 $(SRCROOT)/workout-app/Views/Components/VolumeProgressChart.swift
 $(SRCROOT)/workout-app/Views/Components/WordmarkLockup.swift
-$(SRCROOT)/workout-app/Views/Components/WorkoutAnnotationCard.swift
 $(SRCROOT)/workout-app/Views/Components/WorkoutHRChart.swift
 $(SRCROOT)/workout-app/Views/DashboardView.swift
 $(SRCROOT)/workout-app/Views/ExerciseDetailView.swift
@@ -72,20 +70,16 @@ $(SRCROOT)/workout-app/Views/ExerciseStatDetailView.swift
 $(SRCROOT)/workout-app/Views/ExerciseTagEditorView.swift
 $(SRCROOT)/workout-app/Views/ExerciseTaggingView.swift
 $(SRCROOT)/workout-app/Views/ExportWorkoutsView.swift
-$(SRCROOT)/workout-app/Views/FatigueLensDetailView.swift
 $(SRCROOT)/workout-app/Views/GymBulkAssignView.swift
 $(SRCROOT)/workout-app/Views/GymProfilesView.swift
 $(SRCROOT)/workout-app/Views/Health/DailyHealthDetailView.swift
 $(SRCROOT)/workout-app/Views/Health/HealthCategoryDetailView.swift
 $(SRCROOT)/workout-app/Views/Health/HealthHubView.swift
 $(SRCROOT)/workout-app/Views/Health/HealthMetricDetailView.swift
-$(SRCROOT)/workout-app/Views/Health/RecoveryDetailView.swift
 $(SRCROOT)/workout-app/Views/Health/WorkoutsInRangeView.swift
 $(SRCROOT)/workout-app/Views/HealthDashboardView.swift
 $(SRCROOT)/workout-app/Views/HomeView.swift
 $(SRCROOT)/workout-app/Views/InAppSplashView.swift
-$(SRCROOT)/workout-app/Views/Lab/CorrelationDetailView.swift
-$(SRCROOT)/workout-app/Views/Lab/HabitImpactDetailView.swift
 $(SRCROOT)/workout-app/Views/MainTabView.swift
 $(SRCROOT)/workout-app/Views/MetricDetailView.swift
 $(SRCROOT)/workout-app/Views/MuscleBalanceDetailView.swift

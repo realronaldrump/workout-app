@@ -6,7 +6,6 @@ struct MetricDetailView: View {
     let workouts: [Workout]
     var scrollTarget: MetricDetailScrollTarget?
 
-    @EnvironmentObject var healthManager: HealthKitManager
     @EnvironmentObject var dataManager: WorkoutDataManager
     @EnvironmentObject var annotationsManager: WorkoutAnnotationsManager
     @EnvironmentObject var gymProfilesManager: GymProfilesManager
@@ -30,10 +29,6 @@ struct MetricDetailView: View {
                             totalVolumeSection
                         case .avgDuration:
                             avgDurationSection
-                        case .effortDensity:
-                            effortDensitySection
-                        case .readiness:
-                            readinessSection
                         }
                     }
                     .padding(Theme.Spacing.xl)
@@ -219,103 +214,8 @@ struct MetricDetailView: View {
         }
     }
 
-    private var effortDensitySection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-            effortDensityChart
-
-            let values = effortDensityPoints.map(\.value)
-            if let avg = average(values), let min = values.min(), let max = values.max() {
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: Theme.Spacing.md) {
-                        MetricPill(title: "Average", value: formatDensity(avg))
-                        MetricPill(title: "Min", value: formatDensity(min))
-                        MetricPill(title: "Max", value: formatDensity(max))
-                    }
-
-                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: Theme.Spacing.md) {
-                        MetricPill(title: "Average", value: formatDensity(avg))
-                        MetricPill(title: "Min", value: formatDensity(min))
-                        MetricPill(title: "Max", value: formatDensity(max))
-                    }
-                }
-            }
-
-            let top = sortedWorkouts
-                .map { (workout: $0, density: WorkoutAnalytics.effortDensity(for: $0)) }
-                .sorted { $0.density > $1.density }
-                .prefix(10)
-
-            if !top.isEmpty {
-                Text("Top Density")
-                    .font(Theme.Typography.title3)
-                    .foregroundColor(Theme.Colors.textPrimary)
-
-                ForEach(Array(top), id: \.workout.id) { item in
-                    NavigationLink(destination: WorkoutDetailView(workout: item.workout)) {
-                        MetricWorkoutRow(
-                            workout: item.workout,
-                            subtitle: "\(formatDensity(item.density)) | \(item.workout.duration)"
-                        )
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-    }
-
-    private var readinessSection: some View {
-        let points = readinessPoints
-
-        return VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-            if points.isEmpty {
-                Text("health samples 0")
-                    .font(Theme.Typography.body)
-                    .foregroundColor(Theme.Colors.textSecondary)
-                    .padding(Theme.Spacing.lg)
-                    .softCard(elevation: 2)
-            } else {
-                Chart(points) { point in
-                    LineMark(
-                        x: .value("Date", point.date),
-                        y: .value("Readiness", point.score)
-                    )
-                    .foregroundStyle(Theme.Colors.accent)
-                    PointMark(
-                        x: .value("Date", point.date),
-                        y: .value("Readiness", point.score)
-                    )
-                    .foregroundStyle(Theme.Colors.accent)
-                }
-                .chartYScale(domain: 0...100)
-                .frame(height: 180)
-                .padding(Theme.Spacing.lg)
-                .softCard(elevation: 2)
-
-                ForEach(sortedWorkouts) { workout in
-                    if let readiness = WorkoutAnalytics.readinessScore(for: healthManager.getHealthData(for: workout.id)) {
-                        NavigationLink(destination: WorkoutDetailView(workout: workout)) {
-                            MetricWorkoutRow(
-                                workout: workout,
-                                subtitle: "Readiness \(Int(readiness)) | \(timeOfDayLabel(for: workout.date))"
-                            )
-                        }
-                        .buttonStyle(PlainButtonStyle())
-                    }
-                }
-            }
-        }
-    }
-
     private var sortedWorkouts: [Workout] {
         workouts.sorted { $0.date > $1.date }
-    }
-
-    private var readinessPoints: [ReadinessPoint] {
-        sortedWorkouts.compactMap { workout in
-            guard let score = WorkoutAnalytics.readinessScore(for: healthManager.getHealthData(for: workout.id)) else { return nil }
-            return ReadinessPoint(date: workout.date, score: score, label: "Readiness")
-        }
-        .sorted { $0.date < $1.date }
     }
 
     private var title: String {
@@ -324,8 +224,6 @@ struct MetricDetailView: View {
         case .streak: return "Streak"
         case .totalVolume: return "Total Volume"
         case .avgDuration: return "Avg Duration"
-        case .effortDensity: return "Effort Density"
-        case .readiness: return "Readiness"
         }
     }
 
@@ -340,10 +238,6 @@ struct MetricDetailView: View {
             return "sessions \(workouts.count) | total \(formatVolume(total))"
         case .avgDuration:
             return "sessions \(workouts.count)"
-        case .effortDensity:
-            return "sessions \(workouts.count)"
-        case .readiness:
-            return "health samples \(healthManager.healthDataStore.count)"
         }
     }
 
@@ -366,10 +260,6 @@ struct MetricDetailView: View {
             return String(format: "%.1fk", volume / 1000)
         }
         return "\(Int(volume))"
-    }
-
-    private func formatDensity(_ value: Double) -> String {
-        String(format: "%.1f", value)
     }
 
     private func average(_ values: [Double]) -> Double? {
@@ -456,13 +346,6 @@ private extension MetricDetailView {
             MetricPoint(date: workout.date, value: WorkoutAnalytics.durationMinutes(from: workout.duration))
         }
         .filter { $0.value > 0 }
-        .sorted { $0.date < $1.date }
-    }
-
-    var effortDensityPoints: [MetricPoint] {
-        sortedWorkouts.map { workout in
-            MetricPoint(date: workout.date, value: WorkoutAnalytics.effortDensity(for: workout))
-        }
         .sorted { $0.date < $1.date }
     }
 
@@ -604,47 +487,6 @@ private extension MetricDetailView {
                             AxisValueLabel {
                                 if let axisValue = value.as(Double.self) {
                                     Text(formatDurationMinutes(axisValue))
-                                }
-                            }
-                        }
-                    }
-                    .frame(height: 180)
-                }
-                .padding(Theme.Spacing.lg)
-                .softCard(elevation: 2)
-            }
-        }
-    }
-
-    var effortDensityChart: some View {
-        Group {
-            if effortDensityPoints.isEmpty {
-                EmptyChartCard(title: "Density Trend", message: "Not enough data to chart yet.")
-            } else {
-                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                    Text("Density Trend")
-                        .font(Theme.Typography.title3)
-                        .foregroundColor(Theme.Colors.textPrimary)
-
-                    Chart(effortDensityPoints) { point in
-                        LineMark(
-                            x: .value("Date", point.date),
-                            y: .value("Density", point.value)
-                        )
-                        .foregroundStyle(Theme.Colors.accent)
-                        .interpolationMethod(.catmullRom)
-                    }
-                    .chartXAxis {
-                        AxisMarks(values: .automatic(desiredCount: 4)) { _ in
-                            AxisValueLabel(format: .dateTime.month().day())
-                        }
-                    }
-                    .chartYAxis {
-                        AxisMarks { value in
-                            AxisGridLine()
-                            AxisValueLabel {
-                                if let axisValue = value.as(Double.self) {
-                                    Text(formatDensity(axisValue))
                                 }
                             }
                         }

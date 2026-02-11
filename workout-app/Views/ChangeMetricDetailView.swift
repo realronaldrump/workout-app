@@ -189,8 +189,6 @@ struct ChangeMetricDetailView: View {
                 volumeSupporting
             case "Avg Duration":
                 durationSupporting
-            case "Effort Density":
-                densitySupporting
             default:
                 Text("No supporting view for this metric.")
                     .font(Theme.Typography.body)
@@ -358,45 +356,6 @@ struct ChangeMetricDetailView: View {
         }
     }
 
-    private var densitySupporting: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            let top = currentWorkouts
-                .map { (workout: $0, density: WorkoutAnalytics.effortDensity(for: $0)) }
-                .sorted { $0.density > $1.density }
-                .prefix(10)
-
-            if top.isEmpty {
-                Text("No density data in this window.")
-                    .font(Theme.Typography.body)
-                    .foregroundStyle(Theme.Colors.textSecondary)
-                    .padding(Theme.Spacing.lg)
-                    .softCard(elevation: 1)
-            } else {
-                ForEach(Array(top), id: \.workout.id) { item in
-                    NavigationLink(destination: WorkoutDetailView(workout: item.workout)) {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(item.workout.name)
-                                    .font(Theme.Typography.headline)
-                                    .foregroundStyle(Theme.Colors.textPrimary)
-                                Text("density \(String(format: "%.1f", item.density))")
-                                    .font(Theme.Typography.caption)
-                                    .foregroundStyle(Theme.Colors.textSecondary)
-                            }
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundStyle(Theme.Colors.textTertiary)
-                        }
-                        .padding(Theme.Spacing.lg)
-                        .softCard(elevation: 1)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-    }
-
     private var chartPoints: [ChartPoint] {
         switch metric.title {
         case "Sessions":
@@ -405,8 +364,6 @@ struct ChangeMetricDetailView: View {
             return seriesPoints(from: workouts, value: { $0.totalVolume })
         case "Avg Duration":
             return seriesPoints(from: workouts, value: { WorkoutAnalytics.durationMinutes(from: $0.duration) })
-        case "Effort Density":
-            return seriesPoints(from: workouts, value: { WorkoutAnalytics.effortDensity(for: $0) })
         default:
             return []
         }
@@ -464,8 +421,6 @@ struct ChangeMetricDetailView: View {
             return formatVolume(value)
         case "Avg Duration":
             return formatDurationMinutes(value)
-        case "Effort Density":
-            return String(format: "%.1f", value)
         default:
             return String(format: "%.1f", value)
         }

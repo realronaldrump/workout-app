@@ -194,25 +194,25 @@ enum SampleData {
         ),
         Insight(
             id: UUID(),
-            type: .recommendation,
-            title: "Readiness",
-            message: "hrv 42 ms | rhr 58 bpm",
-            exerciseName: nil,
+            type: .strengthGain,
+            title: "1RM",
+            message: "Bench Press 215 lbs | delta +5",
+            exerciseName: "Bench Press",
             date: workouts.first?.date ?? Date(),
             priority: 7,
-            actionLabel: nil,
-            metric: 42
+            actionLabel: "Trend",
+            metric: 215
         ),
         Insight(
             id: UUID(),
-            type: .plateau,
-            title: "Plateau",
-            message: "Lat Pulldown max 150 lbs | delta 0 | n=4",
+            type: .baseline,
+            title: "New Equipment Baseline",
+            message: "Lat Pulldown | Downtown Gym",
             exerciseName: "Lat Pulldown",
             date: workouts.last?.date ?? Date(),
             priority: 6,
             actionLabel: "History",
-            metric: 150
+            metric: nil
         )
     ]
 

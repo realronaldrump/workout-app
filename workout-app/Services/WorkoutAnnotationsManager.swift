@@ -6,6 +6,8 @@ final class WorkoutAnnotationsManager: ObservableObject {
     @Published private(set) var annotations: [UUID: WorkoutAnnotation] = [:]
 
     private let fileName = "workout_annotations.json"
+    private let userDefaults = UserDefaults.standard
+    private let migrationFlagKey = "workout_annotations_migrated_v2"
 
     init() {
         load()
@@ -15,45 +17,11 @@ final class WorkoutAnnotationsManager: ObservableObject {
         annotations[workoutId]
     }
 
-    func upsertAnnotation(
-        for workoutId: UUID,
-        stress: StressLevel?,
-        soreness: SorenessLevel?,
-        caffeine: CaffeineIntake?,
-        mood: MoodLevel?
-    ) {
-        let existing = annotations[workoutId]
-        let updated = WorkoutAnnotation(
-            id: existing?.id ?? UUID(),
-            workoutId: workoutId,
-            createdAt: existing?.createdAt ?? Date(),
-            gymProfileId: existing?.gymProfileId,
-            stress: stress,
-            soreness: soreness,
-            caffeine: caffeine,
-            mood: mood
-        )
-        annotations[workoutId] = updated
-        persist()
-    }
-
     func setGym(for workoutId: UUID, gymProfileId: UUID?) {
-        let existing = annotations[workoutId]
-        let updated = WorkoutAnnotation(
-            id: existing?.id ?? UUID(),
-            workoutId: workoutId,
-            createdAt: existing?.createdAt ?? Date(),
-            gymProfileId: gymProfileId,
-            stress: existing?.stress,
-            soreness: existing?.soreness,
-            caffeine: existing?.caffeine,
-            mood: existing?.mood
-        )
-
-        if shouldRemoveAnnotation(updated) {
+        if gymProfileId == nil {
             annotations.removeValue(forKey: workoutId)
         } else {
-            annotations[workoutId] = updated
+            annotations[workoutId] = WorkoutAnnotation(workoutId: workoutId, gymProfileId: gymProfileId)
         }
         persist()
     }
@@ -61,38 +29,11 @@ final class WorkoutAnnotationsManager: ObservableObject {
     func setGym(for workoutIds: [UUID], gymProfileId: UUID?) {
         guard !workoutIds.isEmpty else { return }
         for workoutId in workoutIds {
-            let existing = annotations[workoutId]
-            let updated = WorkoutAnnotation(
-                id: existing?.id ?? UUID(),
-                workoutId: workoutId,
-                createdAt: existing?.createdAt ?? Date(),
-                gymProfileId: gymProfileId,
-                stress: existing?.stress,
-                soreness: existing?.soreness,
-                caffeine: existing?.caffeine,
-                mood: existing?.mood
-            )
-
-            if shouldRemoveAnnotation(updated) {
+            if gymProfileId == nil {
                 annotations.removeValue(forKey: workoutId)
             } else {
-                annotations[workoutId] = updated
+                annotations[workoutId] = WorkoutAnnotation(workoutId: workoutId, gymProfileId: gymProfileId)
             }
-        }
-        persist()
-    }
-
-    func clearNonGymFields(for workoutId: UUID) {
-        guard var existing = annotations[workoutId] else { return }
-        existing.stress = nil
-        existing.soreness = nil
-        existing.caffeine = nil
-        existing.mood = nil
-
-        if shouldRemoveAnnotation(existing) {
-            annotations.removeValue(forKey: workoutId)
-        } else {
-            annotations[workoutId] = existing
         }
         persist()
     }
@@ -105,19 +46,8 @@ final class WorkoutAnnotationsManager: ObservableObject {
         guard !affectedIds.isEmpty else { return }
 
         for workoutId in affectedIds {
-            guard var existing = annotations[workoutId] else { continue }
-            existing.gymProfileId = nil
-            if shouldRemoveAnnotation(existing) {
-                annotations.removeValue(forKey: workoutId)
-            } else {
-                annotations[workoutId] = existing
-            }
+            annotations.removeValue(forKey: workoutId)
         }
-        persist()
-    }
-
-    func removeAnnotation(for workoutId: UUID) {
-        annotations.removeValue(forKey: workoutId)
         persist()
     }
 
@@ -131,7 +61,6 @@ final class WorkoutAnnotationsManager: ObservableObject {
         let url = fileURL()
         Task.detached(priority: .utility) {
             let encoder = JSONEncoder()
-            encoder.dateEncodingStrategy = .iso8601
             do {
                 let data = try encoder.encode(entries)
                 try data.write(to: url, options: [.atomic, .completeFileProtection])
@@ -147,19 +76,20 @@ final class WorkoutAnnotationsManager: ObservableObject {
         do {
             let data = try Data(contentsOf: url)
             let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
             let entries = try decoder.decode([WorkoutAnnotation].self, from: data)
-            annotations = Dictionary(uniqueKeysWithValues: entries.map { ($0.workoutId, $0) })
+            // Purge any legacy habit-only annotations and keep only gym assignments.
+            let filtered = entries.filter { $0.gymProfileId != nil }
+            annotations = Dictionary(uniqueKeysWithValues: filtered.map { ($0.workoutId, $0) })
+
+            // One-time rewrite to drop legacy keys from disk.
+            if !userDefaults.bool(forKey: migrationFlagKey) {
+                userDefaults.set(true, forKey: migrationFlagKey)
+                persist()
+            }
         } catch {
             print("Failed to load annotations: \(error)")
         }
     }
 
-    private func shouldRemoveAnnotation(_ annotation: WorkoutAnnotation) -> Bool {
-        return annotation.gymProfileId == nil &&
-            annotation.stress == nil &&
-            annotation.soreness == nil &&
-            annotation.caffeine == nil &&
-            annotation.mood == nil
-    }
+    // No-op placeholder: legacy code used to carry non-gym fields. Left intentionally blank.
 }

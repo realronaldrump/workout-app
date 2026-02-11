@@ -14,6 +14,11 @@ struct ExerciseDetailView: View {
     @State private var selectedChart = ChartType.weight
     @State private var selectedGymScope: GymScope = .all
     @State private var showingLocationPicker = false
+    @State private var selectedProgressRange: ProgressRange = .allTime
+    @State private var customProgressStartDate = Date()
+    @State private var customProgressEndDate = Date()
+    @State private var showingCustomProgressRangePicker = false
+    @State private var didInitializeProgressRange = false
 
     enum ChartType: String, CaseIterable, Hashable {
         case weight = "Max Weight"
@@ -29,6 +34,39 @@ struct ExerciseDetailView: View {
         case all
         case unassigned
         case gym(UUID)
+    }
+
+    enum ProgressRange: Hashable, CaseIterable {
+        case sixWeeks
+        case threeMonths
+        case sixMonths
+        case year
+        case allTime
+        case custom
+
+        var shortLabel: String {
+            switch self {
+            case .sixWeeks: return "6W"
+            case .threeMonths: return "3M"
+            case .sixMonths: return "6M"
+            case .year: return "1Y"
+            case .allTime: return "All"
+            case .custom: return "Custom"
+            }
+        }
+
+        var menuTitle: String {
+            switch self {
+            case .sixWeeks: return "Last 6 weeks"
+            case .threeMonths: return "Last 3 months"
+            case .sixMonths: return "Last 6 months"
+            case .year: return "Last year"
+            case .allTime: return "All time"
+            case .custom: return "Custom range"
+            }
+        }
+
+        static var presets: [ProgressRange] { [.sixWeeks, .threeMonths, .sixMonths, .year, .allTime] }
     }
 
     init(
@@ -133,6 +171,239 @@ struct ExerciseDetailView: View {
         }
     }
 
+    private var earliestScopedWorkoutDate: Date? {
+        scopedHistory.map(\.date).min()
+    }
+
+    private var progressChartHistory: [(date: Date, sets: [WorkoutSet])] {
+        guard let bounds = progressChartRangeBounds(for: selectedProgressRange) else { return scopedHistory }
+        return scopedHistory.filter { $0.date >= bounds.start && $0.date <= bounds.end }
+    }
+
+    private var progressRangeDetailLabel: String? {
+        guard !scopedHistory.isEmpty else { return nil }
+        guard let bounds = progressChartRangeBounds(for: selectedProgressRange) else { return nil }
+
+        let calendar = Calendar.current
+        let startYear = calendar.component(.year, from: bounds.start)
+        let endYear = calendar.component(.year, from: bounds.end)
+        let includeYear = selectedProgressRange == .allTime || selectedProgressRange == .year || selectedProgressRange == .custom || startYear != endYear
+
+        var style = Date.FormatStyle()
+            .month(.abbreviated)
+            .day()
+        if includeYear {
+            style = style.year()
+        }
+
+        let startText = bounds.start.formatted(style)
+        let endText = bounds.end.formatted(style)
+        if startText == endText { return startText }
+        return "\(startText) - \(endText)"
+    }
+
+    private var progressChartRangeControls: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            progressRangeMenu
+
+            if let label = progressRangeDetailLabel {
+                Text(label)
+                    .font(Theme.Typography.caption)
+                    .foregroundColor(Theme.Colors.textTertiary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+        }
+    }
+
+    private var progressRangeMenu: some View {
+        Menu {
+            ForEach(ProgressRange.presets, id: \.self) { range in
+                Button {
+                    selectedProgressRange = range
+                    Haptics.selection()
+                } label: {
+                    if selectedProgressRange == range {
+                        Label(range.menuTitle, systemImage: "checkmark")
+                    } else {
+                        Text(range.menuTitle)
+                    }
+                }
+            }
+
+            Divider()
+
+            Button {
+                openCustomProgressRangePicker()
+            } label: {
+                if selectedProgressRange == .custom {
+                    Label("Edit Custom Range…", systemImage: "slider.horizontal.3")
+                } else {
+                    Text("Custom Range…")
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "calendar")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(Theme.Colors.accent)
+
+                Text("Range \(selectedProgressRange.shortLabel)")
+                    .font(Theme.Typography.captionBold)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(Theme.Colors.textTertiary)
+            }
+            .padding(.horizontal, Theme.Spacing.md)
+            .padding(.vertical, Theme.Spacing.sm)
+            .frame(minHeight: 44)
+            .background(Capsule().fill(Theme.Colors.surface))
+            .overlay(
+                Capsule()
+                    .strokeBorder(Theme.Colors.border, lineWidth: 2)
+            )
+            .shadow(
+                color: Color.black.opacity(Theme.Colors.shadowOpacity),
+                radius: 0,
+                x: 2,
+                y: 2
+            )
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .disabled(scopedHistory.isEmpty)
+        .accessibilityLabel("Chart date range")
+        .accessibilityValue(selectedProgressRange.menuTitle)
+    }
+
+    @ViewBuilder
+    private var progressChartCard: some View {
+        Group {
+            if scopedHistory.isEmpty {
+                progressChartPlaceholder(message: "No sessions yet", showResetButton: false)
+            } else if progressChartHistory.isEmpty {
+                progressChartPlaceholder(message: "No sessions in this range", showResetButton: selectedProgressRange != .allTime)
+            } else {
+                ExerciseProgressChart(
+                    history: progressChartHistory,
+                    chartType: selectedChart,
+                    countLabel: isCardio ? cardioConfig.countLabel : nil
+                )
+            }
+        }
+        .frame(height: 250)
+        .padding(Theme.Spacing.lg)
+        .softCard(elevation: 2)
+    }
+
+    @ViewBuilder
+    private func progressChartPlaceholder(message: String, showResetButton: Bool) -> some View {
+        VStack(spacing: Theme.Spacing.md) {
+            Image(systemName: "calendar.badge.exclamationmark")
+                .font(.system(size: 24, weight: .bold))
+                .foregroundStyle(Theme.Colors.textTertiary)
+
+            Text(message)
+                .font(Theme.Typography.subheadline)
+                .foregroundStyle(Theme.Colors.textSecondary)
+
+            if showResetButton {
+                Button {
+                    selectedProgressRange = .allTime
+                    Haptics.selection()
+                } label: {
+                    Text("Show all time")
+                        .font(Theme.Typography.captionBold)
+                        .textCase(.uppercase)
+                        .tracking(0.8)
+                        .foregroundStyle(Theme.Colors.accent)
+                        .padding(.horizontal, Theme.Spacing.md)
+                        .padding(.vertical, Theme.Spacing.sm)
+                        .frame(minHeight: 44)
+                        .overlay(
+                            Capsule()
+                                .strokeBorder(Theme.Colors.border, lineWidth: 2)
+                        )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func progressChartRangeBounds(for range: ProgressRange) -> (start: Date, end: Date)? {
+        let calendar = Calendar.current
+        let now = Date()
+
+        switch range {
+        case .sixWeeks:
+            let start = calendar.date(byAdding: .day, value: -42, to: now) ?? now
+            return (calendar.startOfDay(for: start), now)
+        case .threeMonths:
+            let start = calendar.date(byAdding: .month, value: -3, to: now) ?? now
+            return (calendar.startOfDay(for: start), now)
+        case .sixMonths:
+            let start = calendar.date(byAdding: .month, value: -6, to: now) ?? now
+            return (calendar.startOfDay(for: start), now)
+        case .year:
+            let start = calendar.date(byAdding: .year, value: -1, to: now) ?? now
+            return (calendar.startOfDay(for: start), now)
+        case .allTime:
+            let oldest = earliestScopedWorkoutDate ?? now
+            return (calendar.startOfDay(for: oldest), now)
+        case .custom:
+            let startDay = calendar.startOfDay(for: customProgressStartDate)
+            let endDay = calendar.startOfDay(for: customProgressEndDate)
+            let start = min(startDay, endDay)
+            let end = max(startDay, endDay)
+            let inclusiveEnd = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: end) ?? end
+            return (start, inclusiveEnd)
+        }
+    }
+
+    private func clampCustomProgressRangeToScope() {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let minDate = earliestScopedWorkoutDate.map { calendar.startOfDay(for: $0) } ?? today
+
+        customProgressStartDate = min(max(customProgressStartDate, minDate), today)
+        customProgressEndDate = min(max(customProgressEndDate, minDate), today)
+
+        if customProgressEndDate < customProgressStartDate {
+            let oldStart = customProgressStartDate
+            customProgressStartDate = customProgressEndDate
+            customProgressEndDate = oldStart
+        }
+    }
+
+    private func openCustomProgressRangePicker() {
+        let calendar = Calendar.current
+        if selectedProgressRange != .custom, let bounds = progressChartRangeBounds(for: selectedProgressRange) {
+            customProgressStartDate = calendar.startOfDay(for: bounds.start)
+            customProgressEndDate = calendar.startOfDay(for: bounds.end)
+        }
+
+        clampCustomProgressRangeToScope()
+        selectedProgressRange = .custom
+        showingCustomProgressRangePicker = true
+        Haptics.selection()
+    }
+
+    private func initializeProgressRangeIfNeeded() {
+        guard !didInitializeProgressRange else { return }
+        didInitializeProgressRange = true
+
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let oldest = earliestScopedWorkoutDate.map { calendar.startOfDay(for: $0) } ?? today
+        customProgressStartDate = oldest
+        customProgressEndDate = today
+    }
+
     var body: some View {
         ZStack {
             AdaptiveBackground()
@@ -165,14 +436,9 @@ struct ExerciseDetailView: View {
                                 .foregroundColor(Theme.Colors.warning)
                         }
 
-                        ExerciseProgressChart(
-                            history: scopedHistory,
-                            chartType: selectedChart,
-                            countLabel: isCardio ? cardioConfig.countLabel : nil
-                        )
-                            .frame(height: 250)
-                            .padding(Theme.Spacing.lg)
-                            .softCard(elevation: 2)
+                        progressChartRangeControls
+
+                        progressChartCard
                     }
 
                     if !isCardio {
@@ -208,12 +474,27 @@ struct ExerciseDetailView: View {
         }
         .navigationTitle(exerciseName)
         .navigationBarTitleDisplayMode(.large)
+        .sheet(isPresented: $showingCustomProgressRangePicker) {
+            BrutalistDateRangeSheet(
+                title: "Chart Range",
+                startDate: $customProgressStartDate,
+                endDate: $customProgressEndDate,
+                earliestSelectableDate: earliestScopedWorkoutDate.map { Calendar.current.startOfDay(for: $0) },
+                latestSelectableDate: Date()
+            )
+        }
         .onAppear {
+            initializeProgressRangeIfNeeded()
             if !availableChartTypes.contains(selectedChart) {
                 selectedChart = availableChartTypes.first ?? (isCardio ? .duration : .weight)
             }
             Task {
                 await insightsEngine.generateInsights()
+            }
+        }
+        .onChange(of: selectedGymScope) { _, _ in
+            if selectedProgressRange == .custom {
+                clampCustomProgressRangeToScope()
             }
         }
         .onChange(of: availableChartTypes) { _, newValue in
@@ -522,6 +803,7 @@ struct ExerciseProgressChart: View {
 
     private enum ChartSeries: String {
         case progress = "Progress"
+        case rollingAverage = "Rolling Avg"
         case trend = "Trend"
     }
 
@@ -558,6 +840,34 @@ struct ExerciseProgressChart: View {
         }
     }
 
+    private var rollingAverageWindow: Int? {
+        // Require enough points so the average doesn't just mirror the raw line.
+        let count = chartData.count
+        guard count >= 8 else { return nil }
+
+        if count >= 60 { return 10 }
+        if count >= 30 { return 7 }
+        if count >= 14 { return 5 }
+        return 3
+    }
+
+    private var indexedRollingAverageData: [IndexedChartPoint] {
+        guard let window = rollingAverageWindow else { return [] }
+        guard !chartData.isEmpty else { return [] }
+
+        let values = chartData.map(\.value)
+        let points: [ChartPoint] = chartData.indices.map { index in
+            let start = max(0, index - (window - 1))
+            let slice = values[start...index]
+            let mean = slice.reduce(0, +) / Double(slice.count)
+            return ChartPoint(date: chartData[index].date, value: mean)
+        }
+
+        return points.enumerated().map { index, point in
+            IndexedChartPoint(id: index, point: point)
+        }
+    }
+
     private var prDate: Date? {
         chartData.max(by: { $0.value < $1.value })?.date
     }
@@ -577,8 +887,44 @@ struct ExerciseProgressChart: View {
     private var seriesColors: KeyValuePairs<String, Color> {
         [
             ChartSeries.progress.rawValue: chartColor,
+            ChartSeries.rollingAverage.rawValue: chartColor.opacity(0.55),
             ChartSeries.trend.rawValue: Color.secondary.opacity(0.5)
         ]
+    }
+
+    private var yDomain: ClosedRange<Double> {
+        // Derive the y-axis range from the values we actually draw so we don't end up
+        // with nonsense ranges like negative reps, or a heavy-lift chart forced to start at 0.
+        var values = chartData.map(\.value)
+
+        if let trend = calculateTrendLine() {
+            values.append(trend.start.value)
+            values.append(trend.end.value)
+        }
+
+        if chartType == .oneRepMax {
+            for point in variabilityBand {
+                values.append(point.lower)
+                values.append(point.upper)
+            }
+        }
+
+        guard let minValue = values.min(), let maxValue = values.max() else {
+            return 0...1
+        }
+
+        if minValue == maxValue {
+            let padding = max(abs(minValue) * 0.05, 1)
+            let lowerRaw = minValue - padding
+            let lower = max(0, lowerRaw)
+            return lower...(maxValue + padding)
+        }
+
+        let span = maxValue - minValue
+        let padding = span * 0.12
+        let lowerRaw = minValue - padding
+        let lower = max(0, lowerRaw)
+        return lower...(maxValue + padding)
     }
 
     var body: some View {
@@ -597,6 +943,18 @@ struct ExerciseProgressChart: View {
         }
         .onDisappear {
             selectionClearTask?.cancel()
+        }
+        .onChange(of: history.first?.date) { _, _ in
+            selectedDataPoint = nil
+            lastPRHapticDate = nil
+        }
+        .onChange(of: history.last?.date) { _, _ in
+            selectedDataPoint = nil
+            lastPRHapticDate = nil
+        }
+        .onChange(of: chartType) { _, _ in
+            selectedDataPoint = nil
+            lastPRHapticDate = nil
         }
     }
 
@@ -627,11 +985,17 @@ struct ExerciseProgressChart: View {
             variabilityBandMarks
             areaMarks
             lineMarks
+            rollingAverageMarks
             pointMarks
             trendLineMarks
             selectionRuleMark
         }
         .chartForegroundStyleScale(seriesColors)
+        .chartYScale(domain: yDomain)
+        .chartPlotStyle { plotArea in
+            // Catmull-Rom can overshoot; keep drawing inside the plot area.
+            plotArea.clipped()
+        }
         .chartXAxis {
             AxisMarks { _ in
                 AxisGridLine()
@@ -709,7 +1073,8 @@ struct ExerciseProgressChart: View {
         ForEach(indexedChartData, id: \.id) { dataPoint in
             AreaMark(
                 x: .value("Date", dataPoint.date),
-                y: .value(chartType.rawValue, isAppearing ? dataPoint.value : 0)
+                yStart: .value("Baseline", yDomain.lowerBound),
+                yEnd: .value(chartType.rawValue, isAppearing ? dataPoint.value : yDomain.lowerBound)
             )
             .foregroundStyle(chartColor.opacity(0.15))
             .interpolationMethod(.catmullRom)
@@ -721,7 +1086,7 @@ struct ExerciseProgressChart: View {
         ForEach(indexedChartData, id: \.id) { dataPoint in
             LineMark(
                 x: .value("Date", dataPoint.date),
-                y: .value(chartType.rawValue, isAppearing ? dataPoint.value : 0)
+                y: .value(chartType.rawValue, isAppearing ? dataPoint.value : yDomain.lowerBound)
             )
             .foregroundStyle(by: .value("Series", ChartSeries.progress.rawValue))
             .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round))
@@ -730,11 +1095,26 @@ struct ExerciseProgressChart: View {
     }
 
     @ChartContentBuilder
+    private var rollingAverageMarks: some ChartContent {
+        if rollingAverageWindow != nil {
+            ForEach(indexedRollingAverageData, id: \.id) { dataPoint in
+                LineMark(
+                    x: .value("Date", dataPoint.date),
+                    y: .value(chartType.rawValue, isAppearing ? dataPoint.value : yDomain.lowerBound)
+                )
+                .foregroundStyle(by: .value("Series", ChartSeries.rollingAverage.rawValue))
+                .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, dash: [2, 3]))
+                .interpolationMethod(.catmullRom)
+            }
+        }
+    }
+
+    @ChartContentBuilder
     private var pointMarks: some ChartContent {
         ForEach(indexedChartData, id: \.id) { dataPoint in
             PointMark(
                 x: .value("Date", dataPoint.date),
-                y: .value(chartType.rawValue, isAppearing ? dataPoint.value : 0)
+                y: .value(chartType.rawValue, isAppearing ? dataPoint.value : yDomain.lowerBound)
             )
             .foregroundStyle(dataPoint.date == prDate ? Theme.Colors.gold : chartColor)
             .symbolSize(dataPoint.date == prDate ? 100 : 50)

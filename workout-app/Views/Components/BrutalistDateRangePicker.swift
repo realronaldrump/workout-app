@@ -68,7 +68,7 @@ struct BrutalistDateRangePickerRow: View {
     }
 }
 
-private struct BrutalistDateRangeSheet: View {
+struct BrutalistDateRangeSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     let title: String
