@@ -40,6 +40,14 @@ struct WorkoutHistoryView: View {
                         )
                         .padding(.horizontal, Theme.Spacing.lg)
                         .padding(.top, Theme.Spacing.xl)
+                    } else if groupedWorkouts.isEmpty {
+                        ContentUnavailableView(
+                            "No matches",
+                            systemImage: "magnifyingglass",
+                            description: Text("Try a different workout name or exercise.")
+                        )
+                        .padding(.horizontal, Theme.Spacing.lg)
+                        .padding(.top, Theme.Spacing.xl)
                     } else {
                         ForEach(groupedWorkouts, id: \.month) { group in
                             VStack(alignment: .leading, spacing: Theme.Spacing.md) {

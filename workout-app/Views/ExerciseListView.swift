@@ -65,28 +65,34 @@ struct ExerciseListView: View {
             AdaptiveBackground()
             ScrollView(showsIndicators: false) {
                 LazyVStack(spacing: Theme.Spacing.md) {
-                    ForEach(exercises, id: \.name) { exercise in
-                        NavigationLink(
-                            destination: ExerciseDetailView(
-                                exerciseName: exercise.name,
-                                dataManager: dataManager,
-                                annotationsManager: annotationsManager,
-                                gymProfilesManager: gymProfilesManager
-                            )
-                        ) {
-                            ExerciseRowView(name: exercise.name, stats: exercise.stats)
-                        }
-                        .buttonStyle(PlainButtonStyle())
-                        .contextMenu {
-                            Button("View History") {
-                                selectedExercise = ExerciseSelection(id: exercise.name)
+                    if exercises.isEmpty {
+                        ContentUnavailableView(
+                            "No matches",
+                            systemImage: "magnifyingglass",
+                            description: Text("Try a different exercise name.")
+                        )
+                        .padding(.top, Theme.Spacing.xl)
+                    } else {
+                        ForEach(exercises, id: \.name) { exercise in
+                            NavigationLink(
+                                destination: ExerciseDetailView(
+                                    exerciseName: exercise.name,
+                                    dataManager: dataManager,
+                                    annotationsManager: annotationsManager,
+                                    gymProfilesManager: gymProfilesManager
+                                )
+                            ) {
+                                ExerciseRowView(name: exercise.name, stats: exercise.stats)
                             }
-                            Button("Compare Progress") {
-                                selectedExercise = ExerciseSelection(id: exercise.name)
-                            }
-                            Button("Quick Start") {
-                                quickStartExercise = exercise.name
-                                showingQuickStart = true
+                            .buttonStyle(PlainButtonStyle())
+                            .contextMenu {
+                                Button("View History") {
+                                    selectedExercise = ExerciseSelection(id: exercise.name)
+                                }
+                                Button("Quick Start") {
+                                    quickStartExercise = exercise.name
+                                    showingQuickStart = true
+                                }
                             }
                         }
                     }

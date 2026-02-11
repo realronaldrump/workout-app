@@ -10,7 +10,7 @@ struct WorkoutSessionView: View {
     @EnvironmentObject private var annotationsManager: WorkoutAnnotationsManager
     @EnvironmentObject private var gymProfilesManager: GymProfilesManager
 
-    @AppStorage("weightUnit") private var weightUnit: String = "lbs"
+    private let weightUnit = "lbs"
     @AppStorage("weightIncrement") private var weightIncrement: Double = 2.5
 
     @State private var showingExercisePicker = false
@@ -18,6 +18,8 @@ struct WorkoutSessionView: View {
     @State private var showingDiscardAlert = false
     @State private var finishErrorMessage: String?
     @State private var isFinishing = false
+
+    private let allowedWeightIncrements: [Double] = [1.25, 2.5, 5.0]
 
     var body: some View {
         NavigationStack {
@@ -88,8 +90,14 @@ struct WorkoutSessionView: View {
                                 .cornerRadius(Theme.CornerRadius.large)
                             }
                             .buttonStyle(.plain)
-                            .disabled(isFinishing)
-                            .opacity(isFinishing ? 0.7 : 1.0)
+                            .disabled(isFinishing || !canFinishSession)
+                            .opacity((isFinishing || !canFinishSession) ? 0.7 : 1.0)
+
+                            if !canFinishSession {
+                                Text("Complete at least one valid set before finishing.")
+                                    .font(Theme.Typography.caption)
+                                    .foregroundStyle(Theme.Colors.textSecondary)
+                            }
                         }
                         .padding(Theme.Spacing.xl)
                     }
@@ -173,9 +181,10 @@ struct WorkoutSessionView: View {
                 Text("This will permanently delete your in-progress session and all sets.")
             }
             .onAppear {
-                // If user never set this preference, keep it aligned with the unit.
-                if weightIncrement <= 0 {
-                    weightIncrement = (weightUnit == "kg") ? 1.0 : 2.5
+                // Keep increment options aligned with pounds-only behavior.
+                let isAllowed = allowedWeightIncrements.contains { abs($0 - weightIncrement) < 0.0001 }
+                if weightIncrement <= 0 || !isAllowed {
+                    weightIncrement = 2.5
                 }
             }
         }
@@ -183,7 +192,40 @@ struct WorkoutSessionView: View {
 
     private var resolvedWeightIncrement: Double {
         let inc = weightIncrement
-        return inc > 0 ? inc : (weightUnit == "kg" ? 1.0 : 2.5)
+        let isAllowed = allowedWeightIncrements.contains { abs($0 - inc) < 0.0001 }
+        return (inc > 0 && isAllowed) ? inc : 2.5
+    }
+
+    private var canFinishSession: Bool {
+        guard let session = sessionManager.activeSession else { return false }
+
+        var completedSetCount = 0
+        for exercise in session.exercises {
+            let isCardio = ExerciseMetadataManager.shared
+                .resolvedTags(for: exercise.name)
+                .contains(where: { $0.builtInGroup == .cardio })
+
+            for set in exercise.sets where set.isCompleted {
+                if isCardio {
+                    let reps = max(set.reps ?? 0, 0)
+                    let distance = max(set.distance ?? 0, 0)
+                    let seconds = max(set.seconds ?? 0, 0)
+                    guard reps > 0 || distance > 0 || seconds > 0 else {
+                        return false
+                    }
+                } else {
+                    guard let weight = set.weight,
+                          let reps = set.reps,
+                          weight >= 0,
+                          reps > 0 else {
+                        return false
+                    }
+                }
+                completedSetCount += 1
+            }
+        }
+
+        return completedSetCount > 0
     }
 
     private func headerCard(_ session: ActiveWorkoutSession) -> some View {
@@ -215,6 +257,8 @@ struct WorkoutSessionView: View {
                             .foregroundStyle(Theme.Colors.success)
                     }
                     .buttonStyle(.plain)
+                    .disabled(isFinishing || !canFinishSession)
+                    .opacity((isFinishing || !canFinishSession) ? 0.55 : 1.0)
                     .accessibilityLabel("Finish session")
                 }
 

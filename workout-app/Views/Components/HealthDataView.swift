@@ -65,11 +65,11 @@ struct HealthDataView: View {
                 .font(.system(size: 40))
                 .foregroundColor(Theme.Colors.textTertiary)
 
-            Text("health data 0")
+            Text("No health data found")
                 .font(Theme.Typography.subheadline)
                 .foregroundColor(Theme.Colors.textSecondary)
 
-            Text("samples 0")
+            Text("Sync to pull Apple Health samples for this workout.")
                 .font(Theme.Typography.caption)
                 .foregroundColor(Theme.Colors.textTertiary)
                 .multilineTextAlignment(.center)
@@ -485,7 +485,7 @@ struct HealthSyncButton: View {
                     Image(systemName: "heart.text.square")
                 }
 
-                Text(isSyncing ? "syncing" : "sync")
+                Text(isSyncing ? "Syncing" : "Sync")
                     .font(Theme.Typography.subheadline)
             }
             .foregroundColor(.white)

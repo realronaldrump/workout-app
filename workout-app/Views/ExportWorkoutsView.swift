@@ -5,7 +5,7 @@ struct ExportWorkoutsView: View {
     @ObservedObject var iCloudManager: iCloudDocumentManager
     @ObservedObject private var exerciseMetadataManager = ExerciseMetadataManager.shared
 
-    @AppStorage("weightUnit") private var weightUnit = "lbs"
+    private let weightUnit = "lbs"
 
     @State private var mode: ExportMode = .basic
     @State private var selectedRange: ExportTimeRange = .all

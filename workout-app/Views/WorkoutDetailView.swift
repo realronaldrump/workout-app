@@ -233,11 +233,11 @@ struct WorkoutDetailView: View {
                 .font(.system(size: 40))
                 .foregroundColor(Theme.Colors.textTertiary)
 
-            Text("health data 0")
+            Text("No health data yet")
                 .font(Theme.Typography.headline)
                 .foregroundColor(Theme.Colors.textSecondary)
 
-            Text("sync required")
+            Text("Sync this workout to load heart rate, sleep, and recovery context.")
                 .font(Theme.Typography.caption)
                 .foregroundColor(Theme.Colors.textTertiary)
                 .multilineTextAlignment(.center)
@@ -373,9 +373,6 @@ struct ExerciseCard: View {
         .softCard(elevation: 2)
         .contextMenu {
             Button("View History") {
-                onViewHistory?(exercise.name)
-            }
-            Button("Compare Progress") {
                 onViewHistory?(exercise.name)
             }
             Button("Quick Start") {

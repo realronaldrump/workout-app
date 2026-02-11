@@ -291,7 +291,7 @@ struct StrongImportWizard: View {
                 )
 
                 if healthManager.isSyncing {
-                    Text("sync background")
+                    Text("Health sync continues in the background.")
                         .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.Colors.textSecondary)
                         .multilineTextAlignment(.center)
@@ -411,7 +411,7 @@ struct StrongImportWizard: View {
         case .unavailable:
             return "Unavailable"
         case .needsAuthorization:
-            return "auth"
+            return "Authorization Needed"
         case .syncing:
             return "Syncing"
         case .synced:
@@ -423,24 +423,24 @@ struct StrongImportWizard: View {
 
     private var healthSyncStatusDetail: String {
         if healthManager.isSyncing {
-            return "syncing"
+            return "Syncing workout health data."
         }
         switch healthSyncState {
         case .idle:
-            return "pending"
+            return "Waiting to start automatic sync."
         case .unavailable:
-            return "unavailable"
+            return "Apple Health is unavailable on this device."
         case .needsAuthorization:
             if healthManager.authorizationStatus == .denied {
-                return "denied"
+                return "Apple Health access is denied. Enable access in Settings."
             }
-            return "auth"
+            return "Authorization is required to sync health data."
         case .syncing:
-            return "syncing"
+            return "Syncing workout health data."
         case .synced(let date):
-            return "complete \(formatDate(date))"
+            return "Completed \(formatDate(date))"
         case .failed(let message):
-            return "failed \(message)"
+            return "Sync failed: \(message)"
         }
     }
 
@@ -636,7 +636,7 @@ struct StrongImportWizard: View {
                 let results = try await healthManager.syncAllWorkouts(missing)
                 let hasData = results.contains { $0.hasHealthData }
                 if !hasData {
-                    healthSyncNote = "health samples 0"
+                    healthSyncNote = "No matching health samples were found for imported workouts."
                 }
                 healthSyncState = .synced(Date())
             } catch {

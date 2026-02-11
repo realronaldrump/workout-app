@@ -15,7 +15,9 @@ struct WorkoutApp: App {
     init() {
         // Defaults for settings that are read outside SwiftUI views (e.g. analytics/services).
         UserDefaults.standard.register(defaults: [
-            "intentionalRestDays": 1
+            "intentionalRestDays": 1,
+            "weightUnit": "lbs",
+            "weightIncrement": 2.5
         ])
 
         FontRegistrar.registerFontsIfNeeded()

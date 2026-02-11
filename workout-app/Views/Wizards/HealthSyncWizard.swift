@@ -9,6 +9,7 @@ struct HealthSyncWizard: View {
     @State private var step = 0
     @State private var errorMessage: String?
     @State private var hasStartedSync = false
+    @State private var showingCloseConfirmation = false
 
     var body: some View {
         NavigationStack {
@@ -41,13 +42,22 @@ struct HealthSyncWizard: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    // Don't allow closing during an active sync unless we've hit an error.
-                    if step < 2 || errorMessage != nil {
-                        AppPillButton(title: "Close", systemImage: "xmark", variant: .subtle) {
-                            isPresented = false
-                        }
+                    AppPillButton(title: "Close", systemImage: "xmark", variant: .subtle) {
+                        handleCloseTapped()
                     }
                 }
+            }
+            .confirmationDialog(
+                "Sync in progress",
+                isPresented: $showingCloseConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Run in Background") {
+                    isPresented = false
+                }
+                Button("Keep Open", role: .cancel) {}
+            } message: {
+                Text("You can close this screen and sync will continue.")
             }
             .alert("Health Sync Failed", isPresented: Binding(
                 get: { errorMessage != nil },
@@ -289,5 +299,13 @@ struct HealthSyncWizard: View {
                 errorMessage = error.localizedDescription
             }
         }
+    }
+
+    private func handleCloseTapped() {
+        if step == 2, healthManager.isSyncing, errorMessage == nil {
+            showingCloseConfirmation = true
+            return
+        }
+        isPresented = false
     }
 }

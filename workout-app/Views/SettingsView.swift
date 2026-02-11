@@ -12,9 +12,7 @@ struct SettingsView: View {
     @State private var showingHealthDashboard = false
     @State private var showingDeleteAlert = false
 
-    @AppStorage("weightUnit") private var weightUnit = "lbs"
     @AppStorage("weightIncrement") private var weightIncrement: Double = 2.5
-    @AppStorage("dateFormat") private var dateFormat = "relative"
     @AppStorage("intentionalRestDays") private var intentionalRestDays: Int = 1
 
     var body: some View {
@@ -102,7 +100,11 @@ struct SettingsView: View {
                             subtitle: healthManager.authorizationStatus == .authorized ? "Connected" : "Health off",
                             value: healthManager.authorizationStatus == .authorized ? "On" : "Off"
                         ) {
-                            showingHealthWizard = true
+                            if healthManager.authorizationStatus == .authorized {
+                                showingHealthDashboard = true
+                            } else {
+                                showingHealthWizard = true
+                            }
                         }
 
                         Divider().padding(.leading, 50)
@@ -156,31 +158,6 @@ struct SettingsView: View {
                         .padding(.horizontal)
 
                     VStack(spacing: 1) {
-                        // Custom Picker Row for Weight
-                        HStack {
-                            Image(systemName: "scalemass.fill")
-                                .foregroundStyle(.white)
-                                .frame(width: 30, height: 30)
-                                .background(Theme.Colors.success)
-                                .cornerRadius(6)
-
-                            Text("Weight Unit")
-                                .font(Theme.Typography.body)
-
-                            Spacer()
-
-                            Picker("", selection: $weightUnit) {
-                                Text("lbs").tag("lbs")
-                                Text("kg").tag("kg")
-                            }
-                            .labelsHidden()
-                            .pickerStyle(.menu)
-                        }
-                        .padding()
-                        .softCard()
-
-                        Divider().padding(.leading, 50)
-
                         // Weight increment
                         HStack {
                             Image(systemName: "ruler.fill")
@@ -198,31 +175,6 @@ struct SettingsView: View {
                                 ForEach(incrementOptions, id: \.self) { option in
                                     Text(incrementLabel(option)).tag(option)
                                 }
-                            }
-                            .labelsHidden()
-                            .pickerStyle(.menu)
-                        }
-                        .padding()
-                        .softCard()
-
-                        Divider().padding(.leading, 50)
-
-                        // Custom Picker Row for Date
-                        HStack {
-                            Image(systemName: "calendar")
-                                .foregroundStyle(.white)
-                                .frame(width: 30, height: 30)
-                                .background(Theme.Colors.warning)
-                                .cornerRadius(6)
-
-                            Text("Date Format")
-                                .font(Theme.Typography.body)
-
-                            Spacer()
-
-                            Picker("", selection: $dateFormat) {
-                                Text("Relative").tag("relative")
-                                Text("Absolute").tag("absolute")
                             }
                             .labelsHidden()
                             .pickerStyle(.menu)
@@ -392,13 +344,10 @@ struct SettingsView: View {
             healthManager.refreshAuthorizationStatus()
             normalizeIncrementIfNeeded()
         }
-        .onChange(of: weightUnit) { _, _ in
-            normalizeIncrementIfNeeded()
-        }
     }
 
     private var incrementOptions: [Double] {
-        weightUnit == "kg" ? [0.5, 1.0, 2.5] : [1.25, 2.5, 5.0]
+        [1.25, 2.5, 5.0]
     }
 
     private func incrementLabel(_ value: Double) -> String {
@@ -410,10 +359,10 @@ struct SettingsView: View {
 
     private func normalizeIncrementIfNeeded() {
         if !incrementOptions.contains(where: { abs($0 - weightIncrement) < 0.0001 }) {
-            weightIncrement = weightUnit == "kg" ? 1.0 : 2.5
+            weightIncrement = 2.5
         }
         if weightIncrement <= 0 {
-            weightIncrement = weightUnit == "kg" ? 1.0 : 2.5
+            weightIncrement = 2.5
         }
     }
 }

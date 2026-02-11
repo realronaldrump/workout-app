@@ -765,20 +765,6 @@ private struct TimeRangePicker: View {
             }
             .padding(.horizontal, Theme.Spacing.lg)
         }
-        .gesture(
-            DragGesture(minimumDistance: 24)
-                .onEnded { value in
-                    let direction = value.translation.width
-                    guard abs(direction) > 40 else { return }
-                    let all = DashboardView.TimeRange.allCases
-                    guard let index = all.firstIndex(of: selectedRange) else { return }
-                    let nextIndex = direction < 0 ? min(index + 1, all.count - 1) : max(index - 1, 0)
-                    if nextIndex != index {
-                        selectedRange = all[nextIndex]
-                        Haptics.selection()
-                    }
-                }
-        )
     }
 }
 

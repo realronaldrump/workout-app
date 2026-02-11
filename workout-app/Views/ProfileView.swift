@@ -12,8 +12,6 @@ struct ProfileView: View {
     @State private var showingExerciseList = false
 
     @AppStorage("profileName") private var profileName = ""
-    @AppStorage("weightUnit") private var weightUnit = "lbs"
-    @AppStorage("dateFormat") private var dateFormat = "relative"
 
     var body: some View {
         ZStack {
@@ -177,54 +175,6 @@ struct ProfileView: View {
                 .padding(.horizontal)
 
             VStack(spacing: 1) {
-                HStack {
-                    Image(systemName: "scalemass.fill")
-                        .foregroundStyle(.white)
-                        .frame(width: 30, height: 30)
-                        .background(Theme.Colors.success)
-                        .cornerRadius(Theme.CornerRadius.small)
-
-                    Text("Weight Unit")
-                        .font(Theme.Typography.body)
-
-                    Spacer()
-
-                    Picker("", selection: $weightUnit) {
-                        Text("lbs").tag("lbs")
-                        Text("kg").tag("kg")
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.menu)
-                }
-                .padding()
-                .softCard()
-
-                Divider().padding(.leading, 50)
-
-                HStack {
-                    Image(systemName: "calendar")
-                        .foregroundStyle(.white)
-                        .frame(width: 30, height: 30)
-                        .background(Theme.Colors.warning)
-                        .cornerRadius(Theme.CornerRadius.small)
-
-                    Text("Date Format")
-                        .font(Theme.Typography.body)
-
-                    Spacer()
-
-                    Picker("", selection: $dateFormat) {
-                        Text("Relative").tag("relative")
-                        Text("Absolute").tag("absolute")
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.menu)
-                }
-                .padding()
-                .softCard()
-
-                Divider().padding(.leading, 50)
-
                 NavigationLink(destination: ExerciseTaggingView(dataManager: dataManager)) {
                     ProfileLinkRow(
                         icon: "tag.fill",

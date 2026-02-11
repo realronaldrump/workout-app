@@ -253,7 +253,7 @@ private struct LoggedExerciseEditorCard: View {
     let onAddSet: () -> Void
     let onDeleteSet: (Int) -> Void
 
-    @AppStorage("weightUnit") private var weightUnit: String = "lbs"
+    private let weightUnit = "lbs"
     @ObservedObject private var metadataManager = ExerciseMetadataManager.shared
     @ObservedObject private var metricManager = ExerciseMetricManager.shared
 
