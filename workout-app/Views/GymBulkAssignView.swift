@@ -11,6 +11,40 @@ private struct AutoTagMapFallbackCandidate: Identifiable {
     var id: UUID { workoutId }
 }
 
+private struct GymDistanceMatch {
+    let gymId: UUID
+    let gymName: String
+    let distanceMeters: Double
+}
+
+private struct AutoTaggingQueryWindow {
+    let start: Date
+    let end: Date
+}
+
+private struct AutoTaggingRuntime {
+    let maxDistanceMeters: Double
+    let maxStartDiffSeconds: TimeInterval
+    let relaxedStartDiffSeconds: TimeInterval
+    let gymCoordinates: [UUID: CLLocationCoordinate2D]
+    let appleWorkouts: [HKWorkout]
+    let appleByUUID: [UUID: HKWorkout]
+
+    var routePermissionDenied: Bool
+    var routeStartByAppleUUID: [UUID: CLLocation] = [:]
+    var appleUUIDsWithNoRoute: Set<UUID> = []
+
+    var assignments: [UUID: UUID] = [:]
+    var items: [AutoGymTaggingItem] = []
+    var fallbackCandidates: [AutoTagMapFallbackCandidate] = []
+    var fallbackCandidateIds: Set<UUID> = []
+
+    var skippedNoMatchingWorkout = 0
+    var skippedNoRoute = 0
+    var skippedNoGymMatch = 0
+    var skippedGymsMissingLocation = 0
+}
+
 struct GymBulkAssignView: View {
     @EnvironmentObject var dataManager: WorkoutDataManager
     @EnvironmentObject var annotationsManager: WorkoutAnnotationsManager
@@ -478,15 +512,37 @@ struct GymBulkAssignView: View {
     }
 
     private func startAutoTagging() {
+        guard let targets = autoTaggingTargets() else { return }
+        resetAutoTaggingStateForRun()
+
+        Task { @MainActor in
+            defer { isAutoTagging = false }
+
+            do {
+                var runtime = try await prepareAutoTaggingRuntime(for: targets)
+                await processAutoTaggingTargets(targets, runtime: &runtime)
+                finalizeAutoTagging(runtime: runtime, attempted: targets.count)
+            } catch {
+                autoTagErrorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func autoTaggingTargets() -> [Workout]? {
+        guard !isAutoTagging else { return nil }
+
         let candidates = workoutsInScopeForAutoTag
         let targets = workoutsNeedingGymTag(in: candidates)
-        guard !isAutoTagging else { return }
-        guard !targets.isEmpty else { return }
+        guard !targets.isEmpty else { return nil }
+
         guard healthManager.isHealthKitAvailable() else {
             autoTagErrorMessage = "HealthKit isn’t available on this device."
-            return
+            return nil
         }
+        return targets
+    }
 
+    private func resetAutoTaggingStateForRun() {
         isAutoTagging = true
         autoTagProgress = 0
         autoTagReport = nil
@@ -494,202 +550,231 @@ struct GymBulkAssignView: View {
         routePermissionUnavailable = false
         mapFallbackCandidates = []
         mapFallbackTarget = nil
+    }
 
-        Task { @MainActor in
-            defer {
-                isAutoTagging = false
-            }
+    private func prepareAutoTaggingRuntime(for targets: [Workout]) async throws -> AutoTaggingRuntime {
+        let maxDistanceMeters: Double = 250
+        let maxStartDiffSeconds: TimeInterval = 20 * 60
+        let relaxedStartDiffSeconds: TimeInterval = 12 * 60 * 60
 
-            do {
-                if healthManager.authorizationStatus != .authorized {
-                    try await healthManager.requestAuthorization()
-                }
-                var routePermissionDenied = false
-                do {
-                    try await healthManager.requestWorkoutRouteAuthorization()
-                } catch {
-                    // Route authorization is optional for this flow.
-                    // Continue so workouts can still be resolved with map fallback.
-                    routePermissionDenied = true
-                }
+        let routePermissionDenied = try await requestAutoTaggingAuthorization()
+        let gymCoordinates = await gymProfilesManager.resolveGymCoordinates()
+        let window = autoTaggingQueryWindow(
+            for: targets,
+            padding: max(maxStartDiffSeconds, relaxedStartDiffSeconds)
+        )
+        let appleWorkouts = try await healthManager.fetchAppleWorkouts(from: window.start, to: window.end)
+        let appleByUUID = Dictionary(uniqueKeysWithValues: appleWorkouts.map { ($0.uuid, $0) })
 
-                let maxDistanceMeters: Double = 250
-                let maxStartDiffSeconds: TimeInterval = 20 * 60
-                let relaxedStartDiffSeconds: TimeInterval = 12 * 60 * 60
+        var runtime = AutoTaggingRuntime(
+            maxDistanceMeters: maxDistanceMeters,
+            maxStartDiffSeconds: maxStartDiffSeconds,
+            relaxedStartDiffSeconds: relaxedStartDiffSeconds,
+            gymCoordinates: gymCoordinates,
+            appleWorkouts: appleWorkouts,
+            appleByUUID: appleByUUID,
+            routePermissionDenied: routePermissionDenied
+        )
+        runtime.items.reserveCapacity(targets.count)
+        return runtime
+    }
 
-                // Resolve gym coordinates (including geocoding addresses when needed).
-                let gymCoordinates = await gymProfilesManager.resolveGymCoordinates()
-
-                // Build a time window for a single workouts query to HealthKit.
-                let windows = targets.map { $0.estimatedWindow(defaultMinutes: 60) }
-                let minStart = windows.map(\.start).min() ?? targets[0].date
-                let maxEnd = windows.map(\.end).max() ?? targets[0].estimatedWindow(defaultMinutes: 60).end
-                let queryPadding = max(maxStartDiffSeconds, relaxedStartDiffSeconds)
-                let queryStart = minStart.addingTimeInterval(-queryPadding)
-                let queryEnd = maxEnd.addingTimeInterval(queryPadding)
-
-                let appleWorkouts = try await healthManager.fetchAppleWorkouts(from: queryStart, to: queryEnd)
-                let appleByUUID = Dictionary(uniqueKeysWithValues: appleWorkouts.map { ($0.uuid, $0) })
-
-                var routeStartByAppleUUID: [UUID: CLLocation] = [:]
-                var appleUUIDsWithNoRoute: Set<UUID> = []
-
-                var assignments: [UUID: UUID] = [:]
-                var items: [AutoGymTaggingItem] = []
-                items.reserveCapacity(targets.count)
-                var fallbackCandidates: [AutoTagMapFallbackCandidate] = []
-                var fallbackCandidateIds: Set<UUID> = []
-
-                var skippedNoMatchingWorkout = 0
-                var skippedNoRoute = 0
-                var skippedNoGymMatch = 0
-                var skippedGymsMissingLocation = 0
-
-                func queueFallbackCandidate(for workout: Workout, location: CLLocation?) {
-                    guard fallbackCandidateIds.insert(workout.id).inserted else { return }
-                    fallbackCandidates.append(
-                        AutoTagMapFallbackCandidate(
-                            workoutId: workout.id,
-                            workoutName: workout.name,
-                            workoutDate: workout.date,
-                            startCoordinate: location?.coordinate
-                        )
-                    )
-                }
-
-                for (index, workout) in targets.enumerated() {
-                    autoTagProgress = Double(index) / Double(max(1, targets.count))
-
-                    // Prefer cached Health sync info when present.
-                    let cached = healthManager.getHealthData(for: workout.id)
-                    if let lat = cached?.workoutRouteStartLatitude,
-                       let lon = cached?.workoutRouteStartLongitude {
-                        let location = CLLocation(latitude: lat, longitude: lon)
-                        guard !gymCoordinates.isEmpty else {
-                            skippedGymsMissingLocation += 1
-                            items.append(.skipped(workout: workout, reason: "Gyms missing addresses/coordinates"))
-                            queueFallbackCandidate(for: workout, location: location)
-                            continue
-                        }
-                        if let match = nearestGym(to: location, gymCoordinates: gymCoordinates, maxDistanceMeters: maxDistanceMeters) {
-                            assignments[workout.id] = match.gymId
-                            items.append(.assigned(workout: workout, gymName: match.gymName, distanceMeters: Int(match.distanceMeters.rounded())))
-                        } else {
-                            skippedNoGymMatch += 1
-                            items.append(.skipped(workout: workout, reason: "No gym within \(Int(maxDistanceMeters))m"))
-                            queueFallbackCandidate(for: workout, location: location)
-                        }
-                        continue
-                    }
-
-                    let appleWorkout: HKWorkout?
-                    if let appleUUID = cached?.appleWorkoutUUID, let exact = appleByUUID[appleUUID] {
-                        appleWorkout = exact
-                    } else {
-                        appleWorkout = healthManager.bestMatchingAppleWorkout(
-                            for: workout,
-                            candidates: appleWorkouts,
-                            strictStartDifferenceSeconds: maxStartDiffSeconds,
-                            relaxedStartDifferenceSeconds: relaxedStartDiffSeconds
-                        )
-                    }
-
-                    guard let appleWorkout else {
-                        skippedNoMatchingWorkout += 1
-                        items.append(.skipped(workout: workout, reason: "No matching Apple workout near this timestamp"))
-                        queueFallbackCandidate(for: workout, location: nil)
-                        continue
-                    }
-
-                    let appleUUID = appleWorkout.uuid
-                    let startLocation: CLLocation?
-                    if let cachedLocation = routeStartByAppleUUID[appleUUID] {
-                        startLocation = cachedLocation
-                    } else if appleUUIDsWithNoRoute.contains(appleUUID) {
-                        startLocation = nil
-                    } else {
-                        let location: CLLocation?
-                        do {
-                            location = try await healthManager.fetchWorkoutRouteStartLocation(for: appleWorkout)
-                        } catch let error as HealthKitError {
-                            // Route permission can be denied after initial auth check.
-                            // Keep processing and fall back to map selection instead of failing the run.
-                            if case .authorizationFailed = error {
-                                routePermissionDenied = true
-                            }
-                            location = nil
-                        } catch {
-                            location = nil
-                        }
-                        if let location {
-                            routeStartByAppleUUID[appleUUID] = location
-                        } else {
-                            appleUUIDsWithNoRoute.insert(appleUUID)
-                        }
-                        startLocation = location
-                    }
-
-                    guard let startLocation else {
-                        skippedNoRoute += 1
-                        let reason = routePermissionDenied
-                            ? "No route/start location available (route permission unavailable)"
-                            : "No route/start location in Apple Health"
-                        items.append(.skipped(workout: workout, reason: reason))
-                        queueFallbackCandidate(for: workout, location: nil)
-                        continue
-                    }
-
-                    guard !gymCoordinates.isEmpty else {
-                        skippedGymsMissingLocation += 1
-                        items.append(.skipped(workout: workout, reason: "Gyms missing addresses/coordinates"))
-                        queueFallbackCandidate(for: workout, location: startLocation)
-                        continue
-                    }
-
-                    guard let match = nearestGym(to: startLocation, gymCoordinates: gymCoordinates, maxDistanceMeters: maxDistanceMeters) else {
-                        skippedNoGymMatch += 1
-                        items.append(.skipped(workout: workout, reason: "No gym within \(Int(maxDistanceMeters))m"))
-                        queueFallbackCandidate(for: workout, location: startLocation)
-                        continue
-                    }
-
-                    assignments[workout.id] = match.gymId
-                    items.append(.assigned(workout: workout, gymName: match.gymName, distanceMeters: Int(match.distanceMeters.rounded())))
-                }
-
-                autoTagProgress = 1
-
-                // Apply the assignments in one persistence pass.
-                if !assignments.isEmpty {
-                    annotationsManager.applyGymAssignments(assignments.mapValues { Optional($0) })
-                }
-                routePermissionUnavailable = routePermissionDenied
-                mapFallbackCandidates = fallbackCandidates.sorted { $0.workoutDate > $1.workoutDate }
-
-                let report = AutoGymTaggingReport(
-                    attempted: targets.count,
-                    assigned: assignments.count,
-                    skippedNoMatchingWorkout: skippedNoMatchingWorkout,
-                    skippedNoRoute: skippedNoRoute,
-                    skippedNoGymMatch: skippedNoGymMatch,
-                    skippedGymsMissingLocation: skippedGymsMissingLocation,
-                    items: items.sorted { $0.workoutDate > $1.workoutDate }
-                )
-
-                autoTagReport = report
-                showingAutoTagReport = true
-            } catch {
-                autoTagErrorMessage = error.localizedDescription
-            }
+    private func requestAutoTaggingAuthorization() async throws -> Bool {
+        if healthManager.authorizationStatus != .authorized {
+            try await healthManager.requestAuthorization()
         }
+
+        do {
+            try await healthManager.requestWorkoutRouteAuthorization()
+            return false
+        } catch {
+            // Route authorization is optional for this flow.
+            // Continue so workouts can still be resolved with map fallback.
+            return true
+        }
+    }
+
+    private func autoTaggingQueryWindow(
+        for targets: [Workout],
+        padding: TimeInterval
+    ) -> AutoTaggingQueryWindow {
+        let windows = targets.map { $0.estimatedWindow(defaultMinutes: 60) }
+        let minStart = windows.map(\.start).min() ?? targets[0].date
+        let maxEnd = windows.map(\.end).max() ?? targets[0].estimatedWindow(defaultMinutes: 60).end
+        return AutoTaggingQueryWindow(
+            start: minStart.addingTimeInterval(-padding),
+            end: maxEnd.addingTimeInterval(padding)
+        )
+    }
+
+    private func processAutoTaggingTargets(
+        _ targets: [Workout],
+        runtime: inout AutoTaggingRuntime
+    ) async {
+        for (index, workout) in targets.enumerated() {
+            autoTagProgress = Double(index) / Double(max(1, targets.count))
+            await processAutoTaggingWorkout(workout, runtime: &runtime)
+        }
+        autoTagProgress = 1
+    }
+
+    private func processAutoTaggingWorkout(
+        _ workout: Workout,
+        runtime: inout AutoTaggingRuntime
+    ) async {
+        let cached = healthManager.getHealthData(for: workout.id)
+        if let cachedLocation = cachedRouteStartLocation(from: cached) {
+            applyLocationAssignment(cachedLocation, to: workout, runtime: &runtime)
+            return
+        }
+
+        guard let appleWorkout = resolveAppleWorkout(for: workout, cachedHealthData: cached, runtime: runtime) else {
+            runtime.skippedNoMatchingWorkout += 1
+            runtime.items.append(.skipped(workout: workout, reason: "No matching Apple workout near this timestamp"))
+            queueFallbackCandidate(for: workout, location: nil, runtime: &runtime)
+            return
+        }
+
+        guard let startLocation = await fetchRouteStartLocation(for: appleWorkout, runtime: &runtime) else {
+            runtime.skippedNoRoute += 1
+            let reason = runtime.routePermissionDenied
+                ? "No route/start location available (route permission unavailable)"
+                : "No route/start location in Apple Health"
+            runtime.items.append(.skipped(workout: workout, reason: reason))
+            queueFallbackCandidate(for: workout, location: nil, runtime: &runtime)
+            return
+        }
+
+        applyLocationAssignment(startLocation, to: workout, runtime: &runtime)
+    }
+
+    private func cachedRouteStartLocation(from cachedHealthData: WorkoutHealthData?) -> CLLocation? {
+        guard let lat = cachedHealthData?.workoutRouteStartLatitude,
+              let lon = cachedHealthData?.workoutRouteStartLongitude else {
+            return nil
+        }
+        return CLLocation(latitude: lat, longitude: lon)
+    }
+
+    private func resolveAppleWorkout(
+        for workout: Workout,
+        cachedHealthData: WorkoutHealthData?,
+        runtime: AutoTaggingRuntime
+    ) -> HKWorkout? {
+        if let appleUUID = cachedHealthData?.appleWorkoutUUID, let exact = runtime.appleByUUID[appleUUID] {
+            return exact
+        }
+        return healthManager.bestMatchingAppleWorkout(
+            for: workout,
+            candidates: runtime.appleWorkouts,
+            strictStartDifferenceSeconds: runtime.maxStartDiffSeconds,
+            relaxedStartDifferenceSeconds: runtime.relaxedStartDiffSeconds
+        )
+    }
+
+    private func fetchRouteStartLocation(
+        for appleWorkout: HKWorkout,
+        runtime: inout AutoTaggingRuntime
+    ) async -> CLLocation? {
+        let appleUUID = appleWorkout.uuid
+        if let cachedLocation = runtime.routeStartByAppleUUID[appleUUID] {
+            return cachedLocation
+        }
+        if runtime.appleUUIDsWithNoRoute.contains(appleUUID) {
+            return nil
+        }
+
+        do {
+            if let location = try await healthManager.fetchWorkoutRouteStartLocation(for: appleWorkout) {
+                runtime.routeStartByAppleUUID[appleUUID] = location
+                return location
+            }
+        } catch let error as HealthKitError {
+            if case .authorizationFailed = error {
+                runtime.routePermissionDenied = true
+            }
+        } catch {
+            // Keep processing with map fallback.
+        }
+
+        runtime.appleUUIDsWithNoRoute.insert(appleUUID)
+        return nil
+    }
+
+    private func applyLocationAssignment(
+        _ location: CLLocation,
+        to workout: Workout,
+        runtime: inout AutoTaggingRuntime
+    ) {
+        guard !runtime.gymCoordinates.isEmpty else {
+            runtime.skippedGymsMissingLocation += 1
+            runtime.items.append(.skipped(workout: workout, reason: "Gyms missing addresses/coordinates"))
+            queueFallbackCandidate(for: workout, location: location, runtime: &runtime)
+            return
+        }
+
+        guard let match = nearestGym(
+            to: location,
+            gymCoordinates: runtime.gymCoordinates,
+            maxDistanceMeters: runtime.maxDistanceMeters
+        ) else {
+            runtime.skippedNoGymMatch += 1
+            runtime.items.append(.skipped(workout: workout, reason: "No gym within \(Int(runtime.maxDistanceMeters))m"))
+            queueFallbackCandidate(for: workout, location: location, runtime: &runtime)
+            return
+        }
+
+        runtime.assignments[workout.id] = match.gymId
+        runtime.items.append(
+            .assigned(
+                workout: workout,
+                gymName: match.gymName,
+                distanceMeters: Int(match.distanceMeters.rounded())
+            )
+        )
+    }
+
+    private func queueFallbackCandidate(
+        for workout: Workout,
+        location: CLLocation?,
+        runtime: inout AutoTaggingRuntime
+    ) {
+        guard runtime.fallbackCandidateIds.insert(workout.id).inserted else { return }
+        runtime.fallbackCandidates.append(
+            AutoTagMapFallbackCandidate(
+                workoutId: workout.id,
+                workoutName: workout.name,
+                workoutDate: workout.date,
+                startCoordinate: location?.coordinate
+            )
+        )
+    }
+
+    private func finalizeAutoTagging(runtime: AutoTaggingRuntime, attempted: Int) {
+        if !runtime.assignments.isEmpty {
+            annotationsManager.applyGymAssignments(runtime.assignments.mapValues { Optional($0) })
+        }
+        routePermissionUnavailable = runtime.routePermissionDenied
+        mapFallbackCandidates = runtime.fallbackCandidates.sorted { $0.workoutDate > $1.workoutDate }
+
+        autoTagReport = AutoGymTaggingReport(
+            attempted: attempted,
+            assigned: runtime.assignments.count,
+            skippedNoMatchingWorkout: runtime.skippedNoMatchingWorkout,
+            skippedNoRoute: runtime.skippedNoRoute,
+            skippedNoGymMatch: runtime.skippedNoGymMatch,
+            skippedGymsMissingLocation: runtime.skippedGymsMissingLocation,
+            items: runtime.items.sorted { $0.workoutDate > $1.workoutDate }
+        )
+        showingAutoTagReport = true
     }
 
     private func nearestGym(
         to location: CLLocation,
         gymCoordinates: [UUID: CLLocationCoordinate2D],
         maxDistanceMeters: Double
-    ) -> (gymId: UUID, gymName: String, distanceMeters: Double)? {
-        var best: (UUID, String, Double)?
+    ) -> GymDistanceMatch? {
+        var best: GymDistanceMatch?
 
         for (gymId, coordinate) in gymCoordinates {
             let gymLocation = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
@@ -697,17 +782,17 @@ struct GymBulkAssignView: View {
             guard distance <= maxDistanceMeters else { continue }
 
             let name = gymProfilesManager.gymName(for: gymId) ?? "Gym"
-            if let existing = best {
-                if distance < existing.2 {
-                    best = (gymId, name, distance)
-                }
-            } else {
-                best = (gymId, name, distance)
+            let candidate = GymDistanceMatch(gymId: gymId, gymName: name, distanceMeters: distance)
+            guard let existing = best else {
+                best = candidate
+                continue
+            }
+            if candidate.distanceMeters < existing.distanceMeters {
+                best = candidate
             }
         }
 
-        guard let best else { return nil }
-        return (best.0, best.1, best.2)
+        return best
     }
 
     private func toggleSelection(for id: UUID) {

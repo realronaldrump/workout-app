@@ -17,132 +17,20 @@ class WorkoutDataManager: ObservableObject {
         _ sets: [WorkoutSet],
         healthDataSnapshot: [WorkoutHealthData] = []
     ) async {
-        let (existingImported, identitySnapshot): ([Workout], [String: UUID]) = await MainActor.run {
+        let snapshots: (existingImported: [Workout], identitySnapshot: [String: UUID]) = await MainActor.run {
             self.isLoading = true
             self.error = nil
-            return (self.importedWorkouts, self.identityStore.snapshot())
+            return (existingImported: self.importedWorkouts, identitySnapshot: self.identityStore.snapshot())
         }
+
         // Run heavy grouping logic on a background thread
         let task = Task.detached(priority: .userInitiated) {
-            // Group sets by date (year-month-day-hour) using Calendar components
-            // This is significantly faster than DateFormatter
-            let calendar = Calendar.current
-
-            let groupedByWorkout = Dictionary(grouping: sets) { set -> String in
-                WorkoutIdentity.workoutKey(date: set.date, workoutName: set.workoutName, calendar: calendar)
-            }
-
-            var existingIdsByKey: [String: UUID] = [:]
-            for workout in existingImported {
-                let key = WorkoutIdentity.workoutKey(date: workout.date, workoutName: workout.name, calendar: calendar)
-                existingIdsByKey[key] = workout.id
-            }
-
-            var legacyCandidatesByHour: [String: [(id: UUID, date: Date)]] = [:]
-            for health in healthDataSnapshot {
-                let bucket = WorkoutIdentity.hourBucket(for: health.workoutDate, calendar: calendar)
-                legacyCandidatesByHour[bucket, default: []].append((health.workoutId, health.workoutDate))
-            }
-
-            var workouts: [Workout] = []
-            var newIdentityEntries: [String: UUID] = [:]
-
-            for (workoutKey, workoutSets) in groupedByWorkout {
-                guard let firstSet = workoutSets.first else { continue }
-
-                // Group by exercise within workout
-                let groupedByExercise = Dictionary(grouping: workoutSets) { $0.exerciseName }
-
-                // Preserve exercise order based on when each exercise first appears in the set stream.
-                // Strong exports include per-set timestamps; sorting by (date, original index) gives a stable
-                // "logged" ordering even when multiple sets share the same timestamp.
-                var firstSeenRankByExerciseName: [String: Int] = [:]
-                firstSeenRankByExerciseName.reserveCapacity(groupedByExercise.count)
-                var nextRank = 0
-
-                let orderedSets = workoutSets
-                    .enumerated()
-                    .sorted { lhs, rhs in
-                        if lhs.element.date != rhs.element.date { return lhs.element.date < rhs.element.date }
-                        return lhs.offset < rhs.offset
-                    }
-
-                for item in orderedSets {
-                    let name = item.element.exerciseName
-                    if firstSeenRankByExerciseName[name] == nil {
-                        firstSeenRankByExerciseName[name] = nextRank
-                        nextRank += 1
-                    }
-                }
-
-                let orderedExerciseNames = groupedByExercise.keys.sorted { lhs, rhs in
-                    let lRank = firstSeenRankByExerciseName[lhs] ?? Int.max
-                    let rRank = firstSeenRankByExerciseName[rhs] ?? Int.max
-                    if lRank != rRank { return lRank < rRank }
-                    return lhs.localizedCaseInsensitiveCompare(rhs) == .orderedAscending
-                }
-
-                var exercises: [Exercise] = []
-                exercises.reserveCapacity(orderedExerciseNames.count)
-                for exerciseName in orderedExerciseNames {
-                    guard let exerciseSets = groupedByExercise[exerciseName] else { continue }
-                    let sortedSets = exerciseSets.sorted { lhs, rhs in
-                        if lhs.setOrder != rhs.setOrder { return lhs.setOrder < rhs.setOrder }
-                        return lhs.date < rhs.date
-                    }
-                    exercises.append(Exercise(name: exerciseName, sets: sortedSets))
-                }
-
-                let workoutDate = workoutSets.map { $0.date }.min() ?? firstSet.date
-                let workoutName = firstSet.workoutName.trimmingCharacters(in: .whitespacesAndNewlines)
-
-                let resolvedId: UUID
-                if let existingId = existingIdsByKey[workoutKey] {
-                    resolvedId = existingId
-                } else if let mappedId = identitySnapshot[workoutKey] {
-                    resolvedId = mappedId
-                } else {
-                    let hourBucket = WorkoutIdentity.hourBucket(for: workoutDate, calendar: calendar)
-                    if var candidates = legacyCandidatesByHour[hourBucket], !candidates.isEmpty {
-                        var bestIndex = 0
-                        var bestDistance = abs(candidates[0].date.timeIntervalSince(workoutDate))
-                        if candidates.count > 1 {
-                            for index in 1..<candidates.count {
-                                let distance = abs(candidates[index].date.timeIntervalSince(workoutDate))
-                                if distance < bestDistance {
-                                    bestDistance = distance
-                                    bestIndex = index
-                                }
-                            }
-                        }
-                        let chosen = candidates.remove(at: bestIndex)
-                        if candidates.isEmpty {
-                            legacyCandidatesByHour.removeValue(forKey: hourBucket)
-                        } else {
-                            legacyCandidatesByHour[hourBucket] = candidates
-                        }
-                        resolvedId = chosen.id
-                    } else {
-                        resolvedId = UUID()
-                    }
-                }
-
-                if identitySnapshot[workoutKey] != resolvedId {
-                    newIdentityEntries[workoutKey] = resolvedId
-                }
-
-                let workout = Workout(
-                    id: resolvedId,
-                    date: workoutDate,
-                    name: workoutName,
-                    duration: firstSet.duration,
-                    exercises: exercises
-                )
-                workouts.append(workout)
-            }
-
-            let sortedWorkouts = workouts.sorted { $0.date > $1.date }
-            return (sortedWorkouts, newIdentityEntries)
+            Self.processImportedWorkoutSetsSnapshot(
+                sets: sets,
+                existingImported: snapshots.existingImported,
+                identitySnapshot: snapshots.identitySnapshot,
+                healthDataSnapshot: healthDataSnapshot
+            )
         }
         let (processedWorkouts, newIdentityEntries) = await task.value
 
@@ -347,6 +235,204 @@ class WorkoutDataManager: ObservableObject {
         self.isLoading = false
         self.error = nil
         self.identityStore.clear()
+    }
+}
+
+private extension WorkoutDataManager {
+    struct ImportedWorkoutBuildResult {
+        let workout: Workout
+        let resolvedId: UUID
+    }
+
+    struct LegacyWorkoutCandidate {
+        let id: UUID
+        let date: Date
+    }
+
+    struct ImportedWorkoutProcessingContext {
+        let existingIdsByKey: [String: UUID]
+        let identitySnapshot: [String: UUID]
+        let calendar: Calendar
+    }
+
+    nonisolated static func processImportedWorkoutSetsSnapshot(
+        sets: [WorkoutSet],
+        existingImported: [Workout],
+        identitySnapshot: [String: UUID],
+        healthDataSnapshot: [WorkoutHealthData]
+    ) -> ([Workout], [String: UUID]) {
+        let calendar = Calendar.current
+        let groupedByWorkout = Dictionary(grouping: sets) { set in
+            WorkoutIdentity.workoutKey(date: set.date, workoutName: set.workoutName, calendar: calendar)
+        }
+        let existingIdsByKey = makeExistingIdsByKey(from: existingImported, calendar: calendar)
+        let context = ImportedWorkoutProcessingContext(
+            existingIdsByKey: existingIdsByKey,
+            identitySnapshot: identitySnapshot,
+            calendar: calendar
+        )
+        var legacyCandidatesByHour = makeLegacyCandidatesByHour(from: healthDataSnapshot, calendar: calendar)
+
+        var workouts: [Workout] = []
+        workouts.reserveCapacity(groupedByWorkout.count)
+        var newIdentityEntries: [String: UUID] = [:]
+        newIdentityEntries.reserveCapacity(groupedByWorkout.count)
+
+        for (workoutKey, workoutSets) in groupedByWorkout {
+            guard let result = buildImportedWorkout(
+                workoutKey: workoutKey,
+                workoutSets: workoutSets,
+                context: context,
+                legacyCandidatesByHour: &legacyCandidatesByHour
+            ) else {
+                continue
+            }
+            workouts.append(result.workout)
+            if context.identitySnapshot[workoutKey] != result.resolvedId {
+                newIdentityEntries[workoutKey] = result.resolvedId
+            }
+        }
+
+        return (workouts.sorted { $0.date > $1.date }, newIdentityEntries)
+    }
+
+    nonisolated static func makeExistingIdsByKey(
+        from workouts: [Workout],
+        calendar: Calendar
+    ) -> [String: UUID] {
+        var idsByKey: [String: UUID] = [:]
+        idsByKey.reserveCapacity(workouts.count)
+        for workout in workouts {
+            let key = WorkoutIdentity.workoutKey(date: workout.date, workoutName: workout.name, calendar: calendar)
+            idsByKey[key] = workout.id
+        }
+        return idsByKey
+    }
+
+    nonisolated static func makeLegacyCandidatesByHour(
+        from healthDataSnapshot: [WorkoutHealthData],
+        calendar: Calendar
+    ) -> [String: [LegacyWorkoutCandidate]] {
+        var candidatesByHour: [String: [LegacyWorkoutCandidate]] = [:]
+        for health in healthDataSnapshot {
+            let bucket = WorkoutIdentity.hourBucket(for: health.workoutDate, calendar: calendar)
+            candidatesByHour[bucket, default: []].append(
+                LegacyWorkoutCandidate(id: health.workoutId, date: health.workoutDate)
+            )
+        }
+        return candidatesByHour
+    }
+
+    nonisolated static func buildImportedWorkout(
+        workoutKey: String,
+        workoutSets: [WorkoutSet],
+        context: ImportedWorkoutProcessingContext,
+        legacyCandidatesByHour: inout [String: [LegacyWorkoutCandidate]]
+    ) -> ImportedWorkoutBuildResult? {
+        guard let firstSet = workoutSets.first else { return nil }
+        let workoutDate = workoutSets.map(\.date).min() ?? firstSet.date
+        let resolvedId = resolveImportedWorkoutId(
+            workoutKey: workoutKey,
+            workoutDate: workoutDate,
+            context: context,
+            legacyCandidatesByHour: &legacyCandidatesByHour
+        )
+        let workout = Workout(
+            id: resolvedId,
+            date: workoutDate,
+            name: firstSet.workoutName.trimmingCharacters(in: .whitespacesAndNewlines),
+            duration: firstSet.duration,
+            exercises: makeExercises(from: workoutSets)
+        )
+        return ImportedWorkoutBuildResult(workout: workout, resolvedId: resolvedId)
+    }
+
+    nonisolated static func makeExercises(from workoutSets: [WorkoutSet]) -> [Exercise] {
+        let groupedByExercise = Dictionary(grouping: workoutSets) { $0.exerciseName }
+        var firstSeenRankByExerciseName: [String: Int] = [:]
+        firstSeenRankByExerciseName.reserveCapacity(groupedByExercise.count)
+        var nextRank = 0
+
+        let orderedSets = workoutSets.enumerated().sorted { lhs, rhs in
+            if lhs.element.date != rhs.element.date { return lhs.element.date < rhs.element.date }
+            return lhs.offset < rhs.offset
+        }
+        for item in orderedSets where firstSeenRankByExerciseName[item.element.exerciseName] == nil {
+            firstSeenRankByExerciseName[item.element.exerciseName] = nextRank
+            nextRank += 1
+        }
+
+        let orderedExerciseNames = groupedByExercise.keys.sorted { lhs, rhs in
+            let lhsRank = firstSeenRankByExerciseName[lhs] ?? Int.max
+            let rhsRank = firstSeenRankByExerciseName[rhs] ?? Int.max
+            if lhsRank != rhsRank { return lhsRank < rhsRank }
+            return lhs.localizedCaseInsensitiveCompare(rhs) == .orderedAscending
+        }
+
+        var exercises: [Exercise] = []
+        exercises.reserveCapacity(orderedExerciseNames.count)
+        for exerciseName in orderedExerciseNames {
+            guard let exerciseSets = groupedByExercise[exerciseName] else { continue }
+            let sortedSets = exerciseSets.sorted { lhs, rhs in
+                if lhs.setOrder != rhs.setOrder { return lhs.setOrder < rhs.setOrder }
+                return lhs.date < rhs.date
+            }
+            exercises.append(Exercise(name: exerciseName, sets: sortedSets))
+        }
+
+        return exercises
+    }
+
+    nonisolated static func resolveImportedWorkoutId(
+        workoutKey: String,
+        workoutDate: Date,
+        context: ImportedWorkoutProcessingContext,
+        legacyCandidatesByHour: inout [String: [LegacyWorkoutCandidate]]
+    ) -> UUID {
+        if let existingId = context.existingIdsByKey[workoutKey] {
+            return existingId
+        }
+        if let mappedId = context.identitySnapshot[workoutKey] {
+            return mappedId
+        }
+        let hourBucket = WorkoutIdentity.hourBucket(for: workoutDate, calendar: context.calendar)
+        return consumeClosestLegacyCandidateId(
+            for: workoutDate,
+            hourBucket: hourBucket,
+            legacyCandidatesByHour: &legacyCandidatesByHour
+        ) ?? UUID()
+    }
+
+    nonisolated static func consumeClosestLegacyCandidateId(
+        for workoutDate: Date,
+        hourBucket: String,
+        legacyCandidatesByHour: inout [String: [LegacyWorkoutCandidate]]
+    ) -> UUID? {
+        guard var candidates = legacyCandidatesByHour[hourBucket], !candidates.isEmpty else { return nil }
+        let bestIndex = closestLegacyCandidateIndex(for: workoutDate, in: candidates)
+        let chosen = candidates.remove(at: bestIndex)
+        if candidates.isEmpty {
+            legacyCandidatesByHour.removeValue(forKey: hourBucket)
+        } else {
+            legacyCandidatesByHour[hourBucket] = candidates
+        }
+        return chosen.id
+    }
+
+    nonisolated static func closestLegacyCandidateIndex(
+        for workoutDate: Date,
+        in candidates: [LegacyWorkoutCandidate]
+    ) -> Int {
+        var bestIndex = 0
+        var bestDistance = abs(candidates[0].date.timeIntervalSince(workoutDate))
+        for index in 1..<candidates.count {
+            let distance = abs(candidates[index].date.timeIntervalSince(workoutDate))
+            if distance < bestDistance {
+                bestDistance = distance
+                bestIndex = index
+            }
+        }
+        return bestIndex
     }
 }
 
