@@ -46,6 +46,8 @@ struct WorkoutDetailView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
+                    workoutHeader(workout)
+
                     // Workout summary card
                     MetricTileButton(
                         action: {
@@ -119,59 +121,9 @@ struct WorkoutDetailView: View {
                 .padding(Theme.Spacing.xl)
             }
         }
-        .navigationTitle(workout.name)
-        .navigationBarTitleDisplayMode(.large)
-        .navigationBarBackButtonHidden(true)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarLeading) {
-                Button {
-                    dismiss()
-                } label: {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(Theme.Colors.textPrimary)
-                        .frame(width: 34, height: 34)
-                        .background(
-                            RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                                .fill(Theme.Colors.cardBackground)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                                .strokeBorder(Theme.Colors.border, lineWidth: 2)
-                        )
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Back")
-            }
-
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Text(workoutDateTimeToolbarText(for: workout.date))
-                    // Match app's brutalist typography (avoid generic system/nav-bar styling).
-                    .font(Theme.Typography.captionBold)
-                    .foregroundStyle(Theme.Colors.textSecondary)
-                    .padding(.horizontal, Theme.Spacing.sm)
-                    .padding(.vertical, Theme.Spacing.xs)
-                    .background(
-                        RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                            .fill(Theme.Colors.surface)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                            .strokeBorder(Theme.Colors.border, lineWidth: 2)
-                    )
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
-                    .allowsTightening(true)
-            }
-
-            if isLoggedWorkout {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    AppPillButton(title: "Edit", systemImage: "pencil") {
-                        showingEdit = true
-                        Haptics.selection()
-                    }
-                }
-            }
+        .toolbar(.hidden, for: .navigationBar)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            workoutTopBar
         }
         .onAppear {
             // Health data is now observed directly from healthManager
@@ -200,6 +152,55 @@ struct WorkoutDetailView: View {
         }
         .navigationDestination(isPresented: $showingWorkoutHealthInsights) {
             WorkoutHealthInsightsView(workout: workout)
+        }
+    }
+
+    private var workoutTopBar: some View {
+        HStack(spacing: Theme.Spacing.sm) {
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                    .frame(width: 34, height: 34)
+                    .background(
+                        RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                            .fill(Theme.Colors.cardBackground)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                            .strokeBorder(Theme.Colors.border, lineWidth: 2)
+                    )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Back")
+
+            Spacer()
+
+            if isLoggedWorkout {
+                AppPillButton(title: "Edit", systemImage: "pencil") {
+                    showingEdit = true
+                    Haptics.selection()
+                }
+            }
+        }
+        .padding(.horizontal, Theme.Spacing.xl)
+        .padding(.top, Theme.Spacing.xs)
+        .padding(.bottom, Theme.Spacing.sm)
+        .background(Theme.Colors.background)
+    }
+
+    private func workoutHeader(_ workout: Workout) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            Text(workout.name)
+                .font(Theme.Typography.screenTitle)
+                .foregroundStyle(Theme.Colors.textPrimary)
+                .tracking(1.5)
+
+            Text(workoutDateTimeToolbarText(for: workout.date))
+                .font(Theme.Typography.microcopy)
+                .foregroundStyle(Theme.Colors.textSecondary)
         }
     }
 

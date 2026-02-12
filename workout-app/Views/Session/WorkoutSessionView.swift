@@ -110,76 +110,9 @@ struct WorkoutSessionView: View {
                     .padding(.horizontal, Theme.Spacing.xl)
                 }
             }
-            .navigationTitle("Session")
-            .navigationBarTitleDisplayMode(.inline)
-            .navigationBarBackButtonHidden(true)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button {
-                        sessionManager.isPresentingSessionUI = false
-                        dismiss()
-                        Haptics.selection()
-                    } label: {
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundStyle(Theme.Colors.textPrimary)
-                            .frame(width: 34, height: 34)
-                            .background(
-                                RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                                    .fill(Theme.Colors.cardBackground)
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                                    .strokeBorder(Theme.Colors.border, lineWidth: 2)
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Minimize session")
-                }
-                if let session = sessionManager.activeSession {
-                    ToolbarItem(placement: .navigationBarTrailing) {
-                        TimelineView(.periodic(from: Date(), by: 1.0)) { context in
-                            let elapsed = max(0, context.date.timeIntervalSince(session.startedAt))
-                            Text(formatElapsed(elapsed))
-                                .font(Theme.Typography.captionBold)
-                                .monospacedDigit()
-                                .foregroundStyle(Theme.Colors.textSecondary)
-                                .padding(.horizontal, Theme.Spacing.sm)
-                                .padding(.vertical, Theme.Spacing.xs)
-                                .background(
-                                    RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                                        .fill(Theme.Colors.surface)
-                                )
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                                        .strokeBorder(Theme.Colors.border, lineWidth: 2)
-                                )
-                        }
-                        .accessibilityLabel("Elapsed time")
-                    }
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(role: .destructive) {
-                        showingDiscardAlert = true
-                        Haptics.selection()
-                    } label: {
-                        Image(systemName: "trash")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(Theme.Colors.error)
-                            .frame(width: 34, height: 34)
-                            .background(
-                                RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                                    .fill(Theme.Colors.cardBackground)
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                                    .strokeBorder(Theme.Colors.border, lineWidth: 2)
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(sessionManager.activeSession == nil || isFinishing)
-                    .accessibilityLabel("Discard session")
-                }
+            .toolbar(.hidden, for: .navigationBar)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                sessionTopBar
             }
             .sheet(isPresented: $showingExercisePicker) {
                 ExercisePickerView { selected in
@@ -216,6 +149,81 @@ struct WorkoutSessionView: View {
                 }
             }
         }
+    }
+
+    private var sessionTopBar: some View {
+        HStack(spacing: Theme.Spacing.sm) {
+            Button {
+                sessionManager.isPresentingSessionUI = false
+                dismiss()
+                Haptics.selection()
+            } label: {
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                    .frame(width: 34, height: 34)
+                    .background(
+                        RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                            .fill(Theme.Colors.cardBackground)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                            .strokeBorder(Theme.Colors.border, lineWidth: 2)
+                    )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Minimize session")
+
+            Spacer(minLength: Theme.Spacing.sm)
+
+            if let session = sessionManager.activeSession {
+                TimelineView(.periodic(from: Date(), by: 1.0)) { context in
+                    let elapsed = max(0, context.date.timeIntervalSince(session.startedAt))
+                    Text(formatElapsed(elapsed))
+                        .font(Theme.Typography.captionBold)
+                        .monospacedDigit()
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                        .padding(.horizontal, Theme.Spacing.sm)
+                        .padding(.vertical, Theme.Spacing.xs)
+                        .background(
+                            RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                                .fill(Theme.Colors.surface)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                                .strokeBorder(Theme.Colors.border, lineWidth: 2)
+                        )
+                }
+                .accessibilityLabel("Elapsed time")
+            }
+
+            Spacer(minLength: Theme.Spacing.sm)
+
+            Button(role: .destructive) {
+                showingDiscardAlert = true
+                Haptics.selection()
+            } label: {
+                Image(systemName: "trash")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Theme.Colors.error)
+                    .frame(width: 34, height: 34)
+                    .background(
+                        RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                            .fill(Theme.Colors.cardBackground)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                            .strokeBorder(Theme.Colors.border, lineWidth: 2)
+                    )
+            }
+            .buttonStyle(.plain)
+            .disabled(sessionManager.activeSession == nil || isFinishing)
+            .accessibilityLabel("Discard session")
+        }
+        .padding(.horizontal, Theme.Spacing.xl)
+        .padding(.top, Theme.Spacing.xs)
+        .padding(.bottom, Theme.Spacing.sm)
+        .background(Theme.Colors.background)
     }
 
     private var resolvedWeightIncrement: Double {

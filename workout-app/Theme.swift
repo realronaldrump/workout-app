@@ -86,6 +86,21 @@ enum Theme {
             .font: UIFont(name: "BebasNeue-Regular", size: 40) ?? UIFont.systemFont(ofSize: 34, weight: .bold)
         ]
 
+        let navButton = UIBarButtonItemAppearance(style: .plain)
+        navButton.normal.backgroundImage = UIImage()
+        navButton.highlighted.backgroundImage = UIImage()
+        navButton.disabled.backgroundImage = UIImage()
+        navButton.normal.backgroundColor = .clear
+        navButton.highlighted.backgroundColor = .clear
+        navButton.disabled.backgroundColor = .clear
+        navButton.normal.titleTextAttributes = [.foregroundColor: UIColors.accent]
+        navButton.highlighted.titleTextAttributes = [.foregroundColor: UIColors.accent]
+        navButton.disabled.titleTextAttributes = [.foregroundColor: UIColors.textTertiary]
+
+        nav.buttonAppearance = navButton
+        nav.doneButtonAppearance = navButton
+        nav.backButtonAppearance = navButton
+
         let navBar = UINavigationBar.appearance()
         navBar.standardAppearance = nav
         navBar.scrollEdgeAppearance = nav
