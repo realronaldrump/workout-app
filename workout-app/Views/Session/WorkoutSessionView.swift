@@ -21,6 +21,17 @@ struct WorkoutSessionView: View {
 
     private let allowedWeightIncrements: [Double] = [1.25, 2.5, 5.0]
 
+    private func sessionDateTimeToolbarText(for date: Date) -> String {
+        let calendar = Calendar.current
+        let now = Date()
+        let includeYear = calendar.component(.year, from: date) != calendar.component(.year, from: now)
+        let datePart = includeYear
+            ? date.formatted(.dateTime.year().month(.abbreviated).day())
+            : date.formatted(.dateTime.month(.abbreviated).day())
+        let timePart = date.formatted(.dateTime.hour().minute())
+        return "\(datePart) | \(timePart)"
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -112,6 +123,7 @@ struct WorkoutSessionView: View {
             }
             .navigationTitle("Session")
             .navigationBarTitleDisplayMode(.inline)
+            .navigationBarBackButtonHidden(true)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button {
@@ -119,25 +131,38 @@ struct WorkoutSessionView: View {
                         dismiss()
                         Haptics.selection()
                     } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: "chevron.down")
-                                .font(.system(size: 12, weight: .bold))
-                                .foregroundStyle(Theme.Colors.accent)
-
-                            Text("Minimize")
-                                .font(Theme.Typography.captionBold)
-                                .foregroundColor(Theme.Colors.textPrimary)
-                        }
-                        .padding(.horizontal, Theme.Spacing.md)
-                        .padding(.vertical, Theme.Spacing.xs)
-                        .background(Capsule().fill(Theme.Colors.surface))
-                        .overlay(
-                            Capsule()
-                                .strokeBorder(Theme.Colors.border, lineWidth: 2)
-                        )
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(Theme.Colors.textPrimary)
+                            .frame(width: 34, height: 34)
+                            .background(
+                                RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                                    .fill(Theme.Colors.cardBackground)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                                    .strokeBorder(Theme.Colors.border, lineWidth: 2)
+                            )
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Minimize session")
+                }
+                if let session = sessionManager.activeSession {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Text(sessionDateTimeToolbarText(for: session.startedAt))
+                            .font(Theme.Typography.captionBold)
+                            .foregroundStyle(Theme.Colors.textSecondary)
+                            .padding(.horizontal, Theme.Spacing.sm)
+                            .padding(.vertical, Theme.Spacing.xs)
+                            .background(
+                                RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                                    .fill(Theme.Colors.surface)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                                    .strokeBorder(Theme.Colors.border, lineWidth: 2)
+                            )
+                    }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(role: .destructive) {
@@ -147,6 +172,15 @@ struct WorkoutSessionView: View {
                         Image(systemName: "trash")
                             .font(.system(size: 16, weight: .semibold))
                             .foregroundStyle(Theme.Colors.error)
+                            .frame(width: 34, height: 34)
+                            .background(
+                                RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                                    .fill(Theme.Colors.cardBackground)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                                    .strokeBorder(Theme.Colors.border, lineWidth: 2)
+                            )
                     }
                     .buttonStyle(.plain)
                     .disabled(sessionManager.activeSession == nil || isFinishing)

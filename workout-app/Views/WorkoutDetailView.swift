@@ -15,6 +15,7 @@ struct WorkoutDetailView: View {
     @State private var showingSessionInsights = false
     @State private var showingWorkoutHealthInsights = false
     @State private var showingEdit = false
+    @Environment(\.dismiss) private var dismiss
 
     private var resolvedWorkout: Workout {
         dataManager.workouts.first(where: { $0.id == workout.id }) ?? workout
@@ -120,12 +121,44 @@ struct WorkoutDetailView: View {
         }
         .navigationTitle(workout.name)
         .navigationBarTitleDisplayMode(.large)
+        .navigationBarBackButtonHidden(true)
         .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                        .frame(width: 34, height: 34)
+                        .background(
+                            RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                                .fill(Theme.Colors.cardBackground)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                                .strokeBorder(Theme.Colors.border, lineWidth: 2)
+                        )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Back")
+            }
+
             ToolbarItem(placement: .navigationBarTrailing) {
                 Text(workoutDateTimeToolbarText(for: workout.date))
                     // Match app's brutalist typography (avoid generic system/nav-bar styling).
-                    .font(Theme.Typography.metricLabel)
-                    .foregroundColor(Theme.Colors.textTertiary)
+                    .font(Theme.Typography.captionBold)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .padding(.horizontal, Theme.Spacing.sm)
+                    .padding(.vertical, Theme.Spacing.xs)
+                    .background(
+                        RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                            .fill(Theme.Colors.surface)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                            .strokeBorder(Theme.Colors.border, lineWidth: 2)
+                    )
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
                     .allowsTightening(true)
