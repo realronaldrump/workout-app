@@ -21,17 +21,6 @@ struct WorkoutSessionView: View {
 
     private let allowedWeightIncrements: [Double] = [1.25, 2.5, 5.0]
 
-    private func sessionDateTimeToolbarText(for date: Date) -> String {
-        let calendar = Calendar.current
-        let now = Date()
-        let includeYear = calendar.component(.year, from: date) != calendar.component(.year, from: now)
-        let datePart = includeYear
-            ? date.formatted(.dateTime.year().month(.abbreviated).day())
-            : date.formatted(.dateTime.month(.abbreviated).day())
-        let timePart = date.formatted(.dateTime.hour().minute())
-        return "\(datePart) | \(timePart)"
-    }
-
     var body: some View {
         NavigationStack {
             ZStack {
@@ -149,19 +138,24 @@ struct WorkoutSessionView: View {
                 }
                 if let session = sessionManager.activeSession {
                     ToolbarItem(placement: .navigationBarTrailing) {
-                        Text(sessionDateTimeToolbarText(for: session.startedAt))
-                            .font(Theme.Typography.captionBold)
-                            .foregroundStyle(Theme.Colors.textSecondary)
-                            .padding(.horizontal, Theme.Spacing.sm)
-                            .padding(.vertical, Theme.Spacing.xs)
-                            .background(
-                                RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                                    .fill(Theme.Colors.surface)
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                                    .strokeBorder(Theme.Colors.border, lineWidth: 2)
-                            )
+                        TimelineView(.periodic(from: Date(), by: 1.0)) { context in
+                            let elapsed = max(0, context.date.timeIntervalSince(session.startedAt))
+                            Text(formatElapsed(elapsed))
+                                .font(Theme.Typography.captionBold)
+                                .monospacedDigit()
+                                .foregroundStyle(Theme.Colors.textSecondary)
+                                .padding(.horizontal, Theme.Spacing.sm)
+                                .padding(.vertical, Theme.Spacing.xs)
+                                .background(
+                                    RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                                        .fill(Theme.Colors.surface)
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                                        .strokeBorder(Theme.Colors.border, lineWidth: 2)
+                                )
+                        }
+                        .accessibilityLabel("Elapsed time")
                     }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
