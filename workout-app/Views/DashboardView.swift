@@ -326,7 +326,6 @@ struct DashboardView: View {
                 RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
                     .fill(Theme.Colors.surface.opacity(0.6))
                     .frame(height: 220)
-                    .redacted(reason: .placeholder)
             }
 
             // Training header and expand button below consistency
@@ -920,14 +919,12 @@ private struct MetricsSkeletonView: View {
             RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
                 .fill(Theme.Colors.surface.opacity(0.6))
                 .frame(height: 24)
-                .redacted(reason: .placeholder)
 
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: Theme.Spacing.md) {
                 ForEach(0..<3, id: \.self) { _ in
                     RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
                         .fill(Theme.Colors.surface.opacity(0.6))
                         .frame(height: 120)
-                        .redacted(reason: .placeholder)
                 }
             }
         }

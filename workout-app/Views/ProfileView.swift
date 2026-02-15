@@ -117,7 +117,7 @@ struct ProfileView: View {
                     icon: "person.fill",
                     color: Theme.Colors.accent,
                     title: "Name",
-                    placeholder: "Name",
+                    promptText: "Name",
                     text: $profileName
                 )
 
@@ -230,7 +230,7 @@ private struct ProfileFieldRow: View {
     let icon: String
     let color: Color
     let title: String
-    let placeholder: String
+    let promptText: String
     @Binding var text: String
     var keyboardType: UIKeyboardType = .default
 
@@ -247,7 +247,7 @@ private struct ProfileFieldRow: View {
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Colors.textPrimary)
 
-                TextField(placeholder, text: $text)
+                TextField(promptText, text: $text)
                     .font(Theme.Typography.callout)
                     .foregroundStyle(Theme.Colors.textPrimary)
                     .keyboardType(keyboardType)

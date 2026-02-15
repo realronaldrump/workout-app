@@ -136,7 +136,7 @@ struct ExportWorkoutsView: View {
             )
 
             if mode == .complete {
-                Text("Complete export is coming soon.")
+                Text("Complete export includes exercise tags and is available below.")
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Colors.textSecondary)
                     .padding(.horizontal, Theme.Spacing.xs)
