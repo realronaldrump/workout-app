@@ -24,37 +24,29 @@ struct StrongImportWizard: View {
 
     var body: some View {
         NavigationStack {
-            VStack {
-                // Progress Indicator
-                HStack(spacing: 8) {
-                    ForEach(0..<3) { index in
-                        Capsule()
-                            .fill(index <= step ? Theme.Colors.accent : Theme.Colors.surface)
-                            .frame(height: 4)
-                            .animation(.spring(), value: step)
-                    }
-                }
-                .padding(.horizontal, Theme.Spacing.xl)
-                .padding(.top, Theme.Spacing.lg)
+            ZStack {
+                AdaptiveBackground()
 
-                TabView(selection: $step) {
-                    welcomeStep.tag(0)
-                    importStep.tag(1)
-                    successStep.tag(2)
-                }
-                .tabViewStyle(.page(indexDisplayMode: .never))
-                .animation(.spring(), value: step)
-            }
-            .background(AdaptiveBackground())
-            .navigationTitle("Import Data")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    AppPillButton(title: "Close", systemImage: "xmark", variant: .subtle) {
-                        isPresented = false
+                VStack(spacing: 0) {
+                    topBar
+
+                    Divider()
+                        .overlay(Theme.Colors.border.opacity(0.35))
+
+                    progressIndicator
+                        .padding(.top, Theme.Spacing.lg)
+
+                    TabView(selection: $step) {
+                        welcomeStep.tag(0)
+                        importStep.tag(1)
+                        successStep.tag(2)
                     }
+                    .tabViewStyle(.page(indexDisplayMode: .never))
+                    .animation(.spring(), value: step)
                 }
             }
+            .navigationBarBackButtonHidden(true)
+            .toolbar(.hidden, for: .navigationBar)
         }
         .fileImporter(
             isPresented: $showingFileImporter,
@@ -63,6 +55,38 @@ struct StrongImportWizard: View {
         ) { result in
             handleFileImport(result)
         }
+    }
+
+    private var topBar: some View {
+        ZStack {
+            HStack {
+                AppPillButton(title: "Close", systemImage: "xmark", variant: .subtle) {
+                    isPresented = false
+                }
+                Spacer()
+            }
+
+            Text("Import Data")
+                .font(Theme.Typography.cardHeader)
+                .textCase(.uppercase)
+                .tracking(1)
+                .foregroundStyle(Theme.Colors.textPrimary)
+        }
+        .padding(.horizontal, Theme.Spacing.xl)
+        .padding(.top, Theme.Spacing.sm)
+        .padding(.bottom, Theme.Spacing.md)
+    }
+
+    private var progressIndicator: some View {
+        HStack(spacing: 8) {
+            ForEach(0..<3) { index in
+                Capsule()
+                    .fill(index <= step ? Theme.Colors.accent : Theme.Colors.surface)
+                    .frame(height: 4)
+                    .animation(.spring(), value: step)
+            }
+        }
+        .padding(.horizontal, Theme.Spacing.xl)
     }
 
     private enum ImportPhase: Double {
@@ -266,7 +290,7 @@ struct StrongImportWizard: View {
                     .padding(Theme.Spacing.lg)
                     .softCard(elevation: 2)
                 }
-                .buttonStyle(PlainButtonStyle())
+                .buttonStyle(.plain)
 
                 primaryActionButton(title: "Done", fill: Theme.Colors.success) {
                     isPresented = false

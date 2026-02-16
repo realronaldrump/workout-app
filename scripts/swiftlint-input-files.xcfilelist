@@ -1,4 +1,3 @@
-$(SRCROOT)/workout-app/ContentView.swift
 $(SRCROOT)/workout-app/Models/AnalyticsModels.swift
 $(SRCROOT)/workout-app/Models/DailyHealthData.swift
 $(SRCROOT)/workout-app/Models/ExerciseMetricPreferences.swift
@@ -9,7 +8,6 @@ $(SRCROOT)/workout-app/Models/HealthTimeRange.swift
 $(SRCROOT)/workout-app/Models/LoggedWorkoutModels.swift
 $(SRCROOT)/workout-app/Models/MuscleTag.swift
 $(SRCROOT)/workout-app/Models/NavigationModels.swift
-$(SRCROOT)/workout-app/Models/ProgramModels.swift
 $(SRCROOT)/workout-app/Models/SampleData.swift
 $(SRCROOT)/workout-app/Models/WorkoutModels.swift
 $(SRCROOT)/workout-app/Models/WorkoutSessionModels.swift
@@ -21,6 +19,7 @@ $(SRCROOT)/workout-app/Services/ExerciseRecommendationEngine.swift
 $(SRCROOT)/workout-app/Services/FontRegistrar.swift
 $(SRCROOT)/workout-app/Services/GymProfilesManager.swift
 $(SRCROOT)/workout-app/Services/Haptics.swift
+$(SRCROOT)/workout-app/Services/LegacyProgramCleanup.swift
 $(SRCROOT)/workout-app/Services/HealthKitManager+Authorization.swift
 $(SRCROOT)/workout-app/Services/HealthKitManager+DailySync.swift
 $(SRCROOT)/workout-app/Services/HealthKitManager+Persistence.swift
@@ -30,9 +29,6 @@ $(SRCROOT)/workout-app/Services/HealthKitManager.swift
 $(SRCROOT)/workout-app/Services/HealthKitSupport.swift
 $(SRCROOT)/workout-app/Services/InsightsEngine.swift
 $(SRCROOT)/workout-app/Services/MuscleRecencySuggestionEngine.swift
-$(SRCROOT)/workout-app/Services/ProgramAutoregulationEngine.swift
-$(SRCROOT)/workout-app/Services/ProgramGenerator.swift
-$(SRCROOT)/workout-app/Services/ProgramStore.swift
 $(SRCROOT)/workout-app/Services/WorkoutAnalytics.swift
 $(SRCROOT)/workout-app/Services/WorkoutAnnotationsManager.swift
 $(SRCROOT)/workout-app/Services/WorkoutCSVExporter.swift
@@ -89,11 +85,6 @@ $(SRCROOT)/workout-app/Views/MetricDetailView.swift
 $(SRCROOT)/workout-app/Views/MuscleBalanceDetailView.swift
 $(SRCROOT)/workout-app/Views/OnboardingView.swift
 $(SRCROOT)/workout-app/Views/PerformanceLabView.swift
-$(SRCROOT)/workout-app/Views/Program/ProgramArchiveListView.swift
-$(SRCROOT)/workout-app/Views/Program/ProgramBuilderView.swift
-$(SRCROOT)/workout-app/Views/Program/ProgramDayDetailView.swift
-$(SRCROOT)/workout-app/Views/Program/ProgramHubView.swift
-$(SRCROOT)/workout-app/Views/Program/ProgramWeekView.swift
 $(SRCROOT)/workout-app/Views/ProfileView.swift
 $(SRCROOT)/workout-app/Views/QuickStartView.swift
 $(SRCROOT)/workout-app/Views/Session/ActiveSessionBar.swift

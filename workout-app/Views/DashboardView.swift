@@ -8,8 +8,6 @@ struct DashboardView: View {
     let gymProfilesManager: GymProfilesManager
     @EnvironmentObject var healthManager: HealthKitManager
     @EnvironmentObject var ouraManager: OuraManager
-    @EnvironmentObject var programStore: ProgramStore
-    @EnvironmentObject var sessionManager: WorkoutSessionManager
 
     @StateObject private var insightsEngine: InsightsEngine
     @State private var selectedTimeRange = TimeRange.week
@@ -20,13 +18,10 @@ struct DashboardView: View {
     @State private var showingMuscleBalance = false
     @State private var isTimeRangeExpanded = true
     @State private var isSummaryExpanded = true
-    @State private var isProgramExpanded = true
     @State private var isTrainingExpanded = true
     @State private var isChangeExpanded = false
     @State private var isHighlightsExpanded = false
     @State private var isExploreExpanded = false
-    @State private var selectedProgramDay: DashboardProgramDaySelection?
-    @State private var showingProgramReplaceAlert = false
     private let maxContentWidth: CGFloat = 820
 
     init(
@@ -72,11 +67,6 @@ struct DashboardView: View {
                             .padding(.horizontal, Theme.Spacing.lg)
                         summarySection
                             .padding(.horizontal, Theme.Spacing.lg)
-
-                        if let today = todayProgram {
-                            programSection(today)
-                                .padding(.horizontal, Theme.Spacing.lg)
-                        }
 
                         CollapsibleSection(
                             title: "Change",
@@ -133,17 +123,6 @@ struct DashboardView: View {
         }
         .navigationDestination(item: $selectedChangeMetric) { metric in
             ChangeMetricDetailView(metric: metric, window: changeWindow, workouts: dataManager.workouts)
-        }
-        .navigationDestination(item: $selectedProgramDay) { selection in
-            ProgramDayDetailView(dayId: selection.id)
-        }
-        .alert("Replace active session?", isPresented: $showingProgramReplaceAlert) {
-            Button("Cancel", role: .cancel) {}
-            Button("Replace", role: .destructive) {
-                startTodayPlan(forceReplace: true)
-            }
-        } message: {
-            Text("Starting today's planned session will discard the current in-progress session.")
         }
         .navigationDestination(isPresented: $showingMuscleBalance) {
             MuscleBalanceDetailView(
@@ -280,102 +259,6 @@ struct DashboardView: View {
         }
     }
 
-    private var todayProgram: ProgramTodayPlan? {
-        programStore.todayPlan(
-            dailyHealthStore: healthManager.dailyHealthStore,
-            ouraScores: ouraManager.dailyScoreStore
-        )
-    }
-
-    private func programSection(_ today: ProgramTodayPlan) -> some View {
-        let todayStart = Calendar.current.startOfDay(for: Date())
-        let scheduledStart = Calendar.current.startOfDay(for: today.day.scheduledDate)
-        let isOverdue = scheduledStart < todayStart
-
-        return CollapsibleSection(
-            title: "Program",
-            subtitle: "Week \(today.day.weekNumber) • Day \(today.day.dayNumber)",
-            isExpanded: $isProgramExpanded
-        ) {
-            HStack(spacing: Theme.Spacing.md) {
-                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                    Text(today.day.focusTitle)
-                        .font(Theme.Typography.headline)
-                        .foregroundStyle(Theme.Colors.textPrimary)
-                    Text("Week \(today.day.weekNumber) • Day \(today.day.dayNumber)")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-
-                    if isOverdue {
-                        Text("Overdue • \(today.day.scheduledDate.formatted(date: .abbreviated, time: .omitted))")
-                            .font(Theme.Typography.microcopy)
-                            .foregroundStyle(Theme.Colors.warning)
-                    }
-
-                    Text("Readiness \(Int(round(today.readiness.score)))")
-                        .font(Theme.Typography.microcopy)
-                        .foregroundStyle(Theme.Colors.textTertiary)
-                }
-
-                Spacer()
-
-                VStack(spacing: Theme.Spacing.xs) {
-                    Button {
-                        if sessionManager.activeSession != nil {
-                            showingProgramReplaceAlert = true
-                        } else {
-                            startTodayPlan(forceReplace: false)
-                        }
-                    } label: {
-                        Text("Start")
-                            .font(Theme.Typography.captionBold)
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, Theme.Spacing.md)
-                            .padding(.vertical, Theme.Spacing.xs)
-                            .brutalistButtonChrome(
-                                fill: Theme.Colors.accent,
-                                cornerRadius: Theme.CornerRadius.large
-                            )
-                    }
-                    .buttonStyle(.plain)
-
-                    Button {
-                        selectedProgramDay = DashboardProgramDaySelection(id: today.day.id)
-                        Haptics.selection()
-                    } label: {
-                        Text("Open Day")
-                            .font(Theme.Typography.captionBold)
-                            .foregroundStyle(Theme.Colors.textSecondary)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(Theme.Spacing.lg)
-            .softCard(elevation: 1)
-        }
-    }
-
-    private func startTodayPlan(forceReplace: Bool) {
-        guard let today = todayProgram else { return }
-
-        Task { @MainActor in
-            if forceReplace {
-                await sessionManager.discardDraft()
-            }
-
-            sessionManager.startSession(
-                name: today.day.focusTitle,
-                gymProfileId: gymProfilesManager.lastUsedGymProfileId,
-                templateExercises: today.adjustedExercises,
-                plannedProgramId: today.planId,
-                plannedDayId: today.day.id,
-                plannedDayDate: today.day.scheduledDate
-            )
-            sessionManager.isPresentingSessionUI = true
-            Haptics.notify(.success)
-        }
-    }
-
     private var changeSummaryContent: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             if changeSummaryMetrics.isEmpty {
@@ -478,18 +361,6 @@ struct DashboardView: View {
 
     private var exploreContent: some View {
         VStack(spacing: Theme.Spacing.md) {
-            NavigationLink {
-                ProgramHubView()
-            } label: {
-                ExplorationRow(
-                    title: "Program Coach",
-                    subtitle: "Adaptive 8-week plans",
-                    icon: "calendar.badge.clock",
-                    tint: Theme.Colors.accent
-                )
-            }
-            .buttonStyle(PlainButtonStyle())
-
             NavigationLink {
                 PerformanceLabView(dataManager: dataManager)
             } label: {
@@ -848,10 +719,6 @@ private struct SyncStatusPill: View {
     }
 }
 
-private struct DashboardProgramDaySelection: Hashable, Identifiable {
-    let id: UUID
-}
-
 private struct TimeRangePicker: View {
     @Binding var selectedRange: DashboardView.TimeRange
 
@@ -880,6 +747,7 @@ private struct TimeRangePicker: View {
                                     .strokeBorder(Theme.Colors.border, lineWidth: 2)
                             )
                     }
+                    .buttonStyle(.plain)
                 }
             }
             .padding(.horizontal, Theme.Spacing.lg)

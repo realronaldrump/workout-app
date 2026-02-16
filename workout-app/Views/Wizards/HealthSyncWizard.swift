@@ -107,20 +107,9 @@ struct HealthSyncWizard: View {
 
             Spacer()
 
-            Button(
-                action: {
-                    withAnimation { step = 1 }
-                },
-                label: {
-                    Text("Next")
-                        .font(Theme.Typography.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Theme.Colors.accent)
-                        .foregroundColor(.white)
-                        .cornerRadius(Theme.CornerRadius.large)
-                }
-            )
+            primaryActionButton(title: "Next", fill: Theme.Colors.accent) {
+                withAnimation { step = 1 }
+            }
             .padding(Theme.Spacing.xl)
         }
     }
@@ -146,15 +135,7 @@ struct HealthSyncWizard: View {
 
             Spacer()
 
-            Button(action: requestAuthorization) {
-                Text("Authorize")
-                    .font(Theme.Typography.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Theme.Colors.accent)
-                    .foregroundColor(.white)
-                    .cornerRadius(Theme.CornerRadius.large)
-            }
+            primaryActionButton(title: "Authorize", fill: Theme.Colors.accent, action: requestAuthorization)
             .padding(Theme.Spacing.xl)
         }
     }
@@ -221,23 +202,29 @@ struct HealthSyncWizard: View {
 
             Spacer()
 
-            Button(
-                action: { isPresented = false },
-                label: {
-                    Text("Done")
-                        .font(Theme.Typography.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Theme.Colors.success)
-                        .foregroundColor(.white)
-                        .cornerRadius(Theme.CornerRadius.large)
-                }
-            )
+            primaryActionButton(title: "Done", fill: Theme.Colors.success) {
+                isPresented = false
+            }
             .padding(Theme.Spacing.xl)
         }
     }
 
     // MARK: - Logic
+
+    private func primaryActionButton(title: String, fill: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(Theme.Typography.headline)
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, Theme.Spacing.md)
+                .brutalistButtonChrome(
+                    fill: fill,
+                    cornerRadius: Theme.CornerRadius.large
+                )
+        }
+        .buttonStyle(.plain)
+    }
 
     private func requestAuthorization() {
         Task {

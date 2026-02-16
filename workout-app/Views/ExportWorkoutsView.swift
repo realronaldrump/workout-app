@@ -328,6 +328,7 @@ struct ExportWorkoutsView: View {
                     .foregroundColor(workoutExportButtonEnabled ? .white : Theme.Colors.textTertiary)
                     .cornerRadius(Theme.CornerRadius.large)
                 }
+                .buttonStyle(.plain)
                 .disabled(!workoutExportButtonEnabled)
 
                 if let url = workoutExportFileURL {
@@ -417,6 +418,7 @@ struct ExportWorkoutsView: View {
                     .foregroundColor(exerciseExportButtonEnabled ? .white : Theme.Colors.textTertiary)
                     .cornerRadius(Theme.CornerRadius.large)
                 }
+                .buttonStyle(.plain)
                 .disabled(!exerciseExportButtonEnabled)
 
                 if let url = exerciseExportFileURL {

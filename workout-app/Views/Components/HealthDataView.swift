@@ -496,6 +496,7 @@ struct HealthSyncButton: View {
             )
             .cornerRadius(Theme.CornerRadius.medium)
         }
+        .buttonStyle(.plain)
         .disabled(isSyncing || !healthManager.isHealthKitAvailable())
         .opacity(isSyncing ? 0.7 : 1)
         .alert("Sync Error", isPresented: $showError) {

@@ -337,9 +337,11 @@ struct GymBulkAssignView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, Theme.Spacing.md)
-                .background(isAutoTagging ? Theme.Colors.border : Theme.Colors.accent)
                 .foregroundStyle(.white)
-                .cornerRadius(Theme.CornerRadius.large)
+                .brutalistButtonChrome(
+                    fill: isAutoTagging ? Theme.Colors.border : Theme.Colors.accent,
+                    cornerRadius: Theme.CornerRadius.large
+                )
             }
             .buttonStyle(.plain)
             .disabled(isAutoTagging || targets.isEmpty || !healthManager.isHealthKitAvailable())
@@ -464,7 +466,7 @@ struct GymBulkAssignView: View {
             .padding(Theme.Spacing.lg)
             .softCard(elevation: 1)
         }
-        .buttonStyle(PlainButtonStyle())
+        .buttonStyle(.plain)
     }
 
     private var filteredWorkouts: [Workout] {
