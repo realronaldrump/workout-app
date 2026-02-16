@@ -124,7 +124,8 @@ final class ProgramStore: ObservableObject {
 
     func todayPlan(
         referenceDate: Date = Date(),
-        dailyHealthStore: [Date: DailyHealthData]
+        dailyHealthStore: [Date: DailyHealthData],
+        ouraScores: [Date: OuraDailyScoreDay]? = nil
     ) -> ProgramTodayPlan? {
         guard let plan = activePlan else { return nil }
 
@@ -158,6 +159,7 @@ final class ProgramStore: ObservableObject {
 
         let readiness = ProgramAutoregulationEngine.readinessSnapshot(
             dailyHealthStore: dailyHealthStore,
+            ouraScores: ouraScores,
             on: referenceDate,
             rule: plan.progressionRule
         )
@@ -209,7 +211,8 @@ final class ProgramStore: ObservableObject {
         plannedDayId: UUID?,
         plannedDayDate: Date?,
         plannedTargetsSnapshot: [PlannedExerciseTarget]? = nil,
-        dailyHealthStore: [Date: DailyHealthData]
+        dailyHealthStore: [Date: DailyHealthData],
+        ouraScores: [Date: OuraDailyScoreDay]? = nil
     ) {
         // Only sessions explicitly started from a program day should mutate plan state.
         guard plannedProgramId != nil || plannedDayId != nil || plannedDayDate != nil else { return }
@@ -226,7 +229,8 @@ final class ProgramStore: ObservableObject {
                    to: activePlan,
                    workout: workout,
                    source: completionSource,
-                   dailyHealthStore: dailyHealthStore
+                   dailyHealthStore: dailyHealthStore,
+                   ouraScores: ouraScores
                ) {
                 self.activePlan = updated
                 persist()
@@ -235,7 +239,8 @@ final class ProgramStore: ObservableObject {
                         to: archivedPlans[archivedIndex],
                         workout: workout,
                         source: completionSource,
-                        dailyHealthStore: dailyHealthStore
+                        dailyHealthStore: dailyHealthStore,
+                        ouraScores: ouraScores
                       ) {
                 archivedPlans[archivedIndex] = updated
                 resortArchivedPlans()
@@ -249,7 +254,8 @@ final class ProgramStore: ObservableObject {
                 to: activePlan,
                 workout: workout,
                 source: completionSource,
-                dailyHealthStore: dailyHealthStore
+                dailyHealthStore: dailyHealthStore,
+                ouraScores: ouraScores
               ) else {
             return
         }
@@ -339,7 +345,8 @@ final class ProgramStore: ObservableObject {
         to sourcePlan: ProgramPlan,
         workout: Workout,
         source: ProgramCompletionSource,
-        dailyHealthStore: [Date: DailyHealthData]
+        dailyHealthStore: [Date: DailyHealthData],
+        ouraScores: [Date: OuraDailyScoreDay]? = nil
     ) -> ProgramPlan? {
         var plan = sourcePlan
 
@@ -357,6 +364,7 @@ final class ProgramStore: ObservableObject {
 
         let readiness = ProgramAutoregulationEngine.readinessSnapshot(
             dailyHealthStore: dailyHealthStore,
+            ouraScores: ouraScores,
             on: workout.date,
             rule: plan.progressionRule
         )

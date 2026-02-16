@@ -5,6 +5,7 @@ struct ProgramHubView: View {
     @EnvironmentObject private var programStore: ProgramStore
     @EnvironmentObject private var dataManager: WorkoutDataManager
     @EnvironmentObject private var healthManager: HealthKitManager
+    @EnvironmentObject private var ouraManager: OuraManager
     @EnvironmentObject private var sessionManager: WorkoutSessionManager
     @EnvironmentObject private var gymProfilesManager: GymProfilesManager
 
@@ -129,7 +130,10 @@ struct ProgramHubView: View {
             momentumSection(plan)
             weeklyProgressSection(plan)
 
-            if let today = programStore.todayPlan(dailyHealthStore: healthManager.dailyHealthStore) {
+            if let today = programStore.todayPlan(
+                dailyHealthStore: healthManager.dailyHealthStore,
+                ouraScores: ouraManager.dailyScoreStore
+            ) {
                 let dayStart = Calendar.current.startOfDay(for: today.day.scheduledDate)
                 let todayStart = Calendar.current.startOfDay(for: Date())
                 let isOverdue = dayStart < todayStart
@@ -552,7 +556,10 @@ struct ProgramHubView: View {
     }
 
     private func startTodayPlan(forceReplace: Bool) {
-        guard let today = programStore.todayPlan(dailyHealthStore: healthManager.dailyHealthStore) else { return }
+        guard let today = programStore.todayPlan(
+            dailyHealthStore: healthManager.dailyHealthStore,
+            ouraScores: ouraManager.dailyScoreStore
+        ) else { return }
 
         Task { @MainActor in
             if forceReplace {

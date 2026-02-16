@@ -1010,40 +1010,66 @@ struct ExerciseProgressChart: View {
                 Rectangle()
                     .fill(Color.clear)
                     .contentShape(Rectangle())
-                    .gesture(
+                    .simultaneousGesture(
                         DragGesture(minimumDistance: 0)
                             .onChanged { value in
                                 selectionClearTask?.cancel()
-                                guard let plotFrame = proxy.plotFrame else { return }
-                                let frame = geometry[plotFrame]
-                                let x = value.location.x - frame.origin.x
-                                if let date: Date = proxy.value(atX: x) {
-                                    // Find closest data point
-                                    if let closest = chartData.min(by: {
-                                        abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date))
-                                    }) {
-                                        selectedDataPoint = closest
-                                        if let prDate, prDate == closest.date, lastPRHapticDate != prDate {
-                                            Haptics.notify(.success)
-                                            lastPRHapticDate = prDate
-                                        }
-                                    }
-                                }
+                                guard isPrimarilyHorizontalDrag(value.translation) else { return }
+                                updateSelection(at: value.location, proxy: proxy, geometry: geometry)
                             }
-                            .onEnded { _ in
-                                // Keep selection visible briefly (cancelled if the user starts dragging again).
-                                selectionClearTask?.cancel()
-                                selectionClearTask = Task { @MainActor in
-                                    try? await Task.sleep(nanoseconds: 2_000_000_000)
-                                    guard !Task.isCancelled else { return }
-                                    withAnimation {
-                                        selectedDataPoint = nil
-                                    }
+                            .onEnded { value in
+                                let tapped = isTapLike(value.translation)
+                                guard tapped || isPrimarilyHorizontalDrag(value.translation) else { return }
+                                if tapped {
+                                    updateSelection(at: value.location, proxy: proxy, geometry: geometry)
                                 }
+                                scheduleSelectionClear()
                             }
                     )
             }
         }
+    }
+
+    private func updateSelection(at location: CGPoint, proxy: ChartProxy, geometry: GeometryProxy) {
+        guard let plotFrame = proxy.plotFrame else { return }
+        let frame = geometry[plotFrame]
+        guard frame.contains(location) else { return }
+        let x = location.x - frame.origin.x
+        guard let date: Date = proxy.value(atX: x) else { return }
+
+        // Find closest data point.
+        if let closest = chartData.min(by: {
+            abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date))
+        }) {
+            selectedDataPoint = closest
+            if let prDate, prDate == closest.date, lastPRHapticDate != prDate {
+                Haptics.notify(.success)
+                lastPRHapticDate = prDate
+            }
+        }
+    }
+
+    private func scheduleSelectionClear() {
+        guard selectedDataPoint != nil else { return }
+        // Keep selection visible briefly (cancelled if the user starts dragging again).
+        selectionClearTask?.cancel()
+        selectionClearTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            guard !Task.isCancelled else { return }
+            withAnimation {
+                selectedDataPoint = nil
+            }
+        }
+    }
+
+    private func isTapLike(_ translation: CGSize) -> Bool {
+        abs(translation.width) < 10 && abs(translation.height) < 10
+    }
+
+    private func isPrimarilyHorizontalDrag(_ translation: CGSize) -> Bool {
+        let dx = abs(translation.width)
+        let dy = abs(translation.height)
+        return dx > max(14, dy * 1.2)
     }
 
     @ChartContentBuilder

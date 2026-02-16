@@ -8,11 +8,26 @@ struct ExerciseProgressEvaluation: Sendable {
 enum ProgramAutoregulationEngine {
     static func readinessSnapshot(
         dailyHealthStore: [Date: DailyHealthData],
+        ouraScores: [Date: OuraDailyScoreDay]? = nil,
         on date: Date,
         rule: ProgressionRule,
         calendar: Calendar = .current
     ) -> ReadinessSnapshot {
         let dayStart = calendar.startOfDay(for: date)
+        if let ouraScore = ouraScores?[dayStart]?.readinessScore {
+            let band = bandForOuraScore(ouraScore)
+            return ReadinessSnapshot(
+                dayStart: dayStart,
+                score: clamp(ouraScore, min: 0, max: 100),
+                band: band,
+                multiplier: rule.multiplier(for: band),
+                source: .oura,
+                sleepHours: nil,
+                restingHeartRateDelta: nil,
+                hrvDelta: nil
+            )
+        }
+
         let current = dailyHealthStore[dayStart]
 
         let lookbackValues = dailyHealthStore
@@ -50,6 +65,7 @@ enum ProgramAutoregulationEngine {
             score: score,
             band: band,
             multiplier: rule.multiplier(for: band),
+            source: .healthKit,
             sleepHours: sleepHours,
             restingHeartRateDelta: delta(current: restingHR, baseline: baselineRHR),
             hrvDelta: delta(current: hrv, baseline: baselineHRV)
@@ -141,5 +157,15 @@ enum ProgramAutoregulationEngine {
 
     private static func clamp(_ value: Double, min lower: Double, max upper: Double) -> Double {
         Swift.max(lower, Swift.min(upper, value))
+    }
+
+    private static func bandForOuraScore(_ score: Double) -> ReadinessBand {
+        if score < 70 {
+            return .low
+        }
+        if score >= 85 {
+            return .high
+        }
+        return .neutral
     }
 }

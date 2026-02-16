@@ -9,7 +9,9 @@ struct MetricDetailView: View {
     @EnvironmentObject var dataManager: WorkoutDataManager
     @EnvironmentObject var annotationsManager: WorkoutAnnotationsManager
     @EnvironmentObject var gymProfilesManager: GymProfilesManager
+    @AppStorage("intentionalRestDays") private var intentionalRestDays: Int = 1
     @State private var hasAutoScrolled = false
+    @State private var selectedStreakRunId: String?
 
     var body: some View {
         ZStack {
@@ -79,29 +81,51 @@ struct MetricDetailView: View {
 
     private var streakSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-            let stats = dataManager.calculateStats(for: workouts)
+            let stats = dataManager.calculateStats(for: dataManager.workouts)
             HStack(spacing: Theme.Spacing.xl) {
                 MetricPill(title: "Current Streak", value: "\(stats.currentStreak) days")
                 MetricPill(title: "Longest Streak", value: "\(stats.longestStreak) days")
             }
 
-            LongestStreaksSection(workouts: dataManager.workouts, collapsedCount: 4, maxExpandedCount: 12)
+            LongestStreaksSection(
+                workouts: dataManager.workouts,
+                collapsedCount: 4,
+                maxExpandedCount: 12,
+                selectedRunId: selectedStreakRun?.id
+            ) { run in
+                selectedStreakRunId = run.id
+            }
                 .padding(Theme.Spacing.lg)
                 .softCard(elevation: 2)
 
-            CalendarHeatmap(workouts: workouts)
+            if let run = selectedStreakRun {
+                HStack {
+                    Text("Viewing \(run.workoutDayCount)-day streak")
+                        .font(Theme.Typography.subheadline)
+                        .foregroundColor(Theme.Colors.textPrimary)
+                    Spacer()
+                    Text(streakDateLabel(run))
+                        .font(Theme.Typography.caption)
+                        .foregroundColor(Theme.Colors.textTertiary)
+                }
+            }
+
+            CalendarHeatmap(
+                workouts: selectedStreakWorkouts,
+                anchorDate: selectedStreakRun?.end
+            )
                 .padding(Theme.Spacing.lg)
                 .softCard(elevation: 2)
 
-            Text("sessions \(sortedWorkouts.count)")
+            Text("sessions \(selectedStreakWorkouts.count)")
                 .font(Theme.Typography.caption)
                 .foregroundColor(Theme.Colors.textTertiary)
 
-            ForEach(sortedWorkouts) { workout in
+            ForEach(selectedStreakWorkouts) { workout in
                 NavigationLink(destination: WorkoutDetailView(workout: workout)) {
                     MetricWorkoutRow(
                         workout: workout,
-                        subtitle: timeOfDayLabel(for: workout.date)
+                        subtitle: "\(workout.date.formatted(date: .abbreviated, time: .omitted)) | \(timeOfDayLabel(for: workout.date))"
                     )
                 }
                 .buttonStyle(PlainButtonStyle())
@@ -232,6 +256,9 @@ struct MetricDetailView: View {
         case .sessions:
             return "sessions \(workouts.count)"
         case .streak:
+            if let run = selectedStreakRun {
+                return "\(run.workoutDayCount)-day streak | sessions \(selectedStreakWorkouts.count)"
+            }
             return "sessions \(workouts.count)"
         case .totalVolume:
             let total = workouts.reduce(0) { $0 + $1.totalVolume }
@@ -239,6 +266,70 @@ struct MetricDetailView: View {
         case .avgDuration:
             return "sessions \(workouts.count)"
         }
+    }
+
+    private var streakRuns: [StreakRun] {
+        WorkoutAnalytics.streakRuns(
+            for: dataManager.workouts,
+            intentionalRestDays: intentionalRestDays
+        )
+    }
+
+    private var streakRunsByLength: [StreakRun] {
+        streakRuns.sorted {
+            if $0.workoutDayCount != $1.workoutDayCount {
+                return $0.workoutDayCount > $1.workoutDayCount
+            }
+            return $0.end > $1.end
+        }
+    }
+
+    private var streakRunsByRecency: [StreakRun] {
+        streakRuns.sorted { $0.end > $1.end }
+    }
+
+    private var currentStreakRun: StreakRun? {
+        let allowedGapDays = max(0, intentionalRestDays) + 1
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+
+        return streakRunsByRecency.first { run in
+            let endDay = calendar.startOfDay(for: run.end)
+            let daysSince = calendar.dateComponents([.day], from: endDay, to: today).day ?? Int.max
+            return daysSince <= allowedGapDays
+        }
+    }
+
+    private var selectedStreakRun: StreakRun? {
+        if let selectedStreakRunId,
+           let matched = streakRuns.first(where: { $0.id == selectedStreakRunId }) {
+            return matched
+        }
+        return currentStreakRun ?? streakRunsByLength.first ?? streakRunsByRecency.first
+    }
+
+    private var selectedStreakWorkouts: [Workout] {
+        guard let run = selectedStreakRun else { return sortedWorkouts }
+        let calendar = Calendar.current
+        let startDay = calendar.startOfDay(for: run.start)
+        let endDay = calendar.startOfDay(for: run.end)
+
+        return dataManager.workouts
+            .filter { workout in
+                let day = calendar.startOfDay(for: workout.date)
+                return day >= startDay && day <= endDay
+            }
+            .sorted { $0.date > $1.date }
+    }
+
+    private func streakDateLabel(_ run: StreakRun) -> String {
+        let calendar = Calendar.current
+        if calendar.isDate(run.start, inSameDayAs: run.end) {
+            return run.start.formatted(date: .abbreviated, time: .omitted)
+        }
+        let start = run.start.formatted(Date.FormatStyle().month(.abbreviated).day())
+        let end = run.end.formatted(Date.FormatStyle().month(.abbreviated).day().year())
+        return "\(start) - \(end)"
     }
 
     private func timeOfDayLabel(for date: Date) -> String {
@@ -336,9 +427,26 @@ private extension MetricDetailView {
     }
 
     struct SessionBucket: Identifiable {
-        let id = UUID()
         let weekStart: Date
         let count: Int
+        var id: Date { weekStart }
+    }
+
+    struct DaySessionBucket: Identifiable {
+        let dayStart: Date
+        let count: Int
+        var id: Date { dayStart }
+    }
+
+    var sundayCalendar: Calendar {
+        var calendar = Calendar.current
+        calendar.firstWeekday = 1 // Sunday
+        calendar.minimumDaysInFirstWeek = 1
+        return calendar
+    }
+
+    func weekStart(for date: Date, calendar: Calendar) -> Date {
+        calendar.dateInterval(of: .weekOfYear, for: date)?.start ?? calendar.startOfDay(for: date)
     }
 
     var durationPoints: [MetricPoint] {
@@ -357,10 +465,9 @@ private extension MetricDetailView {
     }
 
     var weeklySessions: [SessionBucket] {
-        let calendar = Calendar.current
+        let calendar = sundayCalendar
         let buckets: [Date: Int] = sortedWorkouts.reduce(into: [:]) { result, workout in
-            let components = calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: workout.date)
-            let weekStart = calendar.date(from: components) ?? calendar.startOfDay(for: workout.date)
+            let weekStart = weekStart(for: workout.date, calendar: calendar)
             result[weekStart, default: 0] += 1
         }
 
@@ -369,10 +476,70 @@ private extension MetricDetailView {
             .sorted { $0.weekStart < $1.weekStart }
     }
 
+    var singleWeekDailySessions: [DaySessionBucket]? {
+        guard let earliest = sortedWorkouts.last?.date,
+              let latest = sortedWorkouts.first?.date else {
+            return nil
+        }
+
+        let calendar = sundayCalendar
+        let earliestWeekStart = weekStart(for: earliest, calendar: calendar)
+        let latestWeekStart = weekStart(for: latest, calendar: calendar)
+        guard calendar.isDate(earliestWeekStart, inSameDayAs: latestWeekStart) else {
+            return nil
+        }
+
+        let countsByDay: [Date: Int] = sortedWorkouts.reduce(into: [:]) { result, workout in
+            let dayStart = calendar.startOfDay(for: workout.date)
+            result[dayStart, default: 0] += 1
+        }
+
+        return (0..<7).compactMap { offset in
+            guard let day = calendar.date(byAdding: .day, value: offset, to: latestWeekStart) else {
+                return nil
+            }
+            let dayStart = calendar.startOfDay(for: day)
+            return DaySessionBucket(dayStart: dayStart, count: countsByDay[dayStart, default: 0])
+        }
+    }
+
     var sessionsChart: some View {
         Group {
             if weeklySessions.isEmpty {
                 EmptyChartCard(title: "Weekly Sessions", message: "Not enough sessions to chart yet.")
+            } else if let dailySessions = singleWeekDailySessions {
+                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                    Text("Daily Sessions")
+                        .font(Theme.Typography.title3)
+                        .foregroundColor(Theme.Colors.textPrimary)
+
+                    Chart(dailySessions) { bucket in
+                        BarMark(
+                            x: .value("Day", bucket.dayStart),
+                            y: .value("Sessions", bucket.count)
+                        )
+                        .foregroundStyle(Theme.Colors.accent)
+                        .cornerRadius(4)
+                    }
+                    .chartXAxis {
+                        AxisMarks(values: dailySessions.map(\.dayStart)) { _ in
+                            AxisValueLabel(format: .dateTime.weekday(.abbreviated))
+                        }
+                    }
+                    .chartYAxis {
+                        AxisMarks { value in
+                            AxisGridLine()
+                            AxisValueLabel {
+                                if let intValue = value.as(Int.self) {
+                                    Text("\(intValue)")
+                                }
+                            }
+                        }
+                    }
+                    .frame(height: 180)
+                }
+                .padding(Theme.Spacing.lg)
+                .softCard(elevation: 2)
             } else {
                 VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                     Text("Weekly Sessions")

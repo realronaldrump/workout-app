@@ -1,0 +1,28 @@
+name = "oura-worker"
+main = "src/index.ts"
+compatibility_date = "2026-02-16"
+
+[vars]
+FEATURE_OURA_ENABLED = "true"
+PUBLIC_BASE_URL = "https://your-worker-domain.example"
+APP_CALLBACK_URL = "workoutapp://oura/callback"
+OURA_VERIFICATION_TOKEN = "replace-me"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "oura_scores"
+database_id = "replace-me"
+
+[[r2_buckets]]
+binding = "RAW_BUCKET"
+bucket_name = "oura-raw-payloads"
+
+[[queues.producers]]
+binding = "OURA_SYNC_QUEUE"
+queue = "oura-sync-queue"
+
+[[queues.consumers]]
+queue = "oura-sync-queue"
+
+[[triggers.crons]]
+crons = ["0 */6 * * *"]

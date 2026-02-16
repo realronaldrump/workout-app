@@ -7,6 +7,7 @@ struct DashboardView: View {
     let annotationsManager: WorkoutAnnotationsManager
     let gymProfilesManager: GymProfilesManager
     @EnvironmentObject var healthManager: HealthKitManager
+    @EnvironmentObject var ouraManager: OuraManager
     @EnvironmentObject var programStore: ProgramStore
     @EnvironmentObject var sessionManager: WorkoutSessionManager
 
@@ -17,6 +18,10 @@ struct DashboardView: View {
     @State private var selectedWorkoutMetric: WorkoutMetricDetailSelection?
     @State private var selectedChangeMetric: ChangeMetric?
     @State private var showingMuscleBalance = false
+    @State private var isTimeRangeExpanded = true
+    @State private var isSummaryExpanded = true
+    @State private var isProgramExpanded = true
+    @State private var isTrainingExpanded = true
     @State private var isChangeExpanded = false
     @State private var isHighlightsExpanded = false
     @State private var isExploreExpanded = false
@@ -64,6 +69,7 @@ struct DashboardView: View {
                             .padding(.horizontal, Theme.Spacing.lg)
                     } else {
                         timeRangeSection
+                            .padding(.horizontal, Theme.Spacing.lg)
                         summarySection
                             .padding(.horizontal, Theme.Spacing.lg)
 
@@ -148,6 +154,9 @@ struct DashboardView: View {
         }
         .onAppear {
             healthManager.refreshAuthorizationStatus()
+            Task {
+                await ouraManager.autoRefreshOnForeground()
+            }
             if dataManager.workouts.isEmpty {
                 // Offload file reading to background to prevent main thread hitch
                 Task { await loadLatestWorkoutData() }
@@ -159,6 +168,7 @@ struct DashboardView: View {
         }
         .refreshable {
             await loadLatestWorkoutData()
+            await ouraManager.autoRefreshOnForeground()
         }
         .onChange(of: dataManager.workouts.count) { _, _ in
             refreshInsights()
@@ -193,30 +203,21 @@ struct DashboardView: View {
     }
 
     private var timeRangeSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text("Time Range")
-                .font(Theme.Typography.metricLabel)
-                .foregroundColor(Theme.Colors.textTertiary)
-                .textCase(.uppercase)
-                .tracking(0.8)
-                .padding(.horizontal, Theme.Spacing.lg)
-
+        CollapsibleSection(
+            title: "Time Range",
+            subtitle: timeRangeDetailLabel,
+            isExpanded: $isTimeRangeExpanded
+        ) {
             TimeRangePicker(selectedRange: $selectedTimeRange)
-
-            Text(timeRangeDetailLabel)
-                .font(Theme.Typography.caption)
-                .foregroundColor(Theme.Colors.textTertiary)
-                .padding(.horizontal, Theme.Spacing.lg)
         }
     }
 
     private var summarySection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-            Text("Summary")
-                .font(Theme.Typography.sectionHeader)
-                .foregroundColor(Theme.Colors.textPrimary)
-                .tracking(1.0)
-
+        CollapsibleSection(
+            title: "Summary",
+            subtitle: headerSummary,
+            isExpanded: $isSummaryExpanded
+        ) {
             if let currentStats = filteredStats {
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: Theme.Spacing.md) {
@@ -280,7 +281,10 @@ struct DashboardView: View {
     }
 
     private var todayProgram: ProgramTodayPlan? {
-        programStore.todayPlan(dailyHealthStore: healthManager.dailyHealthStore)
+        programStore.todayPlan(
+            dailyHealthStore: healthManager.dailyHealthStore,
+            ouraScores: ouraManager.dailyScoreStore
+        )
     }
 
     private func programSection(_ today: ProgramTodayPlan) -> some View {
@@ -288,12 +292,11 @@ struct DashboardView: View {
         let scheduledStart = Calendar.current.startOfDay(for: today.day.scheduledDate)
         let isOverdue = scheduledStart < todayStart
 
-        return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Program")
-                .font(Theme.Typography.sectionHeader)
-                .foregroundColor(Theme.Colors.textPrimary)
-                .tracking(1.0)
-
+        return CollapsibleSection(
+            title: "Program",
+            subtitle: "Week \(today.day.weekNumber) • Day \(today.day.dayNumber)",
+            isExpanded: $isProgramExpanded
+        ) {
             HStack(spacing: Theme.Spacing.md) {
                 VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                     Text(today.day.focusTitle)
@@ -430,44 +433,45 @@ struct DashboardView: View {
     }
 
     private var trainingSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-            // Consistency shows first without header
-            if let currentStats = filteredStats {
-                ConsistencyView(
-                    stats: currentStats,
-                    workouts: filteredWorkouts,
-                    streakWorkouts: dataManager.workouts,
-                    timeRange: consistencyTimeRange,
-                    dateRange: selectedDateRange
-                ) {
-                    selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: .streak, scrollTarget: nil)
+        CollapsibleSection(
+            title: "Training",
+            subtitle: timeRangeDetailLabel,
+            isExpanded: $isTrainingExpanded
+        ) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
+                // Consistency shows first without header
+                if let currentStats = filteredStats {
+                    ConsistencyView(
+                        stats: currentStats,
+                        workouts: filteredWorkouts,
+                        streakWorkouts: dataManager.workouts,
+                        timeRange: consistencyTimeRange,
+                        dateRange: selectedDateRange
+                    ) {
+                        selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: .streak, scrollTarget: nil)
+                    }
+                } else {
+                    RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
+                        .fill(Theme.Colors.surface.opacity(0.6))
+                        .frame(height: 220)
                 }
-            } else {
-                RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
-                    .fill(Theme.Colors.surface.opacity(0.6))
-                    .frame(height: 220)
-            }
 
-            Text("Training")
-                .font(Theme.Typography.sectionHeader)
-                .foregroundColor(Theme.Colors.textPrimary)
-                .tracking(1.0)
-
-            VolumeProgressChart(workouts: filteredWorkouts) {
-                selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: .totalVolume, scrollTarget: nil)
-            }
-            MuscleHeatmapView(
-                dataManager: dataManager,
-                dateRange: selectedDateRange,
-                rangeLabel: timeRangeDetailLabel
-            ) {
-                showingMuscleBalance = true
-            }
-            ExerciseBreakdownView(workouts: filteredWorkouts) {
-                selectedWorkoutMetric = WorkoutMetricDetailSelection(
-                    kind: .totalVolume,
-                    scrollTarget: .topExercisesByVolume
-                )
+                VolumeProgressChart(workouts: filteredWorkouts) {
+                    selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: .totalVolume, scrollTarget: nil)
+                }
+                MuscleHeatmapView(
+                    dataManager: dataManager,
+                    dateRange: selectedDateRange,
+                    rangeLabel: timeRangeDetailLabel
+                ) {
+                    showingMuscleBalance = true
+                }
+                ExerciseBreakdownView(workouts: filteredWorkouts) {
+                    selectedWorkoutMetric = WorkoutMetricDetailSelection(
+                        kind: .totalVolume,
+                        scrollTarget: .topExercisesByVolume
+                    )
+                }
             }
         }
     }

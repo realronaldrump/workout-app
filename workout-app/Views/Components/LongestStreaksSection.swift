@@ -6,6 +6,8 @@ struct LongestStreaksSection: View {
     var collapsedCount: Int = 3
     var maxExpandedCount: Int = 12
     var title: String = "Longest Streaks"
+    var selectedRunId: String?
+    var onSelectRun: ((StreakRun) -> Void)?
 
     @AppStorage("intentionalRestDays") private var intentionalRestDays: Int = 1
     @State private var isExpanded: Bool = false
@@ -19,13 +21,32 @@ struct LongestStreaksSection: View {
                     .font(Theme.Typography.caption)
                     .foregroundColor(Theme.Colors.textTertiary)
             } else {
+                if onSelectRun != nil {
+                    Text("Tap a streak to inspect it below")
+                        .font(Theme.Typography.caption)
+                        .foregroundColor(Theme.Colors.textTertiary)
+                }
+
                 VStack(spacing: Theme.Spacing.sm) {
                     ForEach(Array(displayRuns.enumerated()), id: \.element.id) { index, run in
-                        LongestStreakRow(
+                        let row = LongestStreakRow(
                             rank: index + 1,
                             run: run,
-                            dateLabel: dateLabel(for: run)
+                            dateLabel: dateLabel(for: run),
+                            isSelected: selectedRunId == run.id
                         )
+
+                        if let onSelectRun {
+                            Button {
+                                Haptics.selection()
+                                onSelectRun(run)
+                            } label: {
+                                row
+                            }
+                            .buttonStyle(.plain)
+                        } else {
+                            row
+                        }
                     }
                 }
             }
@@ -113,6 +134,7 @@ private struct LongestStreakRow: View {
     let rank: Int
     let run: StreakRun
     let dateLabel: String
+    var isSelected: Bool = false
 
     var body: some View {
         HStack(spacing: Theme.Spacing.md) {
@@ -137,7 +159,11 @@ private struct LongestStreakRow: View {
         .padding(.horizontal, Theme.Spacing.md)
         .background(
             RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                .fill(Theme.Colors.surface.opacity(0.55))
+                .fill(isSelected ? Theme.Colors.accent.opacity(0.12) : Theme.Colors.surface.opacity(0.55))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                .strokeBorder(isSelected ? Theme.Colors.accent : Color.clear, lineWidth: 2)
         )
     }
 }

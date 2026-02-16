@@ -4,16 +4,19 @@ struct SettingsView: View {
     @ObservedObject var dataManager: WorkoutDataManager
     @ObservedObject var iCloudManager: iCloudDocumentManager
     @EnvironmentObject var healthManager: HealthKitManager
+    @EnvironmentObject var ouraManager: OuraManager
     @EnvironmentObject var logStore: WorkoutLogStore
     @EnvironmentObject var sessionManager: WorkoutSessionManager
 
     @State private var showingImportWizard = false
     @State private var showingHealthWizard = false
     @State private var showingHealthDashboard = false
+    @State private var showingOuraActions = false
     @State private var showingDeleteAlert = false
 
     @AppStorage("weightIncrement") private var weightIncrement: Double = 2.5
     @AppStorage("intentionalRestDays") private var intentionalRestDays: Int = 1
+    @AppStorage("sessionsPerWeekGoal") private var sessionsPerWeekGoal: Int = 4
 
     var body: some View {
         ZStack {
@@ -105,6 +108,18 @@ struct SettingsView: View {
                             } else {
                                 showingHealthWizard = true
                             }
+                        }
+
+                        Divider().padding(.leading, 50)
+
+                        SettingsRow(
+                            icon: "moon.stars.fill",
+                            color: Theme.Colors.accentSecondary,
+                            title: "Oura",
+                            subtitle: ouraSubtitleText,
+                            value: ouraValueText
+                        ) {
+                            handleOuraRowTapped()
                         }
 
                         Divider().padding(.leading, 50)
@@ -205,6 +220,37 @@ struct SettingsView: View {
                             Picker("", selection: $intentionalRestDays) {
                                 ForEach(0...30, id: \.self) { days in
                                     Text("\(days) day\(days == 1 ? "" : "s")").tag(days)
+                                }
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.menu)
+                        }
+                        .padding()
+                        .softCard()
+
+                        Divider().padding(.leading, 50)
+
+                        // Sessions per week goal (used by consistency visualization)
+                        HStack {
+                            Image(systemName: "target")
+                                .foregroundStyle(.white)
+                                .frame(width: 30, height: 30)
+                                .background(Theme.Colors.success)
+                                .cornerRadius(6)
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Sessions / Week Goal")
+                                    .font(Theme.Typography.body)
+                                Text("Used by consistency goal markers")
+                                    .font(Theme.Typography.caption)
+                                    .foregroundStyle(Theme.Colors.textSecondary)
+                            }
+
+                            Spacer()
+
+                            Picker("", selection: $sessionsPerWeekGoal) {
+                                ForEach(1...14, id: \.self) { sessions in
+                                    Text("\(sessions)/wk").tag(sessions)
                                 }
                             }
                             .labelsHidden()
@@ -322,6 +368,19 @@ struct SettingsView: View {
         .sheet(isPresented: $showingHealthDashboard) {
             HealthDashboardView()
         }
+        .confirmationDialog("Oura Actions", isPresented: $showingOuraActions, titleVisibility: .visible) {
+            Button("Sync Now") {
+                Task {
+                    await ouraManager.manualRefresh()
+                }
+            }
+            Button("Disconnect Oura", role: .destructive) {
+                Task {
+                    await ouraManager.disconnect()
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        }
         .alert("Clear All Data", isPresented: $showingDeleteAlert) {
             Button("Cancel", role: .cancel) {}
             Button("Clear", role: .destructive) {
@@ -331,6 +390,7 @@ struct SettingsView: View {
                     await sessionManager.discardDraft()
                     await MainActor.run {
                         healthManager.clearAllData()
+                        ouraManager.clearLocalCacheOnly()
                         dataManager.clearAllData()
                     }
                 }
@@ -343,12 +403,57 @@ struct SettingsView: View {
         }
         .onAppear {
             healthManager.refreshAuthorizationStatus()
+            Task {
+                await ouraManager.refreshConnectionStatus()
+            }
             normalizeIncrementIfNeeded()
+            normalizeSessionsGoalIfNeeded()
         }
     }
 
     private var incrementOptions: [Double] {
         [1.25, 2.5, 5.0]
+    }
+
+    private var ouraSubtitleText: String {
+        switch ouraManager.connectionStatus {
+        case .connected:
+            return "Scores synced"
+        case .syncing:
+            return "Syncing"
+        case .connecting:
+            return "Waiting for authorization"
+        case .error(let message):
+            return message
+        case .notConnected:
+            return "Not connected"
+        }
+    }
+
+    private var ouraValueText: String {
+        switch ouraManager.connectionStatus {
+        case .connected, .syncing:
+            return "On"
+        case .connecting:
+            return "Pending"
+        case .error:
+            return "Error"
+        case .notConnected:
+            return "Off"
+        }
+    }
+
+    private func handleOuraRowTapped() {
+        switch ouraManager.connectionStatus {
+        case .notConnected, .error:
+            Task {
+                await ouraManager.startConnectionFlow()
+            }
+        case .connecting:
+            return
+        case .connected, .syncing:
+            showingOuraActions = true
+        }
     }
 
     private func incrementLabel(_ value: Double) -> String {
@@ -364,6 +469,14 @@ struct SettingsView: View {
         }
         if weightIncrement <= 0 {
             weightIncrement = 2.5
+        }
+    }
+
+    private func normalizeSessionsGoalIfNeeded() {
+        if sessionsPerWeekGoal < 1 {
+            sessionsPerWeekGoal = 1
+        } else if sessionsPerWeekGoal > 14 {
+            sessionsPerWeekGoal = 14
         }
     }
 }

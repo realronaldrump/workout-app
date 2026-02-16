@@ -6,6 +6,7 @@ struct ProgramDayDetailView: View {
     @EnvironmentObject private var programStore: ProgramStore
     @EnvironmentObject private var sessionManager: WorkoutSessionManager
     @EnvironmentObject private var healthManager: HealthKitManager
+    @EnvironmentObject private var ouraManager: OuraManager
     @EnvironmentObject private var dataManager: WorkoutDataManager
     @EnvironmentObject private var gymProfilesManager: GymProfilesManager
     @Environment(\.dismiss) private var dismiss
@@ -136,7 +137,15 @@ struct ProgramDayDetailView: View {
                 .font(Theme.Typography.caption)
                 .foregroundStyle(Theme.Colors.textSecondary)
 
-            if hasHealthInputs {
+            Text(readiness.source == .oura ? "Source: Oura" : "Source: Apple Health")
+                .font(Theme.Typography.microcopy)
+                .foregroundStyle(Theme.Colors.textTertiary)
+
+            if readiness.source == .oura {
+                Text("Using Oura readiness score when available. Falls back to Apple Health-derived readiness when missing.")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+            } else if hasHealthInputs {
                 VStack(alignment: .leading, spacing: 4) {
                     if let sleepHours = readiness.sleepHours {
                         readinessMetricRow(
@@ -565,6 +574,7 @@ struct ProgramDayDetailView: View {
     private func readinessSnapshot(for plan: ProgramPlan) -> ReadinessSnapshot {
         ProgramAutoregulationEngine.readinessSnapshot(
             dailyHealthStore: healthManager.dailyHealthStore,
+            ouraScores: ouraManager.dailyScoreStore,
             on: Date(),
             rule: plan.progressionRule
         )

@@ -353,6 +353,14 @@ final class WorkoutSessionManager: ObservableObject {
         await deleteDraftFile()
     }
 
+    /// Forces an immediate draft write for lifecycle edges (e.g. app moving to background).
+    /// This avoids data loss if the process is suspended before the debounce delay elapses.
+    func saveImmediately() {
+        persistTask?.cancel()
+        persistTask = nil
+        persistDraftSynchronously()
+    }
+
     // MARK: - Draft Persistence
 
     private func schedulePersistDraft() {
@@ -371,21 +379,35 @@ final class WorkoutSessionManager: ObservableObject {
     }
 
     private func persistDraft() async {
-        guard let session = activeSession else { return }
+        guard let data = encodedDraftData() else { return }
         let url = fileURL()
+        await draftStore.write(data, to: url)
+    }
+
+    private func persistDraftSynchronously() {
+        guard let data = encodedDraftData() else { return }
+        let url = fileURL()
+
+        do {
+            try data.write(to: url, options: [.atomic, .completeFileProtection])
+        } catch {
+            print("Failed to persist active session draft immediately: \(error)")
+        }
+    }
+
+    private func encodedDraftData() -> Data? {
+        guard let session = activeSession else { return nil }
+
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
 
-        let data: Data
         do {
             // Encode on MainActor to avoid Swift 6 actor-isolation violations.
-            data = try encoder.encode(session)
+            return try encoder.encode(session)
         } catch {
             print("Failed to encode active session draft: \(error)")
-            return
+            return nil
         }
-
-        await draftStore.write(data, to: url)
     }
 
     private func deleteDraftFile() async {

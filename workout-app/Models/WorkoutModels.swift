@@ -90,18 +90,21 @@ extension Workout {
 
         // Handle HH:mm:ss or H:mm:ss format (e.g., "01:15:00" or "1:15:00")
         if trimmed.contains(":") {
-            let parts = trimmed.split(separator: ":").compactMap { Int($0) }
+            let parts = trimmed.split(separator: ":").compactMap { Double($0) }
             if parts.count == 3 {
                 // HH:mm:ss
-                return (parts[0] * 60) + parts[1]
+                let totalMinutes = (parts[0] * 60) + parts[1] + (parts[2] / 60.0)
+                return Int(ceil(totalMinutes))
             } else if parts.count == 2 {
                 // mm:ss
-                return parts[0]
+                let totalMinutes = parts[0] + (parts[1] / 60.0)
+                return Int(ceil(totalMinutes))
             }
         }
 
         var hours = 0
         var minutes = 0
+        var seconds = 0
         var matched = false
 
         if let hourMatch = trimmed.range(of: "(\\d+)\\s*h", options: .regularExpression) {
@@ -116,11 +119,22 @@ extension Workout {
             matched = true
         }
 
-        if matched {
-            return (hours * 60) + minutes
+        if let secondMatch = trimmed.range(of: "(\\d+)\\s*s", options: .regularExpression) {
+            let secondString = String(trimmed[secondMatch]).replacingOccurrences(of: "s", with: "")
+            seconds = Int(secondString.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
+            matched = true
         }
 
-        return Int(trimmed) ?? defaultMinutes
+        if matched {
+            let totalMinutes = Double(hours * 60 + minutes) + (Double(seconds) / 60.0)
+            return Int(ceil(totalMinutes))
+        }
+
+        if let numeric = Double(trimmed) {
+            return Int(ceil(numeric))
+        }
+
+        return defaultMinutes
     }
 
     func estimatedWindow(defaultMinutes: Int = 60) -> DateInterval {

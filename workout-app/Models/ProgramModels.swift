@@ -78,6 +78,11 @@ enum ReadinessBand: String, Codable, CaseIterable, Sendable {
     case high
 }
 
+enum ReadinessSource: String, Codable, CaseIterable, Sendable {
+    case healthKit
+    case oura
+}
+
 struct ProgressionRule: Codable, Hashable, Sendable {
     var weightIncrement: Double
     var missThreshold: Int
@@ -231,6 +236,7 @@ struct ReadinessSnapshot: Codable, Hashable, Sendable {
     var score: Double
     var band: ReadinessBand
     var multiplier: Double
+    var source: ReadinessSource
     var sleepHours: Double?
     var restingHeartRateDelta: Double?
     var hrvDelta: Double?

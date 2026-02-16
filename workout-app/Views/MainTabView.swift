@@ -22,6 +22,7 @@ struct MainTabView: View {
     @State private var showSplash = true
     @EnvironmentObject private var sessionManager: WorkoutSessionManager
     @EnvironmentObject private var healthManager: HealthKitManager
+    @EnvironmentObject private var ouraManager: OuraManager
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init() {
@@ -131,6 +132,7 @@ struct MainTabView: View {
             WorkoutSessionView()
                 .environmentObject(sessionManager)
                 .environmentObject(healthManager)
+                .environmentObject(ouraManager)
                 .environmentObject(dataManager)
                 .environmentObject(logStore)
                 .environmentObject(programStore)

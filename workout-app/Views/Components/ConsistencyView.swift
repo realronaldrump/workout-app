@@ -7,9 +7,21 @@ struct ConsistencyView: View {
     var timeRange: TimeRangeOption = .month
     var dateRange: DateInterval?
     var onTap: (() -> Void)?
+    @AppStorage("sessionsPerWeekGoal") private var sessionsPerWeekGoal: Int = 4
 
     enum TimeRangeOption {
         case week, month, threeMonths, year, allTime
+    }
+
+    private var calendar: Calendar {
+        var calendar = Calendar.current
+        calendar.firstWeekday = 1 // Sunday
+        calendar.minimumDaysInFirstWeek = 1
+        return calendar
+    }
+
+    private var targetSessionsPerWeek: Int {
+        min(max(sessionsPerWeekGoal, 1), 14)
     }
 
     var body: some View {
@@ -29,74 +41,62 @@ struct ConsistencyView: View {
         }
     }
 
-    // MARK: - Computed Properties
-
-    private var targetSessionsPerWeek: Double { 4.0 }
-
-    private var targetSessions: Int {
-        max(1, Int(ceil(Double(daysInRange) / 7.0 * targetSessionsPerWeek)))
-    }
-
-    private var sessionCount: Int {
-        workouts.count
-    }
-
-    private var progress: Double {
-        guard targetSessions > 0 else { return 0 }
-        return min(Double(sessionCount) / Double(targetSessions), 1.0)
-    }
-
-    private var daysInRange: Int {
-        let rawDays: Int = {
-            if let dateRange {
-                let calendar = Calendar.current
-                let start = calendar.startOfDay(for: dateRange.start)
-                let end = calendar.startOfDay(for: dateRange.end)
-                let days = (calendar.dateComponents([.day], from: start, to: end).day ?? 0) + 1
-                return max(days, 1)
-            }
-
-            switch timeRange {
-            case .week: return 7
-            case .month: return 28
-            case .threeMonths: return 91
-            case .year: return 365
-            case .allTime:
-                guard let oldest = workouts.map({ $0.date }).min() else { return 28 }
-                let days = (Calendar.current.dateComponents([.day], from: oldest, to: Date()).day ?? 0) + 1
-                return max(days, 1)
-            }
-        }()
-
-        switch timeRange {
-        case .allTime:
-            return min(rawDays, 365)
-        default:
-            return rawDays
-        }
-    }
-
-    // MARK: - Card Content
-
     private var cardContent: some View {
-        VStack(spacing: Theme.Spacing.lg) {
-            HStack(alignment: .center, spacing: Theme.Spacing.xl) {
-                // Activity Ring
-                ActivityRing(progress: progress, sessionCount: sessionCount, targetSessions: targetSessions)
-                    .frame(width: 100, height: 100)
+        VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                Text(summaryText)
+                    .font(Theme.Typography.bodyBold)
+                    .foregroundColor(Theme.Colors.textPrimary)
 
-                // Stats Column
-                VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-                    StatRow(label: "Sessions/Wk", value: String(format: "%.1f", stats.workoutsPerWeek))
-                    StatRow(label: "Current", value: "\(stats.currentStreak) days", highlight: stats.currentStreak > 0)
-                    StatRow(label: "Longest", value: "\(stats.longestStreak) days")
-                }
+                Text("Each bar is one week. Orange marker shows your \(targetSessionsPerWeek)-session target.")
+                    .font(Theme.Typography.caption)
+                    .foregroundColor(Theme.Colors.textTertiary)
+            }
+
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible(), spacing: Theme.Spacing.sm),
+                    GridItem(.flexible(), spacing: Theme.Spacing.sm)
+                ],
+                spacing: Theme.Spacing.sm
+            ) {
+                ConsistencyMetricPill(
+                    label: "Avg Sessions/Wk",
+                    value: String(format: "%.1f", stats.workoutsPerWeek)
+                )
+                ConsistencyMetricPill(
+                    label: "This Week",
+                    value: "\(thisWeekSessions)/\(targetSessionsPerWeek)"
+                )
+                ConsistencyMetricPill(
+                    label: "Current Streak",
+                    value: "\(stats.currentStreak)d",
+                    highlight: stats.currentStreak > 0
+                )
+                ConsistencyMetricPill(
+                    label: "Longest Streak",
+                    value: "\(stats.longestStreak)d"
+                )
+            }
+
+            WeeklyConsistencyGraph(
+                buckets: displayedWeeklyBuckets,
+                targetSessionsPerWeek: targetSessionsPerWeek,
+                maxSessions: maxSessionsInDisplay
+            )
+
+            HStack(spacing: Theme.Spacing.md) {
+                ConsistencyLegendItem(color: Theme.Colors.success, label: "Goal hit")
+                ConsistencyLegendItem(color: Theme.Colors.accent.opacity(0.6), label: "Below goal")
 
                 Spacer()
-            }
 
-            // Streak Bar
-            StreakBar(workouts: workouts, daysToShow: daysInRange, dateRange: dateRange)
+                if didTruncateWeeks {
+                    Text("Showing last \(displayedWeeklyBuckets.count) weeks")
+                        .font(Theme.Typography.caption)
+                        .foregroundColor(Theme.Colors.textTertiary)
+                }
+            }
 
             // Non-interactive preview (safe inside the full-card tap target).
             LongestStreaksPreview(workouts: streakWorkouts ?? workouts, maxCount: 2)
@@ -104,177 +104,303 @@ struct ConsistencyView: View {
         .padding(Theme.Spacing.lg)
         .softCard(elevation: 2)
     }
-}
 
-// MARK: - Activity Ring
+    private var summaryText: String {
+        guard !weeklyBuckets.isEmpty else {
+            return "No sessions yet in this range."
+        }
+        return "\(weeksAtGoal) of \(weeklyBuckets.count) weeks hit your \(targetSessionsPerWeek)-session goal"
+    }
 
-private struct ActivityRing: View {
-    let progress: Double
-    let sessionCount: Int
-    let targetSessions: Int
+    private var thisWeekSessions: Int {
+        weeklyBuckets.last?.sessions ?? 0
+    }
 
-    @State private var animatedProgress: Double = 0
+    private var weeksAtGoal: Int {
+        weeklyBuckets.filter { $0.sessions >= targetSessionsPerWeek }.count
+    }
 
-    var body: some View {
-        ZStack {
-            // Background track
-            Circle()
-                .stroke(Theme.Colors.surface, lineWidth: 10)
+    private var maxSessionsInDisplay: Int {
+        max(targetSessionsPerWeek, displayedWeeklyBuckets.map(\.sessions).max() ?? targetSessionsPerWeek)
+    }
 
-            // Progress arc — flat solid stroke, squared ends
-            Circle()
-                .trim(from: 0, to: animatedProgress)
-                .stroke(
-                    Theme.Colors.success,
-                    style: StrokeStyle(lineWidth: 10, lineCap: .butt)
+    private var maxWeeksToDisplay: Int {
+        switch timeRange {
+        case .allTime:
+            return 52
+        default:
+            return Int.max
+        }
+    }
+
+    private var displayedWeeklyBuckets: [WeeklyConsistencyBucket] {
+        guard weeklyBuckets.count > maxWeeksToDisplay else { return weeklyBuckets }
+        return Array(weeklyBuckets.suffix(maxWeeksToDisplay))
+    }
+
+    private var didTruncateWeeks: Bool {
+        displayedWeeklyBuckets.count < weeklyBuckets.count
+    }
+
+    private var weeklyBuckets: [WeeklyConsistencyBucket] {
+        let bounds = normalizedRangeBounds
+        let firstWeekStart = startOfWeek(for: bounds.start)
+        let lastWeekStart = startOfWeek(for: bounds.end)
+
+        let sessionsByWeek = workouts.reduce(into: [Date: Int]()) { counts, workout in
+            let day = calendar.startOfDay(for: workout.date)
+            guard day >= bounds.start && day <= bounds.end else { return }
+            counts[startOfWeek(for: day), default: 0] += 1
+        }
+
+        var buckets: [WeeklyConsistencyBucket] = []
+        var cursor = firstWeekStart
+        while cursor <= lastWeekStart {
+            let weekEnd = min(calendar.date(byAdding: .day, value: 6, to: cursor) ?? cursor, bounds.end)
+            buckets.append(
+                WeeklyConsistencyBucket(
+                    weekStart: cursor,
+                    weekEnd: weekEnd,
+                    sessions: sessionsByWeek[cursor, default: 0]
                 )
-                .rotationEffect(.degrees(-90))
+            )
 
-            // Center content
-            VStack(spacing: 2) {
-                Text("\(Int(animatedProgress * 100))%")
-                    .font(Theme.Typography.headline)
-                    .foregroundColor(Theme.Colors.textPrimary)
-                Text("\(sessionCount)/\(targetSessions)")
-                    .font(Theme.Typography.caption)
-                    .foregroundColor(Theme.Colors.textSecondary)
-            }
+            guard let next = calendar.date(byAdding: .weekOfYear, value: 1, to: cursor) else { break }
+            cursor = next
         }
-        .onAppear {
-            withAnimation(Theme.Animation.spring.delay(0.2)) {
-                animatedProgress = progress
-            }
+
+        return buckets
+    }
+
+    private var resolvedDateRange: DateInterval {
+        if let dateRange {
+            return dateRange
         }
-        .onChange(of: progress) { _, newValue in
-            withAnimation(Theme.Animation.spring) {
-                animatedProgress = newValue
-            }
+
+        let now = Date()
+        switch timeRange {
+        case .week:
+            let start = calendar.dateInterval(of: .weekOfYear, for: now)?.start ?? calendar.startOfDay(for: now)
+            return DateInterval(start: start, end: now)
+        case .month:
+            let start = calendar.dateInterval(of: .month, for: now)?.start ?? calendar.startOfDay(for: now)
+            return DateInterval(start: start, end: now)
+        case .threeMonths:
+            let start = calendar.date(byAdding: .month, value: -3, to: now) ?? now
+            return DateInterval(start: start, end: now)
+        case .year:
+            let start = calendar.date(byAdding: .year, value: -1, to: now) ?? now
+            return DateInterval(start: start, end: now)
+        case .allTime:
+            let oldest = workouts.map(\.date).min() ?? now
+            return DateInterval(start: oldest, end: now)
         }
+    }
+
+    private var normalizedRangeBounds: (start: Date, end: Date) {
+        let start = calendar.startOfDay(for: resolvedDateRange.start)
+        let end = calendar.startOfDay(for: resolvedDateRange.end)
+        if end < start {
+            return (start: start, end: start)
+        }
+        return (start: start, end: end)
+    }
+
+    private func startOfWeek(for date: Date) -> Date {
+        calendar.dateInterval(of: .weekOfYear, for: date)?.start ?? calendar.startOfDay(for: date)
     }
 }
 
-// MARK: - Stat Row
+private struct WeeklyConsistencyBucket: Identifiable {
+    let weekStart: Date
+    let weekEnd: Date
+    let sessions: Int
 
-private struct StatRow: View {
+    var id: Date { weekStart }
+}
+
+private struct ConsistencyMetricPill: View {
     let label: String
     let value: String
     var highlight: Bool = false
 
     var body: some View {
-        HStack(spacing: Theme.Spacing.sm) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
             Text(label)
-                .font(Theme.Typography.caption)
+                .font(Theme.Typography.metricLabel)
                 .foregroundColor(Theme.Colors.textTertiary)
-            Spacer()
+                .textCase(.uppercase)
+                .tracking(0.8)
+
             Text(value)
                 .font(Theme.Typography.subheadline)
                 .foregroundColor(highlight ? Theme.Colors.success : Theme.Colors.textPrimary)
+                .monospacedDigit()
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, Theme.Spacing.md)
+        .padding(.vertical, Theme.Spacing.sm)
+        .background(
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                .fill(Theme.Colors.surface.opacity(0.55))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                .strokeBorder(Theme.Colors.border.opacity(0.25), lineWidth: 1)
+        )
     }
 }
 
-// MARK: - Streak Bar
+private struct WeeklyConsistencyGraph: View {
+    let buckets: [WeeklyConsistencyBucket]
+    let targetSessionsPerWeek: Int
+    let maxSessions: Int
 
-private struct StreakBar: View {
-    let workouts: [Workout]
-    let daysToShow: Int
-    let dateRange: DateInterval?
-
-    // Intentionally uses one-letter day labels even though some repeat (S/T).
-    // Use indices in `ForEach` to keep SwiftUI identity stable.
-    private static let weekdaySymbols = ["S", "M", "T", "W", "T", "F", "S"]
-
-    private var calendar: Calendar {
-        var calendar = Calendar.current
-        calendar.firstWeekday = 1 // Sunday
-        calendar.minimumDaysInFirstWeek = 1
-        return calendar
-    }
-
-    private var workoutDays: Set<Date> {
-        return Set(workouts.map { calendar.startOfDay(for: $0.date) })
-    }
-
-    private var dates: [Date] {
-        let count = min(daysToShow, 28) // Cap at 4 weeks for visual clarity
-        if let dateRange {
-            let start = calendar.startOfDay(for: dateRange.start)
-            let end = calendar.startOfDay(for: dateRange.end)
-            let totalDays = (calendar.dateComponents([.day], from: start, to: end).day ?? 0) + 1
-            let displayCount = min(count, max(totalDays, 1))
-            let displayStart = calendar.date(byAdding: .day, value: -(displayCount - 1), to: end) ?? end
-            return (0..<displayCount).compactMap { calendar.date(byAdding: .day, value: $0, to: displayStart) }
-        }
-
-        let today = calendar.startOfDay(for: Date())
-        return (0..<count).compactMap { calendar.date(byAdding: .day, value: -($0), to: today) }.reversed()
-    }
-
-    private var weekGroupedDates: [[Date]] {
-        var weeks: [[Date]] = []
-        var currentWeek: [Date] = []
-        var lastWeekOfYear: Int?
-
-        for date in dates {
-            let weekOfYear = calendar.component(.weekOfYear, from: date)
-            if let last = lastWeekOfYear, last != weekOfYear {
-                if !currentWeek.isEmpty {
-                    weeks.append(currentWeek)
-                    currentWeek = []
-                }
-            }
-            currentWeek.append(date)
-            lastWeekOfYear = weekOfYear
-        }
-        if !currentWeek.isEmpty {
-            weeks.append(currentWeek)
-        }
-        return weeks
-    }
+    private let barHeight: CGFloat = 108
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            // Day labels
-            HStack(spacing: 0) {
-                ForEach(Self.weekdaySymbols.indices, id: \.self) { index in
-                    Text(Self.weekdaySymbols[index])
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundColor(Theme.Colors.textTertiary)
-                        .frame(maxWidth: .infinity)
-                }
+            HStack {
+                Text("Weekly Sessions")
+                    .font(Theme.Typography.metricLabel)
+                    .foregroundColor(Theme.Colors.textTertiary)
+                    .textCase(.uppercase)
+                    .tracking(0.8)
+
+                Spacer()
+
+                Text("Goal \(targetSessionsPerWeek)/wk")
+                    .font(Theme.Typography.caption)
+                    .foregroundColor(Theme.Colors.textTertiary)
+                    .monospacedDigit()
             }
 
-            // Week rows
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: Theme.Spacing.sm) {
-                    ForEach(weekGroupedDates.indices, id: \.self) { weekIndex in
-                        WeekColumn(dates: weekGroupedDates[weekIndex], workoutDays: workoutDays)
+                HStack(alignment: .bottom, spacing: Theme.Spacing.sm) {
+                    ForEach(Array(buckets.enumerated()), id: \.element.id) { index, bucket in
+                        WeeklyConsistencyBar(
+                            bucket: bucket,
+                            targetSessionsPerWeek: targetSessionsPerWeek,
+                            maxSessions: maxSessions,
+                            barHeight: barHeight,
+                            label: weekLabel(for: bucket.weekStart),
+                            showLabel: shouldShowLabel(index: index)
+                        )
                     }
                 }
+                .padding(.vertical, Theme.Spacing.xs)
             }
         }
     }
+
+    private var labelStep: Int {
+        let count = buckets.count
+        if count <= 8 { return 1 }
+        if count <= 16 { return 2 }
+        if count <= 32 { return 4 }
+        return 8
+    }
+
+    private func shouldShowLabel(index: Int) -> Bool {
+        index == 0 || index == buckets.count - 1 || index % labelStep == 0
+    }
+
+    private func weekLabel(for date: Date) -> String {
+        if buckets.count <= 10 {
+            return date.formatted(Date.FormatStyle().month(.abbreviated).day())
+        }
+        return date.formatted(Date.FormatStyle().month(.abbreviated))
+    }
 }
 
-private struct WeekColumn: View {
-    let dates: [Date]
-    let workoutDays: Set<Date>
+private struct WeeklyConsistencyBar: View {
+    let bucket: WeeklyConsistencyBucket
+    let targetSessionsPerWeek: Int
+    let maxSessions: Int
+    let barHeight: CGFloat
+    let label: String
+    let showLabel: Bool
 
-    private let calendar = Calendar.current
+    private var normalizedMax: CGFloat {
+        CGFloat(max(maxSessions, 1))
+    }
+
+    private var fillHeight: CGFloat {
+        guard bucket.sessions > 0 else { return 0 }
+        return max(2, (CGFloat(bucket.sessions) / normalizedMax) * barHeight)
+    }
+
+    private var targetOffset: CGFloat {
+        min(barHeight, (CGFloat(targetSessionsPerWeek) / normalizedMax) * barHeight)
+    }
+
+    private var barColor: Color {
+        bucket.sessions >= targetSessionsPerWeek ? Theme.Colors.success : Theme.Colors.accent.opacity(0.6)
+    }
+
+    private var sessionTextColor: Color {
+        bucket.sessions >= targetSessionsPerWeek ? Theme.Colors.success : Theme.Colors.textPrimary
+    }
 
     var body: some View {
-        VStack(spacing: 4) {
-            ForEach(dates, id: \.self) { date in
-                let isWorkout = workoutDays.contains(calendar.startOfDay(for: date))
-                let isToday = calendar.isDateInToday(date)
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(isWorkout ? Theme.Colors.success : Theme.Colors.surface.opacity(0.5))
-                    .frame(width: 14, height: 14)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 2)
-                            .strokeBorder(isToday ? Theme.Colors.accent : Color.clear, lineWidth: 2)
-                    )
+        VStack(spacing: Theme.Spacing.xs) {
+            ZStack(alignment: .bottom) {
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                    .fill(Theme.Colors.surface.opacity(0.55))
+                    .frame(width: 18, height: barHeight)
+
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                    .fill(barColor)
+                    .frame(width: 18, height: fillHeight)
+
+                Rectangle()
+                    .fill(Theme.Colors.accentSecondary)
+                    .frame(width: 24, height: 1)
+                    .offset(y: -(targetOffset - 0.5))
             }
+
+            Text("\(bucket.sessions)")
+                .font(Theme.Typography.captionBold)
+                .foregroundColor(sessionTextColor)
+                .monospacedDigit()
+
+            if showLabel {
+                Text(label)
+                    .font(Theme.Typography.caption)
+                    .foregroundColor(Theme.Colors.textTertiary)
+                    .lineLimit(1)
+                    .frame(height: 14)
+            } else {
+                Color.clear
+                    .frame(height: 14)
+            }
+        }
+        .frame(width: 36)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityLabel)
+    }
+
+    private var accessibilityLabel: String {
+        let start = bucket.weekStart.formatted(Date.FormatStyle().month(.abbreviated).day())
+        let end = bucket.weekEnd.formatted(Date.FormatStyle().month(.abbreviated).day().year())
+        let count = bucket.sessions
+        return "\(start) to \(end): \(count) session\(count == 1 ? "" : "s")"
+    }
+}
+
+private struct ConsistencyLegendItem: View {
+    let color: Color
+    let label: String
+
+    var body: some View {
+        HStack(spacing: Theme.Spacing.xs) {
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                .fill(color)
+                .frame(width: 10, height: 10)
+
+            Text(label)
+                .font(Theme.Typography.caption)
+                .foregroundColor(Theme.Colors.textTertiary)
         }
     }
 }
@@ -283,6 +409,7 @@ private struct WeekColumn: View {
 
 struct CalendarHeatmap: View {
     let workouts: [Workout]
+    var anchorDate: Date?
 
     private let rows = Array(repeating: GridItem(.fixed(12), spacing: 4), count: 7)
     private let weeks = 16
@@ -292,14 +419,10 @@ struct CalendarHeatmap: View {
             // Day Labels
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(0..<7, id: \.self) { index in
-                    if index % 2 == 1 { // Mon, Wed, Fri
-                        Text(dayLabel(for: index))
-                            .font(.caption2)
-                            .foregroundColor(Theme.Colors.textTertiary)
-                            .frame(height: 12)
-                    } else {
-                        Spacer().frame(height: 12)
-                    }
+                    Text(dayLabel(for: index))
+                        .font(.caption2)
+                        .foregroundColor(Theme.Colors.textTertiary)
+                        .frame(height: 12)
                 }
             }
             .padding(.top, 0)
@@ -336,19 +459,19 @@ struct CalendarHeatmap: View {
     }
 
     private func dayLabel(for index: Int) -> String {
-        let symbols = ["S", "M", "T", "W", "T", "F", "S"]
+        let symbols = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"]
         return symbols[index]
     }
 
     private func generateDateGrid() -> [Date] {
         var dates: [Date] = []
         let calendar = Calendar.current
-        let today = Date()
+        let referenceDate = anchorDate ?? Date()
 
-        let weekday = calendar.component(.weekday, from: today)
+        let weekday = calendar.component(.weekday, from: referenceDate)
         let daysToSaturday = 7 - weekday
 
-        guard let endOfWeek = calendar.date(byAdding: .day, value: daysToSaturday, to: today) else { return [] }
+        guard let endOfWeek = calendar.date(byAdding: .day, value: daysToSaturday, to: referenceDate) else { return [] }
 
         let totalDays = weeks * 7
 

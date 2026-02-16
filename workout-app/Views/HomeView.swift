@@ -6,6 +6,7 @@ struct HomeView: View {
     let annotationsManager: WorkoutAnnotationsManager
     let gymProfilesManager: GymProfilesManager
     @EnvironmentObject var healthManager: HealthKitManager
+    @EnvironmentObject var ouraManager: OuraManager
     @EnvironmentObject var programStore: ProgramStore
     @EnvironmentObject var sessionManager: WorkoutSessionManager
     @Binding var selectedTab: AppTab
@@ -136,6 +137,9 @@ struct HomeView: View {
         }
         .onAppear {
             healthManager.refreshAuthorizationStatus()
+            Task {
+                await ouraManager.autoRefreshOnForeground()
+            }
             if dataManager.workouts.isEmpty {
                 Task { await loadLatestWorkoutData() }
             } else {
@@ -145,6 +149,7 @@ struct HomeView: View {
         }
         .refreshable {
             await loadLatestWorkoutData()
+            await ouraManager.autoRefreshOnForeground()
         }
         .onChange(of: dataManager.workouts.count) { _, _ in
             refreshInsights()
@@ -273,7 +278,10 @@ struct HomeView: View {
     }
 
     private var todayProgram: ProgramTodayPlan? {
-        programStore.todayPlan(dailyHealthStore: healthManager.dailyHealthStore)
+        programStore.todayPlan(
+            dailyHealthStore: healthManager.dailyHealthStore,
+            ouraScores: ouraManager.dailyScoreStore
+        )
     }
 
     private func programFocusSection(_ today: ProgramTodayPlan) -> some View {
@@ -446,10 +454,18 @@ struct HomeView: View {
 
     private var weeklyWorkouts: [Workout] {
         guard !dataManager.workouts.isEmpty else { return [] }
-        let calendar = Calendar.current
         let now = Date()
-        let weekAgo = calendar.date(byAdding: .day, value: -7, to: now) ?? now
-        return dataManager.workouts.filter { $0.date >= weekAgo }
+        let weekStart = startOfWeekSunday(for: now)
+        return dataManager.workouts.filter { workout in
+            workout.date >= weekStart && workout.date <= now
+        }
+    }
+
+    private func startOfWeekSunday(for date: Date) -> Date {
+        var calendar = Calendar.current
+        calendar.firstWeekday = 1 // Sunday
+        calendar.minimumDaysInFirstWeek = 1
+        return calendar.dateInterval(of: .weekOfYear, for: date)?.start ?? calendar.startOfDay(for: date)
     }
 
     private var homeHighlights: [HighlightItem] {

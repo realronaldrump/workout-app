@@ -8,6 +8,7 @@ struct WorkoutSessionView: View {
     @EnvironmentObject private var logStore: WorkoutLogStore
     @EnvironmentObject private var programStore: ProgramStore
     @EnvironmentObject private var healthManager: HealthKitManager
+    @EnvironmentObject private var ouraManager: OuraManager
     @EnvironmentObject private var annotationsManager: WorkoutAnnotationsManager
     @EnvironmentObject private var gymProfilesManager: GymProfilesManager
 
@@ -461,7 +462,8 @@ struct WorkoutSessionView: View {
                         plannedDayId: plannedDayId,
                         plannedDayDate: plannedDayDate,
                         plannedTargetsSnapshot: plannedTargetsSnapshot,
-                        dailyHealthStore: healthManager.dailyHealthStore
+                        dailyHealthStore: healthManager.dailyHealthStore,
+                        ouraScores: ouraManager.dailyScoreStore
                     )
                 }
 

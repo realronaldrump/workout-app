@@ -19,16 +19,17 @@ struct WorkoutAnalytics {
         guard !trimmed.isEmpty else { return 0 }
 
         if trimmed.contains(":") {
-            let parts = trimmed.split(separator: ":").compactMap { Int($0) }
+            let parts = trimmed.split(separator: ":").compactMap { Double($0) }
             if parts.count == 3 {
-                return Double(parts[0] * 60 + parts[1])
+                return (parts[0] * 60.0) + parts[1] + (parts[2] / 60.0)
             } else if parts.count == 2 {
-                return Double(parts[0])
+                return parts[0] + (parts[1] / 60.0)
             }
         }
 
         var hours = 0
         var minutes = 0
+        var seconds = 0
         var matched = false
 
         if let hourMatch = trimmed.range(of: "(\\d+)\\s*h", options: .regularExpression) {
@@ -43,11 +44,17 @@ struct WorkoutAnalytics {
             matched = true
         }
 
-        if matched {
-            return Double(hours * 60 + minutes)
+        if let secondMatch = trimmed.range(of: "(\\d+)\\s*s", options: .regularExpression) {
+            let secondString = String(trimmed[secondMatch]).replacingOccurrences(of: "s", with: "")
+            seconds = Int(secondString.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
+            matched = true
         }
 
-        return Double(Int(trimmed) ?? 0)
+        if matched {
+            return Double(hours * 60 + minutes) + (Double(seconds) / 60.0)
+        }
+
+        return Double(trimmed) ?? 0
     }
 
     /// Returns streak runs using the same rule as the app's streak calculation:
