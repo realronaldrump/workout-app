@@ -312,6 +312,7 @@ struct InteractiveTimeSeriesChart: View {
                 }
                 .foregroundStyle(Theme.Colors.textSecondary)
             }
+            .buttonStyle(.plain)
 
             Spacer()
 

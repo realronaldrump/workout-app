@@ -3,6 +3,7 @@ import SwiftUI
 struct MuscleBalanceDetailView: View {
     @ObservedObject var dataManager: WorkoutDataManager
     let dateRange: DateInterval
+    var rangeLabel: String?
 
     var body: some View {
         ZStack {
@@ -16,7 +17,11 @@ struct MuscleBalanceDetailView: View {
                         .tracking(1.5)
                         .padding(.top, Theme.Spacing.md)
 
-                    MuscleHeatmapView(dataManager: dataManager, dateRange: dateRange)
+                    MuscleHeatmapView(
+                        dataManager: dataManager,
+                        dateRange: dateRange,
+                        rangeLabel: rangeLabel
+                    )
                 }
                 .padding(.vertical, Theme.Spacing.xxl)
                 .padding(.horizontal, Theme.Spacing.lg)

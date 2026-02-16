@@ -205,6 +205,7 @@ struct HealthHubView: View {
                         .buttonStyle(.plain)
                     }
                 }
+                .padding(.horizontal, Theme.Spacing.xs)
             }
         }
     }

@@ -447,7 +447,7 @@ private struct WeeklyMuscleVolumeChart: View {
 
     var body: some View {
         if points.isEmpty {
-            Text("tags 0")
+            Text("No tagged muscle volume data yet.")
                 .font(Theme.Typography.body)
                 .foregroundColor(Theme.Colors.textSecondary)
                 .padding(Theme.Spacing.lg)
@@ -511,7 +511,7 @@ private struct WeeklyExerciseVolumeChart: View {
 
     var body: some View {
         if points.isEmpty {
-            Text("volume n 0")
+            Text("No exercise volume trends yet.")
                 .font(Theme.Typography.body)
                 .foregroundColor(Theme.Colors.textSecondary)
                 .padding(Theme.Spacing.lg)

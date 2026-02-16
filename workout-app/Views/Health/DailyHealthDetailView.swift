@@ -2,6 +2,10 @@ import SwiftUI
 
 struct DailyHealthDetailView: View {
     let day: DailyHealthData
+    private let maxContentWidth: CGFloat = 760
+    private var overviewColumns: [GridItem] {
+        [GridItem(.adaptive(minimum: 132, maximum: 210), spacing: Theme.Spacing.md)]
+    }
 
     private var dayTitle: String {
         let formatter = DateFormatter()
@@ -31,6 +35,8 @@ struct DailyHealthDetailView: View {
                 }
                 .padding(.vertical, Theme.Spacing.xxl)
                 .padding(.horizontal, Theme.Spacing.lg)
+                .frame(maxWidth: maxContentWidth, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .center)
             }
         }
         .navigationTitle("Daily Summary")
@@ -56,68 +62,35 @@ struct DailyHealthDetailView: View {
     }
 
     private var overviewSection: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: Theme.Spacing.md) {
-                DailyOverviewCard(
-                    title: "Steps",
-                    value: formatInt(day.steps),
-                    unit: "steps",
-                    icon: "figure.walk",
-                    tint: Theme.Colors.warning
-                )
-                DailyOverviewCard(
-                    title: "Sleep",
-                    value: day.sleepSummary.map { String(format: "%.1f", $0.totalHours) } ?? "--",
-                    unit: "h",
-                    icon: "moon.zzz.fill",
-                    tint: Theme.Colors.accentSecondary
-                )
-                DailyOverviewCard(
-                    title: "Energy",
-                    value: formatInt(day.activeEnergy),
-                    unit: "cal",
-                    icon: "flame.fill",
-                    tint: Theme.Colors.warning
-                )
-                DailyOverviewCard(
-                    title: "Resting HR",
-                    value: formatInt(day.restingHeartRate),
-                    unit: "bpm",
-                    icon: "heart",
-                    tint: Theme.Colors.error
-                )
-            }
-
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: Theme.Spacing.md) {
-                DailyOverviewCard(
-                    title: "Steps",
-                    value: formatInt(day.steps),
-                    unit: "steps",
-                    icon: "figure.walk",
-                    tint: Theme.Colors.warning
-                )
-                DailyOverviewCard(
-                    title: "Sleep",
-                    value: day.sleepSummary.map { String(format: "%.1f", $0.totalHours) } ?? "--",
-                    unit: "h",
-                    icon: "moon.zzz.fill",
-                    tint: Theme.Colors.accentSecondary
-                )
-                DailyOverviewCard(
-                    title: "Energy",
-                    value: formatInt(day.activeEnergy),
-                    unit: "cal",
-                    icon: "flame.fill",
-                    tint: Theme.Colors.warning
-                )
-                DailyOverviewCard(
-                    title: "Resting HR",
-                    value: formatInt(day.restingHeartRate),
-                    unit: "bpm",
-                    icon: "heart",
-                    tint: Theme.Colors.error
-                )
-            }
+        LazyVGrid(columns: overviewColumns, spacing: Theme.Spacing.md) {
+            DailyOverviewCard(
+                title: "Steps",
+                value: formatInt(day.steps),
+                unit: "steps",
+                icon: "figure.walk",
+                tint: Theme.Colors.warning
+            )
+            DailyOverviewCard(
+                title: "Sleep",
+                value: day.sleepSummary.map { String(format: "%.1f", $0.totalHours) } ?? "--",
+                unit: "h",
+                icon: "moon.zzz.fill",
+                tint: Theme.Colors.accentSecondary
+            )
+            DailyOverviewCard(
+                title: "Energy",
+                value: formatInt(day.activeEnergy),
+                unit: "cal",
+                icon: "flame.fill",
+                tint: Theme.Colors.warning
+            )
+            DailyOverviewCard(
+                title: "Resting HR",
+                value: formatInt(day.restingHeartRate),
+                unit: "bpm",
+                icon: "heart",
+                tint: Theme.Colors.error
+            )
         }
     }
 

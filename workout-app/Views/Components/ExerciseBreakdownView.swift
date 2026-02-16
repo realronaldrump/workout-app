@@ -25,8 +25,8 @@ struct ExerciseBreakdownView: View {
                 .font(Theme.Typography.title2)
                 .foregroundColor(Theme.Colors.textPrimary)
 
-            if !exerciseData.isEmpty {
-                Group {
+            Group {
+                if !exerciseData.isEmpty {
                     if let onTap {
                         MetricTileButton(chevronPlacement: .bottomTrailing, action: onTap) {
                             chartContainer
@@ -34,6 +34,17 @@ struct ExerciseBreakdownView: View {
                     } else {
                         chartContainer
                     }
+                } else {
+                    VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                        Text("No exercise volume data in this range.")
+                            .font(Theme.Typography.body)
+                            .foregroundColor(Theme.Colors.textSecondary)
+                        Text("Log workouts to see your top exercises.")
+                            .font(Theme.Typography.caption)
+                            .foregroundColor(Theme.Colors.textTertiary)
+                    }
+                    .padding(Theme.Spacing.lg)
+                    .softCard(elevation: 2)
                 }
             }
         }

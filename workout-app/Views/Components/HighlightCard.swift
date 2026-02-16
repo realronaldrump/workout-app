@@ -48,7 +48,10 @@ struct HighlightCardView: View {
             Text(item.value)
                 .font(Theme.Typography.headline)
                 .foregroundColor(Theme.Colors.textPrimary)
-                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+                .lineLimit(nil)
+                .fixedSize(horizontal: false, vertical: true)
+                .layoutPriority(1)
 
             if let subtitle = item.subtitle {
                 Text(subtitle)

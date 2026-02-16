@@ -64,7 +64,10 @@ struct QuickStartView: View {
                                         .foregroundColor(.white)
                                         .padding(.horizontal, Theme.Spacing.md)
                                         .padding(.vertical, Theme.Spacing.xs)
-                                        .background(Capsule().fill(Theme.Colors.accent))
+                                        .brutalistButtonChrome(
+                                            fill: Theme.Colors.accent,
+                                            cornerRadius: Theme.CornerRadius.large
+                                        )
                                 }
                                 .buttonStyle(.plain)
                             }

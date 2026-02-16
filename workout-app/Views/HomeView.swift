@@ -6,6 +6,8 @@ struct HomeView: View {
     let annotationsManager: WorkoutAnnotationsManager
     let gymProfilesManager: GymProfilesManager
     @EnvironmentObject var healthManager: HealthKitManager
+    @EnvironmentObject var programStore: ProgramStore
+    @EnvironmentObject var sessionManager: WorkoutSessionManager
     @Binding var selectedTab: AppTab
 
     @StateObject private var insightsEngine: InsightsEngine
@@ -16,6 +18,9 @@ struct HomeView: View {
     @State private var selectedExercise: ExerciseSelection?
     @State private var selectedWorkout: Workout?
     @State private var selectedWorkoutMetric: WorkoutMetricDetailSelection?
+    @State private var selectedProgramDay: ProgramDaySelection?
+    @State private var showingProgramReplaceAlert = false
+    private let maxContentWidth: CGFloat = 820
 
     init(
         dataManager: WorkoutDataManager,
@@ -48,6 +53,11 @@ struct HomeView: View {
 
                     quickActionsSection
 
+                    if let today = todayProgram {
+                        programFocusSection(today)
+                            .padding(.horizontal, Theme.Spacing.lg)
+                    }
+
                     if dataManager.workouts.isEmpty {
                         HomeEmptyState(
                             onStart: {
@@ -74,6 +84,8 @@ struct HomeView: View {
                     }
                 }
                 .padding(.vertical, Theme.Spacing.xxl)
+                .frame(maxWidth: maxContentWidth, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .center)
             }
         }
         .navigationBarHidden(true)
@@ -94,6 +106,17 @@ struct HomeView: View {
                 workouts: weeklyWorkouts,
                 scrollTarget: selection.scrollTarget
             )
+        }
+        .navigationDestination(item: $selectedProgramDay) { selection in
+            ProgramDayDetailView(dayId: selection.id)
+        }
+        .alert("Replace active session?", isPresented: $showingProgramReplaceAlert) {
+            Button("Cancel", role: .cancel) {}
+            Button("Replace", role: .destructive) {
+                startTodayPlan(forceReplace: true)
+            }
+        } message: {
+            Text("Starting today's planned session will discard the current in-progress session.")
         }
         .sheet(isPresented: $showingImportWizard) {
             StrongImportWizard(
@@ -249,6 +272,101 @@ struct HomeView: View {
         .softCard(elevation: 2)
     }
 
+    private var todayProgram: ProgramTodayPlan? {
+        programStore.todayPlan(dailyHealthStore: healthManager.dailyHealthStore)
+    }
+
+    private func programFocusSection(_ today: ProgramTodayPlan) -> some View {
+        let todayStart = Calendar.current.startOfDay(for: Date())
+        let scheduledStart = Calendar.current.startOfDay(for: today.day.scheduledDate)
+        let isOverdue = scheduledStart < todayStart
+
+        return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            Text("Program Focus")
+                .font(Theme.Typography.sectionHeader)
+                .foregroundColor(Theme.Colors.textPrimary)
+                .tracking(1.0)
+
+            HStack(spacing: Theme.Spacing.md) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(today.day.focusTitle)
+                        .font(Theme.Typography.headline)
+                        .foregroundStyle(Theme.Colors.textPrimary)
+
+                    Text("Week \(today.day.weekNumber) • Day \(today.day.dayNumber)")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+
+                    if isOverdue {
+                        Text("Overdue • \(today.day.scheduledDate.formatted(date: .abbreviated, time: .omitted))")
+                            .font(Theme.Typography.microcopy)
+                            .foregroundStyle(Theme.Colors.warning)
+                    }
+
+                    Text("Readiness \(Int(round(today.readiness.score))) • \(today.readiness.band.rawValue.capitalized)")
+                        .font(Theme.Typography.microcopy)
+                        .foregroundStyle(Theme.Colors.textTertiary)
+                }
+
+                Spacer()
+
+                VStack(spacing: Theme.Spacing.xs) {
+                    Button {
+                        if sessionManager.activeSession != nil {
+                            showingProgramReplaceAlert = true
+                        } else {
+                            startTodayPlan(forceReplace: false)
+                        }
+                    } label: {
+                        Text("Start")
+                            .font(Theme.Typography.captionBold)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, Theme.Spacing.md)
+                            .padding(.vertical, Theme.Spacing.xs)
+                            .brutalistButtonChrome(
+                                fill: Theme.Colors.accent,
+                                cornerRadius: Theme.CornerRadius.large
+                            )
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        selectedProgramDay = ProgramDaySelection(id: today.day.id)
+                        Haptics.selection()
+                    } label: {
+                        Text("Open")
+                            .font(Theme.Typography.captionBold)
+                            .foregroundStyle(Theme.Colors.textSecondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(Theme.Spacing.lg)
+            .softCard(elevation: 1)
+        }
+    }
+
+    private func startTodayPlan(forceReplace: Bool) {
+        guard let today = todayProgram else { return }
+
+        Task { @MainActor in
+            if forceReplace {
+                await sessionManager.discardDraft()
+            }
+
+            sessionManager.startSession(
+                name: today.day.focusTitle,
+                gymProfileId: gymProfilesManager.lastUsedGymProfileId,
+                templateExercises: today.adjustedExercises,
+                plannedProgramId: today.planId,
+                plannedDayId: today.day.id,
+                plannedDayDate: today.day.scheduledDate
+            )
+            sessionManager.isPresentingSessionUI = true
+            Haptics.notify(.success)
+        }
+    }
+
     private var spotlightSection: some View {
         HighlightsSectionView(title: "Spotlight", items: Array(homeHighlights.prefix(1)))
     }
@@ -268,6 +386,18 @@ struct HomeView: View {
                 .tracking(1.0)
 
             VStack(spacing: Theme.Spacing.md) {
+                NavigationLink {
+                    ProgramHubView()
+                } label: {
+                    ExploreRow(
+                        title: "Program Coach",
+                        subtitle: "Adaptive 8-week planning",
+                        icon: "calendar.badge.clock",
+                        tint: Theme.Colors.accent
+                    )
+                }
+                .buttonStyle(PlainButtonStyle())
+
                 NavigationLink {
                     PerformanceLabView(dataManager: dataManager)
                 } label: {
@@ -450,6 +580,10 @@ struct HomeView: View {
     }
 }
 
+private struct ProgramDaySelection: Hashable, Identifiable {
+    let id: UUID
+}
+
 private struct HomeEmptyState: View {
     let onStart: () -> Void
     let onImport: () -> Void
@@ -570,6 +704,7 @@ private struct ActionChip: View {
                 .cornerRadius(Theme.CornerRadius.large)
             }
         )
+        .buttonStyle(.plain)
     }
 }
 

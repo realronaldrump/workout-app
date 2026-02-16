@@ -6,6 +6,7 @@ struct WorkoutDetailView: View {
     @EnvironmentObject var dataManager: WorkoutDataManager
     @EnvironmentObject var annotationsManager: WorkoutAnnotationsManager
     @EnvironmentObject var gymProfilesManager: GymProfilesManager
+    @EnvironmentObject var programStore: ProgramStore
     // Removed local healthData state to use source of truth
     @State private var showingSyncError = false
     @State private var syncErrorMessage = ""
@@ -15,6 +16,7 @@ struct WorkoutDetailView: View {
     @State private var showingSessionInsights = false
     @State private var showingWorkoutHealthInsights = false
     @State private var showingEdit = false
+    @State private var selectedProgramDay: WorkoutDetailProgramDaySelection?
     @Environment(\.dismiss) private var dismiss
 
     private var resolvedWorkout: Workout {
@@ -23,6 +25,10 @@ struct WorkoutDetailView: View {
 
     private var isLoggedWorkout: Bool {
         dataManager.loggedWorkoutIds.contains(workout.id)
+    }
+
+    private var programContext: ProgramWorkoutContext? {
+        programStore.workoutContext(for: workout.id)
     }
 
     private func workoutDateTimeToolbarText(for date: Date) -> String {
@@ -93,6 +99,10 @@ struct WorkoutDetailView: View {
 
                     GymAssignmentCard(workout: workout)
 
+                    if let programContext {
+                        programContextSection(programContext)
+                    }
+
                     // Health Data Section
                     if healthManager.isHealthKitAvailable() {
                         healthDataSection
@@ -140,6 +150,9 @@ struct WorkoutDetailView: View {
                 annotationsManager: annotationsManager,
                 gymProfilesManager: gymProfilesManager
             )
+        }
+        .navigationDestination(item: $selectedProgramDay) { selection in
+            ProgramDayDetailView(dayId: selection.id)
         }
         .sheet(isPresented: $showingQuickStart) {
             QuickStartView(exerciseName: quickStartExercise)
@@ -207,6 +220,54 @@ struct WorkoutDetailView: View {
     // MARK: - Health Data Section
 
     @ViewBuilder
+    private func programContextSection(_ context: ProgramWorkoutContext) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            Text("Program")
+                .font(Theme.Typography.title2)
+                .foregroundColor(Theme.Colors.textPrimary)
+
+            let content = HStack(spacing: Theme.Spacing.md) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(context.planName)
+                        .font(Theme.Typography.headline)
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                    Text("Week \(context.weekNumber) • Day \(context.dayNumber)")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                    if let readinessScore = context.readinessScore {
+                        let readinessLabel = Int(round(readinessScore))
+                        let bandLabel = context.readinessBand?.rawValue.capitalized ?? "Unknown"
+                        Text("Readiness \(readinessLabel) • \(bandLabel)")
+                            .font(Theme.Typography.microcopy)
+                            .foregroundStyle(Theme.Colors.textTertiary)
+                    }
+                }
+
+                Spacer()
+
+                if !context.isArchivedPlan {
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundStyle(Theme.Colors.textTertiary)
+                }
+            }
+            .padding(Theme.Spacing.lg)
+            .softCard(elevation: 1)
+
+            if context.isArchivedPlan {
+                content
+            } else {
+                Button {
+                    selectedProgramDay = WorkoutDetailProgramDaySelection(id: context.dayId)
+                } label: {
+                    content
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    @ViewBuilder
     private var healthDataSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             HStack {
@@ -252,11 +313,12 @@ struct WorkoutDetailView: View {
             .foregroundColor(.white)
             .padding(.horizontal, Theme.Spacing.md)
             .padding(.vertical, Theme.Spacing.xs)
-            .background(
-                Capsule()
-                    .fill(Theme.Colors.error)
+            .brutalistButtonChrome(
+                fill: Theme.Colors.error,
+                cornerRadius: Theme.CornerRadius.large
             )
         }
+        .buttonStyle(.plain)
         .disabled(healthManager.isSyncing)
         .opacity(healthManager.isSyncing ? 0.7 : 1.0)
     }
@@ -306,6 +368,10 @@ struct WorkoutDetailView: View {
         }
         return "\(Int(volume)) lbs"
     }
+}
+
+private struct WorkoutDetailProgramDaySelection: Hashable, Identifiable {
+    let id: UUID
 }
 
 struct ExerciseCard: View {

@@ -5,6 +5,10 @@ struct ActiveWorkoutSession: Codable, Identifiable, Hashable, Sendable {
     var startedAt: Date
     var name: String
     var gymProfileId: UUID?
+    var plannedProgramId: UUID?
+    var plannedDayId: UUID?
+    var plannedDayDate: Date?
+    var plannedTargetsSnapshot: [PlannedExerciseTarget]?
     var exercises: [ActiveExercise]
     var dismissedMuscleGroupSuggestions: [String]
     var lastModifiedAt: Date
@@ -15,15 +19,23 @@ struct ActiveWorkoutSession: Codable, Identifiable, Hashable, Sendable {
         startedAt: Date = Date(),
         name: String,
         gymProfileId: UUID? = nil,
+        plannedProgramId: UUID? = nil,
+        plannedDayId: UUID? = nil,
+        plannedDayDate: Date? = nil,
+        plannedTargetsSnapshot: [PlannedExerciseTarget]? = nil,
         exercises: [ActiveExercise] = [],
         dismissedMuscleGroupSuggestions: [String] = [],
         lastModifiedAt: Date = Date(),
-        schemaVersion: Int = 2
+        schemaVersion: Int = 4
     ) {
         self.id = id
         self.startedAt = startedAt
         self.name = name
         self.gymProfileId = gymProfileId
+        self.plannedProgramId = plannedProgramId
+        self.plannedDayId = plannedDayId
+        self.plannedDayDate = plannedDayDate
+        self.plannedTargetsSnapshot = plannedTargetsSnapshot
         self.exercises = exercises
         self.dismissedMuscleGroupSuggestions = dismissedMuscleGroupSuggestions
         self.lastModifiedAt = lastModifiedAt

@@ -288,6 +288,7 @@ struct SettingsView: View {
                             .softCard()
                     }
                 )
+                .buttonStyle(.plain)
 
                 VStack(spacing: Theme.Spacing.xs) {
                     Text("Davis's Big Beautiful Workout App")
@@ -407,5 +408,6 @@ struct SettingsRow: View {
             .padding()
             .softCard(elevation: 1)
         }
+        .buttonStyle(.plain)
     }
 }

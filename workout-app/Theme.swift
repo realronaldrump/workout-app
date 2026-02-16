@@ -95,6 +95,9 @@ enum Theme {
         navButton.disabled.titleTextAttributes = [.foregroundColor: UIColors.textTertiary]
 
         nav.buttonAppearance = navButton
+        if #unavailable(iOS 26.0) {
+            nav.doneButtonAppearance = navButton
+        }
         nav.prominentButtonAppearance = navButton
         nav.backButtonAppearance = navButton
 
@@ -102,7 +105,24 @@ enum Theme {
         navBar.standardAppearance = nav
         navBar.scrollEdgeAppearance = nav
         navBar.compactAppearance = nav
+        if #available(iOS 15.0, *) {
+            navBar.compactScrollEdgeAppearance = nav
+        }
         navBar.tintColor = UIColors.accent
+
+        // Belt-and-suspenders fallback for newer UIKit button containers.
+        // Keeps native nav bar buttons from rendering automatic capsule backgrounds.
+        let clearImage = UIImage()
+        let barButton = UIBarButtonItem.appearance(whenContainedInInstancesOf: [UINavigationBar.self])
+        barButton.setBackgroundImage(clearImage, for: .normal, barMetrics: .default)
+        barButton.setBackgroundImage(clearImage, for: .highlighted, barMetrics: .default)
+        barButton.setBackgroundImage(clearImage, for: .disabled, barMetrics: .default)
+        barButton.setBackButtonBackgroundImage(clearImage, for: .normal, barMetrics: .default)
+        barButton.setBackButtonBackgroundImage(clearImage, for: .highlighted, barMetrics: .default)
+        barButton.setBackButtonBackgroundImage(clearImage, for: .disabled, barMetrics: .default)
+        barButton.setTitleTextAttributes([.foregroundColor: UIColors.accent], for: .normal)
+        barButton.setTitleTextAttributes([.foregroundColor: UIColors.accent], for: .highlighted)
+        barButton.setTitleTextAttributes([.foregroundColor: UIColors.textTertiary], for: .disabled)
 
         // Tab bar — opaque, Bebas Neue labels, dark top border
         let tab = UITabBarAppearance()
@@ -265,6 +285,48 @@ struct GlassBackground: ViewModifier {
     }
 }
 
+// MARK: - Brutalist Button Chrome
+
+struct BrutalistButtonChrome: ViewModifier {
+    var fill: Color = Theme.Colors.surface
+    var border: Color = Theme.Colors.border
+    var cornerRadius: CGFloat = Theme.CornerRadius.large
+    var borderWidth: CGFloat = 2
+    var shadowOffset: CGFloat = 2
+
+    func body(content: Content) -> some View {
+        content
+            .background(
+                RoundedRectangle(cornerRadius: cornerRadius)
+                    .fill(fill)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius)
+                    .strokeBorder(border, lineWidth: borderWidth)
+            )
+            .shadow(
+                color: Color.black.opacity(Theme.Colors.shadowOpacity),
+                radius: 0,
+                x: shadowOffset,
+                y: shadowOffset
+            )
+    }
+}
+
+/// Default interaction style for app controls. Keeps labels "unstyled" by platform
+/// while still providing consistent pressed/disabled feedback.
+struct AppInteractionButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(isEnabled ? 1.0 : 0.55)
+            .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
+            .animation(Theme.Animation.quick, value: configuration.isPressed)
+            .animation(Theme.Animation.quick, value: isEnabled)
+    }
+}
+
 extension View {
     func glassBackground(
         opacity: Double = 0.08,
@@ -279,6 +341,24 @@ extension View {
         elevation: CGFloat = 1
     ) -> some View {
         modifier(SoftCardBackground(cornerRadius: cornerRadius, elevation: elevation))
+    }
+
+    func brutalistButtonChrome(
+        fill: Color = Theme.Colors.surface,
+        border: Color = Theme.Colors.border,
+        cornerRadius: CGFloat = Theme.CornerRadius.large,
+        borderWidth: CGFloat = 2,
+        shadowOffset: CGFloat = 2
+    ) -> some View {
+        modifier(
+            BrutalistButtonChrome(
+                fill: fill,
+                border: border,
+                cornerRadius: cornerRadius,
+                borderWidth: borderWidth,
+                shadowOffset: shadowOffset
+            )
+        )
     }
 
     func cardStyle() -> some View {

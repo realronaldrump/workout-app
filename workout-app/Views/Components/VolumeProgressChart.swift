@@ -5,6 +5,8 @@ struct VolumeProgressChart: View {
     let workouts: [Workout]
     var onTap: (() -> Void)?
     @State private var selectedMetric = VolumeMetric.totalVolume
+    private let maxChartWidth: CGFloat = 720
+    @State private var isHorizontalSwipeActive = false
 
     enum VolumeMetric: String, CaseIterable {
         case totalVolume = "Total Volume"
@@ -43,69 +45,87 @@ struct VolumeProgressChart: View {
     }
 
     private var chartContainer: some View {
-        Chart {
-            ForEach(chartData, id: \.date) { dataPoint in
-                LineMark(
-                    x: .value("Date", dataPoint.date),
-                    y: .value(selectedMetric.rawValue, dataPoint.value)
-                )
-                .interpolationMethod(.catmullRom)
-                .foregroundStyle(Theme.Colors.accent)
+        Group {
+            if chartData.isEmpty {
+                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                    Text("No workouts in this range.")
+                        .font(Theme.Typography.body)
+                        .foregroundColor(Theme.Colors.textSecondary)
+                    Text("Log a workout to see volume trends.")
+                        .font(Theme.Typography.caption)
+                        .foregroundColor(Theme.Colors.textTertiary)
+                }
+                .padding(Theme.Spacing.lg)
+                .softCard(elevation: 2)
+            } else {
+                Chart {
+                    ForEach(chartData, id: \.date) { dataPoint in
+                        LineMark(
+                            x: .value("Date", dataPoint.date),
+                            y: .value(selectedMetric.rawValue, dataPoint.value)
+                        )
+                        .interpolationMethod(.catmullRom)
+                        .foregroundStyle(Theme.Colors.accent)
 
-                AreaMark(
-                    x: .value("Date", dataPoint.date),
-                    y: .value(selectedMetric.rawValue, dataPoint.value)
-                )
-                .interpolationMethod(.catmullRom)
-                .foregroundStyle(Theme.Colors.accent.opacity(0.2))
+                        AreaMark(
+                            x: .value("Date", dataPoint.date),
+                            y: .value(selectedMetric.rawValue, dataPoint.value)
+                        )
+                        .interpolationMethod(.catmullRom)
+                        .foregroundStyle(Theme.Colors.accent.opacity(0.2))
 
-                PointMark(
-                    x: .value("Date", dataPoint.date),
-                    y: .value(selectedMetric.rawValue, dataPoint.value)
-                )
-                .foregroundStyle(Theme.Colors.accent)
-                .symbolSize(pointSymbolSize)
-            }
-        }
-        .frame(height: 200)
-        .chartXAxis {
-            AxisMarks(values: .stride(by: xAxisComponent, count: xAxisStride)) { _ in
-                AxisGridLine()
-                AxisValueLabel(format: xAxisDateFormat)
-            }
-        }
-        .chartYAxis {
-            AxisMarks { value in
-                AxisGridLine()
-                AxisValueLabel {
-                    if selectedMetric == .totalVolume || selectedMetric == .avgVolume {
-                        if let doubleValue = value.as(Double.self) {
-                            Text(formatAxisValue(doubleValue))
-                        }
-                    } else {
-                        if let intValue = value.as(Int.self) {
-                            Text("\(intValue)")
+                        PointMark(
+                            x: .value("Date", dataPoint.date),
+                            y: .value(selectedMetric.rawValue, dataPoint.value)
+                        )
+                        .foregroundStyle(Theme.Colors.accent)
+                        .symbolSize(pointSymbolSize)
+                    }
+                }
+                .frame(height: 200)
+                .chartXAxis {
+                    AxisMarks(values: .stride(by: xAxisComponent, count: xAxisStride)) { _ in
+                        AxisGridLine()
+                        AxisValueLabel(format: xAxisDateFormat)
+                    }
+                }
+                .chartYAxis {
+                    AxisMarks { value in
+                        AxisGridLine()
+                        AxisValueLabel {
+                            if let numericValue = value.as(Double.self) {
+                                Text(formatAxisValue(numericValue))
+                            }
                         }
                     }
                 }
+                .padding(Theme.Spacing.lg)
+                .softCard(elevation: 2)
+                .simultaneousGesture(
+                    DragGesture(minimumDistance: 24)
+                        .onChanged { value in
+                            let dx = abs(value.translation.width)
+                            let dy = abs(value.translation.height)
+                            isHorizontalSwipeActive = dx > max(30, dy * 1.25)
+                        }
+                        .onEnded { value in
+                            defer { isHorizontalSwipeActive = false }
+                            guard isHorizontalSwipeActive else { return }
+                            let direction = value.translation.width
+                            guard abs(direction) > 40 else { return }
+                            let all = VolumeMetric.allCases
+                            guard let index = all.firstIndex(of: selectedMetric) else { return }
+                            let nextIndex = direction < 0 ? min(index + 1, all.count - 1) : max(index - 1, 0)
+                            if nextIndex != index {
+                                selectedMetric = all[nextIndex]
+                                Haptics.selection()
+                            }
+                        }
+                )
             }
         }
-        .padding(Theme.Spacing.lg)
-        .softCard(elevation: 2)
-        .gesture(
-            DragGesture(minimumDistance: 24)
-                .onEnded { value in
-                    let direction = value.translation.width
-                    guard abs(direction) > 40 else { return }
-                    let all = VolumeMetric.allCases
-                    guard let index = all.firstIndex(of: selectedMetric) else { return }
-                    let nextIndex = direction < 0 ? min(index + 1, all.count - 1) : max(index - 1, 0)
-                    if nextIndex != index {
-                        selectedMetric = all[nextIndex]
-                        Haptics.selection()
-                    }
-                }
-        )
+        .frame(maxWidth: maxChartWidth, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: - Dynamic Axis Configuration
@@ -161,6 +181,9 @@ struct VolumeProgressChart: View {
     }
 
     private func formatAxisValue(_ value: Double) -> String {
+        if selectedMetric == .totalSets {
+            return String(Int(value.rounded()))
+        }
         if value >= 1000 {
             return String(format: "%.1fk", value / 1000)
         }

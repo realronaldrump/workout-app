@@ -8,6 +8,10 @@ struct WorkoutSessionInsightsView: View {
     @EnvironmentObject var dataManager: WorkoutDataManager
     @EnvironmentObject var annotationsManager: WorkoutAnnotationsManager
     @EnvironmentObject var gymProfilesManager: GymProfilesManager
+    private let maxContentWidth: CGFloat = 760
+    private var statColumns: [GridItem] {
+        [GridItem(.adaptive(minimum: 120, maximum: 210), spacing: Theme.Spacing.md)]
+    }
 
     private struct ExerciseVolumePoint: Identifiable {
         let id = UUID()
@@ -41,6 +45,8 @@ struct WorkoutSessionInsightsView: View {
                 }
                 .padding(.vertical, Theme.Spacing.xxl)
                 .padding(.horizontal, Theme.Spacing.lg)
+                .frame(maxWidth: maxContentWidth, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .center)
             }
         }
         .navigationTitle("Session")
@@ -109,18 +115,10 @@ struct WorkoutSessionInsightsView: View {
                 .font(Theme.Typography.title3)
                 .foregroundStyle(Theme.Colors.textPrimary)
 
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: Theme.Spacing.md) {
-                    MetricStatPill(title: "Duration", value: workout.duration)
-                    MetricStatPill(title: "Volume", value: formatVolume(workout.totalVolume))
-                    MetricStatPill(title: "Minutes", value: minutes > 0 ? "\(Int(round(minutes)))" : "--")
-                }
-
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: Theme.Spacing.md) {
-                    MetricStatPill(title: "Duration", value: workout.duration)
-                    MetricStatPill(title: "Volume", value: formatVolume(workout.totalVolume))
-                    MetricStatPill(title: "Minutes", value: minutes > 0 ? "\(Int(round(minutes)))" : "--")
-                }
+            LazyVGrid(columns: statColumns, spacing: Theme.Spacing.md) {
+                MetricStatPill(title: "Duration", value: workout.duration)
+                MetricStatPill(title: "Volume", value: formatVolume(workout.totalVolume))
+                MetricStatPill(title: "Minutes", value: minutes > 0 ? "\(Int(round(minutes)))" : "--")
             }
         }
         .padding(Theme.Spacing.lg)
@@ -134,7 +132,7 @@ struct WorkoutSessionInsightsView: View {
                 .foregroundStyle(Theme.Colors.textPrimary)
 
             if let data = healthManager.getHealthData(for: workout.id) {
-                HStack(spacing: Theme.Spacing.md) {
+                LazyVGrid(columns: statColumns, spacing: Theme.Spacing.md) {
                     if let avgHR = data.avgHeartRate {
                         MetricStatPill(title: "Avg HR", value: "\(Int(avgHR)) bpm")
                     }

@@ -452,19 +452,10 @@ struct BodyCompositionView: View {
             .padding(.vertical, Theme.Spacing.xs)
             .frame(minHeight: 44)
             .frame(maxWidth: .infinity)
-            .background(
-                Capsule()
-                    .fill(isOn.wrappedValue && isEnabled ? tint : Theme.Colors.cardBackground)
-            )
-            .overlay(
-                Capsule()
-                    .strokeBorder(Theme.Colors.border.opacity(isEnabled ? 1 : 0.35), lineWidth: 2)
-            )
-            .shadow(
-                color: Color.black.opacity(Theme.Colors.shadowOpacity),
-                radius: 0,
-                x: 2,
-                y: 2
+            .brutalistButtonChrome(
+                fill: isOn.wrappedValue && isEnabled ? tint : Theme.Colors.cardBackground,
+                border: Theme.Colors.border.opacity(isEnabled ? 1 : 0.35),
+                cornerRadius: Theme.CornerRadius.large
             )
         }
         .buttonStyle(.plain)

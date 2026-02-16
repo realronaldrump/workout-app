@@ -12,6 +12,7 @@ struct MainTabView: View {
     @StateObject private var dataManager = WorkoutDataManager()
     @StateObject private var iCloudManager = iCloudDocumentManager()
     @StateObject private var logStore = WorkoutLogStore()
+    @StateObject private var programStore = ProgramStore()
     @StateObject private var annotationsManager: WorkoutAnnotationsManager
     @StateObject private var gymProfilesManager: GymProfilesManager
     @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
@@ -86,6 +87,7 @@ struct MainTabView: View {
         }
         .environmentObject(dataManager)
         .environmentObject(logStore)
+        .environmentObject(programStore)
         .environmentObject(annotationsManager)
         .environmentObject(gymProfilesManager)
         .tint(Theme.Colors.accent)
@@ -113,7 +115,7 @@ struct MainTabView: View {
                 hasSeenOnboarding: $hasSeenOnboarding
             )
         }
-        .overlay(alignment: .bottom) {
+        .safeAreaInset(edge: .bottom, spacing: 0) {
             if sessionManager.activeSession != nil && !sessionManager.isPresentingSessionUI {
                 ActiveSessionBar()
                     .padding(.horizontal, Theme.Spacing.lg)
@@ -131,6 +133,7 @@ struct MainTabView: View {
                 .environmentObject(healthManager)
                 .environmentObject(dataManager)
                 .environmentObject(logStore)
+                .environmentObject(programStore)
                 .environmentObject(annotationsManager)
                 .environmentObject(gymProfilesManager)
         }
@@ -174,6 +177,7 @@ struct MainTabView: View {
 
     private func bootstrapStoresIfNeeded() {
         Task { @MainActor in
+            await programStore.load()
             await logStore.load()
             dataManager.setLoggedWorkouts(logStore.workouts)
             await sessionManager.restoreDraft()

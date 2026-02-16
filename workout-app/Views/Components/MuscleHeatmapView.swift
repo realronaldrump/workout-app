@@ -5,6 +5,7 @@ import SwiftUI
 struct MuscleHeatmapView: View {
     let dataManager: WorkoutDataManager
     let dateRange: DateInterval
+    var rangeLabel: String?
     var onOpen: (() -> Void)?
 
     @State private var selectedMuscleTag: MuscleTag?
@@ -15,6 +16,10 @@ struct MuscleHeatmapView: View {
     }
 
     private var dateRangeLabel: String {
+        if let rangeLabel {
+            return rangeLabel
+        }
+
         let calendar = Calendar.current
         let days = calendar.dateComponents([.day], from: dateRange.start, to: dateRange.end).day ?? 0
 

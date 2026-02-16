@@ -955,6 +955,43 @@ private struct TrendCard: View {
     let color: Color
     let onTap: () -> Void
 
+    private var sortedPoints: [HealthTrendPoint] {
+        points.sorted { $0.date < $1.date }
+    }
+
+    private var startPoint: HealthTrendPoint? {
+        sortedPoints.first
+    }
+
+    private var endPoint: HealthTrendPoint? {
+        sortedPoints.last
+    }
+
+    private var minValue: Double? {
+        points.map(\.value).min()
+    }
+
+    private var maxValue: Double? {
+        points.map(\.value).max()
+    }
+
+    private var dateContext: String {
+        guard let start = startPoint?.date, let end = endPoint?.date else { return "No dates" }
+        return "\(start.formatted(date: .abbreviated, time: .omitted)) - \(end.formatted(date: .abbreviated, time: .omitted))"
+    }
+
+    private var valueContext: String {
+        guard let minValue, let maxValue else { return "No values" }
+        return "Low \(formatCompact(minValue))  High \(formatCompact(maxValue))"
+    }
+
+    private var accessibilityTrendSummary: String {
+        guard let start = startPoint, let end = endPoint else { return "No trend data" }
+        let startDateText = start.date.formatted(date: .abbreviated, time: .omitted)
+        let endDateText = end.date.formatted(date: .abbreviated, time: .omitted)
+        return "From \(formatCompact(start.value)) on \(startDateText) to \(formatCompact(end.value)) on \(endDateText). \(valueContext)"
+    }
+
     var body: some View {
         MetricTileButton(chevronPlacement: .bottomTrailing, action: onTap) {
             VStack(alignment: .leading, spacing: Theme.Spacing.md) {
@@ -984,10 +1021,36 @@ private struct TrendCard: View {
                 .chartYAxis(.hidden)
                 .chartXAxis(.hidden)
                 .frame(height: 70)
+                .accessibilityLabel(Text("\(title) trend"))
+                .accessibilityValue(Text(accessibilityTrendSummary))
+
+                HStack {
+                    Text(dateContext)
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Colors.textTertiary)
+                    Spacer()
+                    Text(valueContext)
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                }
             }
             .padding(Theme.Spacing.lg)
             .softCard(elevation: 2)
         }
+    }
+
+    private func formatCompact(_ value: Double) -> String {
+        let absValue = abs(value)
+        if absValue >= 1000 {
+            return String(format: "%.1fk", value / 1000)
+        }
+        if absValue >= 100 {
+            return String(format: "%.0f", value)
+        }
+        if absValue >= 10 {
+            return String(format: "%.1f", value)
+        }
+        return String(format: "%.2f", value)
     }
 }
 

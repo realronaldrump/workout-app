@@ -6,6 +6,7 @@ struct WorkoutSessionView: View {
     @EnvironmentObject private var sessionManager: WorkoutSessionManager
     @EnvironmentObject private var dataManager: WorkoutDataManager
     @EnvironmentObject private var logStore: WorkoutLogStore
+    @EnvironmentObject private var programStore: ProgramStore
     @EnvironmentObject private var healthManager: HealthKitManager
     @EnvironmentObject private var annotationsManager: WorkoutAnnotationsManager
     @EnvironmentObject private var gymProfilesManager: GymProfilesManager
@@ -442,12 +443,27 @@ struct WorkoutSessionView: View {
             defer { isFinishing = false }
 
             do {
+                let plannedProgramId = sessionManager.activeSession?.plannedProgramId
+                let plannedDayId = sessionManager.activeSession?.plannedDayId
+                let plannedDayDate = sessionManager.activeSession?.plannedDayDate
+                let plannedTargetsSnapshot = sessionManager.activeSession?.plannedTargetsSnapshot
                 let logged = try await sessionManager.finish()
                 await logStore.upsert(logged)
                 dataManager.setLoggedWorkouts(logStore.workouts)
 
                 annotationsManager.setGym(for: logged.id, gymProfileId: logged.gymProfileId)
                 gymProfilesManager.setLastUsedGymProfileId(logged.gymProfileId)
+
+                if let completedWorkout = dataManager.workouts.first(where: { $0.id == logged.id }) {
+                    programStore.recordCompletion(
+                        workout: completedWorkout,
+                        plannedProgramId: plannedProgramId,
+                        plannedDayId: plannedDayId,
+                        plannedDayDate: plannedDayDate,
+                        plannedTargetsSnapshot: plannedTargetsSnapshot,
+                        dailyHealthStore: healthManager.dailyHealthStore
+                    )
+                }
 
                 // Kick HealthKit sync in the background if possible.
                 if healthManager.authorizationStatus == .authorized,
@@ -582,6 +598,7 @@ private struct SessionExerciseCard: View {
                         .font(.title3)
                         .foregroundColor(Theme.Colors.textSecondary)
                 }
+                .buttonStyle(.plain)
             }
 
             VStack(spacing: Theme.Spacing.sm) {
@@ -614,9 +631,9 @@ private struct SessionExerciseCard: View {
                     .foregroundColor(.white)
                     .padding(.horizontal, Theme.Spacing.md)
                     .padding(.vertical, Theme.Spacing.sm)
-                    .background(
-                        Capsule()
-                            .fill(Theme.Colors.accentSecondary)
+                    .brutalistButtonChrome(
+                        fill: Theme.Colors.accentSecondary,
+                        cornerRadius: Theme.CornerRadius.large
                     )
                 }
                 .buttonStyle(.plain)

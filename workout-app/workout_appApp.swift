@@ -29,6 +29,7 @@ struct WorkoutApp: App {
             MainTabView()
                 .environmentObject(healthManager)
                 .environmentObject(sessionManager)
+                .buttonStyle(AppInteractionButtonStyle())
         }
     }
 }

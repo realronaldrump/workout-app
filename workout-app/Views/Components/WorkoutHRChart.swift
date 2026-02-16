@@ -48,7 +48,5 @@ struct WorkoutHRChart: View {
             .frame(height: 200)
             .clipped()
         }
-        .padding(Theme.Spacing.lg)
-        .softCard(elevation: 2)
     }
 }

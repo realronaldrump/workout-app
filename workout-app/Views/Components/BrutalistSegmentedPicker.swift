@@ -6,6 +6,7 @@ struct BrutalistSegmentedPicker<SelectionValue: Hashable>: View {
     let title: String
     @Binding var selection: SelectionValue
     let options: [(label: String, value: SelectionValue)]
+    private let maxControlWidth: CGFloat = 560
 
     var body: some View {
         HStack(spacing: 0) {
@@ -22,8 +23,10 @@ struct BrutalistSegmentedPicker<SelectionValue: Hashable>: View {
                         .textCase(.uppercase)
                         .tracking(0.8)
                         .foregroundStyle(selection == option.value ? Color.white : Theme.Colors.textPrimary)
-                        .frame(maxWidth: .infinity)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
                         .padding(.vertical, Theme.Spacing.sm)
+                        .frame(maxWidth: .infinity, minHeight: 44)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -42,6 +45,8 @@ struct BrutalistSegmentedPicker<SelectionValue: Hashable>: View {
         }
         .padding(Theme.Spacing.xs)
         .softCard(cornerRadius: Theme.CornerRadius.xlarge, elevation: 1)
+        .frame(maxWidth: maxControlWidth, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(Text(title))
     }

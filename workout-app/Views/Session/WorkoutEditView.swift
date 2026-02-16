@@ -48,18 +48,17 @@ struct WorkoutEditView: View {
                                     .tracking(1.0)
 
                                 VStack(spacing: Theme.Spacing.md) {
-                                    ForEach(draft.exercises.indices, id: \.self) { eIndex in
+                                    ForEach(draft.exercises) { exercise in
                                         LoggedExerciseEditorCard(
-                                            exerciseIndex: eIndex,
-                                            exercise: draft.exercises[eIndex],
-                                            setBinding: { sIndex in
-                                                bindingForSet(exerciseIndex: eIndex, setIndex: sIndex)
+                                            exercise: exercise,
+                                            setBinding: { setId in
+                                                bindingForSet(exerciseId: exercise.id, setId: setId)
                                             },
                                             onAddSet: {
-                                                addSet(exerciseIndex: eIndex)
+                                                addSet(exerciseId: exercise.id)
                                             },
-                                            onDeleteSet: { sIndex in
-                                                deleteSet(exerciseIndex: eIndex, setIndex: sIndex)
+                                            onDeleteSet: { setId in
+                                                deleteSet(exerciseId: exercise.id, setId: setId)
                                             }
                                         )
                                     }
@@ -153,31 +152,50 @@ struct WorkoutEditView: View {
         )
     }
 
-    private func bindingForSet(exerciseIndex: Int, setIndex: Int) -> Binding<LoggedSet> {
-        Binding(
-            get: { draft?.exercises[exerciseIndex].sets[setIndex] ?? LoggedSet(order: 1, weight: 0, reps: 0, distance: nil, seconds: nil) },
+    private func bindingForSet(exerciseId: UUID, setId: UUID) -> Binding<LoggedSet> {
+        let fallbackSet = LoggedSet(order: 1, weight: 0, reps: 0, distance: nil, seconds: nil)
+
+        return Binding(
+            get: {
+                guard let exerciseIndex = draft?.exercises.firstIndex(where: { $0.id == exerciseId }),
+                      let setIndex = draft?.exercises[exerciseIndex].sets.firstIndex(where: { $0.id == setId }) else {
+                    return fallbackSet
+                }
+                return draft?.exercises[exerciseIndex].sets[setIndex] ?? fallbackSet
+            },
             set: { newValue in
-                guard draft != nil else { return }
-                draft!.exercises[exerciseIndex].sets[setIndex] = newValue
+                guard let exerciseIndex = draft?.exercises.firstIndex(where: { $0.id == exerciseId }),
+                      let setIndex = draft?.exercises[exerciseIndex].sets.firstIndex(where: { $0.id == setId }) else {
+                    return
+                }
+                draft?.exercises[exerciseIndex].sets[setIndex] = newValue
             }
         )
     }
 
-    private func addSet(exerciseIndex: Int) {
-        guard draft != nil else { return }
-        let nextOrder = (draft!.exercises[exerciseIndex].sets.map(\.order).max() ?? 0) + 1
-        draft!.exercises[exerciseIndex].sets.append(LoggedSet(order: nextOrder, weight: 0, reps: 0, distance: nil, seconds: nil))
+    private func addSet(exerciseId: UUID) {
+        guard let exerciseIndex = draft?.exercises.firstIndex(where: { $0.id == exerciseId }) else { return }
+        let nextOrder = (draft?.exercises[exerciseIndex].sets.map(\.order).max() ?? 0) + 1
+        draft?.exercises[exerciseIndex].sets.append(
+            LoggedSet(order: nextOrder, weight: 0, reps: 0, distance: nil, seconds: nil)
+        )
     }
 
-    private func deleteSet(exerciseIndex: Int, setIndex: Int) {
-        guard draft != nil else { return }
-        draft!.exercises[exerciseIndex].sets.remove(at: setIndex)
-        renumberSets(exerciseIndex: exerciseIndex)
+    private func deleteSet(exerciseId: UUID, setId: UUID) {
+        guard let exerciseIndex = draft?.exercises.firstIndex(where: { $0.id == exerciseId }),
+              let setIndex = draft?.exercises[exerciseIndex].sets.firstIndex(where: { $0.id == setId }) else {
+            return
+        }
+        draft?.exercises[exerciseIndex].sets.remove(at: setIndex)
+        renumberSets(exerciseId: exerciseId)
     }
 
-    private func renumberSets(exerciseIndex: Int) {
-        guard draft != nil else { return }
-        let sorted = draft!.exercises[exerciseIndex].sets.sorted { $0.order < $1.order }
+    private func renumberSets(exerciseId: UUID) {
+        guard let exerciseIndex = draft?.exercises.firstIndex(where: { $0.id == exerciseId }),
+              let sets = draft?.exercises[exerciseIndex].sets else {
+            return
+        }
+        let sorted = sets.sorted { $0.order < $1.order }
         var updated: [LoggedSet] = []
         updated.reserveCapacity(sorted.count)
         for (idx, set) in sorted.enumerated() {
@@ -185,7 +203,7 @@ struct WorkoutEditView: View {
             copy.order = idx + 1
             updated.append(copy)
         }
-        draft!.exercises[exerciseIndex].sets = updated
+        draft?.exercises[exerciseIndex].sets = updated
     }
 
     private func save() {
@@ -247,11 +265,10 @@ struct WorkoutEditView: View {
 }
 
 private struct LoggedExerciseEditorCard: View {
-    let exerciseIndex: Int
     let exercise: LoggedExercise
-    let setBinding: (Int) -> Binding<LoggedSet>
+    let setBinding: (UUID) -> Binding<LoggedSet>
     let onAddSet: () -> Void
-    let onDeleteSet: (Int) -> Void
+    let onDeleteSet: (UUID) -> Void
 
     private let weightUnit = "lbs"
     @ObservedObject private var metadataManager = ExerciseMetadataManager.shared
@@ -298,20 +315,23 @@ private struct LoggedExerciseEditorCard: View {
                     .foregroundColor(.white)
                     .padding(.horizontal, Theme.Spacing.md)
                     .padding(.vertical, Theme.Spacing.xs)
-                    .background(Capsule().fill(Theme.Colors.accentSecondary))
+                    .brutalistButtonChrome(
+                        fill: Theme.Colors.accentSecondary,
+                        cornerRadius: Theme.CornerRadius.large
+                    )
                 }
                 .buttonStyle(.plain)
             }
 
             VStack(spacing: Theme.Spacing.sm) {
-                ForEach(exercise.sets.indices, id: \.self) { sIndex in
+                ForEach(exercise.sets) { set in
                     LoggedSetEditorRow(
-                        order: exercise.sets[sIndex].order,
-                        set: setBinding(sIndex),
+                        order: set.order,
+                        set: setBinding(set.id),
                         weightUnit: weightUnit,
                         cardioConfig: config,
                         onDelete: {
-                            onDeleteSet(sIndex)
+                            onDeleteSet(set.id)
                             Haptics.selection()
                         }
                     )

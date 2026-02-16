@@ -261,18 +261,11 @@ struct ExerciseDetailView: View {
             .padding(.horizontal, Theme.Spacing.md)
             .padding(.vertical, Theme.Spacing.sm)
             .frame(minHeight: 44)
-            .background(Capsule().fill(Theme.Colors.surface))
-            .overlay(
-                Capsule()
-                    .strokeBorder(Theme.Colors.border, lineWidth: 2)
+            .brutalistButtonChrome(
+                fill: Theme.Colors.surface,
+                cornerRadius: Theme.CornerRadius.large
             )
-            .shadow(
-                color: Color.black.opacity(Theme.Colors.shadowOpacity),
-                radius: 0,
-                x: 2,
-                y: 2
-            )
-            .contentShape(Capsule())
+            .contentShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large))
         }
         .buttonStyle(.plain)
         .disabled(scopedHistory.isEmpty)
@@ -324,9 +317,9 @@ struct ExerciseDetailView: View {
                         .padding(.horizontal, Theme.Spacing.md)
                         .padding(.vertical, Theme.Spacing.sm)
                         .frame(minHeight: 44)
-                        .overlay(
-                            Capsule()
-                                .strokeBorder(Theme.Colors.border, lineWidth: 2)
+                        .brutalistButtonChrome(
+                            fill: Theme.Colors.surface,
+                            cornerRadius: Theme.CornerRadius.large
                         )
                 }
                 .buttonStyle(.plain)

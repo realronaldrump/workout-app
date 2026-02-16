@@ -476,6 +476,7 @@ struct GymProfilesView: View {
                     .font(.title3)
                     .foregroundColor(Theme.Colors.textSecondary)
             }
+            .buttonStyle(.plain)
         }
         .padding(Theme.Spacing.lg)
         .softCard(elevation: 2)

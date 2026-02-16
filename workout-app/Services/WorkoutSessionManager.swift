@@ -86,6 +86,71 @@ final class WorkoutSessionManager: ObservableObject {
         schedulePersistDraft()
     }
 
+    func startSession(
+        name: String,
+        gymProfileId: UUID?,
+        templateExercises: [PlannedExerciseTarget],
+        plannedProgramId: UUID? = nil,
+        plannedDayId: UUID? = nil,
+        plannedDayDate: Date? = nil
+    ) {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let sessionName = trimmedName.isEmpty ? "Workout" : trimmedName
+
+        var mappedExercises: [ActiveExercise] = []
+        var mappedTargets: [PlannedExerciseTarget] = []
+        mappedExercises.reserveCapacity(templateExercises.count)
+        mappedTargets.reserveCapacity(templateExercises.count)
+        var seenNormalizedNames = Set<String>()
+
+        for target in templateExercises {
+            let exerciseName = target.exerciseName.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !exerciseName.isEmpty else { continue }
+
+            let normalized = normalizedExerciseName(exerciseName)
+            guard !seenNormalizedNames.contains(normalized) else { continue }
+            seenNormalizedNames.insert(normalized)
+
+            let setCount = max(1, target.setCount)
+            let defaultReps = max(1, target.defaultReps)
+            let sets = (1...setCount).map { order in
+                ActiveSet(
+                    order: order,
+                    weight: target.targetWeight,
+                    reps: defaultReps
+                )
+            }
+
+            mappedExercises.append(ActiveExercise(name: exerciseName, sets: sets))
+
+            mappedTargets.append(
+                PlannedExerciseTarget(
+                    id: target.id,
+                    exerciseName: exerciseName,
+                    setCount: setCount,
+                    repRangeLower: target.repRangeLower,
+                    repRangeUpper: target.repRangeUpper,
+                    targetWeight: target.targetWeight,
+                    failureStreak: target.failureStreak
+                )
+            )
+        }
+
+        let session = ActiveWorkoutSession(
+            startedAt: Date(),
+            name: sessionName,
+            gymProfileId: gymProfileId,
+            plannedProgramId: plannedProgramId,
+            plannedDayId: plannedDayId,
+            plannedDayDate: plannedDayDate,
+            plannedTargetsSnapshot: mappedTargets,
+            exercises: mappedExercises
+        )
+
+        activeSession = session
+        schedulePersistDraft()
+    }
+
     func updateSessionName(_ name: String) {
         guard var session = activeSession else { return }
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)

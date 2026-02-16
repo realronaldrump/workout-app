@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Small brutalist pill buttons used in toolbars and headers to avoid the default
+/// Small brutalist action buttons used in toolbars and headers to avoid the default
 /// iOS "blue text" button look and match the app's theme (border + hard shadow).
 struct AppPillButton: View {
     enum Variant {
@@ -65,16 +65,9 @@ struct AppPillButton: View {
             }
             .padding(.horizontal, Theme.Spacing.md)
             .padding(.vertical, Theme.Spacing.xs)
-            .background(Capsule().fill(backgroundColor))
-            .overlay(
-                Capsule()
-                    .strokeBorder(Theme.Colors.border, lineWidth: 2)
-            )
-            .shadow(
-                color: Color.black.opacity(Theme.Colors.shadowOpacity),
-                radius: 0,
-                x: 2,
-                y: 2
+            .brutalistButtonChrome(
+                fill: backgroundColor,
+                cornerRadius: Theme.CornerRadius.large
             )
         }
         .buttonStyle(.plain)
@@ -94,20 +87,12 @@ struct AppPillIconButton: View {
                 .foregroundStyle(tint)
                 .padding(.horizontal, Theme.Spacing.md)
                 .padding(.vertical, Theme.Spacing.xs)
-                .background(Capsule().fill(Theme.Colors.surface))
-                .overlay(
-                    Capsule()
-                        .strokeBorder(Theme.Colors.border, lineWidth: 2)
-                )
-                .shadow(
-                    color: Color.black.opacity(Theme.Colors.shadowOpacity),
-                    radius: 0,
-                    x: 2,
-                    y: 2
+                .brutalistButtonChrome(
+                    fill: Theme.Colors.surface,
+                    cornerRadius: Theme.CornerRadius.large
                 )
         }
         .buttonStyle(.plain)
         .accessibilityLabel(accessibilityLabel)
     }
 }
-

@@ -3,6 +3,10 @@ import SwiftUI
 struct OverviewCardsView: View {
     let stats: WorkoutStats
 
+    private var columns: [GridItem] {
+        [GridItem(.adaptive(minimum: 160, maximum: 220), spacing: Theme.Spacing.md)]
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             Text("Overview")
@@ -10,7 +14,7 @@ struct OverviewCardsView: View {
                 .foregroundColor(Theme.Colors.textPrimary)
                 .tracking(1.0)
 
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: Theme.Spacing.md) {
+            LazyVGrid(columns: columns, spacing: Theme.Spacing.md) {
                 StatCard(
                     title: "Total Workouts",
                     value: "\(stats.totalWorkouts)",
