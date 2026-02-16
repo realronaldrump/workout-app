@@ -130,20 +130,9 @@ struct StrongImportWizard: View {
 
             Spacer()
 
-            Button(
-                action: {
-                    withAnimation { step = 1 }
-                },
-                label: {
-                    Text("Next")
-                        .font(Theme.Typography.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Theme.Colors.accent)
-                        .foregroundColor(.white)
-                        .cornerRadius(Theme.CornerRadius.large)
-                }
-            )
+            primaryActionButton(title: "Next", fill: Theme.Colors.accent) {
+                withAnimation { step = 1 }
+            }
             .padding(Theme.Spacing.xl)
         }
     }
@@ -192,6 +181,8 @@ struct StrongImportWizard: View {
                             )
                         }
                     )
+                    .buttonStyle(.plain)
+                    .contentShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large))
 
                     if let error = importError {
                         HStack {
@@ -277,18 +268,9 @@ struct StrongImportWizard: View {
                 }
                 .buttonStyle(PlainButtonStyle())
 
-                Button(
-                    action: { isPresented = false },
-                    label: {
-                        Text("Done")
-                            .font(Theme.Typography.headline)
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Theme.Colors.success)
-                            .foregroundColor(.white)
-                            .cornerRadius(Theme.CornerRadius.large)
-                    }
-                )
+                primaryActionButton(title: "Done", fill: Theme.Colors.success) {
+                    isPresented = false
+                }
 
                 if healthManager.isSyncing {
                     Text("Health sync continues in the background.")
@@ -470,6 +452,21 @@ struct StrongImportWizard: View {
 
     private func formatDate(_ date: Date) -> String {
         date.formatted(date: .abbreviated, time: .shortened)
+    }
+
+    private func primaryActionButton(title: String, fill: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(Theme.Typography.headline)
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, Theme.Spacing.md)
+                .brutalistButtonChrome(
+                    fill: fill,
+                    cornerRadius: Theme.CornerRadius.large
+                )
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Logic

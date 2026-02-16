@@ -51,10 +51,12 @@ struct GymMapSearchSheet: View {
     @State private var isSearching = false
     @State private var searchError: String?
     @State private var didRunInitialSearch = false
+    @State private var isShowingAllResults = false
 
     // Fallback to CONUS center when we don't have workout/gym coordinates yet.
     private static let fallbackCenter = CLLocationCoordinate2D(latitude: 39.8283, longitude: -98.5795)
     private static let defaultSpan = MKCoordinateSpan(latitudeDelta: 0.045, longitudeDelta: 0.045)
+    private static let collapsedResultsLimit = 5
 
     init(
         title: String,
@@ -144,6 +146,34 @@ struct GymMapSearchSheet: View {
         }
 
         return merged
+    }
+
+    private var canExpandResults: Bool {
+        combinedResults.count > Self.collapsedResultsLimit
+    }
+
+    private var collapsedResults: [GymMapPlace] {
+        guard canExpandResults else { return combinedResults }
+
+        let defaultCollapsed = Array(combinedResults.prefix(Self.collapsedResultsLimit))
+        guard let selectedPlaceId,
+              let selectedIndex = combinedResults.firstIndex(where: { $0.id == selectedPlaceId }),
+              selectedIndex >= Self.collapsedResultsLimit,
+              Self.collapsedResultsLimit > 0 else {
+            return defaultCollapsed
+        }
+
+        var adjusted = Array(combinedResults.prefix(Self.collapsedResultsLimit - 1))
+        adjusted.append(combinedResults[selectedIndex])
+        return adjusted
+    }
+
+    private var displayedResults: [GymMapPlace] {
+        isShowingAllResults ? combinedResults : collapsedResults
+    }
+
+    private var hiddenResultsCount: Int {
+        max(0, combinedResults.count - Self.collapsedResultsLimit)
     }
 
     var body: some View {
@@ -304,8 +334,24 @@ struct GymMapSearchSheet: View {
                 }
             } else {
                 VStack(spacing: Theme.Spacing.sm) {
-                    ForEach(combinedResults) { place in
+                    ForEach(displayedResults) { place in
                         resultRow(for: place)
+                    }
+
+                    if canExpandResults {
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                isShowingAllResults.toggle()
+                            }
+                        } label: {
+                            Text(isShowingAllResults ? "Show less" : "Show \(hiddenResultsCount) more")
+                                .font(Theme.Typography.captionBold)
+                                .foregroundStyle(Theme.Colors.accent)
+                                .textCase(.uppercase)
+                                .tracking(0.8)
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.top, Theme.Spacing.xs)
                     }
                 }
             }
@@ -405,6 +451,7 @@ struct GymMapSearchSheet: View {
                 let places = try await searchGyms(query: trimmed, region: region)
                 await MainActor.run {
                     results = places
+                    isShowingAllResults = false
                     if let first = combinedResults.first {
                         selectedPlaceId = first.id
                         focusMap(on: first.coordinate)
