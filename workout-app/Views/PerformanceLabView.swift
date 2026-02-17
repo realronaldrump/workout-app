@@ -2,17 +2,50 @@ import SwiftUI
 import Charts
 
 struct PerformanceLabView: View {
+    private enum TimeFilter: String, CaseIterable {
+        case twoWeeks = "2 Weeks"
+        case fourWeeks = "4 Weeks"
+        case eightWeeks = "8 Weeks"
+        case twelveWeeks = "12 Weeks"
+        case custom = "Custom"
+
+        var days: Int? {
+            switch self {
+            case .twoWeeks: return 14
+            case .fourWeeks: return 28
+            case .eightWeeks: return 56
+            case .twelveWeeks: return 84
+            case .custom: return nil
+            }
+        }
+    }
+
     @ObservedObject var dataManager: WorkoutDataManager
     @EnvironmentObject var healthManager: HealthKitManager
     @EnvironmentObject var annotationsManager: WorkoutAnnotationsManager
     @EnvironmentObject var gymProfilesManager: GymProfilesManager
 
-    @State private var comparisonWindow = 14
+    @State private var selectedTimeFilter: TimeFilter = .twoWeeks
+    @State private var customStartDate = Date()
+    @State private var customEndDate = Date()
+    @State private var didInitializeCustomRange = false
     @State private var selectedWorkout: Workout?
     @State private var selectedExercise: ExerciseSelection?
     @State private var selectedChangeMetric: ChangeMetric?
 
     private let maxContentWidth: CGFloat = 820
+
+    private struct MuscleWorkChange: Identifiable {
+        let tag: MuscleTag
+        let currentEffort: Double
+        let previousEffort: Double
+        let currentShare: Double
+        let previousShare: Double
+
+        var id: String { tag.id }
+        var deltaEffort: Double { currentEffort - previousEffort }
+        var deltaShare: Double { currentShare - previousShare }
+    }
 
     private var workouts: [Workout] {
         dataManager.workouts
@@ -23,43 +56,119 @@ struct PerformanceLabView: View {
         return ExerciseMetadataManager.shared.resolvedMappings(for: names)
     }
 
-    private var comparisonWindowOptions: [(label: String, value: Int)] {
-        [
-            ("2 Weeks", 14),
-            ("4 Weeks", 28),
-            ("8 Weeks", 56),
-            ("12 Weeks", 84)
-        ]
+    private var timeFilterOptions: [(label: String, value: TimeFilter)] {
+        TimeFilter.allCases.map { (label: $0.rawValue, value: $0) }
+    }
+
+    private var earliestWorkoutDate: Date? {
+        workouts.map(\.date).min()
     }
 
     private var latestWorkoutDate: Date? {
         workouts.map(\.date).max()
     }
 
+    private var latestSelectableDate: Date {
+        latestWorkoutDate ?? Date()
+    }
+
     private var selectedWindowLabel: String {
-        comparisonWindowOptions.first(where: { $0.value == comparisonWindow })?.label ?? "Last \(comparisonWindow) Days"
+        selectedTimeFilter.rawValue
+    }
+
+    private var selectedWindowContextLabel: String {
+        selectedTimeFilter == .custom ? "Custom Range" : selectedWindowLabel
+    }
+
+    private var selectedRangeDetailLabel: String {
+        guard let selectedRangeInterval else { return "--" }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d, yyyy"
+        let start = formatter.string(from: selectedRangeInterval.start)
+        let end = formatter.string(from: selectedRangeInterval.end)
+        return start == end ? start : "\(start) - \(end)"
+    }
+
+    private var selectedRangeDayCount: Int {
+        guard let selectedRangeInterval else { return 1 }
+        let calendar = Calendar.current
+        let start = calendar.startOfDay(for: selectedRangeInterval.start)
+        let end = calendar.startOfDay(for: selectedRangeInterval.end)
+        let days = (calendar.dateComponents([.day], from: start, to: end).day ?? 0) + 1
+        return max(1, days)
     }
 
     private var selectedWindowWeeks: Int {
-        max(1, comparisonWindow / 7)
+        max(1, Int(ceil(Double(selectedRangeDayCount) / 7.0)))
     }
 
     private var selectedWindowTrendSubtitle: String {
-        if selectedWindowWeeks == 1 {
-            return "last week vs the week before"
+        if selectedTimeFilter == .custom {
+            return "selected range vs previous \(selectedRangeDayCount)-day span"
         }
         return "last \(selectedWindowWeeks) weeks vs the \(selectedWindowWeeks) before"
     }
 
     private var selectedRangeInterval: DateInterval? {
         guard let latestWorkoutDate else { return nil }
-        let start = Calendar.current.date(byAdding: .day, value: -comparisonWindow, to: latestWorkoutDate) ?? latestWorkoutDate
-        return DateInterval(start: start, end: latestWorkoutDate)
+        let calendar = Calendar.current
+
+        if let days = selectedTimeFilter.days {
+            let start = calendar.date(byAdding: .day, value: -days, to: latestWorkoutDate) ?? latestWorkoutDate
+            return DateInterval(start: start, end: latestWorkoutDate)
+        }
+
+        let earliest = earliestWorkoutDate ?? latestWorkoutDate
+        let clampedStart = max(calendar.startOfDay(for: customStartDate), calendar.startOfDay(for: earliest))
+        let clampedEndDay = min(calendar.startOfDay(for: customEndDate), calendar.startOfDay(for: latestWorkoutDate))
+        let clampedEnd = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: clampedEndDay) ?? clampedEndDay
+        return DateInterval(start: min(clampedStart, clampedEnd), end: max(clampedStart, clampedEnd))
     }
 
     private var selectedRangeWorkouts: [Workout] {
         guard let selectedRangeInterval else { return [] }
         return workouts.filter { selectedRangeInterval.contains($0.date) }
+    }
+
+    private var workoutsThroughRangeEnd: [Workout] {
+        guard let selectedRangeInterval else { return workouts }
+        return workouts.filter { $0.date <= selectedRangeInterval.end }
+    }
+
+    private var selectedChangeWindow: ChangeMetricWindow? {
+        guard let current = selectedRangeInterval else { return nil }
+        let previous = previousInterval(matching: current)
+        let label: String = selectedTimeFilter == .custom
+            ? "Custom range vs previous \(selectedRangeDayCount)-day span"
+            : "\(selectedWindowLabel) vs previous \(selectedWindowLabel.lowercased())"
+        return ChangeMetricWindow(label: label, current: current, previous: previous)
+    }
+
+    private var muscleWorkChanges: [MuscleWorkChange] {
+        guard let selectedChangeWindow else { return [] }
+
+        let currentWorkouts = workouts.filter { selectedChangeWindow.current.contains($0.date) }
+        let previousWorkouts = workouts.filter { selectedChangeWindow.previous.contains($0.date) }
+
+        let currentTotals = muscleEffortTotals(for: currentWorkouts)
+        let previousTotals = muscleEffortTotals(for: previousWorkouts)
+        let currentTotalEffort = max(1, currentTotals.values.reduce(0, +))
+        let previousTotalEffort = max(1, previousTotals.values.reduce(0, +))
+
+        let allTags = Set(currentTotals.keys).union(previousTotals.keys)
+        return allTags.compactMap { tag in
+            let currentEffort = currentTotals[tag] ?? 0
+            let previousEffort = previousTotals[tag] ?? 0
+            guard currentEffort > 0 || previousEffort > 0 else { return nil }
+            return MuscleWorkChange(
+                tag: tag,
+                currentEffort: currentEffort,
+                previousEffort: previousEffort,
+                currentShare: currentEffort / currentTotalEffort,
+                previousShare: previousEffort / previousTotalEffort
+            )
+        }
+        .sorted { abs($0.deltaEffort) > abs($1.deltaEffort) }
     }
 
     var body: some View {
@@ -73,6 +182,8 @@ struct PerformanceLabView: View {
                     if workouts.isEmpty {
                         emptyState
                     } else {
+                        timeRangeSection
+
                         atAGlanceSection
 
                         comparisonSection
@@ -106,15 +217,21 @@ struct PerformanceLabView: View {
         .navigationDestination(item: $selectedChangeMetric) { metric in
             let fallbackNow = Date()
             let fallbackWindow = ChangeMetricWindow(
-                label: "Last \(comparisonWindow)d",
+                label: "Selected range",
                 current: DateInterval(start: fallbackNow, end: fallbackNow),
                 previous: DateInterval(start: fallbackNow, end: fallbackNow)
             )
             ChangeMetricDetailView(
                 metric: metric,
-                window: WorkoutAnalytics.rollingChangeWindow(for: workouts, windowDays: comparisonWindow) ?? fallbackWindow,
+                window: selectedChangeWindow ?? fallbackWindow,
                 workouts: workouts
             )
+        }
+        .onAppear {
+            synchronizeCustomRange()
+        }
+        .onChange(of: latestWorkoutDate) { _, _ in
+            synchronizeCustomRange()
         }
     }
 
@@ -137,7 +254,7 @@ struct PerformanceLabView: View {
             return "Start logging workouts to track your progress."
         }
         let through = latest.formatted(date: .abbreviated, time: .omitted)
-        return "\(selectedRangeWorkouts.count) workouts in \(selectedWindowLabel.lowercased()) • \(workouts.count) total through \(through)"
+        return "\(selectedRangeWorkouts.count) workouts in \(selectedWindowContextLabel) • \(workouts.count) total through \(through)"
     }
 
     // MARK: - Empty State
@@ -153,6 +270,36 @@ struct PerformanceLabView: View {
         }
         .padding(Theme.Spacing.lg)
         .softCard(elevation: 2)
+    }
+
+    // MARK: - Time Range
+
+    private var timeRangeSection: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            Text("Time Range")
+                .font(Theme.Typography.title2)
+                .foregroundColor(Theme.Colors.textPrimary)
+
+            Text(selectedRangeDetailLabel)
+                .font(Theme.Typography.caption)
+                .foregroundColor(Theme.Colors.textSecondary)
+
+            BrutalistSegmentedPicker(
+                title: "Time Range",
+                selection: $selectedTimeFilter,
+                options: timeFilterOptions
+            )
+
+            if selectedTimeFilter == .custom {
+                BrutalistDateRangePickerRow(
+                    title: "Custom Range",
+                    startDate: $customStartDate,
+                    endDate: $customEndDate,
+                    earliestSelectableDate: earliestWorkoutDate,
+                    latestSelectableDate: latestSelectableDate
+                )
+            }
+        }
     }
 
     // MARK: - At a Glance
@@ -173,7 +320,7 @@ struct PerformanceLabView: View {
                 HStack(spacing: Theme.Spacing.md) {
                     glanceTile(
                         value: "\(selectedRangeWorkouts.count)",
-                        label: "In \(selectedWindowLabel)",
+                        label: "In \(selectedWindowContextLabel)",
                         icon: "calendar"
                     )
                     glanceTile(
@@ -191,7 +338,7 @@ struct PerformanceLabView: View {
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: Theme.Spacing.md) {
                     glanceTile(
                         value: "\(selectedRangeWorkouts.count)",
-                        label: "In \(selectedWindowLabel)",
+                        label: "In \(selectedWindowContextLabel)",
                         icon: "calendar"
                     )
                     glanceTile(
@@ -233,7 +380,7 @@ struct PerformanceLabView: View {
     // MARK: - Comparison (Recent vs Before)
 
     private var comparisonSection: some View {
-        let window = WorkoutAnalytics.rollingChangeWindow(for: workouts, windowDays: comparisonWindow)
+        let window = selectedChangeWindow
         let changes = window.map { WorkoutAnalytics.changeMetrics(for: workouts, window: $0) } ?? []
 
         return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
@@ -241,12 +388,11 @@ struct PerformanceLabView: View {
                 .font(Theme.Typography.title2)
                 .foregroundColor(Theme.Colors.textPrimary)
 
-            BrutalistSegmentedPicker(
-                title: "Window",
-                selection: $comparisonWindow,
-                options: comparisonWindowOptions
-            )
-            .frame(maxWidth: 560, alignment: .leading)
+            if let window {
+                Text(window.label)
+                    .font(Theme.Typography.caption)
+                    .foregroundColor(Theme.Colors.textSecondary)
+            }
 
             if changes.isEmpty {
                 Text("Need more workouts to compare periods.")
@@ -276,7 +422,7 @@ struct PerformanceLabView: View {
 
     private var strengthGainsSection: some View {
         let contributions = WorkoutAnalytics.progressContributions(
-            workouts: workouts,
+            workouts: workoutsThroughRangeEnd,
             weeks: selectedWindowWeeks,
             mappings: muscleMapping
         )
@@ -403,13 +549,14 @@ struct PerformanceLabView: View {
 
     private var muscleBalanceSection: some View {
         let buckets = muscleVolumeBuckets()
+        let changes = muscleWorkChanges
 
         return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             Text("Muscle Focus")
                 .font(Theme.Typography.title2)
                 .foregroundColor(Theme.Colors.textPrimary)
 
-            Text("Distribution across tagged groups in \(selectedWindowLabel.lowercased()).")
+            Text("Distribution across tagged groups in \(selectedRangeDetailLabel).")
                 .font(Theme.Typography.caption)
                 .foregroundColor(Theme.Colors.textSecondary)
 
@@ -424,23 +571,38 @@ struct PerformanceLabView: View {
                     .padding(Theme.Spacing.lg)
                     .softCard(elevation: 2)
             }
+
+            if !changes.isEmpty {
+                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                    Text("Change by Muscle Group")
+                        .font(Theme.Typography.captionBold)
+                        .foregroundColor(Theme.Colors.textSecondary)
+                        .textCase(.uppercase)
+                        .tracking(0.5)
+
+                    if let selectedChangeWindow {
+                        Text(selectedChangeWindow.label)
+                            .font(Theme.Typography.caption)
+                            .foregroundColor(Theme.Colors.textTertiary)
+                    }
+
+                    VStack(spacing: 0) {
+                        ForEach(Array(changes.enumerated()), id: \.element.id) { index, change in
+                            muscleChangeRow(change)
+                            if index < changes.count - 1 {
+                                Divider()
+                                    .padding(.horizontal, Theme.Spacing.lg)
+                            }
+                        }
+                    }
+                    .softCard(elevation: 1)
+                }
+            }
         }
     }
 
     private func muscleVolumeBuckets() -> [PerformanceMuscleVolumeBucket] {
-        let recent = selectedRangeWorkouts
-
-        var groupVolumes: [MuscleTag: Double] = [:]
-        for workout in recent {
-            for exercise in workout.exercises {
-                let tags = muscleMapping[exercise.name] ?? []
-                let effort = exerciseEffortScore(exercise)
-                guard effort > 0 else { continue }
-                for tag in tags {
-                    groupVolumes[tag, default: 0] += effort
-                }
-            }
-        }
+        let groupVolumes = muscleEffortTotals(for: selectedRangeWorkouts)
 
         let total = groupVolumes.values.reduce(0, +)
         guard total > 0 else { return [] }
@@ -457,6 +619,52 @@ struct PerformanceLabView: View {
                 rank: index
             )
         }
+    }
+
+    private func muscleEffortTotals(for sourceWorkouts: [Workout]) -> [MuscleTag: Double] {
+        var totals: [MuscleTag: Double] = [:]
+        for workout in sourceWorkouts {
+            for exercise in workout.exercises {
+                let tags = muscleMapping[exercise.name] ?? []
+                guard !tags.isEmpty else { continue }
+                let effort = exerciseEffortScore(exercise)
+                guard effort > 0 else { continue }
+                for tag in tags {
+                    totals[tag, default: 0] += effort
+                }
+            }
+        }
+        return totals
+    }
+
+    private func muscleChangeRow(_ change: MuscleWorkChange) -> some View {
+        HStack(spacing: Theme.Spacing.sm) {
+            Circle()
+                .fill(change.tag.tint)
+                .frame(width: 10, height: 10)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(change.tag.shortName)
+                    .font(Theme.Typography.bodyBold)
+                    .foregroundColor(Theme.Colors.textPrimary)
+                Text("Now \(percentLabel(for: change.currentShare)) • Before \(percentLabel(for: change.previousShare))")
+                    .font(Theme.Typography.caption)
+                    .foregroundColor(Theme.Colors.textSecondary)
+            }
+
+            Spacer()
+
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(shareDeltaLabel(for: change.deltaShare))
+                    .font(Theme.Typography.captionBold)
+                    .foregroundColor(deltaTint(for: change.deltaEffort))
+                Text(relativeEffortChangeLabel(current: change.currentEffort, previous: change.previousEffort))
+                    .font(Theme.Typography.caption)
+                    .foregroundColor(Theme.Colors.textTertiary)
+            }
+        }
+        .padding(.horizontal, Theme.Spacing.lg)
+        .padding(.vertical, Theme.Spacing.sm)
     }
 
     // MARK: - Weekly Activity
@@ -530,6 +738,59 @@ struct PerformanceLabView: View {
         let fallbackSetPoints = Double(exercise.sets.count) * 25.0
 
         return max(fallbackSetPoints, countPoints + distancePoints + durationPoints)
+    }
+
+    private func percentLabel(for share: Double) -> String {
+        let percent = share * 100
+        if percent <= 0 { return "0%" }
+        if percent < 0.1 { return "<0.1%" }
+        if percent < 1 { return String(format: "%.1f%%", percent) }
+        return "\(Int(round(percent)))%"
+    }
+
+    private func shareDeltaLabel(for deltaShare: Double) -> String {
+        let points = deltaShare * 100
+        if abs(points) < 0.05 { return "0.0 pts" }
+        return String(format: "%+.1f pts", points)
+    }
+
+    private func relativeEffortChangeLabel(current: Double, previous: Double) -> String {
+        if previous <= 0 {
+            return current > 0 ? "new activity" : "no change"
+        }
+        let percent = ((current - previous) / previous) * 100
+        return String(format: "%+.0f%% effort", percent)
+    }
+
+    private func deltaTint(for delta: Double) -> Color {
+        if abs(delta) < 0.001 { return Theme.Colors.textSecondary }
+        return delta > 0 ? Theme.Colors.success : Theme.Colors.warning
+    }
+
+    private func previousInterval(matching current: DateInterval) -> DateInterval {
+        let previousEnd = current.start.addingTimeInterval(-0.001)
+        let previousStart = previousEnd.addingTimeInterval(-max(current.duration, 1))
+        return DateInterval(start: previousStart, end: previousEnd)
+    }
+
+    private func synchronizeCustomRange() {
+        guard let latestWorkoutDate else { return }
+        let earliest = earliestWorkoutDate ?? latestWorkoutDate
+        let calendar = Calendar.current
+
+        if !didInitializeCustomRange {
+            customEndDate = calendar.startOfDay(for: latestWorkoutDate)
+            let suggestedStart = calendar.date(byAdding: .day, value: -27, to: customEndDate) ?? earliest
+            customStartDate = max(calendar.startOfDay(for: earliest), calendar.startOfDay(for: suggestedStart))
+            didInitializeCustomRange = true
+            return
+        }
+
+        customEndDate = min(calendar.startOfDay(for: customEndDate), calendar.startOfDay(for: latestWorkoutDate))
+        customStartDate = max(calendar.startOfDay(for: customStartDate), calendar.startOfDay(for: earliest))
+        if customStartDate > customEndDate {
+            customStartDate = customEndDate
+        }
     }
 
     private func formatWeight(_ value: Double) -> String {
