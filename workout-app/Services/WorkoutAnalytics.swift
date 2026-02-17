@@ -307,8 +307,12 @@ struct WorkoutAnalytics {
     }
 
     private static func rollingWindowLabel(days: Int) -> String {
-        if days <= 14 { return "Last 2w" }
-        if days <= 28 { return "Last 4w" }
+        if days % 7 == 0 {
+            return "Last \(days / 7)w"
+        }
+        if days % 30 == 0 {
+            return "Last \(days / 30)mo"
+        }
         return "Last \(days)d"
     }
 
