@@ -32,6 +32,36 @@ struct PerformanceLabView: View {
         ]
     }
 
+    private var latestWorkoutDate: Date? {
+        workouts.map(\.date).max()
+    }
+
+    private var selectedWindowLabel: String {
+        comparisonWindowOptions.first(where: { $0.value == comparisonWindow })?.label ?? "Last \(comparisonWindow) Days"
+    }
+
+    private var selectedWindowWeeks: Int {
+        max(1, comparisonWindow / 7)
+    }
+
+    private var selectedWindowTrendSubtitle: String {
+        if selectedWindowWeeks == 1 {
+            return "last week vs the week before"
+        }
+        return "last \(selectedWindowWeeks) weeks vs the \(selectedWindowWeeks) before"
+    }
+
+    private var selectedRangeInterval: DateInterval? {
+        guard let latestWorkoutDate else { return nil }
+        let start = Calendar.current.date(byAdding: .day, value: -comparisonWindow, to: latestWorkoutDate) ?? latestWorkoutDate
+        return DateInterval(start: start, end: latestWorkoutDate)
+    }
+
+    private var selectedRangeWorkouts: [Workout] {
+        guard let selectedRangeInterval else { return [] }
+        return workouts.filter { selectedRangeInterval.contains($0.date) }
+    }
+
     var body: some View {
         ZStack {
             AdaptiveBackground()
@@ -103,11 +133,11 @@ struct PerformanceLabView: View {
     }
 
     private var headerSubtitle: String {
-        guard let latest = workouts.map(\.date).max() else {
+        guard let latest = latestWorkoutDate else {
             return "Start logging workouts to track your progress."
         }
         let through = latest.formatted(date: .abbreviated, time: .omitted)
-        return "\(workouts.count) workouts through \(through)"
+        return "\(selectedRangeWorkouts.count) workouts in \(selectedWindowLabel.lowercased()) • \(workouts.count) total through \(through)"
     }
 
     // MARK: - Empty State
@@ -128,13 +158,11 @@ struct PerformanceLabView: View {
     // MARK: - At a Glance
 
     private var atAGlanceSection: some View {
-        let streakRuns = WorkoutAnalytics.streakRuns(for: workouts, intentionalRestDays: 2)
+        let streakRuns = WorkoutAnalytics.streakRuns(for: selectedRangeWorkouts, intentionalRestDays: 2)
         let currentStreak = streakRuns.last?.workoutDayCount ?? 0
         let bestStreak = streakRuns.map(\.workoutDayCount).max() ?? 0
-
-        let calendar = Calendar.current
-        let fourWeeksAgo = calendar.date(byAdding: .day, value: -28, to: Date()) ?? Date()
-        let recentCount = workouts.filter { $0.date >= fourWeeksAgo }.count
+        let avgPerWeek = Double(selectedRangeWorkouts.count) / Double(selectedWindowWeeks)
+        let avgPerWeekText = String(format: "%.1f", avgPerWeek)
 
         return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             Text("At a Glance")
@@ -144,14 +172,14 @@ struct PerformanceLabView: View {
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: Theme.Spacing.md) {
                     glanceTile(
-                        value: "\(workouts.count)",
-                        label: "Total Workouts",
-                        icon: "figure.strengthtraining.traditional"
+                        value: "\(selectedRangeWorkouts.count)",
+                        label: "In \(selectedWindowLabel)",
+                        icon: "calendar"
                     )
                     glanceTile(
-                        value: "\(recentCount)",
-                        label: "Last 4 Weeks",
-                        icon: "calendar"
+                        value: avgPerWeekText,
+                        label: "Avg / Week",
+                        icon: "chart.bar.fill"
                     )
                     glanceTile(
                         value: "\(currentStreak)",
@@ -162,14 +190,14 @@ struct PerformanceLabView: View {
 
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: Theme.Spacing.md) {
                     glanceTile(
-                        value: "\(workouts.count)",
-                        label: "Total Workouts",
-                        icon: "figure.strengthtraining.traditional"
+                        value: "\(selectedRangeWorkouts.count)",
+                        label: "In \(selectedWindowLabel)",
+                        icon: "calendar"
                     )
                     glanceTile(
-                        value: "\(recentCount)",
-                        label: "Last 4 Weeks",
-                        icon: "calendar"
+                        value: avgPerWeekText,
+                        label: "Avg / Week",
+                        icon: "chart.bar.fill"
                     )
                     glanceTile(
                         value: "\(currentStreak)",
@@ -231,12 +259,13 @@ struct PerformanceLabView: View {
                     ForEach(changes) { metric in
                         MetricTileButton(
                             chevronPlacement: .topTrailing,
-                            action: { selectedChangeMetric = metric }
-                        ) {
-                            PerformanceComparisonRow(metric: metric)
-                                .padding(Theme.Spacing.lg)
-                                .softCard(elevation: 1)
-                        }
+                            action: { selectedChangeMetric = metric },
+                            content: {
+                                PerformanceComparisonRow(metric: metric)
+                                    .padding(Theme.Spacing.lg)
+                                    .softCard(elevation: 1)
+                            }
+                        )
                     }
                 }
             }
@@ -248,7 +277,7 @@ struct PerformanceLabView: View {
     private var strengthGainsSection: some View {
         let contributions = WorkoutAnalytics.progressContributions(
             workouts: workouts,
-            weeks: 8,
+            weeks: selectedWindowWeeks,
             mappings: muscleMapping
         )
         let exerciseGains = contributions
@@ -262,7 +291,7 @@ struct PerformanceLabView: View {
                 .font(Theme.Typography.title2)
                 .foregroundColor(Theme.Colors.textPrimary)
 
-            Text("Best weight per exercise \u{2014} last 8 weeks vs the 8 before")
+            Text("Best weight per exercise \u{2014} \(selectedWindowTrendSubtitle)")
                 .font(Theme.Typography.caption)
                 .foregroundColor(Theme.Colors.textSecondary)
 
@@ -380,6 +409,10 @@ struct PerformanceLabView: View {
                 .font(Theme.Typography.title2)
                 .foregroundColor(Theme.Colors.textPrimary)
 
+            Text("Distribution across tagged groups in \(selectedWindowLabel.lowercased()).")
+                .font(Theme.Typography.caption)
+                .foregroundColor(Theme.Colors.textSecondary)
+
             if buckets.isEmpty {
                 Text("Tag your exercises with muscle groups to see your training balance.")
                     .font(Theme.Typography.body)
@@ -395,16 +428,16 @@ struct PerformanceLabView: View {
     }
 
     private func muscleVolumeBuckets() -> [PerformanceMuscleVolumeBucket] {
-        let calendar = Calendar.current
-        let eightWeeksAgo = calendar.date(byAdding: .day, value: -56, to: Date()) ?? Date()
-        let recent = workouts.filter { $0.date >= eightWeeksAgo }
+        let recent = selectedRangeWorkouts
 
         var groupVolumes: [MuscleTag: Double] = [:]
         for workout in recent {
             for exercise in workout.exercises {
                 let tags = muscleMapping[exercise.name] ?? []
+                let effort = exerciseEffortScore(exercise)
+                guard effort > 0 else { continue }
                 for tag in tags {
-                    groupVolumes[tag, default: 0] += exercise.totalVolume
+                    groupVolumes[tag, default: 0] += effort
                 }
             }
         }
@@ -452,30 +485,20 @@ struct PerformanceLabView: View {
 
     private func weeklyWorkoutCounts() -> [PerformanceWeeklyCount] {
         let calendar = Calendar.current
-        guard let latest = workouts.map(\.date).max() else { return [] }
+        guard let selectedRangeInterval else { return [] }
 
-        let maxWeeks = 12
         var counts: [Date: Int] = [:]
 
-        for workout in workouts {
+        for workout in selectedRangeWorkouts {
             let comps = calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: workout.date)
             guard let weekStart = calendar.date(from: comps) else { continue }
             counts[weekStart, default: 0] += 1
         }
 
-        // Include all weeks in range, even those with zero workouts
-        let earliest = calendar.date(byAdding: .day, value: -(maxWeeks * 7), to: latest) ?? latest
-        let earliestComps = calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: earliest)
-        guard var cursor = calendar.date(from: earliestComps) else {
-            return counts.keys.sorted().suffix(maxWeeks).map {
-                PerformanceWeeklyCount(weekStart: $0, count: counts[$0] ?? 0)
-            }
-        }
-
-        let latestComps = calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: latest)
-        guard let latestWeekStart = calendar.date(from: latestComps) else {
-            return []
-        }
+        let rangeStartComps = calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: selectedRangeInterval.start)
+        let rangeEndComps = calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: selectedRangeInterval.end)
+        guard var cursor = calendar.date(from: rangeStartComps),
+              let latestWeekStart = calendar.date(from: rangeEndComps) else { return [] }
 
         var result: [PerformanceWeeklyCount] = []
         while cursor <= latestWeekStart {
@@ -484,10 +507,30 @@ struct PerformanceLabView: View {
             cursor = next
         }
 
-        return Array(result.suffix(maxWeeks))
+        return result
     }
 
     // MARK: - Helpers
+
+    private func exerciseEffortScore(_ exercise: Exercise) -> Double {
+        let weightedVolume = exercise.totalVolume
+        if weightedVolume > 0 {
+            return weightedVolume
+        }
+
+        let count = exercise.sets.reduce(0) { $0 + max($1.reps, 0) }
+        let distance = exercise.sets.reduce(0.0) { $0 + max($1.distance, 0) }
+        let seconds = exercise.sets.reduce(0.0) { $0 + max($1.seconds, 0) }
+
+        // Cardio and bodyweight sets can be recorded as count/distance/time with zero weight.
+        // Convert those metrics into effort points so tagged groups (e.g. Cardio/Floors) contribute.
+        let countPoints = Double(count) * 10.0
+        let distancePoints = distance * 100.0
+        let durationPoints = seconds / 60.0
+        let fallbackSetPoints = Double(exercise.sets.count) * 25.0
+
+        return max(fallbackSetPoints, countPoints + distancePoints + durationPoints)
+    }
 
     private func formatWeight(_ value: Double) -> String {
         if value >= 1000 {
@@ -672,13 +715,21 @@ private struct PerformanceMuscleFocusChart: View {
                             .foregroundColor(Theme.Colors.textPrimary)
                             .lineLimit(1)
                         Spacer()
-                        Text("\(Int(round(bucket.share * 100)))%")
+                        Text(percentLabel(for: bucket.share))
                             .font(Theme.Typography.captionBold)
                             .foregroundColor(Theme.Colors.textSecondary)
                     }
                 }
             }
         }
+    }
+
+    private func percentLabel(for share: Double) -> String {
+        let percent = share * 100
+        if percent <= 0 { return "0%" }
+        if percent < 0.1 { return "<0.1%" }
+        if percent < 1 { return String(format: "%.1f%%", percent) }
+        return "\(Int(round(percent)))%"
     }
 }
 
@@ -737,8 +788,8 @@ private struct PerformanceWeeklyChart: View {
                 AxisMarks(position: .trailing) { value in
                     AxisGridLine()
                     AxisValueLabel {
-                        if let v = value.as(Int.self) {
-                            Text("\(v)")
+                        if let countValue = value.as(Int.self) {
+                            Text("\(countValue)")
                         }
                     }
                 }

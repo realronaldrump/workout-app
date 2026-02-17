@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ExerciseListView: View {
     @ObservedObject var dataManager: WorkoutDataManager
+    @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var annotationsManager: WorkoutAnnotationsManager
     @EnvironmentObject var gymProfilesManager: GymProfilesManager
     @State private var searchText = ""
@@ -63,75 +64,56 @@ struct ExerciseListView: View {
     var body: some View {
         ZStack {
             AdaptiveBackground()
-            ScrollView(showsIndicators: false) {
-                LazyVStack(spacing: Theme.Spacing.md) {
-                    if exercises.isEmpty {
-                        ContentUnavailableView(
-                            "No matches",
-                            systemImage: "magnifyingglass",
-                            description: Text("Try a different exercise name.")
-                        )
-                        .padding(.top, Theme.Spacing.xl)
-                    } else {
-                        ForEach(exercises, id: \.name) { exercise in
-                            NavigationLink(
-                                destination: ExerciseDetailView(
-                                    exerciseName: exercise.name,
-                                    dataManager: dataManager,
-                                    annotationsManager: annotationsManager,
-                                    gymProfilesManager: gymProfilesManager
-                                )
-                            ) {
-                                ExerciseRowView(name: exercise.name, stats: exercise.stats)
-                            }
-                            .buttonStyle(PlainButtonStyle())
-                            .contextMenu {
-                                Button("View History") {
-                                    selectedExercise = ExerciseSelection(id: exercise.name)
+
+            VStack(spacing: Theme.Spacing.md) {
+                topBar
+                    .padding(.horizontal, Theme.Spacing.lg)
+                    .padding(.top, Theme.Spacing.sm)
+
+                searchField
+                    .padding(.horizontal, Theme.Spacing.lg)
+
+                ScrollView(showsIndicators: false) {
+                    LazyVStack(spacing: Theme.Spacing.md) {
+                        if exercises.isEmpty {
+                            ContentUnavailableView(
+                                "No matches",
+                                systemImage: "magnifyingglass",
+                                description: Text("Try a different exercise name.")
+                            )
+                            .padding(.top, Theme.Spacing.xl)
+                        } else {
+                            ForEach(exercises, id: \.name) { exercise in
+                                NavigationLink(
+                                    destination: ExerciseDetailView(
+                                        exerciseName: exercise.name,
+                                        dataManager: dataManager,
+                                        annotationsManager: annotationsManager,
+                                        gymProfilesManager: gymProfilesManager
+                                    )
+                                ) {
+                                    ExerciseRowView(name: exercise.name, stats: exercise.stats)
                                 }
-                                Button("Quick Start") {
-                                    quickStartExercise = exercise.name
-                                    showingQuickStart = true
+                                .buttonStyle(.plain)
+                                .contextMenu {
+                                    Button("View History") {
+                                        selectedExercise = ExerciseSelection(id: exercise.name)
+                                    }
+                                    Button("Quick Start") {
+                                        quickStartExercise = exercise.name
+                                        showingQuickStart = true
+                                    }
                                 }
                             }
                         }
                     }
+                    .padding(.horizontal, Theme.Spacing.lg)
+                    .padding(.bottom, Theme.Spacing.xl)
                 }
-                .padding(Theme.Spacing.lg)
             }
         }
-        .navigationTitle("All Exercises")
-        .searchable(text: $searchText, prompt: "Search exercises")
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Menu {
-                    Picker("Sort Order", selection: $sortOrder) {
-                        ForEach(SortOrder.allCases, id: \.self) { order in
-                            Label(order.rawValue, systemImage: sortIcon(for: order))
-                                .tag(order)
-                        }
-                    }
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "arrow.up.arrow.down")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(Theme.Colors.accent)
-                        Text("Sort")
-                            .font(Theme.Typography.captionBold)
-                            .foregroundStyle(Theme.Colors.textPrimary)
-                            .textCase(.uppercase)
-                            .tracking(0.8)
-                    }
-                    .padding(.horizontal, Theme.Spacing.md)
-                    .padding(.vertical, Theme.Spacing.xs)
-                    .brutalistButtonChrome(
-                        fill: Theme.Colors.surface,
-                        cornerRadius: Theme.CornerRadius.large
-                    )
-                }
-                .buttonStyle(.plain)
-            }
-        }
+        .navigationBarBackButtonHidden(true)
+        .toolbar(.hidden, for: .navigationBar)
         .navigationDestination(item: $selectedExercise) { selection in
             ExerciseDetailView(
                 exerciseName: selection.id,
@@ -143,6 +125,87 @@ struct ExerciseListView: View {
         .sheet(isPresented: $showingQuickStart) {
             QuickStartView(exerciseName: quickStartExercise)
         }
+    }
+
+    private var topBar: some View {
+        ZStack {
+            HStack {
+                AppPillIconButton(
+                    systemImage: "chevron.left",
+                    accessibilityLabel: "Back",
+                    tint: Theme.Colors.textPrimary
+                ) {
+                    dismiss()
+                }
+                Spacer()
+                sortMenu
+            }
+
+            Text("All Exercises")
+                .font(Theme.Typography.cardHeader)
+                .textCase(.uppercase)
+                .tracking(1)
+                .foregroundStyle(Theme.Colors.textPrimary)
+        }
+    }
+
+    private var sortMenu: some View {
+        Menu {
+            Picker("Sort Order", selection: $sortOrder) {
+                ForEach(SortOrder.allCases, id: \.self) { order in
+                    Label(order.rawValue, systemImage: sortIcon(for: order))
+                        .tag(order)
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.up.arrow.down")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(Theme.Colors.accent)
+                Text("Sort")
+                    .font(Theme.Typography.captionBold)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                    .textCase(.uppercase)
+                    .tracking(0.8)
+            }
+            .padding(.horizontal, Theme.Spacing.md)
+            .padding(.vertical, Theme.Spacing.xs)
+            .brutalistButtonChrome(
+                fill: Theme.Colors.surface,
+                cornerRadius: Theme.CornerRadius.large
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var searchField: some View {
+        HStack(spacing: Theme.Spacing.sm) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(Theme.Colors.textTertiary)
+
+            TextField("Search exercises", text: $searchText)
+                .textInputAutocapitalization(.never)
+                .disableAutocorrection(true)
+                .font(Theme.Typography.callout)
+                .foregroundStyle(Theme.Colors.textPrimary)
+                .tint(Theme.Colors.accent)
+
+            if !searchText.isEmpty {
+                Button {
+                    searchText = ""
+                    Haptics.selection()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(Theme.Colors.textTertiary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Clear search")
+            }
+        }
+        .padding(.horizontal, Theme.Spacing.lg)
+        .padding(.vertical, Theme.Spacing.md)
+        .glassBackground(cornerRadius: Theme.CornerRadius.xlarge, elevation: 1)
     }
 
     private func sortIcon(for order: SortOrder) -> String {
