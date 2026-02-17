@@ -415,31 +415,15 @@ struct PerformanceLabView: View {
         let sorted = groupVolumes
             .sorted { $0.value > $1.value }
 
-        let maxNamed = 6
-        var buckets: [PerformanceMuscleVolumeBucket] = []
-
-        for (index, entry) in sorted.prefix(maxNamed).enumerated() {
-            buckets.append(PerformanceMuscleVolumeBucket(
+        return sorted.enumerated().map { index, entry in
+            PerformanceMuscleVolumeBucket(
                 name: entry.key.shortName,
                 volume: entry.value,
                 share: entry.value / total,
                 tint: entry.key.tint,
                 rank: index
-            ))
+            )
         }
-
-        if sorted.count > maxNamed {
-            let otherVolume = sorted.dropFirst(maxNamed).reduce(0) { $0 + $1.value }
-            buckets.append(PerformanceMuscleVolumeBucket(
-                name: "Other",
-                volume: otherVolume,
-                share: otherVolume / total,
-                tint: Theme.Colors.textTertiary,
-                rank: maxNamed
-            ))
-        }
-
-        return buckets
     }
 
     // MARK: - Weekly Activity
