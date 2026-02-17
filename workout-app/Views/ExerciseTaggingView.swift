@@ -1,6 +1,15 @@
 import SwiftUI
 
 struct ExerciseTaggingView: View {
+    private struct ExerciseTaggingItem: Identifiable {
+        let exerciseName: String
+        let tags: [MuscleTag]
+        let isCustomized: Bool
+
+        var id: String { exerciseName }
+        var isUntagged: Bool { tags.isEmpty }
+    }
+
     @ObservedObject var dataManager: WorkoutDataManager
     @ObservedObject private var metadataManager = ExerciseMetadataManager.shared
     @State private var searchText = ""
@@ -17,6 +26,24 @@ struct ExerciseTaggingView: View {
         } else {
             return uniqueExercises.filter { $0.localizedCaseInsensitiveContains(searchText) }
         }
+    }
+
+    private var filteredExerciseItems: [ExerciseTaggingItem] {
+        filteredExercises.map { exercise in
+            ExerciseTaggingItem(
+                exerciseName: exercise,
+                tags: metadataManager.resolvedTags(for: exercise),
+                isCustomized: metadataManager.isOverridden(for: exercise)
+            )
+        }
+    }
+
+    private var untaggedFilteredExercises: [ExerciseTaggingItem] {
+        filteredExerciseItems.filter(\.isUntagged)
+    }
+
+    private var taggedFilteredExercises: [ExerciseTaggingItem] {
+        filteredExerciseItems.filter { !$0.isUntagged }
     }
 
     var body: some View {
@@ -46,16 +73,13 @@ struct ExerciseTaggingView: View {
                                 message: "Try a different search."
                             )
                         } else {
-                            LazyVStack(spacing: Theme.Spacing.md) {
-                                ForEach(filteredExercises, id: \.self) { exercise in
-                                    NavigationLink(destination: ExerciseTagEditorView(exerciseName: exercise)) {
-                                        ExerciseTaggingRow(
-                                            exerciseName: exercise,
-                                            tags: metadataManager.resolvedTags(for: exercise),
-                                            isCustomized: metadataManager.isOverridden(for: exercise)
-                                        )
-                                    }
-                                    .buttonStyle(.plain)
+                            LazyVStack(alignment: .leading, spacing: Theme.Spacing.lg) {
+                                if !untaggedFilteredExercises.isEmpty {
+                                    exerciseSection(title: "Untagged", exercises: untaggedFilteredExercises)
+                                }
+
+                                if !taggedFilteredExercises.isEmpty {
+                                    exerciseSection(title: "Tagged", exercises: taggedFilteredExercises)
                                 }
                             }
                         }
@@ -67,6 +91,28 @@ struct ExerciseTaggingView: View {
         .navigationTitle("Exercise Tags")
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $searchText, prompt: "Search exercises")
+    }
+
+    private func exerciseSection(title: String, exercises: [ExerciseTaggingItem]) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            Text("\(title) (\(exercises.count))")
+                .font(Theme.Typography.captionBold)
+                .foregroundColor(Theme.Colors.textSecondary)
+                .padding(.horizontal, Theme.Spacing.sm)
+
+            VStack(spacing: Theme.Spacing.md) {
+                ForEach(exercises) { item in
+                    NavigationLink(destination: ExerciseTagEditorView(exerciseName: item.exerciseName)) {
+                        ExerciseTaggingRow(
+                            exerciseName: item.exerciseName,
+                            tags: item.tags,
+                            isCustomized: item.isCustomized
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
     }
 
     private var introCard: some View {
