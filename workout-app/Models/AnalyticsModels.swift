@@ -48,6 +48,20 @@ struct ChangeMetricWindow {
     let previous: DateInterval
 }
 
+struct ExerciseConsistencySummary: Identifiable, Hashable {
+    let exerciseName: String
+    let sessions: Int
+    let weeksPerformed: Int
+    let activeWeeks: Int
+
+    var id: String { exerciseName }
+
+    var weeklyCoverage: Double {
+        guard activeWeeks > 0 else { return 0 }
+        return Double(weeksPerformed) / Double(activeWeeks)
+    }
+}
+
 struct RepRangeBucket: Identifiable {
     let id = UUID()
     let label: String

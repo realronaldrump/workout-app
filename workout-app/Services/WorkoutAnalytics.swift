@@ -235,6 +235,32 @@ struct WorkoutAnalytics {
             .sorted { abs($0.delta) > abs($1.delta) }
     }
 
+    static func exerciseConsistencySummaries(workouts: [Workout], weeks: Int) -> [ExerciseConsistencySummary] {
+        guard let endDate = workouts.map({ $0.date }).max() else { return [] }
+        let calendar = Calendar.current
+        let currentStart = calendar.date(byAdding: .day, value: -(weeks * 7), to: endDate) ?? endDate
+        let current = workouts.filter { $0.date >= currentStart && $0.date <= endDate }
+        return exerciseConsistencySummaries(for: current, calendar: calendar)
+    }
+
+    static func consistentExerciseNames(
+        workouts: [Workout],
+        weeks: Int,
+        minimumSessions: Int = 3,
+        minimumWeeks: Int = 3,
+        minimumWeeklyCoverage: Double = 0.5
+    ) -> Set<String> {
+        Set(
+            exerciseConsistencySummaries(workouts: workouts, weeks: weeks)
+                .filter { summary in
+                    summary.sessions >= minimumSessions &&
+                    summary.weeksPerformed >= minimumWeeks &&
+                    summary.weeklyCoverage >= minimumWeeklyCoverage
+                }
+                .map(\.exerciseName)
+        )
+    }
+
     static func changeMetrics(for workouts: [Workout], windowDays: Int) -> [ChangeMetric] {
         guard let window = rollingChangeWindow(for: workouts, windowDays: windowDays) else { return [] }
         return changeMetrics(for: workouts, window: window)
@@ -307,6 +333,48 @@ struct WorkoutAnalytics {
         return deltas
     }
 
+    private static func exerciseConsistencySummaries(
+        for workouts: [Workout],
+        calendar: Calendar
+    ) -> [ExerciseConsistencySummary] {
+        guard !workouts.isEmpty else { return [] }
+
+        let activeWeeks = Set(workouts.compactMap { weekStart(for: $0.date, calendar: calendar) })
+        guard !activeWeeks.isEmpty else { return [] }
+
+        var sessionsByExercise: [String: Int] = [:]
+        var weeksByExercise: [String: Set<Date>] = [:]
+
+        for workout in workouts {
+            guard let weekStart = weekStart(for: workout.date, calendar: calendar) else { continue }
+            let exerciseNames = Set(workout.exercises.map(\.name))
+            for name in exerciseNames {
+                sessionsByExercise[name, default: 0] += 1
+                weeksByExercise[name, default: []].insert(weekStart)
+            }
+        }
+
+        let activeWeekCount = activeWeeks.count
+        return sessionsByExercise.map { name, sessions in
+            ExerciseConsistencySummary(
+                exerciseName: name,
+                sessions: sessions,
+                weeksPerformed: weeksByExercise[name]?.count ?? 0,
+                activeWeeks: activeWeekCount
+            )
+        }
+        .sorted { lhs, rhs in
+            if lhs.sessions != rhs.sessions { return lhs.sessions > rhs.sessions }
+            if lhs.weeksPerformed != rhs.weeksPerformed { return lhs.weeksPerformed > rhs.weeksPerformed }
+            return lhs.exerciseName < rhs.exerciseName
+        }
+    }
+
+    private static func weekStart(for date: Date, calendar: Calendar) -> Date? {
+        let components = calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: date)
+        return calendar.date(from: components)
+    }
+
     private static func progressDeltaByWorkoutName(current: [Workout], previous: [Workout]) -> [String: Double] {
         let names = Set(current.map { $0.name } + previous.map { $0.name })
         var deltas: [String: Double] = [:]
@@ -324,7 +392,8 @@ struct WorkoutAnalytics {
         let sets = workouts.flatMap { workout in
             workout.exercises.filter { $0.name == exerciseName }.flatMap { $0.sets }
         }
-        return sets.map { estimateOneRepMax(weight: $0.weight, reps: $0.reps) }.max() ?? 0
+        // Use best lifted weight for progress comparisons so the metric is easy to understand.
+        return sets.map(\.weight).max() ?? 0
     }
 
     private static func previousExerciseValue(_ workouts: [Workout], exerciseName: String) -> Double {
