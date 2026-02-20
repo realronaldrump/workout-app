@@ -162,7 +162,7 @@ enum SampleData {
     static let stats: WorkoutStats = {
         let totalVolume = workouts.reduce(0) { $0 + $1.totalVolume }
         let totalSets = workouts.reduce(0) { $0 + $1.totalSets }
-        let totalExercises = workouts.reduce(0) { $0 + $1.exercises.count }
+        let totalExercises = Set(workouts.flatMap { $0.exercises.map(\.name) }).count
 
         return WorkoutStats(
             totalWorkouts: workouts.count,

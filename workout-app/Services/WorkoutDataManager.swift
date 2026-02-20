@@ -117,7 +117,7 @@ class WorkoutDataManager: ObservableObject {
 
         return WorkoutStats(
             totalWorkouts: filteredWorkouts.count,
-            totalExercises: allExercises.count,
+            totalExercises: exerciseGroups.keys.count,
             totalVolume: filteredWorkouts.reduce(0) { $0 + $1.totalVolume },
             totalSets: filteredWorkouts.reduce(0) { $0 + $1.totalSets },
             avgWorkoutDuration: avgDuration,
