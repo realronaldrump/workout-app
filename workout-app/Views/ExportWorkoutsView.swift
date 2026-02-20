@@ -13,15 +13,6 @@ struct ExportWorkoutsView: View {
     @State private var customEndDate: Date = Date()
     @State private var showingCustomRangeSheet = false
     @State private var didInitializeCustomRange = false
-    
-    @State private var customRangeStartDateDraft: Date = Date()
-    @State private var customRangeEndDateDraft: Date = Date()
-
-    @State private var selectedWorkoutIDs: Set<UUID>? = nil
-    @State private var selectedExerciseNames: Set<String>? = nil
-
-    @State private var showingWorkoutsSelection = false
-    @State private var showingExercisesSelection = false
 
     @State private var isExportingWorkouts = false
     @State private var workoutExportStatusMessage: String?
@@ -38,66 +29,30 @@ struct ExportWorkoutsView: View {
     @State private var showingShareSheet = false
     @State private var shareFileURL: URL?
 
-    @ViewBuilder
-    private var mainContentView: some View {
-        VStack(spacing: Theme.Spacing.xl) {
-            header
-
-            if dataManager.workouts.isEmpty {
-                ContentUnavailableView(
-                    "No Workouts",
-                    systemImage: "square.and.arrow.up",
-                    description: Text("Import workouts before exporting.")
-                )
-                .padding(.top, Theme.Spacing.xl)
-            } else {
-                modePicker
-                rangeCard
-                filterCard
-                summaryCard
-                workoutExportCard
-                exerciseExportCard
-            }
-        }
-        .padding()
-    }
-
-    @ViewBuilder
-    private var customRangeSheetContent: some View {
-        ExportCustomRangeSheet(
-            startDate: $customStartDate,
-            endDate: $customEndDate,
-            latestSelectableDate: latestSelectableDate
-        )
-    }
-
-    @ViewBuilder
-    private var workoutsSelectionSheetContent: some View {
-        MultiSelectSheet(
-            title: "Workouts",
-            items: workoutsInDateRange,
-            selectedItems: $selectedWorkoutIDs,
-            itemTitle: { $0.name },
-            itemSubtitle: { formatDay($0.date) }
-        )
-    }
-
-    @ViewBuilder
-    private var exercisesSelectionSheetContent: some View {
-        MultiSelectSheet(
-            title: "Exercises",
-            items: uniqueExerciseNamesInDateRange,
-            selectedItems: $selectedExerciseNames,
-            itemTitle: { $0 }
-        )
-    }
-
     var body: some View {
         ZStack {
             AdaptiveBackground()
 
             ScrollView {
-                mainContentView
+                VStack(spacing: Theme.Spacing.xl) {
+                    header
+
+                    if dataManager.workouts.isEmpty {
+                        ContentUnavailableView(
+                            "No Workouts",
+                            systemImage: "square.and.arrow.up",
+                            description: Text("Import workouts before exporting.")
+                        )
+                        .padding(.top, Theme.Spacing.xl)
+                    } else {
+                        modePicker
+                        rangeCard
+                        summaryCard
+                        workoutExportCard
+                        exerciseExportCard
+                    }
+                }
+                .padding()
             }
         }
         .navigationTitle("Export")
@@ -130,13 +85,11 @@ struct ExportWorkoutsView: View {
             clearExportState()
         }
         .sheet(isPresented: $showingCustomRangeSheet) {
-            customRangeSheetContent
-        }
-        .sheet(isPresented: $showingWorkoutsSelection) {
-            workoutsSelectionSheetContent
-        }
-        .sheet(isPresented: $showingExercisesSelection) {
-            exercisesSelectionSheetContent
+            ExportCustomRangeSheet(
+                startDate: $customStartDate,
+                endDate: $customEndDate,
+                latestSelectableDate: latestSelectableDate
+            )
         }
     }
 
@@ -298,53 +251,8 @@ struct ExportWorkoutsView: View {
         .padding(.top, Theme.Spacing.xs)
     }
 
-    private var filterCard: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            HStack {
-                Image(systemName: "line.3.horizontal.decrease.circle")
-                    .foregroundStyle(Theme.Colors.accent)
-                Text("Filters")
-                    .font(Theme.Typography.headline)
-                    .foregroundStyle(Theme.Colors.textPrimary)
-                Spacer()
-            }
-
-            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                HStack {
-                    Text("Workouts")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                    Spacer()
-                    Button {
-                        showingWorkoutsSelection = true
-                    } label: {
-                        Text(selectedWorkoutIDs == nil ? "All" : "\(selectedWorkoutIDs!.count) Selected")
-                            .font(Theme.Typography.captionBold)
-                            .foregroundStyle(Theme.Colors.accent)
-                    }
-                }
-
-                HStack {
-                    Text("Exercises")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                    Spacer()
-                    Button {
-                        showingExercisesSelection = true
-                    } label: {
-                        Text(selectedExerciseNames == nil ? "All" : "\(selectedExerciseNames!.count) Selected")
-                            .font(Theme.Typography.captionBold)
-                            .foregroundStyle(Theme.Colors.accent)
-                    }
-                }
-            }
-        }
-        .padding(Theme.Spacing.lg)
-        .softCard(elevation: 2)
-    }
-
     private var summaryCard: some View {
-        let workouts = filteredWorkouts
+        let workouts = workoutsInSelection
         let totalSets = workouts.reduce(0) { $0 + $1.totalSets }
         let totalExercises = Set(workouts.flatMap { $0.exercises.map(\.name) }).count
 
@@ -458,7 +366,7 @@ struct ExportWorkoutsView: View {
     private var workoutExportButtonEnabled: Bool {
         if isExportingWorkouts { return false }
         if mode != .basic { return false }
-        return !filteredWorkouts.isEmpty
+        return !workoutsInSelection.isEmpty
     }
 
     private var exerciseExportCard: some View {
@@ -547,37 +455,10 @@ struct ExportWorkoutsView: View {
 
     private var exerciseExportButtonEnabled: Bool {
         if isExportingExercises { return false }
-        return !filteredWorkouts.isEmpty
+        return !workoutsInSelection.isEmpty
     }
 
-    private var filteredWorkouts: [Workout] {
-        workoutsInDateRange.compactMap { workout in
-            if let ids = selectedWorkoutIDs, !ids.contains(workout.id) {
-                return nil
-            }
-
-            let filteredExercises = workout.exercises.filter { exercise in
-                if let names = selectedExerciseNames, !names.contains(exercise.name) {
-                    return false
-                }
-                return true
-            }
-
-            if filteredExercises.isEmpty {
-                return nil
-            }
-
-            var mutatedWorkout = workout
-            mutatedWorkout.exercises = filteredExercises
-            return mutatedWorkout
-        }
-    }
-
-    private var uniqueExerciseNamesInDateRange: [String] {
-        Array(Set(workoutsInDateRange.flatMap { $0.exercises.map(\.name) })).sorted(by: <)
-    }
-
-    private var workoutsInDateRange: [Workout] {
+    private var workoutsInSelection: [Workout] {
         guard !dataManager.workouts.isEmpty else { return [] }
 
         let range = effectiveDayRange
@@ -675,7 +556,12 @@ struct ExportWorkoutsView: View {
         let start = range.start
         let end = range.endInclusive
 
-        let workoutsSnapshot = filteredWorkouts
+        let workoutsSnapshot: [Workout]
+        if selectedRange == .lastWorkout {
+            workoutsSnapshot = dataManager.workouts.max(by: { $0.date < $1.date }).map { [$0] } ?? []
+        } else {
+            workoutsSnapshot = dataManager.workouts
+        }
 
         let exerciseNames = Set(workoutsSnapshot.flatMap { $0.exercises.map(\.name) })
         var exerciseTagsByName: [String: String] = [:]
@@ -744,7 +630,12 @@ struct ExportWorkoutsView: View {
         let start = range.start
         let end = range.endInclusive
 
-        let workoutsSnapshot = filteredWorkouts
+        let workoutsSnapshot: [Workout]
+        if selectedRange == .lastWorkout {
+            workoutsSnapshot = dataManager.workouts.max(by: { $0.date < $1.date }).map { [$0] } ?? []
+        } else {
+            workoutsSnapshot = dataManager.workouts
+        }
 
         let includeTags = includeExerciseTags
         let exerciseNames = Set(workoutsSnapshot.flatMap { $0.exercises.map(\.name) })

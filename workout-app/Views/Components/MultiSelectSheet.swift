@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct MultiSelectSheet<Item: Hashable>: View {
+struct MultiSelectSheet<Item: Hashable & Identifiable>: View {
     @Environment(\.dismiss) private var dismiss
 
     let title: String
@@ -51,7 +51,7 @@ struct MultiSelectSheet<Item: Hashable>: View {
                     .background(Theme.Colors.elevated)
 
                     List {
-                        ForEach(items, id: \.self) { item in
+                        ForEach(items) { item in
                             Button {
                                 if localSelection.contains(item) {
                                     localSelection.remove(item)
