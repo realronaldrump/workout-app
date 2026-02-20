@@ -69,6 +69,7 @@ $(SRCROOT)/workout-app/Views/ExerciseListView.swift
 $(SRCROOT)/workout-app/Views/ExerciseStatDetailView.swift
 $(SRCROOT)/workout-app/Views/ExerciseTagEditorView.swift
 $(SRCROOT)/workout-app/Views/ExerciseTaggingView.swift
+$(SRCROOT)/workout-app/Views/ExportSelectionSheets.swift
 $(SRCROOT)/workout-app/Views/ExportWorkoutsView.swift
 $(SRCROOT)/workout-app/Views/GymBulkAssignView.swift
 $(SRCROOT)/workout-app/Views/GymProfilesView.swift

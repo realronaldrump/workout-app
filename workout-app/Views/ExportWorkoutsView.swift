@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 
 struct ExportWorkoutsView: View {
@@ -12,6 +13,8 @@ struct ExportWorkoutsView: View {
     @State private var customStartDate: Date = Date()
     @State private var customEndDate: Date = Date()
     @State private var showingCustomRangeSheet = false
+    @State private var showingExerciseHistoryPicker = false
+    @State private var showingWorkoutDatePicker = false
     @State private var didInitializeCustomRange = false
 
     @State private var isExportingWorkouts = false
@@ -22,6 +25,16 @@ struct ExportWorkoutsView: View {
     @State private var isExportingExercises = false
     @State private var exerciseExportStatusMessage: String?
     @State private var exerciseExportFileURL: URL?
+
+    @State private var selectedExerciseNames: Set<String> = []
+    @State private var isExportingExerciseHistory = false
+    @State private var exerciseHistoryExportStatusMessage: String?
+    @State private var exerciseHistoryExportFileURL: URL?
+
+    @State private var selectedWorkoutDateIds: Set<String> = []
+    @State private var isExportingWorkoutDates = false
+    @State private var workoutDatesExportStatusMessage: String?
+    @State private var workoutDatesExportFileURL: URL?
 
     @State private var exportErrorMessage: String?
     @State private var showingErrorAlert = false
@@ -50,6 +63,8 @@ struct ExportWorkoutsView: View {
                         summaryCard
                         workoutExportCard
                         exerciseExportCard
+                        exerciseHistoryExportCard
+                        workoutDatesExportCard
                     }
                 }
                 .padding()
@@ -69,26 +84,43 @@ struct ExportWorkoutsView: View {
         }
         .onAppear {
             initializeDefaultRangesIfNeeded()
+            pruneSelections()
         }
         .onChange(of: dataManager.workouts.count) { _, _ in
             initializeDefaultRangesIfNeeded()
+            pruneSelections()
         }
         .onChange(of: selectedRange) { _, _ in
             clearExportState()
+            pruneSelections()
         }
         .onChange(of: customStartDate) { _, _ in
             guard selectedRange == .custom else { return }
             clearExportState()
+            pruneSelections()
         }
         .onChange(of: customEndDate) { _, _ in
             guard selectedRange == .custom else { return }
             clearExportState()
+            pruneSelections()
         }
         .sheet(isPresented: $showingCustomRangeSheet) {
             ExportCustomRangeSheet(
                 startDate: $customStartDate,
                 endDate: $customEndDate,
                 latestSelectableDate: latestSelectableDate
+            )
+        }
+        .sheet(isPresented: $showingExerciseHistoryPicker) {
+            ExportExerciseSelectionSheet(
+                selectedExerciseNames: $selectedExerciseNames,
+                availableExerciseNames: availableExerciseNames
+            )
+        }
+        .sheet(isPresented: $showingWorkoutDatePicker) {
+            ExportWorkoutDateSelectionSheet(
+                selectedDateIds: $selectedWorkoutDateIds,
+                dateOptions: workoutDateOptions
             )
         }
     }
@@ -458,6 +490,253 @@ struct ExportWorkoutsView: View {
         return !workoutsInSelection.isEmpty
     }
 
+    private var availableExerciseNames: [String] {
+        let names = Set(workoutsInSelection.flatMap { $0.exercises.map(\.name) })
+        return names.sorted { lhs, rhs in
+            let insensitive = lhs.localizedCaseInsensitiveCompare(rhs)
+            if insensitive != .orderedSame { return insensitive == .orderedAscending }
+            return lhs.localizedCompare(rhs) == .orderedAscending
+        }
+    }
+
+    private var selectedExerciseNamesInRange: Set<String> {
+        selectedExerciseNames.intersection(Set(availableExerciseNames))
+    }
+
+    private var workoutDateOptions: [ExportWorkoutDateOption] {
+        let calendar = Calendar.current
+        let grouped = Dictionary(grouping: workoutsInSelection) { workout in
+            calendar.startOfDay(for: workout.date)
+        }
+        return grouped.keys.sorted(by: >).compactMap { day in
+            guard let workouts = grouped[day] else { return nil }
+            return ExportWorkoutDateOption(
+                id: dayIdentifier(for: day),
+                date: day,
+                workoutCount: workouts.count
+            )
+        }
+    }
+
+    private var selectedWorkoutDateIdsInRange: Set<String> {
+        selectedWorkoutDateIds.intersection(Set(workoutDateOptions.map(\.id)))
+    }
+
+    private var exerciseHistoryExportCard: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            HStack {
+                Image(systemName: "chart.line.uptrend.xyaxis")
+                    .foregroundStyle(Theme.Colors.accentSecondary)
+                Text("Export Exercise History")
+                    .font(Theme.Typography.headline)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                Spacer()
+            }
+
+            Button {
+                showingExerciseHistoryPicker = true
+                Haptics.selection()
+            } label: {
+                HStack {
+                    Text(selectedExerciseNamesInRange.isEmpty ? "Select Exercises" : "\(selectedExerciseNamesInRange.count) selected")
+                        .font(Theme.Typography.captionBold)
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Theme.Colors.textTertiary)
+                }
+                .padding(Theme.Spacing.md)
+                .background(Theme.Colors.elevated)
+                .cornerRadius(Theme.CornerRadius.large)
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
+                        .strokeBorder(Theme.Colors.border, lineWidth: 2)
+                )
+            }
+            .buttonStyle(.plain)
+
+            if !selectedExerciseNamesInRange.isEmpty {
+                Text(selectedExercisePreviewText)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .lineLimit(2)
+            }
+
+            if let message = exerciseHistoryExportStatusMessage {
+                Text(message)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+            }
+
+            if let url = exerciseHistoryExportFileURL {
+                Text(url.lastPathComponent)
+                    .font(Theme.Typography.captionBold)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                    .lineLimit(1)
+            }
+
+            HStack(spacing: Theme.Spacing.md) {
+                Button(action: startExerciseHistoryExport) {
+                    HStack(spacing: Theme.Spacing.sm) {
+                        if isExportingExerciseHistory {
+                            ProgressView()
+                                .tint(.white)
+                        } else {
+                            Image(systemName: "arrow.up.doc.fill")
+                        }
+                        Text(isExportingExerciseHistory ? "Exporting" : "Export CSV")
+                    }
+                    .font(Theme.Typography.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(exerciseHistoryExportButtonEnabled ? Theme.Colors.accent : Theme.Colors.surface)
+                    .foregroundColor(exerciseHistoryExportButtonEnabled ? .white : Theme.Colors.textTertiary)
+                    .cornerRadius(Theme.CornerRadius.large)
+                }
+                .buttonStyle(.plain)
+                .disabled(!exerciseHistoryExportButtonEnabled)
+
+                if let url = exerciseHistoryExportFileURL {
+                    shareButton(for: url)
+                }
+            }
+
+            Text("Exports full set-level history, but only for the exercises you choose.")
+                .font(Theme.Typography.microcopy)
+                .foregroundStyle(Theme.Colors.textTertiary)
+        }
+        .padding(Theme.Spacing.lg)
+        .softCard(elevation: 2)
+    }
+
+    private var exerciseHistoryExportButtonEnabled: Bool {
+        if isExportingExerciseHistory { return false }
+        return !selectedExerciseNamesInRange.isEmpty
+    }
+
+    private var workoutDatesExportCard: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            HStack {
+                Image(systemName: "calendar.badge.plus")
+                    .foregroundStyle(Theme.Colors.accentSecondary)
+                Text("Export Workout Dates")
+                    .font(Theme.Typography.headline)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                Spacer()
+            }
+
+            Button {
+                showingWorkoutDatePicker = true
+                Haptics.selection()
+            } label: {
+                HStack {
+                    Text(selectedWorkoutDateIdsInRange.isEmpty ? "Select Dates" : "\(selectedWorkoutDateIdsInRange.count) selected")
+                        .font(Theme.Typography.captionBold)
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Theme.Colors.textTertiary)
+                }
+                .padding(Theme.Spacing.md)
+                .background(Theme.Colors.elevated)
+                .cornerRadius(Theme.CornerRadius.large)
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
+                        .strokeBorder(Theme.Colors.border, lineWidth: 2)
+                )
+            }
+            .buttonStyle(.plain)
+
+            if let message = workoutDatesExportStatusMessage {
+                Text(message)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+            }
+
+            if let url = workoutDatesExportFileURL {
+                Text(url.lastPathComponent)
+                    .font(Theme.Typography.captionBold)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                    .lineLimit(1)
+            }
+
+            HStack(spacing: Theme.Spacing.md) {
+                Button(action: startWorkoutDatesExport) {
+                    HStack(spacing: Theme.Spacing.sm) {
+                        if isExportingWorkoutDates {
+                            ProgressView()
+                                .tint(.white)
+                        } else {
+                            Image(systemName: "arrow.up.doc.fill")
+                        }
+                        Text(isExportingWorkoutDates ? "Exporting" : "Export CSV")
+                    }
+                    .font(Theme.Typography.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(workoutDatesExportButtonEnabled ? Theme.Colors.accent : Theme.Colors.surface)
+                    .foregroundColor(workoutDatesExportButtonEnabled ? .white : Theme.Colors.textTertiary)
+                    .cornerRadius(Theme.CornerRadius.large)
+                }
+                .buttonStyle(.plain)
+                .disabled(!workoutDatesExportButtonEnabled)
+
+                if let url = workoutDatesExportFileURL {
+                    shareButton(for: url)
+                }
+            }
+
+            Text("Choose one or more dates to export only those workout sessions.")
+                .font(Theme.Typography.microcopy)
+                .foregroundStyle(Theme.Colors.textTertiary)
+        }
+        .padding(Theme.Spacing.lg)
+        .softCard(elevation: 2)
+    }
+
+    private var workoutDatesExportButtonEnabled: Bool {
+        if isExportingWorkoutDates { return false }
+        return !selectedWorkoutDateIdsInRange.isEmpty
+    }
+
+    private var selectedExercisePreviewText: String {
+        let sorted = selectedExerciseNamesInRange.sorted { lhs, rhs in
+            let insensitive = lhs.localizedCaseInsensitiveCompare(rhs)
+            if insensitive != .orderedSame { return insensitive == .orderedAscending }
+            return lhs.localizedCompare(rhs) == .orderedAscending
+        }
+        if sorted.count <= 3 {
+            return sorted.joined(separator: ", ")
+        }
+        let prefix = sorted.prefix(3).joined(separator: ", ")
+        return "\(prefix), +\(sorted.count - 3) more"
+    }
+
+    private func shareButton(for url: URL) -> some View {
+        Button(
+            action: {
+                shareFileURL = url
+                showingShareSheet = true
+            },
+            label: {
+                Image(systemName: "square.and.arrow.up")
+                    .font(.headline)
+                    .frame(width: 48, height: 48)
+                    .background(Theme.Colors.cardBackground)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
+                            .strokeBorder(Theme.Colors.border, lineWidth: 2)
+                    )
+                    .cornerRadius(Theme.CornerRadius.large)
+            }
+        )
+        .buttonStyle(.plain)
+        .accessibilityLabel("Share")
+    }
+
     private var workoutsInSelection: [Workout] {
         guard !dataManager.workouts.isEmpty else { return [] }
 
@@ -698,11 +977,202 @@ struct ExportWorkoutsView: View {
     }
 
     @MainActor
+    private func startExerciseHistoryExport() {
+        guard exerciseHistoryExportButtonEnabled else { return }
+
+        exerciseHistoryExportStatusMessage = nil
+        exerciseHistoryExportFileURL = nil
+
+        isExportingExerciseHistory = true
+
+        let selectedNames = selectedExerciseNamesInRange
+        let workoutsSnapshot = workoutsInSelection.compactMap { workout -> Workout? in
+            let filteredExercises = workout.exercises.filter { selectedNames.contains($0.name) }
+            guard !filteredExercises.isEmpty else { return nil }
+            return Workout(
+                id: workout.id,
+                date: workout.date,
+                name: workout.name,
+                duration: workout.duration,
+                exercises: filteredExercises
+            )
+        }
+
+        guard let bounds = dayBounds(for: workoutsSnapshot) else {
+            isExportingExerciseHistory = false
+            exportErrorMessage = WorkoutExportError.noWorkoutsInRange.localizedDescription
+            showingErrorAlert = true
+            Haptics.notify(.error)
+            return
+        }
+
+        let exerciseTagsByName = exerciseTagsByName(for: workoutsSnapshot)
+        let storageSnapshot = iCloudManager.storageSnapshot()
+        let unit = weightUnit
+        let selectedExerciseCount = selectedNames.count
+
+        Task.detached(priority: .userInitiated) {
+            do {
+                guard let directory = storageSnapshot.url else {
+                    throw iCloudError.containerNotAvailable
+                }
+
+                let data = try WorkoutCSVExporter.exportWorkoutHistoryCSV(
+                    workouts: workoutsSnapshot,
+                    startDate: bounds.start,
+                    endDateInclusive: bounds.endInclusive,
+                    exerciseTagsByName: exerciseTagsByName,
+                    weightUnit: unit
+                )
+
+                let fileName = try WorkoutCSVExporter.makeExerciseHistoryExportFileName(
+                    startDate: bounds.start,
+                    endDateInclusive: bounds.endInclusive,
+                    selectedExerciseCount: selectedExerciseCount
+                )
+
+                try iCloudDocumentManager.saveWorkoutFile(data: data, in: directory, fileName: fileName)
+                let fileURL = directory.appendingPathComponent(fileName)
+
+                await MainActor.run {
+                    exerciseHistoryExportFileURL = fileURL
+                    exerciseHistoryExportStatusMessage = storageSnapshot.isUsingLocalFallback
+                        ? "Saved on-device (iCloud unavailable)"
+                        : "Saved to iCloud Drive"
+                    shareFileURL = fileURL
+                    isExportingExerciseHistory = false
+                    showingShareSheet = true
+                    Haptics.notify(.success)
+                }
+            } catch {
+                await MainActor.run {
+                    exportErrorMessage = error.localizedDescription
+                    showingErrorAlert = true
+                    isExportingExerciseHistory = false
+                    Haptics.notify(.error)
+                }
+            }
+        }
+    }
+
+    @MainActor
+    private func startWorkoutDatesExport() {
+        guard workoutDatesExportButtonEnabled else { return }
+
+        workoutDatesExportStatusMessage = nil
+        workoutDatesExportFileURL = nil
+
+        isExportingWorkoutDates = true
+
+        let selectedIds = selectedWorkoutDateIdsInRange
+        let workoutsSnapshot = workoutsInSelection.filter { workout in
+            selectedIds.contains(dayIdentifier(for: workout.date))
+        }
+
+        guard let bounds = dayBounds(for: workoutsSnapshot) else {
+            isExportingWorkoutDates = false
+            exportErrorMessage = WorkoutExportError.noWorkoutsInRange.localizedDescription
+            showingErrorAlert = true
+            Haptics.notify(.error)
+            return
+        }
+
+        let exerciseTagsByName = exerciseTagsByName(for: workoutsSnapshot)
+        let storageSnapshot = iCloudManager.storageSnapshot()
+        let unit = weightUnit
+        let selectedDateCount = selectedIds.count
+
+        Task.detached(priority: .userInitiated) {
+            do {
+                guard let directory = storageSnapshot.url else {
+                    throw iCloudError.containerNotAvailable
+                }
+
+                let data = try WorkoutCSVExporter.exportWorkoutHistoryCSV(
+                    workouts: workoutsSnapshot,
+                    startDate: bounds.start,
+                    endDateInclusive: bounds.endInclusive,
+                    exerciseTagsByName: exerciseTagsByName,
+                    weightUnit: unit
+                )
+
+                let fileName = try WorkoutCSVExporter.makeWorkoutDatesExportFileName(
+                    startDate: bounds.start,
+                    endDateInclusive: bounds.endInclusive,
+                    selectedDateCount: selectedDateCount
+                )
+
+                try iCloudDocumentManager.saveWorkoutFile(data: data, in: directory, fileName: fileName)
+                let fileURL = directory.appendingPathComponent(fileName)
+
+                await MainActor.run {
+                    workoutDatesExportFileURL = fileURL
+                    workoutDatesExportStatusMessage = storageSnapshot.isUsingLocalFallback
+                        ? "Saved on-device (iCloud unavailable)"
+                        : "Saved to iCloud Drive"
+                    shareFileURL = fileURL
+                    isExportingWorkoutDates = false
+                    showingShareSheet = true
+                    Haptics.notify(.success)
+                }
+            } catch {
+                await MainActor.run {
+                    exportErrorMessage = error.localizedDescription
+                    showingErrorAlert = true
+                    isExportingWorkoutDates = false
+                    Haptics.notify(.error)
+                }
+            }
+        }
+    }
+
+    private func pruneSelections() {
+        selectedExerciseNames = selectedExerciseNames.intersection(Set(availableExerciseNames))
+        selectedWorkoutDateIds = selectedWorkoutDateIds.intersection(Set(workoutDateOptions.map(\.id)))
+    }
+
+    private func dayIdentifier(for date: Date) -> String {
+        let calendar = Calendar.current
+        let components = calendar.dateComponents([.year, .month, .day], from: calendar.startOfDay(for: date))
+        let year = components.year ?? 0
+        let month = components.month ?? 0
+        let day = components.day ?? 0
+        return String(format: "%04d-%02d-%02d", year, month, day)
+    }
+
+    private func dayBounds(for workouts: [Workout]) -> (start: Date, endInclusive: Date)? {
+        let calendar = Calendar.current
+        guard let earliest = workouts.map(\.date).min(),
+              let latest = workouts.map(\.date).max() else {
+            return nil
+        }
+        return (
+            start: calendar.startOfDay(for: earliest),
+            endInclusive: calendar.startOfDay(for: latest)
+        )
+    }
+
+    private func exerciseTagsByName(for workouts: [Workout]) -> [String: String] {
+        let exerciseNames = Set(workouts.flatMap { $0.exercises.map(\.name) })
+        var mapping: [String: String] = [:]
+        for name in exerciseNames {
+            let tags = exerciseMetadataManager.resolvedTags(for: name)
+            guard !tags.isEmpty else { continue }
+            mapping[name] = tags.map(\.displayName).joined(separator: "; ")
+        }
+        return mapping
+    }
+
+    @MainActor
     private func clearExportState() {
         workoutExportStatusMessage = nil
         workoutExportFileURL = nil
         exerciseExportStatusMessage = nil
         exerciseExportFileURL = nil
+        exerciseHistoryExportStatusMessage = nil
+        exerciseHistoryExportFileURL = nil
+        workoutDatesExportStatusMessage = nil
+        workoutDatesExportFileURL = nil
     }
 }
 
