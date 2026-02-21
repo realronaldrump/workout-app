@@ -133,7 +133,7 @@ struct WorkoutCSVExporter {
         return data
     }
 
-    nonisolated static func makeBasicExportFileName(
+    nonisolated static func makeWorkoutExportFileName(
         startDate: Date,
         endDateInclusive: Date,
         calendar: Calendar = .current
@@ -148,7 +148,7 @@ struct WorkoutCSVExporter {
         let start = dateFormatter.string(from: calendar.startOfDay(for: startDate))
         let end = dateFormatter.string(from: calendar.startOfDay(for: endDateInclusive))
         let stamp = Int(Date().timeIntervalSince1970)
-        return "workout_export_basic_\(start)_\(end)_\(stamp).csv"
+        return "workout_export_\(start)_\(end)_\(stamp).csv"
     }
 
     /// Export a unique list of exercise names within a date range.

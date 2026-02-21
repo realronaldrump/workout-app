@@ -8,7 +8,6 @@ struct ExportWorkoutsView: View {
 
     private let weightUnit = "lbs"
 
-    @State private var mode: ExportMode = .basic
     @State private var selectedRange: ExportTimeRange = .all
     @State private var customStartDate: Date = Date()
     @State private var customEndDate: Date = Date()
@@ -58,7 +57,6 @@ struct ExportWorkoutsView: View {
                         )
                         .padding(.top, Theme.Spacing.xl)
                     } else {
-                        modePicker
                         rangeCard
                         summaryCard
                         workoutExportCard
@@ -152,28 +150,6 @@ struct ExportWorkoutsView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, Theme.Spacing.lg)
-    }
-
-    private var modePicker: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text("Mode")
-                .font(Theme.Typography.headline)
-                .foregroundStyle(Theme.Colors.textSecondary)
-                .padding(.horizontal, Theme.Spacing.xs)
-
-            BrutalistSegmentedPicker(
-                title: "Export Mode",
-                selection: $mode,
-                options: ExportMode.allCases.map { (label: $0.title, value: $0) }
-            )
-
-            if mode == .complete {
-                Text("Complete export includes exercise tags and is available below.")
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textSecondary)
-                    .padding(.horizontal, Theme.Spacing.xs)
-            }
-        }
     }
 
     private var rangeCard: some View {
@@ -387,7 +363,7 @@ struct ExportWorkoutsView: View {
                 }
             }
 
-            Text("Basic mode exports a compact CSV (workout/exercise info shown once). Includes muscle tags; only adds Distance/Seconds if present.")
+            Text("Exports a compact CSV (workout/exercise info shown once). Includes muscle tags; only adds Distance/Seconds if present.")
                 .font(Theme.Typography.microcopy)
                 .foregroundStyle(Theme.Colors.textTertiary)
         }
@@ -397,7 +373,6 @@ struct ExportWorkoutsView: View {
 
     private var workoutExportButtonEnabled: Bool {
         if isExportingWorkouts { return false }
-        if mode != .basic { return false }
         return !workoutsInSelection.isEmpty
     }
 
@@ -867,7 +842,7 @@ struct ExportWorkoutsView: View {
                     weightUnit: unit
                 )
 
-                let fileName = try WorkoutCSVExporter.makeBasicExportFileName(
+                let fileName = try WorkoutCSVExporter.makeWorkoutExportFileName(
                     startDate: start,
                     endDateInclusive: end
                 )
@@ -1176,22 +1151,6 @@ struct ExportWorkoutsView: View {
     }
 }
 
-private enum ExportMode: String, CaseIterable, Identifiable {
-    case basic
-    case complete
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .basic:
-            return "Basic"
-        case .complete:
-            return "Complete"
-        }
-    }
-}
-
 private enum ExportTimeRange: String, CaseIterable, Identifiable {
     case lastWorkout = "Last"
     case week = "1w"
@@ -1232,6 +1191,13 @@ private struct ExportCustomRangeSheet: View {
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
+                    HStack {
+                        Spacer()
+                        AppPillButton(title: "Done", systemImage: "checkmark", variant: .subtle) {
+                            dismiss()
+                        }
+                    }
+
                     VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                         Text("Start")
                             .font(Theme.Typography.metricLabel)
@@ -1294,13 +1260,6 @@ private struct ExportCustomRangeSheet: View {
             }
             .navigationTitle("Custom Range")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    AppPillButton(title: "Done", systemImage: "checkmark") {
-                        dismiss()
-                    }
-                }
-            }
         }
     }
 }

@@ -24,6 +24,13 @@ struct ExportExerciseSelectionSheet: View {
                 AdaptiveBackground()
 
                 VStack(spacing: Theme.Spacing.md) {
+                    HStack {
+                        Spacer()
+                        AppPillButton(title: "Done", systemImage: "checkmark", variant: .subtle) {
+                            dismiss()
+                        }
+                    }
+
                     ExportSelectionSearchField(text: $searchText, placeholder: "Search exercises")
 
                     selectionToolbar(
@@ -95,16 +102,6 @@ struct ExportExerciseSelectionSheet: View {
             }
             .navigationTitle("Select Exercises")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") {
-                        dismiss()
-                    }
-                    .buttonStyle(.plain)
-                    .font(Theme.Typography.captionBold)
-                    .foregroundStyle(Theme.Colors.accent)
-                }
-            }
         }
     }
 
@@ -155,6 +152,13 @@ struct ExportWorkoutDateSelectionSheet: View {
                 AdaptiveBackground()
 
                 VStack(spacing: Theme.Spacing.md) {
+                    HStack {
+                        Spacer()
+                        AppPillButton(title: "Done", systemImage: "checkmark", variant: .subtle) {
+                            dismiss()
+                        }
+                    }
+
                     HStack(spacing: Theme.Spacing.md) {
                         Text("\(selectedCount) selected")
                             .font(Theme.Typography.captionBold)
@@ -244,16 +248,6 @@ struct ExportWorkoutDateSelectionSheet: View {
             }
             .navigationTitle("Select Workout Dates")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") {
-                        dismiss()
-                    }
-                    .buttonStyle(.plain)
-                    .font(Theme.Typography.captionBold)
-                    .foregroundStyle(Theme.Colors.accent)
-                }
-            }
         }
     }
 }
