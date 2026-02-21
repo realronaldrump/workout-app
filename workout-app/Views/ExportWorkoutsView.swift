@@ -14,6 +14,7 @@ struct ExportWorkoutsView: View {
     @State private var showingCustomRangeSheet = false
     @State private var showingExerciseHistoryPicker = false
     @State private var showingWorkoutDatePicker = false
+    @State private var showingMuscleGroupPicker = false
     @State private var didInitializeCustomRange = false
 
     @State private var isExportingWorkouts = false
@@ -34,6 +35,11 @@ struct ExportWorkoutsView: View {
     @State private var isExportingWorkoutDates = false
     @State private var workoutDatesExportStatusMessage: String?
     @State private var workoutDatesExportFileURL: URL?
+
+    @State private var selectedMuscleTagIds: Set<String> = []
+    @State private var isExportingMuscleGroups = false
+    @State private var muscleGroupExportStatusMessage: String?
+    @State private var muscleGroupExportFileURL: URL?
 
     @State private var exportErrorMessage: String?
     @State private var showingErrorAlert = false
@@ -62,6 +68,7 @@ struct ExportWorkoutsView: View {
                         workoutExportCard
                         exerciseExportCard
                         exerciseHistoryExportCard
+                        muscleGroupExportCard
                         workoutDatesExportCard
                     }
                 }
@@ -119,6 +126,12 @@ struct ExportWorkoutsView: View {
             ExportWorkoutDateSelectionSheet(
                 selectedDateIds: $selectedWorkoutDateIds,
                 dateOptions: workoutDateOptions
+            )
+        }
+        .sheet(isPresented: $showingMuscleGroupPicker) {
+            ExportMuscleGroupSelectionSheet(
+                selectedTagIds: $selectedMuscleTagIds,
+                availableTags: availableMuscleTags
             )
         }
     }
@@ -497,6 +510,43 @@ struct ExportWorkoutsView: View {
         selectedWorkoutDateIds.intersection(Set(workoutDateOptions.map(\.id)))
     }
 
+    private var availableMuscleTags: [MuscleTag] {
+        let exerciseNames = Set(workoutsInSelection.flatMap { $0.exercises.map(\.name) })
+        var uniqueTags: [String: MuscleTag] = [:]
+        for exerciseName in exerciseNames {
+            for tag in exerciseMetadataManager.resolvedTags(for: exerciseName) {
+                uniqueTags[tag.id] = tag
+            }
+        }
+
+        let builtInOrder: [MuscleGroup: Int] = Dictionary(
+            uniqueKeysWithValues: MuscleGroup.allCases.enumerated().map { ($1, $0) }
+        )
+
+        return uniqueTags.values.sorted { lhs, rhs in
+            switch (lhs.builtInGroup, rhs.builtInGroup) {
+            case let (left?, right?):
+                let leftOrder = builtInOrder[left] ?? Int.max
+                let rightOrder = builtInOrder[right] ?? Int.max
+                if leftOrder != rightOrder { return leftOrder < rightOrder }
+            case (_?, nil):
+                return true
+            case (nil, _?):
+                return false
+            case (nil, nil):
+                break
+            }
+
+            let insensitive = lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName)
+            if insensitive != .orderedSame { return insensitive == .orderedAscending }
+            return lhs.displayName.localizedCompare(rhs.displayName) == .orderedAscending
+        }
+    }
+
+    private var selectedMuscleTagIdsInRange: Set<String> {
+        selectedMuscleTagIds.intersection(Set(availableMuscleTags.map(\.id)))
+    }
+
     private var exerciseHistoryExportCard: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             HStack {
@@ -588,6 +638,99 @@ struct ExportWorkoutsView: View {
     private var exerciseHistoryExportButtonEnabled: Bool {
         if isExportingExerciseHistory { return false }
         return !selectedExerciseNamesInRange.isEmpty
+    }
+
+    private var muscleGroupExportCard: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            HStack {
+                Image(systemName: "figure.strengthtraining.functional")
+                    .foregroundStyle(Theme.Colors.accentSecondary)
+                Text("Export by Muscle Group")
+                    .font(Theme.Typography.headline)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                Spacer()
+            }
+
+            Button {
+                showingMuscleGroupPicker = true
+                Haptics.selection()
+            } label: {
+                HStack {
+                    Text(selectedMuscleTagIdsInRange.isEmpty ? "Select Muscle Groups" : "\(selectedMuscleTagIdsInRange.count) selected")
+                        .font(Theme.Typography.captionBold)
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Theme.Colors.textTertiary)
+                }
+                .padding(Theme.Spacing.md)
+                .background(Theme.Colors.elevated)
+                .cornerRadius(Theme.CornerRadius.large)
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
+                        .strokeBorder(Theme.Colors.border, lineWidth: 2)
+                )
+            }
+            .buttonStyle(.plain)
+
+            if !selectedMuscleTagIdsInRange.isEmpty {
+                Text(selectedMuscleTagPreviewText)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .lineLimit(2)
+            }
+
+            if let message = muscleGroupExportStatusMessage {
+                Text(message)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+            }
+
+            if let url = muscleGroupExportFileURL {
+                Text(url.lastPathComponent)
+                    .font(Theme.Typography.captionBold)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                    .lineLimit(1)
+            }
+
+            HStack(spacing: Theme.Spacing.md) {
+                Button(action: startMuscleGroupExport) {
+                    HStack(spacing: Theme.Spacing.sm) {
+                        if isExportingMuscleGroups {
+                            ProgressView()
+                                .tint(.white)
+                        } else {
+                            Image(systemName: "arrow.up.doc.fill")
+                        }
+                        Text(isExportingMuscleGroups ? "Exporting" : "Export CSV")
+                    }
+                    .font(Theme.Typography.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(muscleGroupExportButtonEnabled ? Theme.Colors.accent : Theme.Colors.surface)
+                    .foregroundColor(muscleGroupExportButtonEnabled ? .white : Theme.Colors.textTertiary)
+                    .cornerRadius(Theme.CornerRadius.large)
+                }
+                .buttonStyle(.plain)
+                .disabled(!muscleGroupExportButtonEnabled)
+
+                if let url = muscleGroupExportFileURL {
+                    shareButton(for: url)
+                }
+            }
+
+            Text("Choose one or more muscle groups to export workouts that include those tagged exercises.")
+                .font(Theme.Typography.microcopy)
+                .foregroundStyle(Theme.Colors.textTertiary)
+        }
+        .padding(Theme.Spacing.lg)
+        .softCard(elevation: 2)
+    }
+
+    private var muscleGroupExportButtonEnabled: Bool {
+        if isExportingMuscleGroups { return false }
+        return !selectedMuscleTagIdsInRange.isEmpty
     }
 
     private var workoutDatesExportCard: some View {
@@ -682,6 +825,22 @@ struct ExportWorkoutsView: View {
             if insensitive != .orderedSame { return insensitive == .orderedAscending }
             return lhs.localizedCompare(rhs) == .orderedAscending
         }
+        if sorted.count <= 3 {
+            return sorted.joined(separator: ", ")
+        }
+        let prefix = sorted.prefix(3).joined(separator: ", ")
+        return "\(prefix), +\(sorted.count - 3) more"
+    }
+
+    private var selectedMuscleTagPreviewText: String {
+        let selectedTagMap = Dictionary(uniqueKeysWithValues: availableMuscleTags.map { ($0.id, $0) })
+        let names = selectedMuscleTagIdsInRange.compactMap { selectedTagMap[$0]?.displayName }
+        let sorted = names.sorted { lhs, rhs in
+            let insensitive = lhs.localizedCaseInsensitiveCompare(rhs)
+            if insensitive != .orderedSame { return insensitive == .orderedAscending }
+            return lhs.localizedCompare(rhs) == .orderedAscending
+        }
+
         if sorted.count <= 3 {
             return sorted.joined(separator: ", ")
         }
@@ -1031,6 +1190,89 @@ struct ExportWorkoutsView: View {
     }
 
     @MainActor
+    private func startMuscleGroupExport() {
+        guard muscleGroupExportButtonEnabled else { return }
+
+        muscleGroupExportStatusMessage = nil
+        muscleGroupExportFileURL = nil
+
+        isExportingMuscleGroups = true
+
+        let selectedTagIds = selectedMuscleTagIdsInRange
+        let workoutsSnapshot = workoutsInSelection.compactMap { workout -> Workout? in
+            let filteredExercises = workout.exercises.filter { exercise in
+                let resolvedTagIds = Set(exerciseMetadataManager.resolvedTags(for: exercise.name).map(\.id))
+                return !resolvedTagIds.isDisjoint(with: selectedTagIds)
+            }
+
+            guard !filteredExercises.isEmpty else { return nil }
+            return Workout(
+                id: workout.id,
+                date: workout.date,
+                name: workout.name,
+                duration: workout.duration,
+                exercises: filteredExercises
+            )
+        }
+
+        guard let bounds = dayBounds(for: workoutsSnapshot) else {
+            isExportingMuscleGroups = false
+            exportErrorMessage = WorkoutExportError.noWorkoutsInRange.localizedDescription
+            showingErrorAlert = true
+            Haptics.notify(.error)
+            return
+        }
+
+        let exerciseTagsByName = exerciseTagsByName(for: workoutsSnapshot)
+        let storageSnapshot = iCloudManager.storageSnapshot()
+        let unit = weightUnit
+        let selectedGroupCount = selectedTagIds.count
+
+        Task.detached(priority: .userInitiated) {
+            do {
+                guard let directory = storageSnapshot.url else {
+                    throw iCloudError.containerNotAvailable
+                }
+
+                let data = try WorkoutCSVExporter.exportWorkoutHistoryCSV(
+                    workouts: workoutsSnapshot,
+                    startDate: bounds.start,
+                    endDateInclusive: bounds.endInclusive,
+                    exerciseTagsByName: exerciseTagsByName,
+                    weightUnit: unit
+                )
+
+                let fileName = try WorkoutCSVExporter.makeMuscleGroupExportFileName(
+                    startDate: bounds.start,
+                    endDateInclusive: bounds.endInclusive,
+                    selectedGroupCount: selectedGroupCount
+                )
+
+                try iCloudDocumentManager.saveWorkoutFile(data: data, in: directory, fileName: fileName)
+                let fileURL = directory.appendingPathComponent(fileName)
+
+                await MainActor.run {
+                    muscleGroupExportFileURL = fileURL
+                    muscleGroupExportStatusMessage = storageSnapshot.isUsingLocalFallback
+                        ? "Saved on-device (iCloud unavailable)"
+                        : "Saved to iCloud Drive"
+                    shareFileURL = fileURL
+                    isExportingMuscleGroups = false
+                    showingShareSheet = true
+                    Haptics.notify(.success)
+                }
+            } catch {
+                await MainActor.run {
+                    exportErrorMessage = error.localizedDescription
+                    showingErrorAlert = true
+                    isExportingMuscleGroups = false
+                    Haptics.notify(.error)
+                }
+            }
+        }
+    }
+
+    @MainActor
     private func startWorkoutDatesExport() {
         guard workoutDatesExportButtonEnabled else { return }
 
@@ -1104,6 +1346,7 @@ struct ExportWorkoutsView: View {
     private func pruneSelections() {
         selectedExerciseNames = selectedExerciseNames.intersection(Set(availableExerciseNames))
         selectedWorkoutDateIds = selectedWorkoutDateIds.intersection(Set(workoutDateOptions.map(\.id)))
+        selectedMuscleTagIds = selectedMuscleTagIds.intersection(Set(availableMuscleTags.map(\.id)))
     }
 
     private func dayIdentifier(for date: Date) -> String {
@@ -1148,6 +1391,8 @@ struct ExportWorkoutsView: View {
         exerciseHistoryExportFileURL = nil
         workoutDatesExportStatusMessage = nil
         workoutDatesExportFileURL = nil
+        muscleGroupExportStatusMessage = nil
+        muscleGroupExportFileURL = nil
     }
 }
 

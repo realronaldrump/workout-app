@@ -252,6 +252,137 @@ struct ExportWorkoutDateSelectionSheet: View {
     }
 }
 
+struct ExportMuscleGroupSelectionSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Binding var selectedTagIds: Set<String>
+    let availableTags: [MuscleTag]
+
+    @State private var searchText = ""
+
+    private var filteredTags: [MuscleTag] {
+        guard !searchText.isEmpty else { return availableTags }
+        return availableTags.filter { $0.displayName.localizedCaseInsensitiveContains(searchText) }
+    }
+
+    private var selectedCount: Int {
+        selectedTagIds.intersection(Set(availableTags.map(\.id))).count
+    }
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                AdaptiveBackground()
+
+                VStack(spacing: Theme.Spacing.md) {
+                    HStack {
+                        Spacer()
+                        AppPillButton(title: "Done", systemImage: "checkmark", variant: .subtle) {
+                            dismiss()
+                        }
+                    }
+
+                    ExportSelectionSearchField(text: $searchText, placeholder: "Search muscle groups")
+
+                    HStack(spacing: Theme.Spacing.md) {
+                        Text("\(selectedCount) selected")
+                            .font(Theme.Typography.captionBold)
+                            .foregroundStyle(Theme.Colors.textSecondary)
+
+                        Spacer()
+
+                        Button("Select All") {
+                            selectedTagIds = Set(availableTags.map(\.id))
+                            Haptics.selection()
+                        }
+                        .font(Theme.Typography.captionBold)
+                        .foregroundStyle(availableTags.isEmpty ? Theme.Colors.textTertiary : Theme.Colors.accent)
+                        .disabled(availableTags.isEmpty)
+                        .buttonStyle(.plain)
+
+                        Button("Clear") {
+                            selectedTagIds.removeAll()
+                            Haptics.selection()
+                        }
+                        .font(Theme.Typography.captionBold)
+                        .foregroundStyle(selectedCount == 0 ? Theme.Colors.textTertiary : Theme.Colors.textSecondary)
+                        .disabled(selectedCount == 0)
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.horizontal, Theme.Spacing.md)
+                    .padding(.vertical, Theme.Spacing.sm)
+                    .softCard(elevation: 1)
+
+                    if filteredTags.isEmpty {
+                        ContentUnavailableView(
+                            "No muscle groups",
+                            systemImage: "figure.strengthtraining.functional",
+                            description: Text("Try a different search term.")
+                        )
+                    } else {
+                        ScrollView(showsIndicators: false) {
+                            LazyVStack(spacing: Theme.Spacing.sm) {
+                                ForEach(filteredTags, id: \.id) { tag in
+                                    Button {
+                                        if selectedTagIds.contains(tag.id) {
+                                            selectedTagIds.remove(tag.id)
+                                        } else {
+                                            selectedTagIds.insert(tag.id)
+                                        }
+                                        Haptics.selection()
+                                    } label: {
+                                        HStack(spacing: Theme.Spacing.sm) {
+                                            Image(systemName: selectedTagIds.contains(tag.id)
+                                                ? "checkmark.circle.fill"
+                                                : "circle")
+                                                .foregroundStyle(
+                                                    selectedTagIds.contains(tag.id)
+                                                        ? Theme.Colors.accent
+                                                        : Theme.Colors.textTertiary
+                                                )
+                                                .font(.system(size: 18, weight: .semibold))
+
+                                            Image(systemName: tag.iconName)
+                                                .foregroundStyle(tag.tint)
+                                                .font(.system(size: 15, weight: .semibold))
+                                                .frame(width: 22, height: 22)
+                                                .background(tag.tint.opacity(0.12))
+                                                .cornerRadius(Theme.CornerRadius.small)
+
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                Text(tag.displayName)
+                                                    .font(Theme.Typography.bodyBold)
+                                                    .foregroundStyle(Theme.Colors.textPrimary)
+                                                Text(tag.kind == .builtIn ? "Built-in" : "Custom")
+                                                    .font(Theme.Typography.caption)
+                                                    .foregroundStyle(Theme.Colors.textSecondary)
+                                            }
+
+                                            Spacer()
+                                        }
+                                        .padding(.horizontal, Theme.Spacing.md)
+                                        .padding(.vertical, Theme.Spacing.sm)
+                                        .background(Theme.Colors.surface)
+                                        .cornerRadius(Theme.CornerRadius.large)
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
+                                                .strokeBorder(Theme.Colors.border, lineWidth: 2)
+                                        )
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                            .padding(.bottom, Theme.Spacing.md)
+                        }
+                    }
+                }
+                .padding(Theme.Spacing.xl)
+            }
+            .navigationTitle("Select Muscle Groups")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+}
+
 private struct ExportSelectionSearchField: View {
     @Binding var text: String
     let placeholder: String

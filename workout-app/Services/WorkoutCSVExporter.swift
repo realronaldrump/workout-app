@@ -260,6 +260,25 @@ struct WorkoutCSVExporter {
         return "workout_dates_\(selectedDateCount)_\(start)_\(end)_\(stamp).csv"
     }
 
+    nonisolated static func makeMuscleGroupExportFileName(
+        startDate: Date,
+        endDateInclusive: Date,
+        selectedGroupCount: Int,
+        calendar: Calendar = .current
+    ) throws -> String {
+        _ = try normalizedDayRange(startDate: startDate, endDateInclusive: endDateInclusive, calendar: calendar)
+
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyyMMdd"
+        dateFormatter.timeZone = TimeZone.current
+        dateFormatter.locale = Locale(identifier: "en_US_POSIX")
+
+        let start = dateFormatter.string(from: calendar.startOfDay(for: startDate))
+        let end = dateFormatter.string(from: calendar.startOfDay(for: endDateInclusive))
+        let stamp = Int(Date().timeIntervalSince1970)
+        return "muscle_group_export_\(selectedGroupCount)_\(start)_\(end)_\(stamp).csv"
+    }
+
     // MARK: - Helpers
 
     private nonisolated static func normalizedDayRange(
