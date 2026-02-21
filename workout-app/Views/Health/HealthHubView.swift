@@ -2,16 +2,13 @@ import SwiftUI
 
 struct HealthHubView: View {
     @EnvironmentObject var healthManager: HealthKitManager
-    @EnvironmentObject var ouraManager: OuraManager
     @EnvironmentObject var dataManager: WorkoutDataManager
 
     @State private var selectedRange: HealthTimeRange = .fourWeeks
     @State private var showingCustomRange = false
     @State private var showingHealthWizard = false
-    @State private var showingOuraActions = false
     @State private var showAllDays = false
     @State private var selectedMetric: HealthMetric?
-    @State private var selectedOuraDay: OuraDailyScoreDay?
     @State private var customRange: DateInterval = {
         let end = Date()
         let start = Calendar.current.date(byAdding: .day, value: -28, to: end) ?? end
@@ -64,8 +61,6 @@ struct HealthHubView: View {
 
                     timeRangeSection
 
-                    ouraSection
-
                     if healthManager.authorizationStatus == .unavailable {
                         unavailableCard
                     } else if healthManager.authorizationStatus != .authorized {
@@ -88,9 +83,6 @@ struct HealthHubView: View {
         .navigationDestination(item: $selectedMetric) { metric in
             HealthMetricDetailView(metric: metric, range: currentRange, rangeLabel: rangeLabel)
         }
-        .navigationDestination(item: $selectedOuraDay) { day in
-            OuraContributorsDetailView(day: day)
-        }
         .sheet(isPresented: $showingCustomRange) {
             HealthCustomRangeSheet(range: $customRange) {
                 selectedRange = .custom
@@ -102,39 +94,16 @@ struct HealthHubView: View {
                 workouts: dataManager.workouts
             )
         }
-        .confirmationDialog("Oura Actions", isPresented: $showingOuraActions, titleVisibility: .visible) {
-            Button("Sync Oura Now") {
-                Task {
-                    await ouraManager.manualRefresh(range: currentRange)
-                }
-            }
-            Button("Disconnect Oura", role: .destructive) {
-                Task {
-                    await ouraManager.disconnect()
-                }
-            }
-            Button("Cancel", role: .cancel) {}
-        }
         .onAppear {
             healthManager.refreshAuthorizationStatus()
-            Task {
-                await ouraManager.autoRefreshOnForeground()
-                await ouraManager.pullScores(startDate: currentRange.start, endDate: currentRange.end)
-            }
             triggerDailySync(force: false)
         }
         .onChange(of: selectedRange) { _, _ in
             triggerDailySync(force: false)
-            Task {
-                await ouraManager.pullScores(startDate: currentRange.start, endDate: currentRange.end)
-            }
         }
         .onChange(of: customRange) { _, _ in
             if selectedRange == .custom {
                 triggerDailySync(force: false)
-                Task {
-                    await ouraManager.pullScores(startDate: currentRange.start, endDate: currentRange.end)
-                }
             }
         }
         .onChange(of: healthManager.authorizationStatus) { _, newValue in
@@ -162,21 +131,12 @@ struct HealthHubView: View {
 
                 Button {
                     triggerDailySync(force: true)
-                    Task {
-                        if ouraManager.isConnected {
-                            await ouraManager.manualRefresh(range: currentRange)
-                        }
-                    }
                 } label: {
                     Group {
                         if healthManager.isDailySyncing {
                             ProgressView(value: healthManager.dailySyncProgress)
                                 .progressViewStyle(CircularProgressViewStyle())
                                 .tint(Theme.Colors.accent)
-                        } else if ouraManager.isSyncing {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle())
-                                .tint(Theme.Colors.accentSecondary)
                         } else {
                             Image(systemName: "arrow.clockwise")
                                 .font(.system(size: 16, weight: .bold))
@@ -195,21 +155,13 @@ struct HealthHubView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(
-                    (healthManager.authorizationStatus != .authorized && !ouraManager.isConnected)
-                        || healthManager.isDailySyncing
-                        || ouraManager.isSyncing
+                    healthManager.authorizationStatus != .authorized || healthManager.isDailySyncing
                 )
                 .accessibilityLabel("Refresh health data")
             }
 
             if let lastSync = healthManager.lastDailySyncDate {
                 Text("Last sync \(formatSyncDate(lastSync))")
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textTertiary)
-            }
-
-            if let ouraSync = ouraManager.lastSyncDate {
-                Text("Oura updated \(formatSyncDate(ouraSync))")
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Colors.textTertiary)
             }
@@ -257,135 +209,6 @@ struct HealthHubView: View {
                 }
                 .padding(.horizontal, Theme.Spacing.xs)
             }
-        }
-    }
-
-    private var ouraData: [OuraDailyScoreDay] {
-        ouraManager.scores(in: currentRange)
-    }
-
-    private var ouraLatestDay: OuraDailyScoreDay? {
-        ouraData.last
-    }
-
-    private var ouraSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Oura")
-                .font(Theme.Typography.sectionHeader)
-                .foregroundStyle(Theme.Colors.textPrimary)
-                .tracking(1.0)
-
-            VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-                HStack {
-                    HStack(spacing: Theme.Spacing.xs) {
-                        Image(systemName: ouraManager.connectionStatus.iconName)
-                            .foregroundStyle(ouraManager.connectionStatus.tint)
-                        Text(ouraManager.connectionStatus.displayText)
-                            .font(Theme.Typography.subheadline)
-                            .foregroundStyle(Theme.Colors.textPrimary)
-                    }
-
-                    Spacer()
-
-                    Button {
-                        handleOuraActionTap()
-                    } label: {
-                        Text(ouraManager.isConnected ? "Manage" : "Connect")
-                            .font(Theme.Typography.captionBold)
-                            .foregroundStyle(Theme.Colors.textPrimary)
-                            .padding(.horizontal, Theme.Spacing.md)
-                            .padding(.vertical, Theme.Spacing.xs)
-                            .softCard(elevation: 1)
-                    }
-                    .buttonStyle(.plain)
-                }
-
-                if ouraManager.isConnected {
-                    if ouraData.isEmpty {
-                        Text("No Oura scores in this range yet.")
-                            .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.Colors.textSecondary)
-                    } else {
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: Theme.Spacing.md) {
-                                ForEach(ouraSummaryCards) { card in
-                                    OuraSummaryCard(model: card)
-                                }
-                            }
-                        }
-
-                        if let latest = ouraLatestDay {
-                            Button {
-                                selectedOuraDay = latest
-                            } label: {
-                                HStack(spacing: Theme.Spacing.sm) {
-                                    Image(systemName: "chart.bar.xaxis")
-                                        .foregroundStyle(Theme.Colors.accentSecondary)
-                                    Text("View Contributor Breakdown")
-                                        .font(Theme.Typography.captionBold)
-                                        .foregroundStyle(Theme.Colors.textPrimary)
-                                    Spacer()
-                                    Image(systemName: "chevron.right")
-                                        .font(.caption)
-                                        .foregroundStyle(Theme.Colors.textTertiary)
-                                }
-                                .padding(Theme.Spacing.md)
-                                .softCard(elevation: 1)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                } else {
-                    Text("Connect Oura to sync sleep, readiness, and activity scores.")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                }
-            }
-            .padding(Theme.Spacing.lg)
-            .softCard(elevation: 1)
-        }
-    }
-
-    private var ouraSummaryCards: [OuraSummaryCardModel] {
-        let avgSleep = average(ouraData.compactMap { $0.sleepScore })
-        let avgReadiness = average(ouraData.compactMap { $0.readinessScore })
-        let avgActivity = average(ouraData.compactMap { $0.activityScore })
-
-        return [
-            OuraSummaryCardModel(
-                id: "ouraSleep",
-                title: "Sleep Score",
-                value: avgSleep.map { "\(Int($0.rounded()))" } ?? "--",
-                icon: OuraScoreType.sleep.icon,
-                tint: OuraScoreType.sleep.tint
-            ),
-            OuraSummaryCardModel(
-                id: "ouraReadiness",
-                title: "Readiness",
-                value: avgReadiness.map { "\(Int($0.rounded()))" } ?? "--",
-                icon: OuraScoreType.readiness.icon,
-                tint: OuraScoreType.readiness.tint
-            ),
-            OuraSummaryCardModel(
-                id: "ouraActivity",
-                title: "Activity Score",
-                value: avgActivity.map { "\(Int($0.rounded()))" } ?? "--",
-                icon: OuraScoreType.activity.icon,
-                tint: OuraScoreType.activity.tint
-            )
-        ]
-    }
-
-    private func handleOuraActionTap() {
-        switch ouraManager.connectionStatus {
-        case .notConnected, .error:
-            Task {
-                await ouraManager.startConnectionFlow()
-            }
-        case .connecting:
-            return
-        case .connected, .syncing:
-            showingOuraActions = true
         }
     }
 
@@ -673,108 +496,6 @@ private struct HealthSummaryCard: View {
         .padding(Theme.Spacing.md)
         .frame(width: 160, alignment: .leading)
         .softCard(elevation: 1)
-    }
-}
-
-private struct OuraSummaryCardModel: Identifiable {
-    let id: String
-    let title: String
-    let value: String
-    let icon: String
-    let tint: Color
-}
-
-private struct OuraSummaryCard: View {
-    let model: OuraSummaryCardModel
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            HStack(spacing: Theme.Spacing.xs) {
-                Image(systemName: model.icon)
-                    .font(.caption)
-                    .foregroundStyle(model.tint)
-                Text(model.title)
-                    .font(Theme.Typography.metricLabel)
-                    .foregroundStyle(Theme.Colors.textSecondary)
-                    .textCase(.uppercase)
-                    .tracking(0.8)
-            }
-
-            Text(model.value)
-                .font(Theme.Typography.number)
-                .foregroundStyle(Theme.Colors.textPrimary)
-        }
-        .padding(Theme.Spacing.md)
-        .frame(width: 170, alignment: .leading)
-        .softCard(elevation: 1)
-    }
-}
-
-private struct OuraContributorsDetailView: View {
-    let day: OuraDailyScoreDay
-
-    var body: some View {
-        ZStack {
-            AdaptiveBackground()
-
-            ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-                    Text(day.dayStart.formatted(date: .abbreviated, time: .omitted))
-                        .font(Theme.Typography.title3)
-                        .foregroundStyle(Theme.Colors.textPrimary)
-
-                    contributorSection(type: .sleep, score: day.sleepScore, contributors: day.sleepContributors)
-                    contributorSection(type: .readiness, score: day.readinessScore, contributors: day.readinessContributors)
-                    contributorSection(type: .activity, score: day.activityScore, contributors: day.activityContributors)
-                }
-                .padding(Theme.Spacing.xl)
-            }
-        }
-        .navigationTitle("Oura Contributors")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-
-    @ViewBuilder
-    private func contributorSection(type: OuraScoreType, score: Double?, contributors: [String: Double]?) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            HStack {
-                Label(type.title, systemImage: type.icon)
-                    .font(Theme.Typography.headline)
-                    .foregroundStyle(Theme.Colors.textPrimary)
-                Spacer()
-                Text(score.map { "\(Int($0.rounded()))" } ?? "--")
-                    .font(Theme.Typography.numberSmall)
-                    .foregroundStyle(type.tint)
-            }
-
-            if let contributors, !contributors.isEmpty {
-                ForEach(contributors.sorted(by: { $0.key < $1.key }), id: \.key) { key, value in
-                    HStack {
-                        Text(formatContributorKey(key))
-                            .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.Colors.textSecondary)
-                        Spacer()
-                        Text("\(Int(value.rounded()))")
-                            .font(Theme.Typography.captionBold)
-                            .foregroundStyle(Theme.Colors.textPrimary)
-                    }
-                }
-            } else {
-                Text("No contributor data available.")
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textTertiary)
-            }
-        }
-        .padding(Theme.Spacing.md)
-        .softCard(elevation: 1)
-    }
-
-    private func formatContributorKey(_ raw: String) -> String {
-        raw
-            .replacingOccurrences(of: "_", with: " ")
-            .split(separator: " ")
-            .map { $0.capitalized }
-            .joined(separator: " ")
     }
 }
 

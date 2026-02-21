@@ -7,7 +7,6 @@ struct DashboardView: View {
     let annotationsManager: WorkoutAnnotationsManager
     let gymProfilesManager: GymProfilesManager
     @EnvironmentObject var healthManager: HealthKitManager
-    @EnvironmentObject var ouraManager: OuraManager
 
     @StateObject private var insightsEngine: InsightsEngine
     @State private var selectedTimeRange = TimeRange.week
@@ -133,9 +132,6 @@ struct DashboardView: View {
         }
         .onAppear {
             healthManager.refreshAuthorizationStatus()
-            Task {
-                await ouraManager.autoRefreshOnForeground()
-            }
             if dataManager.workouts.isEmpty {
                 // Offload file reading to background to prevent main thread hitch
                 Task { await loadLatestWorkoutData() }
@@ -147,7 +143,6 @@ struct DashboardView: View {
         }
         .refreshable {
             await loadLatestWorkoutData()
-            await ouraManager.autoRefreshOnForeground()
         }
         .onChange(of: dataManager.workouts.count) { _, _ in
             refreshInsights()

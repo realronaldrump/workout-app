@@ -11,7 +11,6 @@ import SwiftUI
 struct WorkoutApp: App {
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var healthManager = HealthKitManager()
-    @StateObject private var ouraManager = OuraManager()
     @StateObject private var sessionManager = WorkoutSessionManager()
 
     init() {
@@ -31,21 +30,10 @@ struct WorkoutApp: App {
         WindowGroup {
             MainTabView()
                 .environmentObject(healthManager)
-                .environmentObject(ouraManager)
                 .environmentObject(sessionManager)
                 .buttonStyle(AppInteractionButtonStyle())
-                .onOpenURL { url in
-                    ouraManager.handleIncomingURL(url)
-                }
         }
         .onChange(of: scenePhase) { _, newPhase in
-            if newPhase == .active {
-                Task {
-                    await ouraManager.autoRefreshOnForeground()
-                }
-                return
-            }
-
             guard newPhase == .inactive || newPhase == .background else { return }
             sessionManager.saveImmediately()
         }

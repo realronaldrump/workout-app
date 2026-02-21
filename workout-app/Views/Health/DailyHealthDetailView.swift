@@ -2,7 +2,6 @@ import SwiftUI
 
 struct DailyHealthDetailView: View {
     let day: DailyHealthData
-    @EnvironmentObject var ouraManager: OuraManager
     private let maxContentWidth: CGFloat = 760
     private var overviewColumns: [GridItem] {
         [GridItem(.adaptive(minimum: 132, maximum: 210), spacing: Theme.Spacing.md)]
@@ -23,10 +22,6 @@ struct DailyHealthDetailView: View {
                     headerSection
 
                     overviewSection
-
-                    if let ouraDay {
-                        ouraScoreSection(day: ouraDay)
-                    }
 
                     if let sleepSummary = day.sleepSummary {
                         sleepSummarySection(summary: sleepSummary)
@@ -64,10 +59,6 @@ struct DailyHealthDetailView: View {
                     .foregroundStyle(Theme.Colors.textSecondary)
             }
         }
-    }
-
-    private var ouraDay: OuraDailyScoreDay? {
-        ouraManager.score(for: day.dayStart)
     }
 
     private var overviewSection: some View {
@@ -158,69 +149,6 @@ struct DailyHealthDetailView: View {
         }
         .padding(Theme.Spacing.lg)
         .softCard(elevation: 1)
-    }
-
-    private func ouraScoreSection(day: OuraDailyScoreDay) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Oura Scores")
-                .font(Theme.Typography.title3)
-                .foregroundStyle(Theme.Colors.textPrimary)
-
-            HStack(spacing: Theme.Spacing.md) {
-                scoreChip(title: "Sleep", value: day.sleepScore, tint: OuraScoreType.sleep.tint)
-                scoreChip(title: "Readiness", value: day.readinessScore, tint: OuraScoreType.readiness.tint)
-                scoreChip(title: "Activity", value: day.activityScore, tint: OuraScoreType.activity.tint)
-            }
-
-            contributorRows(title: "Sleep Contributors", values: day.sleepContributors)
-            contributorRows(title: "Readiness Contributors", values: day.readinessContributors)
-            contributorRows(title: "Activity Contributors", values: day.activityContributors)
-        }
-        .padding(Theme.Spacing.lg)
-        .softCard(elevation: 1)
-    }
-
-    private func scoreChip(title: String, value: Double?, tint: Color) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title)
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Colors.textSecondary)
-            Text(value.map { "\(Int($0.rounded()))" } ?? "--")
-                .font(Theme.Typography.numberSmall)
-                .foregroundStyle(tint)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    @ViewBuilder
-    private func contributorRows(title: String, values: [String: Double]?) -> some View {
-        if let values, !values.isEmpty {
-            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                Text(title)
-                    .font(Theme.Typography.captionBold)
-                    .foregroundStyle(Theme.Colors.textSecondary)
-
-                ForEach(values.sorted(by: { $0.key < $1.key }), id: \.key) { key, value in
-                    HStack {
-                        Text(formatContributorKey(key))
-                            .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.Colors.textSecondary)
-                        Spacer()
-                        Text("\(Int(value.rounded()))")
-                            .font(Theme.Typography.captionBold)
-                            .foregroundStyle(Theme.Colors.textPrimary)
-                    }
-                }
-            }
-        }
-    }
-
-    private func formatContributorKey(_ raw: String) -> String {
-        raw
-            .replacingOccurrences(of: "_", with: " ")
-            .split(separator: " ")
-            .map { $0.capitalized }
-            .joined(separator: " ")
     }
 
     private func formatInt(_ value: Double?) -> String {

@@ -6,7 +6,6 @@ struct HomeView: View {
     let annotationsManager: WorkoutAnnotationsManager
     let gymProfilesManager: GymProfilesManager
     @EnvironmentObject var healthManager: HealthKitManager
-    @EnvironmentObject var ouraManager: OuraManager
     @Binding var selectedTab: AppTab
 
     @StateObject private var insightsEngine: InsightsEngine
@@ -117,9 +116,6 @@ struct HomeView: View {
         }
         .onAppear {
             healthManager.refreshAuthorizationStatus()
-            Task {
-                await ouraManager.autoRefreshOnForeground()
-            }
             if dataManager.workouts.isEmpty {
                 Task { await loadLatestWorkoutData() }
             } else {
@@ -129,7 +125,6 @@ struct HomeView: View {
         }
         .refreshable {
             await loadLatestWorkoutData()
-            await ouraManager.autoRefreshOnForeground()
         }
         .onChange(of: dataManager.workouts.count) { _, _ in
             refreshInsights()
