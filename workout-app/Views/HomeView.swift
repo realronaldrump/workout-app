@@ -607,7 +607,10 @@ struct HomeView: View {
     }
 
     private var bestPerformanceTimeBucket: TimeOfDayBucket? {
-        correlationEngine.timeOfDayAnalysis.max(by: { $0.avgVolume < $1.avgVolume })
+        // Only consider buckets with enough sessions to be statistically
+        // meaningful, then rank by Bayesian confidence score.
+        let qualifying = correlationEngine.timeOfDayAnalysis.filter { $0.meetsMinimum }
+        return qualifying.max(by: { $0.confidenceScore < $1.confidenceScore })
     }
 
     private var sleepCorrelation: PerformanceCorrelation? {

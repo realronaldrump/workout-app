@@ -524,13 +524,17 @@ final class DataCorrelationEngine: ObservableObject {
             var totalDuration: Double = 0
         }
 
+        // 2-hour windows for tighter precision
         let buckets: [(label: String, range: ClosedRange<Int>)] = [
-            ("Early AM (5-8)", 5...8),
-            ("Morning (8-11)", 8...11),
-            ("Midday (11-14)", 11...14),
-            ("Afternoon (14-17)", 14...17),
-            ("Evening (17-20)", 17...20),
-            ("Night (20-23)", 20...23)
+            ("5–7 AM",    5...6),
+            ("7–9 AM",    7...8),
+            ("9–11 AM",   9...10),
+            ("11 AM–1 PM", 11...12),
+            ("1–3 PM",    13...14),
+            ("3–5 PM",    15...16),
+            ("5–7 PM",    17...18),
+            ("7–9 PM",    19...20),
+            ("9–11 PM",   21...22)
         ]
 
         var accumulators = buckets.map { _ in BucketAccumulator() }
@@ -544,14 +548,33 @@ final class DataCorrelationEngine: ObservableObject {
             }
         }
 
+        // Global average volume for Bayesian shrinkage
+        let totalSessions = accumulators.reduce(0) { $0 + $1.sessions }
+        let totalVolume = accumulators.reduce(0.0) { $0 + $1.totalVolume }
+        let globalAvgVolume = totalSessions > 0 ? totalVolume / Double(totalSessions) : 0
+
+        // A bucket must have at least 3 sessions or 3 % of all workouts
+        // (whichever is larger) to be considered reliable.
+        let minSessions = max(3, Int(ceil(Double(workouts.count) * 0.03)))
+
+        // Bayesian confidence weight — pulls low-sample buckets toward the
+        // global mean so a handful of outlier sessions can't dominate.
+        let k = 5.0
+
         return zip(buckets, accumulators).compactMap { bucket, acc in
             guard acc.sessions > 0 else { return nil }
+            let avgVolume = acc.totalVolume / Double(acc.sessions)
+            let avgDuration = acc.totalDuration / Double(acc.sessions)
+            let n = Double(acc.sessions)
+            let confidenceScore = (n * avgVolume + k * globalAvgVolume) / (n + k)
             return TimeOfDayBucket(
                 label: bucket.label,
                 hourRange: bucket.range,
                 sessionCount: acc.sessions,
-                avgVolume: acc.totalVolume / Double(acc.sessions),
-                avgDuration: acc.totalDuration / Double(acc.sessions)
+                avgVolume: avgVolume,
+                avgDuration: avgDuration,
+                confidenceScore: confidenceScore,
+                meetsMinimum: acc.sessions >= minSessions
             )
         }
     }
@@ -724,4 +747,10 @@ struct TimeOfDayBucket: Identifiable {
     let sessionCount: Int
     let avgVolume: Double
     let avgDuration: Double
+    /// Bayesian-weighted score that penalises low-sample buckets by pulling
+    /// them toward the global average volume.
+    let confidenceScore: Double
+    /// Whether this bucket meets the minimum session threshold to be
+    /// considered a reliable "best" recommendation.
+    let meetsMinimum: Bool
 }
