@@ -33,23 +33,23 @@ struct GymBadge: View {
     }
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 5) {
             Image(systemName: icon)
-                .font(.system(size: 11, weight: .semibold))
+                .font(.system(size: 10, weight: .semibold))
             Text(text)
                 .font(Theme.Typography.metricLabel)
                 .lineLimit(1)
         }
         .foregroundColor(tint)
         .padding(.horizontal, Theme.Spacing.sm)
-        .padding(.vertical, 6)
+        .padding(.vertical, 5)
         .background(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                .fill(tint.opacity(0.12))
+            Capsule()
+                .fill(tint.opacity(0.10))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                .strokeBorder(tint.opacity(0.6), lineWidth: 2)
+            Capsule()
+                .strokeBorder(tint.opacity(0.25), lineWidth: 1)
         )
     }
 }

@@ -11,12 +11,12 @@ struct FilterButton: View {
                 .font(Theme.Typography.captionBold)
                 .padding(.horizontal, Theme.Spacing.md)
                 .padding(.vertical, Theme.Spacing.sm)
-                .background(isSelected ? Theme.Colors.accent : Theme.Colors.surface)
+                .background(isSelected ? Theme.Colors.accent : Theme.Colors.surfaceRaised)
                 .foregroundColor(isSelected ? .white : Theme.Colors.textPrimary)
-                .cornerRadius(Theme.CornerRadius.medium)
+                .clipShape(Capsule())
                 .overlay(
-                    RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                        .strokeBorder(isSelected ? Theme.Colors.accent : Theme.Colors.border, lineWidth: 1)
+                    Capsule()
+                        .strokeBorder(isSelected ? Theme.Colors.accent : Theme.Colors.border.opacity(0.4), lineWidth: 1)
                 )
         }
     }

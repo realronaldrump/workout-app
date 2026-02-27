@@ -49,26 +49,41 @@ struct ProfileView: View {
     }
 
     private var headerSection: some View {
-        VStack(spacing: Theme.Spacing.md) {
+        VStack(spacing: Theme.Spacing.lg) {
+            // Avatar with gradient background
             ZStack {
-                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                    .fill(Theme.Colors.accent)
-                    .frame(width: 96, height: 96)
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Theme.Colors.accent,
+                                Color(uiColor: UIColor(hex: 0x3B82F6))
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 88, height: 88)
+                    .shadow(color: Theme.Colors.accent.opacity(0.25), radius: 16, x: 0, y: 8)
 
                 Text(initials)
-                    .font(Theme.Typography.sectionHeader)
+                    .font(.system(size: 28, weight: .bold, design: .default))
                     .foregroundStyle(.white)
             }
-            .overlay(
-                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                    .strokeBorder(Theme.Colors.border, lineWidth: 3)
-            )
 
             VStack(spacing: Theme.Spacing.xs) {
                 Text(displayName)
                     .font(Theme.Typography.sectionHeader)
                     .foregroundStyle(Theme.Colors.textPrimary)
-                    .tracking(1.0)
+                    .tracking(0.8)
+
+                if !profileName.isEmpty {
+                    Text("Member")
+                        .font(Theme.Typography.metricLabel)
+                        .foregroundStyle(Theme.Colors.textTertiary)
+                        .textCase(.uppercase)
+                        .tracking(1.0)
+                }
             }
 
             HStack(spacing: Theme.Spacing.md) {
@@ -78,7 +93,7 @@ struct ProfileView: View {
                         showingWorkoutHistory = true
                     },
                     content: {
-                        ProfileStat(title: "Workouts", value: "\(dataManager.workouts.count)")
+                        ProfileStat(title: "Workouts", value: "\(dataManager.workouts.count)", tint: Theme.Colors.accent)
                     }
                 )
                 .frame(maxWidth: .infinity)
@@ -89,14 +104,12 @@ struct ProfileView: View {
                         showingExerciseList = true
                     },
                     content: {
-                        ProfileStat(title: "Exercises", value: "\(uniqueExercisesCount)")
+                        ProfileStat(title: "Exercises", value: "\(uniqueExercisesCount)", tint: Theme.Colors.accentSecondary)
                     }
                 )
                 .frame(maxWidth: .infinity)
             }
-            // Keep these tiles inset from the header card border so they don't visually
-            // "kiss" the edges of the top square/card.
-            .padding(.horizontal, Theme.Spacing.lg)
+            .padding(.horizontal, Theme.Spacing.md)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, Theme.Spacing.xl)
@@ -105,12 +118,7 @@ struct ProfileView: View {
 
     private var personalInfoSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Personal")
-                .font(Theme.Typography.sectionHeader2)
-                .foregroundStyle(Theme.Colors.textSecondary)
-                .textCase(.uppercase)
-                .tracking(1.0)
-                .padding(.horizontal)
+            SectionLabel(text: "Personal")
 
             VStack(spacing: Theme.Spacing.sm) {
                 ProfileFieldRow(
@@ -120,19 +128,13 @@ struct ProfileView: View {
                     promptText: "Name",
                     text: $profileName
                 )
-
             }
         }
     }
 
     private var connectionsSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Connections")
-                .font(Theme.Typography.sectionHeader2)
-                .foregroundStyle(Theme.Colors.textSecondary)
-                .textCase(.uppercase)
-                .tracking(1.0)
-                .padding(.horizontal)
+            SectionLabel(text: "Connections")
 
             VStack(spacing: 1) {
                 SettingsRow(
@@ -167,12 +169,7 @@ struct ProfileView: View {
 
     private var preferencesSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Preferences")
-                .font(Theme.Typography.sectionHeader2)
-                .foregroundStyle(Theme.Colors.textSecondary)
-                .textCase(.uppercase)
-                .tracking(1.0)
-                .padding(.horizontal)
+            SectionLabel(text: "Preferences")
 
             VStack(spacing: 1) {
                 NavigationLink(destination: ExerciseTaggingView(dataManager: dataManager)) {
@@ -235,27 +232,30 @@ private struct ProfileFieldRow: View {
     var keyboardType: UIKeyboardType = .default
 
     var body: some View {
-        HStack(alignment: .top, spacing: Theme.Spacing.md) {
+        HStack(alignment: .center, spacing: Theme.Spacing.md) {
             Image(systemName: icon)
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.white)
-                .frame(width: 30, height: 30)
+                .frame(width: 32, height: 32)
                 .background(color)
-                .cornerRadius(Theme.CornerRadius.small)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
 
-            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text(title)
-                    .font(Theme.Typography.body)
-                    .foregroundStyle(Theme.Colors.textPrimary)
+                    .font(Theme.Typography.metricLabel)
+                    .foregroundStyle(Theme.Colors.textTertiary)
+                    .textCase(.uppercase)
+                    .tracking(0.6)
 
                 TextField(promptText, text: $text)
-                    .font(Theme.Typography.callout)
+                    .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Colors.textPrimary)
                     .keyboardType(keyboardType)
             }
 
             Spacer()
         }
-        .padding()
+        .padding(Theme.Spacing.lg)
         .softCard()
     }
 }
@@ -268,14 +268,15 @@ private struct ProfileLinkRow: View {
     var value: String?
 
     var body: some View {
-        HStack {
+        HStack(spacing: Theme.Spacing.md) {
             Image(systemName: icon)
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.white)
-                .frame(width: 30, height: 30)
+                .frame(width: 32, height: 32)
                 .background(color)
-                .cornerRadius(Theme.CornerRadius.small)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
 
-            VStack(alignment: .leading) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Colors.textPrimary)
@@ -288,14 +289,15 @@ private struct ProfileLinkRow: View {
 
             if let value = value {
                 Text(value)
-                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .font(Theme.Typography.captionBold)
+                    .foregroundStyle(Theme.Colors.textTertiary)
             }
 
             Image(systemName: "chevron.right")
-                .font(.caption)
+                .font(.system(size: 11, weight: .bold))
                 .foregroundStyle(Theme.Colors.textTertiary)
         }
-        .padding()
+        .padding(Theme.Spacing.lg)
         .softCard(elevation: 1)
     }
 }
@@ -303,17 +305,15 @@ private struct ProfileLinkRow: View {
 private struct ProfileStat: View {
     let title: String
     let value: String
-
-    // Slightly smaller than the dashboard stat tiles so they sit comfortably under the avatar.
-    private let tileHeight: CGFloat = 88
+    var tint: Color = Theme.Colors.accent
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             Text(title)
                 .font(Theme.Typography.metricLabel)
-                .foregroundStyle(Theme.Colors.textSecondary)
+                .foregroundStyle(Theme.Colors.textTertiary)
                 .textCase(.uppercase)
-                .tracking(0.8)
+                .tracking(0.6)
                 .lineLimit(1)
             Text(value)
                 .font(Theme.Typography.number)
@@ -322,10 +322,30 @@ private struct ProfileStat: View {
                 .minimumScaleFactor(0.9)
                 .allowsTightening(true)
         }
-        .padding(.horizontal, Theme.Spacing.md)
-        .padding(.vertical, Theme.Spacing.sm)
+        .padding(.horizontal, Theme.Spacing.lg)
+        .padding(.vertical, Theme.Spacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(height: tileHeight)
-        .softCard(elevation: 1)
+        .frame(minHeight: 80)
+        .background(
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                .fill(tint.opacity(0.04))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                .strokeBorder(tint.opacity(0.12), lineWidth: 1)
+        )
+    }
+}
+
+/// Reusable section label used across Profile and Settings
+private struct SectionLabel: View {
+    let text: String
+    var body: some View {
+        Text(text)
+            .font(Theme.Typography.metricLabel)
+            .foregroundStyle(Theme.Colors.textTertiary)
+            .textCase(.uppercase)
+            .tracking(1.2)
+            .padding(.horizontal)
     }
 }

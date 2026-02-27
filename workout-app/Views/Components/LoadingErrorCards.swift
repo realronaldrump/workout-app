@@ -17,7 +17,7 @@ struct LoadingCard: View {
         }
         .frame(maxWidth: .infinity)
         .padding(Theme.Spacing.xl)
-        .softCard(elevation: 2)
+        .softCard(elevation: 1)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Loading workouts")
     }
@@ -25,9 +25,7 @@ struct LoadingCard: View {
 
 // MARK: - Error Card
 
-/// Displayed when data loading fails. Includes a retry action and
-/// shows the error message so users have actionable information
-/// instead of a silent failure.
+/// Displayed when data loading fails. Includes a retry action.
 struct ErrorCard: View {
     let message: String
     let onRetry: () -> Void
@@ -62,17 +60,14 @@ struct ErrorCard: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, Theme.Spacing.md)
                 .frame(minHeight: 48)
-                .background(Theme.Colors.accent)
-                .cornerRadius(Theme.CornerRadius.xlarge)
-                .overlay(
-                    RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge)
-                        .strokeBorder(Color.white.opacity(0.25), lineWidth: 2)
-                )
+                .background(Theme.accentGradient)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge))
+                .shadow(color: Theme.Colors.accent.opacity(0.2), radius: 8, y: 4)
             }
             .buttonStyle(.plain)
         }
         .padding(Theme.Spacing.xl)
-        .softCard(elevation: 2)
+        .softCard(elevation: 1)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Error loading workouts. \(message)")
         .accessibilityHint("Double tap to retry")

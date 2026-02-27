@@ -175,12 +175,12 @@ struct WorkoutSessionView: View {
                     .foregroundStyle(Theme.Colors.textPrimary)
                     .frame(width: 34, height: 34)
                     .background(
-                        RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                            .fill(Theme.Colors.cardBackground)
+                        Circle()
+                            .fill(Theme.Colors.surfaceRaised)
                     )
                     .overlay(
-                        RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                            .strokeBorder(Theme.Colors.border, lineWidth: 2)
+                        Circle()
+                            .strokeBorder(Theme.Colors.border.opacity(0.5), lineWidth: 1)
                     )
             }
             .buttonStyle(.plain)
@@ -198,12 +198,12 @@ struct WorkoutSessionView: View {
                         .padding(.horizontal, Theme.Spacing.sm)
                         .padding(.vertical, Theme.Spacing.xs)
                         .background(
-                            RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                                .fill(Theme.Colors.surface)
+                            Capsule()
+                                .fill(Theme.Colors.surfaceRaised)
                         )
                         .overlay(
-                            RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                                .strokeBorder(Theme.Colors.border, lineWidth: 2)
+                            Capsule()
+                                .strokeBorder(Theme.Colors.border.opacity(0.4), lineWidth: 1)
                         )
                 }
                 .accessibilityLabel("Elapsed time")
@@ -220,12 +220,12 @@ struct WorkoutSessionView: View {
                     .foregroundStyle(Theme.Colors.error)
                     .frame(width: 34, height: 34)
                     .background(
-                        RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                            .fill(Theme.Colors.cardBackground)
+                        Circle()
+                            .fill(Theme.Colors.error.opacity(0.06))
                     )
                     .overlay(
-                        RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                            .strokeBorder(Theme.Colors.border, lineWidth: 2)
+                        Circle()
+                            .strokeBorder(Theme.Colors.error.opacity(0.15), lineWidth: 1)
                     )
             }
             .buttonStyle(.plain)
@@ -366,8 +366,8 @@ struct WorkoutSessionView: View {
                                     .strokeBorder(
                                         sessionManager.restTimerDuration == seconds
                                             ? Theme.Colors.accent
-                                            : Theme.Colors.border,
-                                        lineWidth: 2
+                                            : Theme.Colors.border.opacity(0.4),
+                                        lineWidth: 1
                                     )
                             )
                     }

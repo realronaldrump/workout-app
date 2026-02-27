@@ -36,7 +36,11 @@ struct HighlightCardView: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             HStack(spacing: Theme.Spacing.sm) {
                 Image(systemName: item.icon)
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(item.tint)
+                    .frame(width: 24, height: 24)
+                    .background(item.tint.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
                 Text(item.title)
                     .font(Theme.Typography.metricLabel)
                     .foregroundColor(Theme.Colors.textSecondary)
@@ -61,7 +65,7 @@ struct HighlightCardView: View {
         }
         .padding(Theme.Spacing.lg)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .softCard(elevation: 2)
+        .softCard(elevation: 1)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(item.title): \(item.value)\(item.subtitle.map { ", \($0)" } ?? "")")
         .accessibilityAddTraits(item.action != nil ? .isButton : [])
@@ -75,15 +79,16 @@ struct HighlightsSectionView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-            Text(title)
-                .font(Theme.Typography.sectionHeader)
-                .foregroundColor(Theme.Colors.textPrimary)
-                .tracking(1.0)
+            Text(title.uppercased())
+                .font(Theme.Typography.metricLabel)
+                .foregroundColor(Theme.Colors.textTertiary)
+                .tracking(1.2)
+                .padding(.leading, 4)
 
             if items.isEmpty {
                 EmptyHighlightsView()
             } else {
-                VStack(spacing: Theme.Spacing.md) {
+                VStack(spacing: Theme.Spacing.sm) {
                     ForEach(items) { item in
                         HighlightCardView(item: item)
                     }

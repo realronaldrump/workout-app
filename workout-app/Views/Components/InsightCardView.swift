@@ -28,15 +28,11 @@ struct InsightCardView: View {
             label: {
                 HStack(spacing: Theme.Spacing.lg) {
                     Image(systemName: insight.type.iconName)
-                        .font(.system(size: 20, weight: .bold))
+                        .font(.system(size: 18, weight: .bold))
                         .foregroundColor(iconColor)
                         .frame(width: 40, height: 40)
-                        .background(iconColor.opacity(0.12))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                                .strokeBorder(iconColor, lineWidth: 2)
-                        )
-                        .cornerRadius(Theme.CornerRadius.small)
+                        .background(iconColor.opacity(0.10))
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
 
                     VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                         Text(insight.title)
@@ -59,7 +55,7 @@ struct InsightCardView: View {
                     }
                 }
                 .padding(Theme.Spacing.lg)
-                .softCard(elevation: 2)
+                .softCard(elevation: 1)
             }
         )
         .buttonStyle(ScaleButtonStyle())
@@ -73,15 +69,12 @@ struct InsightCardView: View {
     }
 }
 
-/// Neubrutalist press style: card shifts into its shadow on press.
+/// Subtle press style: card scales slightly on press.
 struct ScaleButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .offset(
-                x: configuration.isPressed ? 2 : 0,
-                y: configuration.isPressed ? 2 : 0
-            )
-            .animation(.easeInOut(duration: 0.08), value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
+            .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
     }
 }
 
@@ -106,9 +99,10 @@ struct InsightsSectionView: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             HStack {
                 Text("Insights")
-                    .font(Theme.Typography.sectionHeader)
-                    .foregroundColor(Theme.Colors.textPrimary)
-                    .tracking(1.0)
+                    .font(Theme.Typography.metricLabel)
+                    .foregroundColor(Theme.Colors.textTertiary)
+                    .tracking(1.2)
+                    .textCase(.uppercase)
 
                 Spacer()
 

@@ -65,17 +65,14 @@ struct MetricTileButton<Content: View>: View {
     }
 }
 
-/// Neubrutalist press style: card translates into its own shadow on press.
+/// Subtle press style: card scales slightly on press.
 private struct MetricTilePressStyle: ButtonStyle {
     let isEnabled: Bool
 
     func makeBody(configuration: Configuration) -> some View {
         let isPressed = configuration.isPressed && isEnabled
         configuration.label
-            .offset(
-                x: isPressed ? 2 : 0,
-                y: isPressed ? 2 : 0
-            )
-            .animation(.easeInOut(duration: 0.08), value: configuration.isPressed)
+            .scaleEffect(isPressed ? 0.97 : 1.0)
+            .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
     }
 }

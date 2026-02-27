@@ -145,14 +145,11 @@ struct ExportWorkoutsView: View {
                 .foregroundStyle(.white)
                 .padding()
                 .background(
-                    RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                        .fill(Theme.Colors.accentSecondary)
+                    Circle()
+                        .fill(Theme.warmGradient)
                 )
-                .overlay(
-                    RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                        .strokeBorder(Theme.Colors.border, lineWidth: 2)
-                )
-                .shadow(color: Color.black.opacity(Theme.Colors.shadowOpacity), radius: 0, x: 4, y: 4)
+                .shadow(color: Theme.Colors.accentSecondary.opacity(0.25), radius: 12, y: 4)
+                .shadow(color: Theme.Colors.accentSecondary.opacity(0.10), radius: 24, y: 8)
 
             Text("Export Workouts")
                 .font(Theme.Typography.screenTitle)

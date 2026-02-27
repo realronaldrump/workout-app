@@ -96,12 +96,12 @@ struct OnboardingView: View {
 
             HStack(spacing: 8) {
                 ForEach(0..<totalSteps, id: \.self) { index in
-                    RoundedRectangle(cornerRadius: 2)
+                    Capsule()
                         .fill(index <= step
                               ? (isSplashStep ? Color.white : Theme.Colors.accent)
-                              : (isSplashStep ? Color.white.opacity(0.28) : Theme.Colors.border.opacity(0.7)))
-                        .frame(height: 4)
-                        .animation(reduceMotion ? .easeOut(duration: 0.2) : .spring(), value: step)
+                              : (isSplashStep ? Color.white.opacity(0.20) : Theme.Colors.border.opacity(0.5)))
+                        .frame(width: index == step ? 24 : 8, height: 4)
+                        .animation(reduceMotion ? .easeOut(duration: 0.2) : .spring(response: 0.4, dampingFraction: 0.75), value: step)
                 }
             }
             .padding(.horizontal, Theme.Spacing.xl)
@@ -113,17 +113,18 @@ struct OnboardingView: View {
             Button(action: handlePrimaryAction) {
                 Text(primaryButtonTitle)
                     .font(Theme.Typography.headline)
-                    .foregroundStyle(isSplashStep ? Theme.Colors.textPrimary : .white)
+                    .foregroundStyle(isSplashStep ? Theme.Colors.accent : .white)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, Theme.Spacing.md)
                     .frame(minHeight: 52)
-                    .background(isSplashStep ? Theme.Colors.surface : primaryButtonColor)
-                    .cornerRadius(Theme.CornerRadius.xlarge)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge)
-                            .strokeBorder(Theme.Colors.border, lineWidth: 2)
+                    .background(
+                        isSplashStep
+                        ? AnyShapeStyle(Theme.Colors.surface)
+                        : AnyShapeStyle(Theme.accentGradient)
                     )
-                    .shadow(color: Color.black.opacity(Theme.Colors.shadowOpacity), radius: 0, x: 4, y: 4)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge))
+                    .shadow(color: (isSplashStep ? Color.black : Theme.Colors.accent).opacity(0.15), radius: 8, y: 4)
+                    .shadow(color: (isSplashStep ? Color.black : Theme.Colors.accent).opacity(0.08), radius: 16, y: 8)
             }
 
             if let secondary = secondaryButtonTitle {
@@ -181,17 +182,18 @@ struct OnboardingView: View {
 
             VStack(spacing: Theme.Spacing.lg) {
                 Image(systemName: "square.and.arrow.down.on.square")
-                    .font(.system(size: 64))
+                    .font(.system(size: 48, weight: .medium))
                     .foregroundStyle(Theme.Colors.accent)
-                    .padding(Theme.Spacing.xl)
+                    .frame(width: 100, height: 100)
                     .background(
-                        RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                            .fill(Theme.Colors.accent.opacity(0.12))
+                        Circle()
+                            .fill(Theme.Colors.accentTint)
                     )
                     .overlay(
-                        RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                            .strokeBorder(Theme.Colors.accent, lineWidth: 2)
+                        Circle()
+                            .strokeBorder(Theme.Colors.accent.opacity(0.2), lineWidth: 1)
                     )
+                    .shadow(color: Theme.Colors.accent.opacity(0.12), radius: 12, y: 4)
 
                 VStack(spacing: Theme.Spacing.sm) {
                     Text("Bring your history.")
@@ -218,17 +220,18 @@ struct OnboardingView: View {
 
             VStack(spacing: Theme.Spacing.lg) {
                 Image(systemName: "heart.fill")
-                    .font(.system(size: 64))
+                    .font(.system(size: 48, weight: .medium))
                     .foregroundStyle(Theme.Colors.error)
-                    .padding(Theme.Spacing.xl)
+                    .frame(width: 100, height: 100)
                     .background(
-                        RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                            .fill(Theme.Colors.error.opacity(0.10))
+                        Circle()
+                            .fill(Theme.Colors.error.opacity(0.08))
                     )
                     .overlay(
-                        RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                            .strokeBorder(Theme.Colors.error, lineWidth: 2)
+                        Circle()
+                            .strokeBorder(Theme.Colors.error.opacity(0.15), lineWidth: 1)
                     )
+                    .shadow(color: Theme.Colors.error.opacity(0.12), radius: 12, y: 4)
 
                 VStack(spacing: Theme.Spacing.sm) {
                     Text("Add recovery context.")
@@ -275,16 +278,23 @@ struct OnboardingView: View {
         }()
 
         return HStack(spacing: Theme.Spacing.sm) {
-            RoundedRectangle(cornerRadius: 2)
+            Circle()
                 .fill(tint)
-                .frame(width: 10, height: 10)
+                .frame(width: 8, height: 8)
             Text(statusText)
-                .font(Theme.Typography.caption)
+                .font(Theme.Typography.captionBold)
                 .foregroundStyle(Theme.Colors.textSecondary)
         }
         .padding(.horizontal, Theme.Spacing.lg)
         .padding(.vertical, Theme.Spacing.sm)
-        .softCard(cornerRadius: Theme.CornerRadius.xlarge, elevation: 1)
+        .background(
+            Capsule()
+                .fill(Theme.Colors.surfaceRaised)
+        )
+        .overlay(
+            Capsule()
+                .strokeBorder(Theme.Colors.border.opacity(0.4), lineWidth: 1)
+        )
         .padding(.top, Theme.Spacing.sm)
     }
 

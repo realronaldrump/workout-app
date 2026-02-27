@@ -74,7 +74,7 @@ struct ExerciseListView: View {
                     .padding(.horizontal, Theme.Spacing.lg)
 
                 ScrollView(showsIndicators: false) {
-                    LazyVStack(spacing: Theme.Spacing.md) {
+                    LazyVStack(spacing: Theme.Spacing.sm) {
                         if exercises.isEmpty {
                             ContentUnavailableView(
                                 "No matches",
@@ -83,7 +83,7 @@ struct ExerciseListView: View {
                             )
                             .padding(.top, Theme.Spacing.xl)
                         } else {
-                            ForEach(exercises, id: \.name) { exercise in
+                            ForEach(Array(exercises.enumerated()), id: \.element.name) { index, exercise in
                                 NavigationLink(
                                     destination: ExerciseDetailView(
                                         exerciseName: exercise.name,
@@ -95,6 +95,7 @@ struct ExerciseListView: View {
                                     ExerciseRowView(name: exercise.name, stats: exercise.stats)
                                 }
                                 .buttonStyle(.plain)
+                                .staggeredAppear(index: index)
                                 .contextMenu {
                                     Button("View History") {
                                         selectedExercise = ExerciseSelection(id: exercise.name)
@@ -162,7 +163,7 @@ struct ExerciseListView: View {
                 Image(systemName: "arrow.up.arrow.down")
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(Theme.Colors.accent)
-                Text("Sort")
+                Text(sortOrder.rawValue)
                     .font(Theme.Typography.captionBold)
                     .foregroundStyle(Theme.Colors.textPrimary)
                     .textCase(.uppercase)
@@ -170,9 +171,13 @@ struct ExerciseListView: View {
             }
             .padding(.horizontal, Theme.Spacing.md)
             .padding(.vertical, Theme.Spacing.xs)
-            .brutalistButtonChrome(
-                fill: Theme.Colors.surface,
-                cornerRadius: Theme.CornerRadius.large
+            .background(
+                Capsule()
+                    .fill(Theme.Colors.surfaceRaised)
+            )
+            .overlay(
+                Capsule()
+                    .strokeBorder(Theme.Colors.border.opacity(0.5), lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
@@ -235,26 +240,19 @@ struct ExerciseRowView: View {
     let stats: ExerciseStats
 
     var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 8) {
+        HStack(spacing: Theme.Spacing.md) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text(name)
-                    .font(Theme.Typography.condensed)
-                    .tracking(-0.2)
+                    .font(Theme.Typography.bodyBold)
                     .foregroundColor(Theme.Colors.textPrimary)
+                    .lineLimit(1)
 
-                HStack(spacing: 16) {
-                    Label("\(stats.frequency)x", systemImage: "repeat")
-                        .font(Theme.Typography.caption)
-                        .foregroundColor(Theme.Colors.textSecondary)
-
-                    Label(formatWeight(stats.maxWeight), systemImage: "scalemass")
-                        .font(Theme.Typography.caption)
-                        .foregroundColor(Theme.Colors.textSecondary)
+                HStack(spacing: 12) {
+                    ExerciseMetricPill(icon: "repeat", text: "\(stats.frequency)x")
+                    ExerciseMetricPill(icon: "scalemass", text: formatWeight(stats.maxWeight))
 
                     if let lastDate = stats.lastPerformed {
-                        Label(relativeDateString(for: lastDate), systemImage: "clock")
-                            .font(Theme.Typography.caption)
-                            .foregroundColor(Theme.Colors.textSecondary)
+                        ExerciseMetricPill(icon: "clock", text: relativeDateString(for: lastDate))
                     }
                 }
             }
@@ -262,11 +260,11 @@ struct ExerciseRowView: View {
             Spacer()
 
             Image(systemName: "chevron.right")
-                .font(.caption)
+                .font(.system(size: 12, weight: .bold))
                 .foregroundColor(Theme.Colors.textTertiary)
         }
         .padding(Theme.Spacing.lg)
-        .softCard(elevation: 2)
+        .softCard(elevation: 1)
     }
 
     private func formatWeight(_ weight: Double) -> String {
@@ -277,5 +275,20 @@ struct ExerciseRowView: View {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .abbreviated
         return formatter.localizedString(for: date, relativeTo: Date())
+    }
+}
+
+private struct ExerciseMetricPill: View {
+    let icon: String
+    let text: String
+
+    var body: some View {
+        HStack(spacing: 3) {
+            Image(systemName: icon)
+                .font(.system(size: 10, weight: .medium))
+            Text(text)
+                .font(Theme.Typography.caption)
+        }
+        .foregroundColor(Theme.Colors.textSecondary)
     }
 }

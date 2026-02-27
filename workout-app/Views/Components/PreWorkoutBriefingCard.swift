@@ -15,12 +15,15 @@ struct PreWorkoutBriefingCard: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             HStack(spacing: Theme.Spacing.sm) {
                 Image(systemName: "brain.head.profile")
-                    .font(.system(size: 14, weight: .bold))
+                    .font(.system(size: 13, weight: .bold))
                     .foregroundColor(Theme.Colors.accent)
-                Text("Pre-Workout Briefing")
-                    .font(Theme.Typography.sectionHeader)
-                    .foregroundColor(Theme.Colors.textPrimary)
-                    .tracking(1.0)
+                    .frame(width: 28, height: 28)
+                    .background(Theme.Colors.accentTint)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                Text("PRE-WORKOUT BRIEFING")
+                    .font(Theme.Typography.metricLabel)
+                    .foregroundColor(Theme.Colors.textTertiary)
+                    .tracking(1.2)
             }
 
             if let readiness = recoveryReadiness {
@@ -50,7 +53,7 @@ struct PreWorkoutBriefingCard: View {
             }
         }
         .padding(Theme.Spacing.lg)
-        .softCard(elevation: 2)
+        .softCard(elevation: 1)
     }
 
     private var isEmpty: Bool {

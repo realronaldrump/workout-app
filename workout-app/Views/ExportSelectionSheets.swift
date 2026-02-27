@@ -88,7 +88,7 @@ struct ExportExerciseSelectionSheet: View {
                                         .cornerRadius(Theme.CornerRadius.large)
                                         .overlay(
                                             RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
-                                                .strokeBorder(Theme.Colors.border, lineWidth: 2)
+                                                .strokeBorder(Theme.Colors.border.opacity(0.4), lineWidth: 1)
                                         )
                                     }
                                     .buttonStyle(.plain)
@@ -234,7 +234,7 @@ struct ExportWorkoutDateSelectionSheet: View {
                                         .cornerRadius(Theme.CornerRadius.large)
                                         .overlay(
                                             RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
-                                                .strokeBorder(Theme.Colors.border, lineWidth: 2)
+                                                .strokeBorder(Theme.Colors.border.opacity(0.4), lineWidth: 1)
                                         )
                                     }
                                     .buttonStyle(.plain)
@@ -365,7 +365,7 @@ struct ExportMuscleGroupSelectionSheet: View {
                                         .cornerRadius(Theme.CornerRadius.large)
                                         .overlay(
                                             RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
-                                                .strokeBorder(Theme.Colors.border, lineWidth: 2)
+                                                .strokeBorder(Theme.Colors.border.opacity(0.4), lineWidth: 1)
                                         )
                                     }
                                     .buttonStyle(.plain)

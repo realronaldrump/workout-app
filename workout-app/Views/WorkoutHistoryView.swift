@@ -49,16 +49,18 @@ struct WorkoutHistoryView: View {
                         .padding(.horizontal, Theme.Spacing.lg)
                         .padding(.top, Theme.Spacing.xl)
                     } else {
-                        ForEach(groupedWorkouts, id: \.month) { group in
-                            VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-                                Text(group.month)
-                                    .font(Theme.Typography.sectionHeader)
-                                    .foregroundStyle(Theme.Colors.textPrimary)
-                                    .tracking(1.0)
+                        ForEach(Array(groupedWorkouts.enumerated()), id: \.element.month) { sectionIndex, group in
+                            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                                Text(group.month.uppercased())
+                                    .font(Theme.Typography.metricLabel)
+                                    .foregroundStyle(Theme.Colors.textTertiary)
+                                    .tracking(1.2)
+                                    .padding(.leading, 4)
 
-                                VStack(spacing: Theme.Spacing.md) {
-                                    ForEach(group.workouts) { workout in
+                                VStack(spacing: Theme.Spacing.sm) {
+                                    ForEach(Array(group.workouts.enumerated()), id: \.element.id) { rowIndex, workout in
                                         WorkoutHistoryRow(workout: workout)
+                                            .staggeredAppear(index: rowIndex)
                                     }
                                 }
                             }
@@ -81,14 +83,14 @@ struct WorkoutHistoryView: View {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 16, weight: .bold))
                         .foregroundStyle(Theme.Colors.textPrimary)
-                        .frame(width: 44, height: 44)
+                        .frame(width: 40, height: 40)
                         .background(
-                            RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                                .fill(Theme.Colors.cardBackground)
+                            Circle()
+                                .fill(Theme.Colors.surfaceRaised)
                         )
                         .overlay(
-                            RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                                .strokeBorder(Theme.Colors.border, lineWidth: 2)
+                            Circle()
+                                .strokeBorder(Theme.Colors.border.opacity(0.5), lineWidth: 1)
                         )
                 }
                 .buttonStyle(.plain)
@@ -136,7 +138,7 @@ struct WorkoutHistoryView: View {
         }
         .padding(.horizontal, Theme.Spacing.lg)
         .padding(.vertical, Theme.Spacing.md)
-        .softCard(cornerRadius: Theme.CornerRadius.xlarge, elevation: 1)
+        .glassBackground(cornerRadius: Theme.CornerRadius.xlarge, elevation: 1)
     }
 }
 
@@ -151,12 +153,13 @@ struct WorkoutHistoryRow: View {
 
     var body: some View {
         NavigationLink(destination: WorkoutDetailView(workout: workout)) {
-            HStack {
+            HStack(spacing: Theme.Spacing.md) {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
                         Text(workout.name)
-                            .font(Theme.Typography.title3)
+                            .font(Theme.Typography.bodyBold)
                             .foregroundStyle(Theme.Colors.textPrimary)
+                            .lineLimit(1)
 
                         Spacer()
 
@@ -166,15 +169,11 @@ struct WorkoutHistoryRow: View {
                             repeatThisWorkout()
                         } label: {
                             Image(systemName: "arrow.counterclockwise")
-                                .font(.system(size: 12, weight: .bold))
+                                .font(.system(size: 11, weight: .bold))
                                 .foregroundColor(Theme.Colors.accent)
-                                .frame(width: 30, height: 30)
-                                .background(Theme.Colors.accent.opacity(0.1))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                                        .strokeBorder(Theme.Colors.accent.opacity(0.3), lineWidth: 1.5)
-                                )
-                                .cornerRadius(Theme.CornerRadius.small)
+                                .frame(width: 28, height: 28)
+                                .background(Theme.Colors.accentTint)
+                                .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("Repeat \(workout.name)")
@@ -204,14 +203,12 @@ struct WorkoutHistoryRow: View {
                     }
                 }
 
-                Spacer()
-
                 Image(systemName: "chevron.right")
-                    .font(.caption)
+                    .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(Theme.Colors.textTertiary)
             }
             .padding(Theme.Spacing.lg)
-            .softCard(elevation: 2)
+            .softCard(elevation: 1)
             .accessibilityElement(children: .combine)
             .accessibilityLabel(
                 "\(workout.name), \(workout.date.formatted(date: .abbreviated, time: .shortened)), "

@@ -50,10 +50,11 @@ struct ActiveSessionBar: View {
                 .background(Theme.Colors.cardBackground)
                 .overlay(
                     RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge)
-                        .strokeBorder(Theme.Colors.border, lineWidth: 2)
+                        .strokeBorder(Theme.Colors.border.opacity(0.5), lineWidth: 1)
                 )
                 .cornerRadius(Theme.CornerRadius.xlarge)
-                .shadow(color: .black.opacity(Theme.Colors.shadowOpacity), radius: 0, x: 4, y: 4)
+                .shadow(color: .black.opacity(Theme.Colors.shadowOpacity), radius: 8, y: 4)
+                .shadow(color: .black.opacity(Theme.Colors.shadowOpacity * 0.5), radius: 20, y: 8)
                 .contextMenu {
                     Button("Discard Session", role: .destructive) {
                         Task { await sessionManager.discardDraft() }

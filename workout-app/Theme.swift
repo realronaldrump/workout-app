@@ -1,56 +1,62 @@
 import SwiftUI
 import UIKit
 
-/// Centralized theme system — Brutalist / Neubrutalist.
-/// Bold borders, hard shadows, flat color blocks, Bebas Neue headings, sharp corners.
-/// Single universal theme. The splash screen is the north star.
+/// Centralized theme system — Warm Precision.
+/// Refined surfaces, layered shadows, Bebas Neue headings, generous radii.
+/// Premium athletic aesthetic with warmth and depth.
 enum Theme {
 
     // MARK: - Colors
 
     enum Colors {
-        // Brutalist palette: stark, high-contrast, flat.
-        // Electric blue brand moment from LaunchScreen remains the primary accent.
+        // Warm Precision palette: sophisticated, warm neutrals, real depth.
+        // Electric blue accent remains the hero color.
 
-        // Core surfaces — cool near-white, flat, no warmth
-        static let background = Color(uiColor: UIColor(hex: 0xF5F5F5))
+        // Core surfaces — warm ivory, layered depth
+        static let background = Color(uiColor: UIColor(hex: 0xF6F4F0))
         static let surface = Color(uiColor: UIColor(hex: 0xFFFFFF))
         static let elevated = Color(uiColor: UIColor(hex: 0xFFFFFF))
         static let cardBackground = Color(uiColor: UIColor(hex: 0xFFFFFF))
-        static let border = Color(uiColor: UIColor(hex: 0x1B1612))  // Near-black — bold brutalist borders
+        static let border = Color(uiColor: UIColor(hex: 0xE0DBD3))  // Warm subtle border
 
-        // Text hierarchy — high contrast
-        static let textPrimary = Color(uiColor: UIColor(hex: 0x1B1612))
-        static let textSecondary = Color(uiColor: UIColor(hex: 0x4A4A4A))
-        static let textTertiary = Color(uiColor: UIColor(hex: 0x7A7A7A))
+        // Text hierarchy — warm, refined contrast
+        static let textPrimary = Color(uiColor: UIColor(hex: 0x1A1714))
+        static let textSecondary = Color(uiColor: UIColor(hex: 0x6B6560))
+        static let textTertiary = Color(uiColor: UIColor(hex: 0xA39E99))
 
-        // Accent colors — vibrant and energetic
-        static let accent = Color(uiColor: UIColor(hex: 0x125BFF))  // Electric blue (matches LaunchBackground)
-        static let accentSecondary = Color(uiColor: UIColor(hex: 0xFF5A1F)) // Tangerine heat
+        // Accent colors — vibrant and confident
+        static let accent = Color(uiColor: UIColor(hex: 0x2563EB))  // Royal blue — deeper, richer
+        static let accentSecondary = Color(uiColor: UIColor(hex: 0xF97316)) // Warm amber-orange
         static let accentTertiary = Color(uiColor: UIColor(hex: 0x8B5CF6))  // Violet punch
 
-        // Semantic colors — bold, saturated
-        static let success = Color(uiColor: UIColor(hex: 0x22C55E))
-        static let warning = Color(uiColor: UIColor(hex: 0xFFB020))
-        static let error = Color(uiColor: UIColor(hex: 0xFF3B30))
+        // Semantic colors — clear, confident
+        static let success = Color(uiColor: UIColor(hex: 0x16A34A))
+        static let warning = Color(uiColor: UIColor(hex: 0xF59E0B))
+        static let error = Color(uiColor: UIColor(hex: 0xEF4444))
         static let info = accent
-        static let shadowOpacity: Double = 0.05
+        static let shadowOpacity: Double = 0.08
 
         // PR/Achievement
-        static let gold = Color(uiColor: UIColor(hex: 0xFFD166))
+        static let gold = Color(uiColor: UIColor(hex: 0xF59E0B))
 
         // Muscle groups — vibrant, distinguishable
-        static let chest = Color(uiColor: UIColor(hex: 0xFF2D55))
-        static let back = Color(uiColor: UIColor(hex: 0x125BFF))
-        static let shoulders = Color(uiColor: UIColor(hex: 0xFFB020))
+        static let chest = Color(uiColor: UIColor(hex: 0xEF4444))
+        static let back = Color(uiColor: UIColor(hex: 0x2563EB))
+        static let shoulders = Color(uiColor: UIColor(hex: 0xF59E0B))
         static let biceps = Color(uiColor: UIColor(hex: 0xA855F7))
         static let triceps = Color(uiColor: UIColor(hex: 0xEC4899))
-        static let quads = Color(uiColor: UIColor(hex: 0x22C55E))
+        static let quads = Color(uiColor: UIColor(hex: 0x16A34A))
         static let hamstrings = Color(uiColor: UIColor(hex: 0x14B8A6))
         static let glutes = Color(uiColor: UIColor(hex: 0x8B5CF6))
-        static let calves = Color(uiColor: UIColor(hex: 0x00D4FF))
-        static let core = Color(uiColor: UIColor(hex: 0xFFD166))
-        static let cardio = Color(uiColor: UIColor(hex: 0x00D4FF))
+        static let calves = Color(uiColor: UIColor(hex: 0x06B6D4))
+        static let core = Color(uiColor: UIColor(hex: 0xF59E0B))
+        static let cardio = Color(uiColor: UIColor(hex: 0x06B6D4))
+
+        // Surface tints — for section variety and colored backgrounds
+        static let accentTint = Color(uiColor: UIColor(hex: 0x2563EB)).opacity(0.06)
+        static let warmTint = Color(uiColor: UIColor(hex: 0xF97316)).opacity(0.05)
+        static let successTint = Color(uiColor: UIColor(hex: 0x16A34A)).opacity(0.06)
+        static let surfaceRaised = Color(uiColor: UIColor(hex: 0xFAF9F7))
 
         /// Lookup muscle group color by enum value.
         static func muscleGroupColor(for group: MuscleGroup) -> Color {
@@ -73,26 +79,26 @@ enum Theme {
     // MARK: - UIKit Colors (for UIAppearance)
 
     enum UIColors {
-        static let background = UIColor(hex: 0xF5F5F5)
+        static let background = UIColor(hex: 0xF6F4F0)
         static let surface = UIColor(hex: 0xFFFFFF)
         static let elevated = UIColor(hex: 0xFFFFFF)
         static let cardBackground = UIColor(hex: 0xFFFFFF)
-        static let border = UIColor(hex: 0x1B1612)
+        static let border = UIColor(hex: 0xE0DBD3)
 
-        static let textPrimary = UIColor(hex: 0x1B1612)
-        static let textSecondary = UIColor(hex: 0x4A4A4A)
-        static let textTertiary = UIColor(hex: 0x7A7A7A)
+        static let textPrimary = UIColor(hex: 0x1A1714)
+        static let textSecondary = UIColor(hex: 0x6B6560)
+        static let textTertiary = UIColor(hex: 0xA39E99)
 
-        static let accent = UIColor(hex: 0x125BFF)
-        static let accentSecondary = UIColor(hex: 0xFF5A1F)
+        static let accent = UIColor(hex: 0x2563EB)
+        static let accentSecondary = UIColor(hex: 0xF97316)
     }
 
     static func configureGlobalAppearance() {
-        // Navigation bar — opaque, Bebas Neue titles, dark shadow
+        // Navigation bar — clean, warm, refined
         let nav = UINavigationBarAppearance()
         nav.configureWithOpaqueBackground()
         nav.backgroundColor = UIColors.background
-        nav.shadowColor = UIColor(hex: 0x1B1612).withAlphaComponent(Colors.shadowOpacity)
+        nav.shadowColor = UIColors.border.withAlphaComponent(0.5)
 
         nav.titleTextAttributes = [
             .foregroundColor: UIColors.textPrimary,
@@ -128,7 +134,6 @@ enum Theme {
         navBar.tintColor = UIColors.accent
 
         // Belt-and-suspenders fallback for newer UIKit button containers.
-        // Keeps native nav bar buttons from rendering automatic capsule backgrounds.
         let clearImage = UIImage()
         let barButton = UIBarButtonItem.appearance(whenContainedInInstancesOf: [UINavigationBar.self])
         barButton.setBackgroundImage(clearImage, for: .normal, barMetrics: .default)
@@ -141,11 +146,11 @@ enum Theme {
         barButton.setTitleTextAttributes([.foregroundColor: UIColors.accent], for: .highlighted)
         barButton.setTitleTextAttributes([.foregroundColor: UIColors.textTertiary], for: .disabled)
 
-        // Tab bar — opaque, Bebas Neue labels, dark top border
+        // Tab bar — refined with subtle top separator
         let tab = UITabBarAppearance()
         tab.configureWithOpaqueBackground()
-        tab.backgroundColor = UIColors.background
-        tab.shadowColor = UIColor(hex: 0x1B1612)
+        tab.backgroundColor = UIColors.surface
+        tab.shadowColor = UIColors.border.withAlphaComponent(0.4)
 
         let stacked = tab.stackedLayoutAppearance
         stacked.normal.iconColor = UIColors.textTertiary
@@ -168,32 +173,32 @@ enum Theme {
     // MARK: - Typography
 
     enum Typography {
-        // Bebas Neue — used for screen titles, section headers, metric labels, and brand moments.
-        static let wordmarkHuge = Font.custom("BebasNeue-Regular", size: 52, relativeTo: .largeTitle)
-        static let wordmarkBig = Font.custom("BebasNeue-Regular", size: 36, relativeTo: .title)
-        static let screenTitle = Font.custom("BebasNeue-Regular", size: 40, relativeTo: .largeTitle)
-        static let sectionHeader = Font.custom("BebasNeue-Regular", size: 28, relativeTo: .title)
-        static let sectionHeader2 = Font.custom("BebasNeue-Regular", size: 24, relativeTo: .title2)
+        // Bebas Neue — brand headings, section titles, labels
+        static let wordmarkHuge = Font.custom("BebasNeue-Regular", size: 56, relativeTo: .largeTitle)
+        static let wordmarkBig = Font.custom("BebasNeue-Regular", size: 38, relativeTo: .title)
+        static let screenTitle = Font.custom("BebasNeue-Regular", size: 42, relativeTo: .largeTitle)
+        static let sectionHeader = Font.custom("BebasNeue-Regular", size: 26, relativeTo: .title)
+        static let sectionHeader2 = Font.custom("BebasNeue-Regular", size: 22, relativeTo: .title2)
         static let cardHeader = Font.custom("BebasNeue-Regular", size: 20, relativeTo: .title3)
-        static let metricLabel = Font.custom("BebasNeue-Regular", size: 14, relativeTo: .caption)
+        static let metricLabel = Font.custom("BebasNeue-Regular", size: 13, relativeTo: .caption)
         static let tabLabel = Font.custom("BebasNeue-Regular", size: 11, relativeTo: .caption2)
-        static let heroTitle = Font.custom("BebasNeue-Regular", size: 36, relativeTo: .title)
+        static let heroTitle = Font.custom("BebasNeue-Regular", size: 38, relativeTo: .title)
 
-        // System fonts — angular (no rounded design)
+        // System fonts — clean, modern
         static let largeTitle = Font.system(size: 36, weight: .heavy, design: .default)
         static let title = Font.system(size: 30, weight: .heavy, design: .default)
         static let title2 = Font.custom("BebasNeue-Regular", size: 24, relativeTo: .title2)
         static let title3 = Font.custom("BebasNeue-Regular", size: 20, relativeTo: .title3)
-        static let headline = Font.system(size: 18, weight: .bold, design: .default)
-        static let body = Font.system(size: 17, weight: .regular, design: .default)
-        static let bodyBold = Font.system(size: 17, weight: .semibold, design: .default)
-        static let callout = Font.system(size: 16, weight: .medium, design: .default)
-        static let subheadline = Font.system(size: 15, weight: .medium, design: .default)
+        static let headline = Font.system(size: 17, weight: .bold, design: .default)
+        static let body = Font.system(size: 16, weight: .regular, design: .default)
+        static let bodyBold = Font.system(size: 16, weight: .semibold, design: .default)
+        static let callout = Font.system(size: 15, weight: .medium, design: .default)
+        static let subheadline = Font.system(size: 14, weight: .medium, design: .default)
         static let footnote = Font.system(size: 13, weight: .medium, design: .default)
         static let caption = Font.system(size: 12, weight: .medium, design: .default)
         static let captionBold = Font.system(size: 12, weight: .bold, design: .default)
 
-        // Monospaced for numbers — raw data aesthetic
+        // Monospaced for numbers — precision data
         static let number = Font.system(size: 28, weight: .bold, design: .monospaced)
         static let numberLarge = Font.system(size: 42, weight: .bold, design: .monospaced)
         static let numberSmall = Font.system(size: 17, weight: .bold, design: .monospaced)
@@ -210,11 +215,13 @@ enum Theme {
     // MARK: - Animation
 
     enum Animation {
-        static let spring = SwiftUI.Animation.spring(response: 0.4, dampingFraction: 0.8)
-        static let quick = SwiftUI.Animation.easeOut(duration: 0.15)
-        static let smooth = SwiftUI.Animation.easeInOut(duration: 0.25)
-        static let slow = SwiftUI.Animation.easeInOut(duration: 0.4)
-        static let chartAppear = SwiftUI.Animation.spring(response: 0.6, dampingFraction: 0.7)
+        static let spring = SwiftUI.Animation.spring(response: 0.45, dampingFraction: 0.82)
+        static let quick = SwiftUI.Animation.easeOut(duration: 0.18)
+        static let smooth = SwiftUI.Animation.easeInOut(duration: 0.3)
+        static let slow = SwiftUI.Animation.easeInOut(duration: 0.45)
+        static let chartAppear = SwiftUI.Animation.spring(response: 0.65, dampingFraction: 0.72)
+        static let bouncy = SwiftUI.Animation.spring(response: 0.35, dampingFraction: 0.65)
+        static let gentleSpring = SwiftUI.Animation.spring(response: 0.55, dampingFraction: 0.88)
     }
 
     // MARK: - Spacing — generous whitespace
@@ -225,16 +232,17 @@ enum Theme {
         static let md: CGFloat = 14
         static let lg: CGFloat = 20
         static let xl: CGFloat = 28
-        static let xxl: CGFloat = 40
+        static let xxl: CGFloat = 44
     }
 
-    // MARK: - Corner Radius — sharp, angular
+    // MARK: - Corner Radius — generous, modern
 
     enum CornerRadius {
-        static let small: CGFloat = 2
-        static let medium: CGFloat = 4
-        static let large: CGFloat = 6
-        static let xlarge: CGFloat = 8
+        static let small: CGFloat = 8
+        static let medium: CGFloat = 12
+        static let large: CGFloat = 16
+        static let xlarge: CGFloat = 20
+        static let pill: CGFloat = 100
     }
 }
 
@@ -252,22 +260,28 @@ struct AdaptiveBackground: View {
 struct SplashBackground: View {
     var body: some View {
         ZStack {
-            // Flat electric blue — crisp, high-impact brand moment.
-            Theme.Colors.accent
+            // Rich gradient brand moment — deep royal blue shifting to lighter blue
+            LinearGradient(
+                colors: [
+                    Color(uiColor: UIColor(hex: 0x1E40AF)),
+                    Theme.Colors.accent,
+                    Color(uiColor: UIColor(hex: 0x3B82F6))
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
         }
         .ignoresSafeArea()
     }
 }
 
-// MARK: - Brutalist Card Modifier (Default Surface)
+// MARK: - Refined Card Modifier (Layered Shadow)
 
 struct SoftCardBackground: ViewModifier {
     var cornerRadius: CGFloat = Theme.CornerRadius.large
     var elevation: CGFloat = 1
 
     func body(content: Content) -> some View {
-        let shadowOffset = 3 * elevation
-
         content
             .background(
                 RoundedRectangle(cornerRadius: cornerRadius)
@@ -275,18 +289,31 @@ struct SoftCardBackground: ViewModifier {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: cornerRadius)
-                    .strokeBorder(Theme.Colors.border, lineWidth: 2)
+                    .strokeBorder(Theme.Colors.border.opacity(0.5), lineWidth: 1)
+            )
+            // Layered shadow system — inner soft + outer ambient
+            .shadow(
+                color: Color.black.opacity(0.03 * elevation),
+                radius: 1,
+                x: 0,
+                y: 1
             )
             .shadow(
-                color: Color.black.opacity(Theme.Colors.shadowOpacity),
-                radius: 0,
-                x: shadowOffset,
-                y: shadowOffset
+                color: Color.black.opacity(0.05 * elevation),
+                radius: 8 * elevation,
+                x: 0,
+                y: 4 * elevation
+            )
+            .shadow(
+                color: Color.black.opacity(0.02 * elevation),
+                radius: 20 * elevation,
+                x: 0,
+                y: 8 * elevation
             )
     }
 }
 
-// MARK: - Flat Card Modifier (replaces glassmorphism)
+// MARK: - Glass Background Modifier (Subtle Surface)
 
 struct GlassBackground: ViewModifier {
     var opacity: Double = 0.08
@@ -301,18 +328,24 @@ struct GlassBackground: ViewModifier {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: cornerRadius)
-                    .strokeBorder(Theme.Colors.border, lineWidth: 2)
+                    .strokeBorder(Theme.Colors.border.opacity(0.4), lineWidth: 1)
+            )
+            .shadow(
+                color: Color.black.opacity(0.04 * elevation),
+                radius: 6 * elevation,
+                x: 0,
+                y: 3 * elevation
             )
     }
 }
 
-// MARK: - Brutalist Button Chrome
+// MARK: - Refined Button Chrome
 
 struct BrutalistButtonChrome: ViewModifier {
     var fill: Color = Theme.Colors.surface
     var border: Color = Theme.Colors.border
     var cornerRadius: CGFloat = Theme.CornerRadius.large
-    var borderWidth: CGFloat = 2
+    var borderWidth: CGFloat = 1
     var shadowOffset: CGFloat = 2
 
     func body(content: Content) -> some View {
@@ -323,29 +356,63 @@ struct BrutalistButtonChrome: ViewModifier {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: cornerRadius)
-                    .strokeBorder(border, lineWidth: borderWidth)
+                    .strokeBorder(border.opacity(0.4), lineWidth: borderWidth)
             )
             .shadow(
-                color: Color.black.opacity(Theme.Colors.shadowOpacity),
-                radius: 0,
-                x: shadowOffset,
-                y: shadowOffset
+                color: Color.black.opacity(0.06),
+                radius: 4,
+                x: 0,
+                y: 2
             )
     }
 }
 
-/// Default interaction style for app controls. Keeps labels "unstyled" by platform
-/// while still providing consistent pressed/disabled feedback.
+/// Default interaction style for app controls.
+/// Provides consistent pressed/disabled feedback with smooth spring animation.
 struct AppInteractionButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .opacity(isEnabled ? 1.0 : 0.55)
-            .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
-            .animation(Theme.Animation.quick, value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
+            .animation(Theme.Animation.bouncy, value: configuration.isPressed)
             .animation(Theme.Animation.quick, value: isEnabled)
     }
+}
+
+// MARK: - Accent Gradient Helpers
+
+extension Theme {
+    /// Primary action gradient — hero buttons, CTAs
+    static let accentGradient = LinearGradient(
+        colors: [
+            Color(uiColor: UIColor(hex: 0x2563EB)),
+            Color(uiColor: UIColor(hex: 0x3B82F6))
+        ],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+
+    /// Warm gradient — achievements, highlights
+    static let warmGradient = LinearGradient(
+        colors: [
+            Color(uiColor: UIColor(hex: 0xF97316)),
+            Color(uiColor: UIColor(hex: 0xFBBF24))
+        ],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+
+    /// Success gradient — positive metrics
+    static let successGradient = LinearGradient(
+        colors: [
+            Color(uiColor: UIColor(hex: 0x16A34A)),
+            Color(uiColor: UIColor(hex: 0x22C55E))
+        ],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
 }
 
 extension View {
@@ -368,7 +435,7 @@ extension View {
         fill: Color = Theme.Colors.surface,
         border: Color = Theme.Colors.border,
         cornerRadius: CGFloat = Theme.CornerRadius.large,
-        borderWidth: CGFloat = 2,
+        borderWidth: CGFloat = 1,
         shadowOffset: CGFloat = 2
     ) -> some View {
         modifier(
@@ -386,6 +453,19 @@ extension View {
         self
             .padding(Theme.Spacing.lg)
             .softCard(elevation: 2)
+    }
+
+    /// Tinted section background — adds subtle color behind a content section
+    func tintedSection(_ color: Color, cornerRadius: CGFloat = Theme.CornerRadius.large) -> some View {
+        self
+            .background(
+                RoundedRectangle(cornerRadius: cornerRadius)
+                    .fill(color.opacity(0.06))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius)
+                    .strokeBorder(color.opacity(0.12), lineWidth: 1)
+            )
     }
 
     func animateOnAppear(delay: Double = 0) -> some View {
@@ -448,11 +528,35 @@ struct AnimateOnAppearModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .opacity(isVisible ? 1 : 0)
-            .offset(y: isVisible ? 0 : 6)
-            .animation(Theme.Animation.spring.delay(delay), value: isVisible)
+            .offset(y: isVisible ? 0 : 12)
+            .scaleEffect(isVisible ? 1 : 0.98)
+            .animation(Theme.Animation.gentleSpring.delay(delay), value: isVisible)
             .onAppear {
                 isVisible = true
             }
+    }
+}
+
+// MARK: - Staggered Appear Modifier
+
+struct StaggeredAppearModifier: ViewModifier {
+    let index: Int
+    let baseDelay: Double
+    @State private var isVisible = false
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(isVisible ? 1 : 0)
+            .offset(y: isVisible ? 0 : 16)
+            .scaleEffect(isVisible ? 1 : 0.96)
+            .animation(Theme.Animation.gentleSpring.delay(baseDelay + Double(index) * 0.06), value: isVisible)
+            .onAppear { isVisible = true }
+    }
+}
+
+extension View {
+    func staggeredAppear(index: Int, baseDelay: Double = 0.05) -> some View {
+        modifier(StaggeredAppearModifier(index: index, baseDelay: baseDelay))
     }
 }
 
@@ -462,21 +566,23 @@ struct PRMarkerView: View {
     let date: Date
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 5) {
             Image(systemName: "trophy.fill")
-                .font(.caption2)
+                .font(.system(size: 10, weight: .bold))
             Text("PR")
                 .font(Theme.Typography.metricLabel)
         }
-        .foregroundColor(Theme.Colors.gold)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(Theme.Colors.gold.opacity(0.15))
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                .strokeBorder(Theme.Colors.gold, lineWidth: 2)
+        .foregroundStyle(Theme.Colors.gold)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(
+            Capsule()
+                .fill(Theme.Colors.gold.opacity(0.12))
         )
-        .cornerRadius(Theme.CornerRadius.small)
+        .overlay(
+            Capsule()
+                .strokeBorder(Theme.Colors.gold.opacity(0.3), lineWidth: 1)
+        )
     }
 }
 

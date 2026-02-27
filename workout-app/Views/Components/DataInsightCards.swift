@@ -12,10 +12,11 @@ struct DataInsightCards: View {
         let items = buildInsightItems()
         if !items.isEmpty {
             VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-                Text("Data Insights")
-                    .font(Theme.Typography.sectionHeader)
-                    .foregroundColor(Theme.Colors.textPrimary)
-                    .tracking(1.0)
+                Text("DATA INSIGHTS")
+                    .font(Theme.Typography.metricLabel)
+                    .foregroundColor(Theme.Colors.textTertiary)
+                    .tracking(1.2)
+                    .padding(.leading, 4)
 
                 ForEach(items) { item in
                     DataInsightRow(item: item)
@@ -106,15 +107,11 @@ private struct DataInsightRow: View {
     private var content: some View {
         HStack(spacing: Theme.Spacing.md) {
             Image(systemName: item.icon)
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundColor(item.tint)
                 .frame(width: 30, height: 30)
-                .background(item.tint.opacity(0.12))
-                .overlay(
-                    RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                        .strokeBorder(item.tint.opacity(0.3), lineWidth: 1.5)
-                )
-                .cornerRadius(Theme.CornerRadius.small)
+                .background(item.tint.opacity(0.10))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.title)

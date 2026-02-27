@@ -35,12 +35,12 @@ struct BrutalistDateRangePickerRow: View {
                     .foregroundStyle(Theme.Colors.accentSecondary)
                     .frame(width: 36, height: 36)
                     .background(
-                        RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                            .fill(Theme.Colors.cardBackground)
+                        Circle()
+                            .fill(Theme.Colors.surfaceRaised)
                     )
                     .overlay(
-                        RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                            .strokeBorder(Theme.Colors.border, lineWidth: 2)
+                        Circle()
+                            .strokeBorder(Theme.Colors.border.opacity(0.5), lineWidth: 1)
                     )
             }
             .padding(.horizontal, Theme.Spacing.lg)

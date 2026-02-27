@@ -9,12 +9,13 @@ struct OverviewCardsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-            Text("Overview")
-                .font(Theme.Typography.sectionHeader)
-                .foregroundColor(Theme.Colors.textPrimary)
-                .tracking(1.0)
+            Text("OVERVIEW")
+                .font(Theme.Typography.metricLabel)
+                .foregroundColor(Theme.Colors.textTertiary)
+                .tracking(1.2)
+                .padding(.leading, 4)
 
-            LazyVGrid(columns: columns, spacing: Theme.Spacing.md) {
+            LazyVGrid(columns: columns, spacing: Theme.Spacing.sm) {
                 StatCard(
                     title: "Total Workouts",
                     value: "\(stats.totalWorkouts)",
@@ -119,7 +120,7 @@ struct StatCard: View {
         .padding(.horizontal, Theme.Spacing.lg)
         .padding(.vertical, Theme.Spacing.md)
         .frame(height: tileHeight)
-        .softCard(elevation: 2)
+        .softCard(elevation: 1)
         .opacity(isAppearing ? 1 : 0)
         .offset(y: isAppearing ? 0 : 8)
         .onAppear {

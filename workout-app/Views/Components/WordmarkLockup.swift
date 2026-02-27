@@ -9,14 +9,14 @@ struct WordmarkLockup: View {
     private var secondaryText: Color { isOnSplash ? Color.white.opacity(0.86) : Theme.Colors.textSecondary }
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 10) {
             Text("Davis's")
-                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                .font(.system(size: 14, weight: .semibold, design: .rounded))
                 .foregroundStyle(secondaryText)
                 .textCase(.uppercase)
-                .tracking(1.2)
+                .tracking(2.0)
 
-            VStack(spacing: 2) {
+            VStack(spacing: 0) {
                 ViewThatFits(in: .horizontal) {
                     Text("BIG BEAUTIFUL")
                         .font(Theme.Typography.wordmarkHuge)
@@ -24,7 +24,7 @@ struct WordmarkLockup: View {
                     Text("BIG BEAUTIFUL")
                         .font(.custom("BebasNeue-Regular", size: 44, relativeTo: .largeTitle))
                 }
-                .tracking(0.8)
+                .tracking(1.5)
                 .foregroundStyle(primaryText)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
@@ -36,7 +36,7 @@ struct WordmarkLockup: View {
                     Text("WORKOUT APP")
                         .font(.custom("BebasNeue-Regular", size: 30, relativeTo: .title))
                 }
-                .tracking(0.6)
+                .tracking(1.0)
                 .foregroundStyle(primaryText)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
@@ -47,6 +47,7 @@ struct WordmarkLockup: View {
                     .font(Theme.Typography.subheadline)
                     .foregroundStyle(secondaryText)
                     .multilineTextAlignment(.center)
+                    .padding(.top, 4)
             }
         }
         .accessibilityElement(children: .combine)
