@@ -184,38 +184,10 @@ struct BodyCompositionView: View {
                 .textCase(.uppercase)
                 .tracking(0.8)
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: Theme.Spacing.sm) {
-                    ForEach(HealthTimeRange.allCases) { range in
-                        let isSelected = selectedRange == range
-                        Button {
-                            if range == .custom {
-                                showingCustomRange = true
-                            } else {
-                                selectedRange = range
-                            }
-                        } label: {
-                            Text(range.title)
-                                .font(Theme.Typography.metricLabel)
-                                .textCase(.uppercase)
-                                .tracking(0.8)
-                                .foregroundStyle(isSelected ? .white : Theme.Colors.textSecondary)
-                                .padding(.horizontal, Theme.Spacing.md)
-                                .padding(.vertical, Theme.Spacing.sm)
-                                .frame(minHeight: 44)
-                                .background(
-                                    RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                                        .fill(isSelected ? Theme.Colors.accent : Color.clear)
-                                )
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                                        .strokeBorder(Theme.Colors.border, lineWidth: 2)
-                                )
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
+            TimeRangePillPicker(
+                options: HealthTimeRange.allCases.filter { $0 != .custom },
+                selected: $selectedRange
+            )
         }
     }
 

@@ -50,6 +50,53 @@ class WorkoutDataManager: ObservableObject {
         mergeSources()
     }
 
+    /// Centralized method for loading workout data from iCloud storage.
+    /// Previously duplicated in both HomeView and DashboardView.
+    /// Sets `isLoading` / `error` so views can show loading and error states.
+    func loadLatestWorkoutData(
+        iCloudManager: iCloudDocumentManager,
+        healthDataSnapshot: [WorkoutHealthData]
+    ) async {
+        let directoryURL = iCloudManager.storageSnapshot().url
+        isLoading = true
+        error = nil
+
+        let setsResult = await Task.detached(priority: .userInitiated) { [directoryURL] in
+            do {
+                guard let directoryURL else { return Result<[WorkoutSet], Error>.success([]) }
+
+                let importFiles = iCloudDocumentManager.listStrongImportFiles(in: directoryURL)
+                let files = (importFiles.isEmpty
+                    ? iCloudDocumentManager.listWorkoutFiles(in: directoryURL)
+                    : importFiles)
+                    .sorted { url1, url2 in
+                        let date1 = (try? url1.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? Date.distantPast
+                        let date2 = (try? url2.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? Date.distantPast
+                        return date1 > date2
+                    }
+
+                guard let latestFile = files.first else { return Result<[WorkoutSet], Error>.success([]) }
+                let data = try Data(contentsOf: latestFile)
+                let sets = try CSVParser.parseStrongWorkoutsCSV(from: data)
+                return Result<[WorkoutSet], Error>.success(sets)
+            } catch {
+                return Result<[WorkoutSet], Error>.failure(error)
+            }
+        }.value
+
+        switch setsResult {
+        case .success(let sets):
+            guard !sets.isEmpty else {
+                isLoading = false
+                return
+            }
+            await processImportedWorkoutSets(sets, healthDataSnapshot: healthDataSnapshot)
+        case .failure(let loadError):
+            isLoading = false
+            error = loadError.localizedDescription
+        }
+    }
+
     private func mergeSources() {
         workouts = (importedWorkouts + loggedWorkouts).sorted { $0.date > $1.date }
     }

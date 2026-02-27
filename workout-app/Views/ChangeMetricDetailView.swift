@@ -257,7 +257,7 @@ struct ChangeMetricDetailView: View {
                                 Text(workout.name)
                                     .font(Theme.Typography.headline)
                                     .foregroundStyle(Theme.Colors.textPrimary)
-                                Text("\(formatVolume(workout.totalVolume)) volume")
+                                Text("\(SharedFormatters.volumePrecise(workout.totalVolume)) volume")
                                     .font(Theme.Typography.caption)
                                     .foregroundStyle(Theme.Colors.textSecondary)
                             }
@@ -298,7 +298,7 @@ struct ChangeMetricDetailView: View {
                                     Text(exercise.name)
                                         .font(Theme.Typography.headline)
                                         .foregroundStyle(Theme.Colors.textPrimary)
-                                    Text(formatVolume(exercise.volume))
+                                    Text(SharedFormatters.volumePrecise(exercise.volume))
                                         .font(Theme.Typography.caption)
                                         .foregroundStyle(Theme.Colors.textSecondary)
                                 }
@@ -338,7 +338,7 @@ struct ChangeMetricDetailView: View {
                                 Text(item.workout.name)
                                     .font(Theme.Typography.headline)
                                     .foregroundStyle(Theme.Colors.textPrimary)
-                                Text(formatDurationMinutes(item.minutes))
+                                Text(SharedFormatters.durationMinutes(item.minutes))
                                     .font(Theme.Typography.caption)
                                     .foregroundStyle(Theme.Colors.textSecondary)
                             }
@@ -401,9 +401,9 @@ struct ChangeMetricDetailView: View {
         case "Sessions":
             return "\(sign)\(Int(metric.delta))"
         case "Total Volume":
-            return "\(sign)\(formatVolume(abs(metric.delta)))"
+            return "\(sign)\(SharedFormatters.volumePrecise(abs(metric.delta)))"
         case "Avg Duration":
-            return "\(sign)\(formatDurationMinutes(abs(metric.delta)))"
+            return "\(sign)\(SharedFormatters.durationMinutes(abs(metric.delta)))"
         default:
             return "\(sign)\(String(format: "%.1f", metric.delta))"
         }
@@ -418,9 +418,9 @@ struct ChangeMetricDetailView: View {
         case "Sessions":
             return "\(Int(value))"
         case "Total Volume":
-            return formatVolume(value)
+            return SharedFormatters.volumePrecise(value)
         case "Avg Duration":
-            return formatDurationMinutes(value)
+            return SharedFormatters.durationMinutes(value)
         default:
             return String(format: "%.1f", value)
         }
@@ -431,29 +431,12 @@ struct ChangeMetricDetailView: View {
         case "Sessions":
             return "\(Int(value))"
         case "Total Volume":
-            return formatVolume(value)
+            return SharedFormatters.volumePrecise(value)
         case "Avg Duration":
-            return formatDurationMinutes(value)
+            return SharedFormatters.durationMinutes(value)
         default:
             return String(format: "%.1f", value)
         }
     }
 
-    private func formatVolume(_ volume: Double) -> String {
-        if volume >= 1_000_000 {
-            return String(format: "%.1fM", volume / 1_000_000)
-        }
-        if volume >= 1000 {
-            return String(format: "%.1fk", volume / 1000)
-        }
-        return String(format: "%.0f", volume)
-    }
-
-    private func formatDurationMinutes(_ minutes: Double) -> String {
-        let value = Int(round(minutes))
-        if value >= 60 {
-            return "\(value / 60)h \(value % 60)m"
-        }
-        return "\(value)m"
-    }
 }

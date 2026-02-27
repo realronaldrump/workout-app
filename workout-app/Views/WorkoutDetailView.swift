@@ -81,7 +81,7 @@ struct WorkoutDetailView: View {
                                     Text("Total Volume")
                                         .font(Theme.Typography.caption)
                                         .foregroundColor(Theme.Colors.textTertiary)
-                                    Text(formatVolume(workout.totalVolume))
+                                    Text(SharedFormatters.volumeWithUnit(workout.totalVolume))
                                         .font(Theme.Typography.metric)
                                         .foregroundColor(Theme.Colors.textPrimary)
                                 }
@@ -301,12 +301,6 @@ struct WorkoutDetailView: View {
         }
     }
 
-    private func formatVolume(_ volume: Double) -> String {
-        if volume >= 1000 {
-            return String(format: "%.1fk lbs", volume / 1000)
-        }
-        return "\(Int(volume)) lbs"
-    }
 }
 
 struct ExerciseCard: View {
@@ -350,7 +344,7 @@ struct ExerciseCard: View {
                                 if isCardio {
                                     cardioSummaryChips
                                 } else {
-                                    Label(formatVolume(exercise.totalVolume), systemImage: "scalemass")
+                                    Label(SharedFormatters.volumeCompact(exercise.totalVolume), systemImage: "scalemass")
                                         .font(Theme.Typography.caption)
                                         .foregroundColor(Theme.Colors.textSecondary)
                                 }
@@ -414,6 +408,7 @@ struct ExerciseCard: View {
                 onQuickStart?(exercise.name)
             }
         }
+        .accessibilityHint("Long press for more options: View History, Quick Start")
     }
 
     private var cardioSummaryChips: some View {
@@ -454,12 +449,6 @@ struct ExerciseCard: View {
         return parts.isEmpty ? "—" : parts.joined(separator: " | ")
     }
 
-    private func formatVolume(_ volume: Double) -> String {
-        if volume >= 1000 {
-            return String(format: "%.1fk", volume / 1000)
-        }
-        return "\(Int(volume))"
-    }
 }
 
 struct SyncPulse: View {

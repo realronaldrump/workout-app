@@ -51,6 +51,23 @@ enum Theme {
         static let calves = Color(uiColor: UIColor(hex: 0x00D4FF))
         static let core = Color(uiColor: UIColor(hex: 0xFFD166))
         static let cardio = Color(uiColor: UIColor(hex: 0x00D4FF))
+
+        /// Lookup muscle group color by enum value.
+        static func muscleGroupColor(for group: MuscleGroup) -> Color {
+            switch group {
+            case .chest: return chest
+            case .back: return back
+            case .shoulders: return shoulders
+            case .biceps: return biceps
+            case .triceps: return triceps
+            case .quads: return quads
+            case .hamstrings: return hamstrings
+            case .glutes: return glutes
+            case .calves: return calves
+            case .core: return core
+            case .cardio: return cardio
+            }
+        }
     }
 
     // MARK: - UIKit Colors (for UIAppearance)
@@ -184,6 +201,10 @@ enum Theme {
         static let metric = Font.system(size: 30, weight: .bold, design: .monospaced)
         static let condensed = Font.system(size: 16, weight: .semibold, design: .default)
         static let microcopy = Font.system(size: 13, weight: .regular, design: .default)
+
+        // Mono helpers for data-dense UI
+        static let monoMedium = Font.system(size: 18, weight: .bold, design: .monospaced)
+        static let monoSmall = Font.system(size: 14, weight: .semibold, design: .monospaced)
     }
 
     // MARK: - Animation

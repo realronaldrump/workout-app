@@ -1,6 +1,8 @@
 import Foundation
 import SwiftUI
 
+// swiftlint:disable type_body_length file_length
+
 struct ExportWorkoutsView: View {
     @ObservedObject var dataManager: WorkoutDataManager
     @ObservedObject var iCloudManager: iCloudDocumentManager
@@ -1508,3 +1510,5 @@ private struct ExportCustomRangeSheet: View {
         }
     }
 }
+
+// swiftlint:enable type_body_length file_length

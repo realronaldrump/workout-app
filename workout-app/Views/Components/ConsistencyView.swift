@@ -451,7 +451,7 @@ struct CalendarHeatmap: View {
                     .frame(width: 12, height: 12)
             }
 
-            Text(formatVolume(maxVolume))
+            Text(SharedFormatters.volumeCompact(maxVolume))
                 .font(.caption2)
                 .foregroundColor(Theme.Colors.textTertiary)
         }
@@ -508,12 +508,4 @@ struct CalendarHeatmap: View {
         dailyVolume.values.max() ?? 0
     }
 
-    private func formatVolume(_ volume: Double) -> String {
-        if volume >= 1000000 {
-            return String(format: "%.1fM", volume / 1000000)
-        } else if volume >= 1000 {
-            return String(format: "%.0fk", volume / 1000)
-        }
-        return String(format: "%.0f", volume)
-    }
 }

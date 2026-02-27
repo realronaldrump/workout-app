@@ -1,9 +1,8 @@
 import SwiftUI
 
 enum AppTab: String, CaseIterable, Hashable {
-    case home
+    case dashboard
     case health
-    case progress
     case history
     case profile
 }
@@ -14,10 +13,11 @@ struct MainTabView: View {
     @StateObject private var logStore = WorkoutLogStore()
     @StateObject private var annotationsManager: WorkoutAnnotationsManager
     @StateObject private var gymProfilesManager: GymProfilesManager
+    @StateObject private var insightsEngine: InsightsEngine
     @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
     @State private var showingOnboarding = false
     @State private var pendingOnboarding = false
-    @State private var selectedTab: AppTab = .home
+    @State private var selectedTab: AppTab = .dashboard
     @State private var showSplash = true
     @EnvironmentObject private var sessionManager: WorkoutSessionManager
     @EnvironmentObject private var healthManager: HealthKitManager
@@ -25,8 +25,18 @@ struct MainTabView: View {
 
     init() {
         let annotations = WorkoutAnnotationsManager()
+        let gyms = GymProfilesManager(annotationsManager: annotations)
+        let dataManager = WorkoutDataManager()
         _annotationsManager = StateObject(wrappedValue: annotations)
-        _gymProfilesManager = StateObject(wrappedValue: GymProfilesManager(annotationsManager: annotations))
+        _gymProfilesManager = StateObject(wrappedValue: gyms)
+        _dataManager = StateObject(wrappedValue: dataManager)
+        _insightsEngine = StateObject(
+            wrappedValue: InsightsEngine(
+                dataManager: dataManager,
+                annotationsProvider: { annotations.annotations },
+                gymNameProvider: { gyms.gymNameSnapshot() }
+            )
+        )
     }
 
     var body: some View {
@@ -42,9 +52,9 @@ struct MainTabView: View {
                 )
             }
             .tabItem {
-                Label("Home", systemImage: "house.fill")
+                Label("Dashboard", systemImage: "chart.bar.fill")
             }
-            .tag(AppTab.home)
+            .tag(AppTab.dashboard)
 
             NavigationStack {
                 HealthHubView()
@@ -53,19 +63,6 @@ struct MainTabView: View {
                 Label("Health", systemImage: "heart.fill")
             }
             .tag(AppTab.health)
-
-            NavigationStack {
-                DashboardView(
-                    dataManager: dataManager,
-                    iCloudManager: iCloudManager,
-                    annotationsManager: annotationsManager,
-                    gymProfilesManager: gymProfilesManager
-                )
-            }
-            .tabItem {
-                Label("Progress", systemImage: "chart.line.uptrend.xyaxis")
-            }
-            .tag(AppTab.progress)
 
             NavigationStack {
                 WorkoutHistoryView(workouts: dataManager.workouts, showsBackButton: false)
@@ -88,6 +85,7 @@ struct MainTabView: View {
         .environmentObject(logStore)
         .environmentObject(annotationsManager)
         .environmentObject(gymProfilesManager)
+        .environmentObject(insightsEngine)
         .tint(Theme.Colors.accent)
         .overlay {
             if showSplash {
@@ -104,6 +102,7 @@ struct MainTabView: View {
         }
         .onChange(of: dataManager.workouts.count) { _, _ in
             refreshOnboardingState()
+            Task { await insightsEngine.generateInsights() }
         }
         .fullScreenCover(isPresented: $showingOnboarding) {
             OnboardingView(

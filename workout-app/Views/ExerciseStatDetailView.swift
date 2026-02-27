@@ -244,7 +244,7 @@ struct ExerciseStatDetailView: View {
         case .maxWeight:
             return formatWeight(value)
         case .maxVolume:
-            return formatVolumeCompact(value)
+            return SharedFormatters.volumeCompact(value)
         case .avgReps:
             return String(format: "%.0f", value)
         }
@@ -257,7 +257,7 @@ struct ExerciseStatDetailView: View {
         case .maxWeight:
             return "\(formatWeight(value)) lbs"
         case .maxVolume:
-            return "\(formatVolumeCompact(value)) lbs"
+            return "\(SharedFormatters.volumeCompact(value)) lbs"
         case .avgReps:
             return String(format: "%.1f", value)
         }
@@ -268,16 +268,6 @@ struct ExerciseStatDetailView: View {
             return "\(Int(value.rounded()))"
         }
         return String(format: "%.1f", value)
-    }
-
-    private func formatVolumeCompact(_ volume: Double) -> String {
-        if volume >= 1_000_000 {
-            return String(format: "%.1fM", volume / 1_000_000)
-        }
-        if volume >= 1000 {
-            return String(format: "%.1fk", volume / 1000)
-        }
-        return "\(Int(volume))"
     }
 
     private func average(_ values: [Double]) -> Double? {

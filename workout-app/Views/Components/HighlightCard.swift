@@ -62,6 +62,10 @@ struct HighlightCardView: View {
         .padding(Theme.Spacing.lg)
         .frame(maxWidth: .infinity, alignment: .leading)
         .softCard(elevation: 2)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(item.title): \(item.value)\(item.subtitle.map { ", \($0)" } ?? "")")
+        .accessibilityAddTraits(item.action != nil ? .isButton : [])
+        .accessibilityHint(item.action != nil ? "Double tap for details" : "")
     }
 }
 

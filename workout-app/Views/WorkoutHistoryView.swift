@@ -145,6 +145,9 @@ struct WorkoutHistoryRow: View {
     @EnvironmentObject var healthManager: HealthKitManager
     @EnvironmentObject var annotationsManager: WorkoutAnnotationsManager
     @EnvironmentObject var gymProfilesManager: GymProfilesManager
+    @EnvironmentObject var sessionManager: WorkoutSessionManager
+    @EnvironmentObject var dataManager: WorkoutDataManager
+    @AppStorage("weightIncrement") private var weightIncrement: Double = 2.5
 
     var body: some View {
         NavigationLink(destination: WorkoutDetailView(workout: workout)) {
@@ -156,6 +159,25 @@ struct WorkoutHistoryRow: View {
                             .foregroundStyle(Theme.Colors.textPrimary)
 
                         Spacer()
+
+                        // Repeat workout button
+                        Button {
+                            Haptics.selection()
+                            repeatThisWorkout()
+                        } label: {
+                            Image(systemName: "arrow.counterclockwise")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundColor(Theme.Colors.accent)
+                                .frame(width: 30, height: 30)
+                                .background(Theme.Colors.accent.opacity(0.1))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                                        .strokeBorder(Theme.Colors.accent.opacity(0.3), lineWidth: 1.5)
+                                )
+                                .cornerRadius(Theme.CornerRadius.small)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Repeat \(workout.name)")
 
                         Text(workout.date.formatted(date: .omitted, time: .shortened))
                             .font(Theme.Typography.caption)
@@ -171,7 +193,7 @@ struct WorkoutHistoryRow: View {
                     HStack(spacing: 12) {
                         metric(workout.duration, systemImage: "clock")
                         metric("\(workout.exercises.count) exercises", systemImage: "figure.strengthtraining.traditional")
-                        metric(formatVolume(workout.totalVolume), systemImage: "scalemass")
+                        metric(SharedFormatters.volumeWithUnit(workout.totalVolume), systemImage: "scalemass")
                     }
                     .font(Theme.Typography.captionBold)
                     .padding(.top, 4)
@@ -190,6 +212,13 @@ struct WorkoutHistoryRow: View {
             }
             .padding(Theme.Spacing.lg)
             .softCard(elevation: 2)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(
+                "\(workout.name), \(workout.date.formatted(date: .abbreviated, time: .shortened)), "
+                + "\(workout.duration), \(workout.exercises.count) exercises, "
+                + "\(SharedFormatters.volumeWithUnit(workout.totalVolume))"
+            )
+            .accessibilityHint("Double tap for workout details")
         }
         .buttonStyle(PlainButtonStyle())
     }
@@ -206,13 +235,6 @@ struct WorkoutHistoryRow: View {
         }
     }
 
-    private func formatVolume(_ volume: Double) -> String {
-        if volume >= 1000 {
-            return String(format: "%.1fk lbs", volume / 1000)
-        }
-        return "\(Int(volume)) lbs"
-    }
-
     private var gymLabel: String {
         let gymId = annotationsManager.annotation(for: workout.id)?.gymProfileId
         if let name = gymProfilesManager.gymName(for: gymId) {
@@ -227,5 +249,40 @@ struct WorkoutHistoryRow: View {
             return .unassigned
         }
         return gymProfilesManager.gymName(for: gymId) == nil ? .deleted : .assigned
+    }
+
+    private func repeatThisWorkout() {
+        let exercises = workout.exercises.map { $0.name }
+        let gymId = annotationsManager.annotation(for: workout.id)?.gymProfileId
+
+        sessionManager.startSession(
+            name: workout.name,
+            gymProfileId: gymId
+        )
+
+        let increment = weightIncrement > 0 ? weightIncrement : 2.5
+        for exerciseName in exercises {
+            let tags = ExerciseMetadataManager.shared.resolvedTags(for: exerciseName)
+            let isCardio = tags.contains(where: { $0.builtInGroup == .cardio })
+
+            if isCardio {
+                sessionManager.addExercise(name: exerciseName)
+            } else {
+                let history = dataManager.getExerciseHistory(for: exerciseName)
+                let rec = ExerciseRecommendationEngine.recommend(
+                    exerciseName: exerciseName,
+                    history: history,
+                    weightIncrement: increment
+                )
+                let midReps = (rec.repRange.lowerBound + rec.repRange.upperBound) / 2
+                sessionManager.addExercise(
+                    name: exerciseName,
+                    initialSetPrefill: SetPrefill(weight: rec.suggestedWeight, reps: midReps)
+                )
+            }
+        }
+
+        sessionManager.isPresentingSessionUI = true
+        Haptics.notify(.success)
     }
 }

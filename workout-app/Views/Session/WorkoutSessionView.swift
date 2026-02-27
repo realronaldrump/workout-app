@@ -1,5 +1,6 @@
 import SwiftUI
 
+// swiftlint:disable file_length
 struct WorkoutSessionView: View {
     @Environment(\.dismiss) private var dismiss
 
@@ -16,6 +17,7 @@ struct WorkoutSessionView: View {
     @State private var showingExercisePicker = false
     @State private var showingFinishSheet = false
     @State private var showingDiscardAlert = false
+    @State private var showingRestSettings = false
     @State private var finishErrorMessage: String?
     @State private var isFinishing = false
 
@@ -30,6 +32,11 @@ struct WorkoutSessionView: View {
                     ScrollView(showsIndicators: false) {
                         VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
                             headerCard(session)
+
+                            // Rest timer
+                            if sessionManager.restTimerIsActive {
+                                restTimerCard
+                            }
 
                             if !muscleGroupSuggestions(for: session).isEmpty {
                                 muscleSuggestionSection(session)
@@ -116,7 +123,7 @@ struct WorkoutSessionView: View {
             }
             .sheet(isPresented: $showingExercisePicker) {
                 ExercisePickerView { selected in
-                    sessionManager.addExercise(name: selected)
+                    addExerciseWithPrefill(name: selected)
                 }
             }
             .sheet(isPresented: $showingFinishSheet) {
@@ -140,6 +147,11 @@ struct WorkoutSessionView: View {
                 }
             } message: {
                 Text("This will permanently delete your in-progress session and all sets.")
+            }
+            .sheet(isPresented: $showingRestSettings) {
+                restTimerSettingsSheet
+                    .presentationDetents([.height(280)])
+                    .presentationDragIndicator(.visible)
             }
             .onAppear {
                 // Keep increment options aligned with pounds-only behavior.
@@ -179,7 +191,7 @@ struct WorkoutSessionView: View {
             if let session = sessionManager.activeSession {
                 TimelineView(.periodic(from: Date(), by: 1.0)) { context in
                     let elapsed = max(0, context.date.timeIntervalSince(session.startedAt))
-                    Text(formatElapsed(elapsed))
+                    Text(SharedFormatters.elapsed(elapsed))
                         .font(Theme.Typography.captionBold)
                         .monospacedDigit()
                         .foregroundStyle(Theme.Colors.textSecondary)
@@ -232,6 +244,173 @@ struct WorkoutSessionView: View {
         return (inc > 0 && isAllowed) ? inc : 2.5
     }
 
+    // MARK: - Rest Timer Card
+
+    private var restTimerCard: some View {
+        let remaining = sessionManager.restTimerSecondsRemaining
+        let total = sessionManager.restTimerDuration
+        let progress = total > 0 ? Double(remaining) / Double(total) : 0
+
+        return HStack(spacing: Theme.Spacing.md) {
+            ZStack {
+                Circle()
+                    .stroke(Theme.Colors.border, lineWidth: 3)
+                    .frame(width: 48, height: 48)
+                Circle()
+                    .trim(from: 0, to: progress)
+                    .stroke(
+                        remaining <= 10 ? Theme.Colors.accentSecondary : Theme.Colors.accent,
+                        style: StrokeStyle(lineWidth: 3, lineCap: .round)
+                    )
+                    .frame(width: 48, height: 48)
+                    .rotationEffect(.degrees(-90))
+                    .animation(.linear(duration: 1), value: remaining)
+                Text("\(remaining)")
+                    .font(Theme.Typography.monoMedium)
+                    .foregroundColor(remaining <= 10 ? Theme.Colors.accentSecondary : Theme.Colors.accent)
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("REST")
+                    .font(Theme.Typography.captionBold)
+                    .foregroundColor(Theme.Colors.textSecondary)
+                    .tracking(1.2)
+                Text(restTimerFormatted(remaining))
+                    .font(Theme.Typography.monoMedium)
+                    .foregroundColor(Theme.Colors.textPrimary)
+            }
+
+            Spacer()
+
+            HStack(spacing: Theme.Spacing.sm) {
+                Button {
+                    sessionManager.setRestTimerDuration(sessionManager.restTimerDuration + 30)
+                    sessionManager.restTimerSecondsRemaining += 30
+                    Haptics.selection()
+                } label: {
+                    Text("+30s")
+                        .font(Theme.Typography.captionBold)
+                        .foregroundColor(Theme.Colors.accent)
+                        .padding(.horizontal, Theme.Spacing.sm)
+                        .padding(.vertical, 6)
+                        .background(Theme.Colors.surface.opacity(0.35))
+                        .cornerRadius(Theme.CornerRadius.large)
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    showingRestSettings = true
+                    Haptics.selection()
+                } label: {
+                    Image(systemName: "gear")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                        .frame(width: 28, height: 28)
+                        .background(Theme.Colors.surface.opacity(0.35))
+                        .cornerRadius(Theme.CornerRadius.small)
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    sessionManager.cancelRestTimer()
+                    Haptics.selection()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 20))
+                        .foregroundStyle(Theme.Colors.textTertiary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(Theme.Spacing.lg)
+        .softCard(elevation: 2)
+    }
+
+    private var restTimerSettingsSheet: some View {
+        let presets = [30, 60, 90, 120, 180, 300]
+
+        return VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
+            Text("Rest Timer")
+                .font(Theme.Typography.title3)
+                .foregroundColor(Theme.Colors.textPrimary)
+
+            Text("Default rest between sets")
+                .font(Theme.Typography.caption)
+                .foregroundColor(Theme.Colors.textSecondary)
+
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: Theme.Spacing.sm), count: 3), spacing: Theme.Spacing.sm) {
+                ForEach(presets, id: \.self) { seconds in
+                    Button {
+                        sessionManager.setRestTimerDuration(seconds)
+                        Haptics.selection()
+                    } label: {
+                        Text(restTimerFormatted(seconds))
+                            .font(Theme.Typography.headline)
+                            .foregroundColor(
+                                sessionManager.restTimerDuration == seconds
+                                    ? .white
+                                    : Theme.Colors.textPrimary
+                            )
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, Theme.Spacing.md)
+                            .background(
+                                RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
+                                    .fill(
+                                        sessionManager.restTimerDuration == seconds
+                                            ? Theme.Colors.accent
+                                            : Theme.Colors.surface.opacity(0.35)
+                                    )
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
+                                    .strokeBorder(
+                                        sessionManager.restTimerDuration == seconds
+                                            ? Theme.Colors.accent
+                                            : Theme.Colors.border,
+                                        lineWidth: 2
+                                    )
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(Theme.Spacing.xl)
+        .background(Theme.Colors.background)
+    }
+
+    private func restTimerFormatted(_ seconds: Int) -> String {
+        let minutes = seconds / 60
+        let remainingSeconds = seconds % 60
+        return remainingSeconds > 0
+            ? "\(minutes):\(String(format: "%02d", remainingSeconds))"
+            : "\(minutes):00"
+    }
+
+    // MARK: - Auto-Prefill Helper
+
+    private func addExerciseWithPrefill(name: String) {
+        let tags = ExerciseMetadataManager.shared.resolvedTags(for: name)
+        let isCardio = tags.contains(where: { $0.builtInGroup == .cardio })
+
+        if isCardio {
+            sessionManager.addExercise(name: name)
+        } else {
+            let history = dataManager.getExerciseHistory(for: name)
+            let rec = ExerciseRecommendationEngine.recommend(
+                exerciseName: name,
+                history: history,
+                weightIncrement: resolvedWeightIncrement
+            )
+            let midReps = (rec.repRange.lowerBound + rec.repRange.upperBound) / 2
+            sessionManager.addExercise(
+                name: name,
+                initialSetPrefill: SetPrefill(weight: rec.suggestedWeight, reps: midReps)
+            )
+        }
+        Haptics.selection()
+    }
+
     private var canFinishSession: Bool {
         guard let session = sessionManager.activeSession else { return false }
 
@@ -267,7 +446,7 @@ struct WorkoutSessionView: View {
     private func headerCard(_ session: ActiveWorkoutSession) -> some View {
         TimelineView(.periodic(from: Date(), by: 1.0)) { context in
             let elapsed = max(0, context.date.timeIntervalSince(session.startedAt))
-            let elapsedLabel = formatElapsed(elapsed)
+            let elapsedLabel = SharedFormatters.elapsed(elapsed)
 
             return VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                 HStack(alignment: .top) {
@@ -342,8 +521,7 @@ struct WorkoutSessionView: View {
                     MuscleSuggestionCard(
                         suggestion: suggestion,
                         onAddExercise: { name in
-                            sessionManager.addExercise(name: name)
-                            Haptics.selection()
+                            addExerciseWithPrefill(name: name)
                         },
                         onDismiss: {
                             sessionManager.dismissMuscleGroupSuggestion(suggestion.group)
@@ -476,17 +654,6 @@ struct WorkoutSessionView: View {
         return gymId == nil ? "Unassigned" : "Deleted gym"
     }
 
-    private func formatElapsed(_ interval: TimeInterval) -> String {
-        let totalSeconds = Int(interval)
-        let hours = totalSeconds / 3600
-        let minutes = (totalSeconds % 3600) / 60
-        let seconds = totalSeconds % 60
-
-        if hours > 0 {
-            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
-        }
-        return String(format: "%d:%02d", minutes, seconds)
-    }
 }
 
 // MARK: - Exercise Card
@@ -586,12 +753,15 @@ private struct SessionExerciseCard: View {
             }
 
             VStack(spacing: Theme.Spacing.sm) {
-                ForEach(exercise.sets.sorted { $0.order < $1.order }) { set in
+                let sortedSets = exercise.sets.sorted { $0.order < $1.order }
+                ForEach(Array(sortedSets.enumerated()), id: \.element.id) { index, set in
                     SessionSetRow(
                         exerciseId: exercise.id,
                         exerciseName: exercise.name,
                         set: set,
+                        previousSet: index > 0 ? sortedSets[index - 1] : nil,
                         weightUnit: weightUnit,
+                        weightIncrement: weightIncrement,
                         cardioConfig: cardioConfig
                     )
                 }
@@ -675,7 +845,9 @@ private struct SessionSetRow: View {
     let exerciseId: UUID
     let exerciseName: String
     let set: ActiveSet
+    let previousSet: ActiveSet?
     let weightUnit: String
+    let weightIncrement: Double
     let cardioConfig: ResolvedCardioMetricConfiguration?
 
     @EnvironmentObject private var sessionManager: WorkoutSessionManager
@@ -697,13 +869,17 @@ private struct SessionSetRow: View {
         exerciseId: UUID,
         exerciseName: String,
         set: ActiveSet,
+        previousSet: ActiveSet?,
         weightUnit: String,
+        weightIncrement: Double,
         cardioConfig: ResolvedCardioMetricConfiguration?
     ) {
         self.exerciseId = exerciseId
         self.exerciseName = exerciseName
         self.set = set
+        self.previousSet = previousSet
         self.weightUnit = weightUnit
+        self.weightIncrement = weightIncrement
         self.cardioConfig = cardioConfig
         _weightText = State(initialValue: set.weight.map(WorkoutValueFormatter.weightText) ?? "")
         _repsText = State(initialValue: set.reps.map { String($0) } ?? "")
@@ -712,51 +888,72 @@ private struct SessionSetRow: View {
     }
 
     var body: some View {
-        HStack(spacing: Theme.Spacing.sm) {
-            Button {
-                sessionManager.toggleSetComplete(exerciseId: exerciseId, setId: set.id)
-                Haptics.selection()
-            } label: {
-                Image(systemName: set.isCompleted ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(set.isCompleted ? Theme.Colors.success : Theme.Colors.textTertiary)
-            }
-            .buttonStyle(.plain)
-
-            Text("#\(set.order)")
-                .font(Theme.Typography.captionBold)
-                .foregroundColor(Theme.Colors.textSecondary)
-                .frame(width: 34, alignment: .leading)
-                .monospacedDigit()
-
-            if let cardioConfig {
-                cardioField(kind: cardioConfig.primary, countLabel: cardioConfig.countLabel)
-                cardioField(kind: cardioConfig.secondary, countLabel: cardioConfig.countLabel)
-            } else {
-                field(title: weightUnit, text: $weightText, keyboard: .decimalPad, focus: .weight)
-                    .onChange(of: weightText) { _, _ in
-                        commit()
-                    }
-
-                field(title: "reps", text: $repsText, keyboard: .numberPad, focus: .reps)
-                    .onChange(of: repsText) { _, _ in
-                        commit()
-                    }
-            }
-
-            Menu {
-                Button("Delete Set", role: .destructive) {
-                    sessionManager.deleteSet(exerciseId: exerciseId, setId: set.id)
+        VStack(spacing: 0) {
+            HStack(spacing: Theme.Spacing.sm) {
+                // Completion toggle
+                Button {
+                    sessionManager.toggleSetComplete(exerciseId: exerciseId, setId: set.id)
+                    Haptics.selection()
+                } label: {
+                    Image(systemName: set.isCompleted ? "checkmark.circle.fill" : "circle")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(set.isCompleted ? Theme.Colors.success : Theme.Colors.textTertiary)
                 }
-            } label: {
-                Image(systemName: "ellipsis")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(Theme.Colors.textTertiary)
-                    .frame(width: 28, height: 28)
-                    .background(Theme.Colors.surface.opacity(0.35))
-                    .cornerRadius(Theme.CornerRadius.small)
+                .buttonStyle(.plain)
+
+                Text("#\(set.order)")
+                    .font(Theme.Typography.captionBold)
+                    .foregroundColor(Theme.Colors.textSecondary)
+                    .frame(width: 28, alignment: .leading)
+                    .monospacedDigit()
+
+                if let cardioConfig {
+                    cardioField(kind: cardioConfig.primary, countLabel: cardioConfig.countLabel)
+                    cardioField(kind: cardioConfig.secondary, countLabel: cardioConfig.countLabel)
+                } else {
+                    // Weight field with steppers
+                    stepperField(
+                        title: weightUnit,
+                        text: $weightText,
+                        keyboard: .decimalPad,
+                        focus: .weight,
+                        onStep: { delta in adjustWeight(by: weightIncrement * Double(delta)) }
+                    )
+                    .onChange(of: weightText) { _, _ in commit() }
+
+                    // Reps field with steppers
+                    stepperField(
+                        title: "reps",
+                        text: $repsText,
+                        keyboard: .numberPad,
+                        focus: .reps,
+                        onStep: adjustReps
+                    )
+                    .onChange(of: repsText) { _, _ in commit() }
+                }
+
+                // Actions menu
+                Menu {
+                    if let prev = previousSet, !set.isCompleted, cardioConfig == nil {
+                        Button {
+                            copyFromSet(prev)
+                        } label: {
+                            Label("Copy Previous", systemImage: "doc.on.doc")
+                        }
+                    }
+                    Button("Delete Set", role: .destructive) {
+                        sessionManager.deleteSet(exerciseId: exerciseId, setId: set.id)
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(Theme.Colors.textTertiary)
+                        .frame(width: 28, height: 28)
+                        .background(Theme.Colors.surface.opacity(0.35))
+                        .cornerRadius(Theme.CornerRadius.small)
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
         }
         .padding(.horizontal, Theme.Spacing.md)
         .padding(.vertical, Theme.Spacing.sm)
@@ -768,16 +965,64 @@ private struct SessionSetRow: View {
             RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
                 .strokeBorder(Theme.Colors.border.opacity(0.7), lineWidth: 1)
         )
-            .toolbar {
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button("Done") { focusedField = nil }
-                        .font(Theme.Typography.captionBold)
-                        .foregroundStyle(Theme.Colors.accent)
-                        .buttonStyle(.plain)
-                }
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { focusedField = nil }
+                    .font(Theme.Typography.captionBold)
+                    .foregroundStyle(Theme.Colors.accent)
+                    .buttonStyle(.plain)
             }
         }
+    }
+
+    // MARK: - Stepper Field
+
+    private func stepperField(
+        title: String,
+        text: Binding<String>,
+        keyboard: UIKeyboardType,
+        focus: Field,
+        onStep: @escaping (Int) -> Void
+    ) -> some View {
+        HStack(spacing: 2) {
+            Button {
+                onStep(-1)
+                Haptics.impact(.light)
+            } label: {
+                Image(systemName: "minus")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(Theme.Colors.textTertiary)
+                    .frame(width: 22, height: 30)
+            }
+            .buttonStyle(.plain)
+
+            VStack(alignment: .center, spacing: 1) {
+                Text(title)
+                    .font(Theme.Typography.microcopy)
+                    .foregroundColor(Theme.Colors.textTertiary)
+                TextField(title, text: text)
+                    .keyboardType(keyboard)
+                    .focused($focusedField, equals: focus)
+                    .font(Theme.Typography.body)
+                    .foregroundColor(Theme.Colors.textPrimary)
+                    .monospacedDigit()
+                    .multilineTextAlignment(.center)
+                    .frame(minWidth: 40)
+            }
+
+            Button {
+                onStep(1)
+                Haptics.impact(.light)
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(Theme.Colors.accent)
+                    .frame(width: 22, height: 30)
+            }
+            .buttonStyle(.plain)
+        }
+    }
 
     private func field(title: String, text: Binding<String>, keyboard: UIKeyboardType, focus: Field, width: CGFloat? = nil) -> some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -807,6 +1052,33 @@ private struct SessionSetRow: View {
             field(title: countLabel, text: $repsText, keyboard: .numberPad, focus: .reps, width: 72)
                 .onChange(of: repsText) { _, _ in commit() }
         }
+    }
+
+    // MARK: - Actions
+
+    private func adjustWeight(by amount: Double) {
+        let current = parseDouble(weightText) ?? 0
+        let newWeight = max(0, current + amount)
+        weightText = WorkoutValueFormatter.weightText(newWeight)
+        commit()
+    }
+
+    private func adjustReps(by amount: Int) {
+        let current = parseInt(repsText) ?? 0
+        let newReps = max(0, current + amount)
+        repsText = String(newReps)
+        commit()
+    }
+
+    private func copyFromSet(_ source: ActiveSet) {
+        if let weight = source.weight {
+            weightText = WorkoutValueFormatter.weightText(weight)
+        }
+        if let reps = source.reps {
+            repsText = String(reps)
+        }
+        commit()
+        Haptics.selection()
     }
 
     private func commit() {

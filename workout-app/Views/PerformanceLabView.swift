@@ -900,9 +900,9 @@ private struct PerformanceComparisonRow: View {
         case "Sessions":
             return "\(Int(round(value)))"
         case "Total Volume":
-            return formatVolume(value)
+            return SharedFormatters.volumeWithUnit(value)
         case "Avg Duration":
-            return formatDuration(value)
+            return SharedFormatters.durationMinutes(value)
         default:
             return String(format: "%.0f", value)
         }
@@ -911,27 +911,12 @@ private struct PerformanceComparisonRow: View {
     private func formatDelta(_ value: Double) -> String {
         switch metric.title {
         case "Sessions": return "\(Int(round(value)))"
-        case "Total Volume": return formatVolume(value)
-        case "Avg Duration": return formatDuration(value)
+        case "Total Volume": return SharedFormatters.volumeWithUnit(value)
+        case "Avg Duration": return SharedFormatters.durationMinutes(value)
         default: return String(format: "%.1f", value)
         }
     }
 
-    private func formatVolume(_ value: Double) -> String {
-        if value >= 1_000_000 {
-            return String(format: "%.1fM lbs", value / 1_000_000)
-        }
-        if value >= 1000 {
-            return String(format: "%.0fk lbs", value / 1000)
-        }
-        return String(format: "%.0f lbs", value)
-    }
-
-    private func formatDuration(_ minutes: Double) -> String {
-        let value = Int(round(minutes))
-        if value >= 60 { return "\(value / 60)h \(value % 60)m" }
-        return "\(value)m"
-    }
 }
 
 // MARK: - Muscle Donut Chart

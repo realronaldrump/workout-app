@@ -143,7 +143,7 @@ struct MetricDetailView: View {
                     NavigationLink(destination: WorkoutDetailView(workout: workout)) {
                         MetricWorkoutRow(
                             workout: workout,
-                            subtitle: "\(formatVolume(workout.totalVolume)) volume | \(timeOfDayLabel(for: workout.date))"
+                            subtitle: "\(SharedFormatters.volumeCompact(workout.totalVolume)) volume | \(timeOfDayLabel(for: workout.date))"
                         )
                     }
                     .buttonStyle(PlainButtonStyle())
@@ -176,7 +176,7 @@ struct MetricDetailView: View {
                                 Text(exercise.name)
                                     .font(Theme.Typography.headline)
                                     .foregroundColor(Theme.Colors.textPrimary)
-                                Text(formatVolume(exercise.volume))
+                                Text(SharedFormatters.volumeCompact(exercise.volume))
                                     .font(Theme.Typography.caption)
                                     .foregroundColor(Theme.Colors.textSecondary)
                             }
@@ -202,15 +202,15 @@ struct MetricDetailView: View {
             if let avg = average(minutes), let min = minutes.min(), let max = minutes.max() {
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: Theme.Spacing.md) {
-                        MetricPill(title: "Average", value: formatDurationMinutes(avg))
-                        MetricPill(title: "Min", value: formatDurationMinutes(min))
-                        MetricPill(title: "Max", value: formatDurationMinutes(max))
+                        MetricPill(title: "Average", value: SharedFormatters.durationMinutes(avg))
+                        MetricPill(title: "Min", value: SharedFormatters.durationMinutes(min))
+                        MetricPill(title: "Max", value: SharedFormatters.durationMinutes(max))
                     }
 
                     LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: Theme.Spacing.md) {
-                        MetricPill(title: "Average", value: formatDurationMinutes(avg))
-                        MetricPill(title: "Min", value: formatDurationMinutes(min))
-                        MetricPill(title: "Max", value: formatDurationMinutes(max))
+                        MetricPill(title: "Average", value: SharedFormatters.durationMinutes(avg))
+                        MetricPill(title: "Min", value: SharedFormatters.durationMinutes(min))
+                        MetricPill(title: "Max", value: SharedFormatters.durationMinutes(max))
                     }
                 }
             }
@@ -229,7 +229,7 @@ struct MetricDetailView: View {
                     NavigationLink(destination: WorkoutDetailView(workout: item.workout)) {
                         MetricWorkoutRow(
                             workout: item.workout,
-                            subtitle: "\(formatDurationMinutes(item.minutes)) | \(timeOfDayLabel(for: item.workout.date))"
+                            subtitle: "\(SharedFormatters.durationMinutes(item.minutes)) | \(timeOfDayLabel(for: item.workout.date))"
                         )
                     }
                     .buttonStyle(.plain)
@@ -262,7 +262,7 @@ struct MetricDetailView: View {
             return "sessions \(workouts.count)"
         case .totalVolume:
             let total = workouts.reduce(0) { $0 + $1.totalVolume }
-            return "sessions \(workouts.count) | total \(formatVolume(total))"
+            return "sessions \(workouts.count) | total \(SharedFormatters.volumeCompact(total))"
         case .avgDuration:
             return "sessions \(workouts.count)"
         }
@@ -346,24 +346,9 @@ struct MetricDetailView: View {
         }
     }
 
-    private func formatVolume(_ volume: Double) -> String {
-        if volume >= 1000 {
-            return String(format: "%.1fk", volume / 1000)
-        }
-        return "\(Int(volume))"
-    }
-
     private func average(_ values: [Double]) -> Double? {
         guard !values.isEmpty else { return nil }
         return values.reduce(0, +) / Double(values.count)
-    }
-
-    private func formatDurationMinutes(_ minutes: Double) -> String {
-        let value = Int(round(minutes))
-        if value >= 60 {
-            return "\(value / 60)h \(value % 60)m"
-        }
-        return "\(value)m"
     }
 }
 
@@ -612,7 +597,7 @@ private extension MetricDetailView {
                             AxisGridLine()
                             AxisValueLabel {
                                 if let axisValue = value.as(Double.self) {
-                                    Text(formatVolume(axisValue))
+                                    Text(SharedFormatters.volumeCompact(axisValue))
                                 }
                             }
                         }
@@ -653,7 +638,7 @@ private extension MetricDetailView {
                             AxisGridLine()
                             AxisValueLabel {
                                 if let axisValue = value.as(Double.self) {
-                                    Text(formatDurationMinutes(axisValue))
+                                    Text(SharedFormatters.durationMinutes(axisValue))
                                 }
                             }
                         }

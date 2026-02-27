@@ -40,11 +40,11 @@ struct FinishSessionSheet: View {
                 }
 
                 VStack(spacing: Theme.Spacing.sm) {
-                    statRow(title: "Elapsed", value: elapsedLabel(from: summary.startedAt))
+                    statRow(title: "Elapsed", value: SharedFormatters.elapsed(Date().timeIntervalSince(summary.startedAt)))
                     statRow(title: "Exercises", value: "\(summary.exerciseCount)")
                     statRow(title: "Completed sets", value: "\(summary.completedSetCount)")
                     if summary.strengthVolume > 0 {
-                        statRow(title: "Volume", value: formatVolume(summary.strengthVolume))
+                        statRow(title: "Volume", value: SharedFormatters.volumeCompact(summary.strengthVolume))
                     }
                     if summary.cardioDistance > 0 {
                         statRow(
@@ -118,20 +118,4 @@ struct FinishSessionSheet: View {
         }
     }
 
-    private func elapsedLabel(from startedAt: Date) -> String {
-        let seconds = max(0, Date().timeIntervalSince(startedAt))
-        let totalSeconds = Int(seconds)
-        let hours = totalSeconds / 3600
-        let minutes = (totalSeconds % 3600) / 60
-        let secondsComponent = totalSeconds % 60
-        if hours > 0 { return String(format: "%d:%02d:%02d", hours, minutes, secondsComponent) }
-        return String(format: "%d:%02d", minutes, secondsComponent)
-    }
-
-    private func formatVolume(_ volume: Double) -> String {
-        if volume >= 1000 {
-            return String(format: "%.1fk", volume / 1000)
-        }
-        return "\(Int(volume))"
-    }
 }

@@ -7,7 +7,7 @@ struct ActiveSessionBar: View {
         if let session = sessionManager.activeSession {
             TimelineView(.periodic(from: Date(), by: 1.0)) { context in
                 let elapsed = max(0, context.date.timeIntervalSince(session.startedAt))
-                let elapsedLabel = formatElapsed(elapsed)
+                let elapsedLabel = SharedFormatters.elapsed(elapsed)
                 let exerciseCount = session.exercises.count
                 let setCount = session.exercises.reduce(0) { $0 + $1.sets.count }
 
@@ -59,19 +59,11 @@ struct ActiveSessionBar: View {
                         Task { await sessionManager.discardDraft() }
                     }
                 }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Active session: \(session.name), \(elapsedLabel) elapsed, \(exerciseCount) exercises, \(setCount) sets")
+                .accessibilityHint("Double tap Resume to continue, or long press for more options")
             }
         }
     }
 
-    private func formatElapsed(_ interval: TimeInterval) -> String {
-        let totalSeconds = Int(interval)
-        let hours = totalSeconds / 3600
-        let minutes = (totalSeconds % 3600) / 60
-        let seconds = totalSeconds % 60
-
-        if hours > 0 {
-            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
-        }
-        return String(format: "%d:%02d", minutes, seconds)
-    }
 }

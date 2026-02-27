@@ -58,7 +58,7 @@ struct ExerciseBreakdownView: View {
             )
             .foregroundStyle(Theme.Colors.accent)
             .annotation(position: .trailing) {
-                Text(formatVolume(exercise.volume))
+                Text(SharedFormatters.volumeCompact(exercise.volume))
                     .font(Theme.Typography.caption)
                     .foregroundColor(Theme.Colors.textTertiary)
             }
@@ -69,7 +69,7 @@ struct ExerciseBreakdownView: View {
                 AxisGridLine()
                 AxisValueLabel {
                     if let axisValue = value.as(Double.self) {
-                        Text(formatVolume(axisValue))
+                        Text(SharedFormatters.volumeCompact(axisValue))
                     }
                 }
             }
@@ -78,10 +78,4 @@ struct ExerciseBreakdownView: View {
         .softCard(elevation: 2)
     }
 
-    private func formatVolume(_ volume: Double) -> String {
-        if volume >= 1000 {
-            return String(format: "%.1fk", volume / 1000)
-        }
-        return String(format: "%.0f", volume)
-    }
 }

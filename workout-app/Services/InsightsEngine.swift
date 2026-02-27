@@ -45,6 +45,21 @@ class InsightsEngine: ObservableObject {
                     )
                 }
 
+                // Progressive Overload Detection
+                group.addTask {
+                    return self.detectProgressiveOverload(in: workoutsSnapshot)
+                }
+
+                // Volume Milestones
+                group.addTask {
+                    return self.detectVolumeMilestones(in: workoutsSnapshot)
+                }
+
+                // Consistency Streaks
+                group.addTask {
+                    return self.detectConsistencyMilestones(in: workoutsSnapshot)
+                }
+
                 var results: [Insight] = []
                 for await partialResults in group {
                     results.append(contentsOf: partialResults)
@@ -200,6 +215,157 @@ class InsightsEngine: ObservableObject {
         guard reps > 0 else { return weight }
         return weight * (1 + 0.0333 * Double(reps))
     }
+
+    // MARK: - Progressive Overload Detection
+
+    private nonisolated func detectProgressiveOverload(in workouts: [Workout]) -> [Insight] {
+        var insights: [Insight] = []
+        let calendar = Calendar.current
+        guard let fourWeeksAgo = calendar.date(byAdding: .day, value: -28, to: Date()) else { return [] }
+
+        let exerciseGroups = Dictionary(
+            grouping: workouts.flatMap { workout in workout.exercises.map { (workout.date, $0) } },
+            by: { $0.1.name }
+        )
+
+        for (name, dateExercises) in exerciseGroups {
+            let sorted = dateExercises.sorted { $0.0 < $1.0 }
+            guard sorted.count >= 4 else { continue }
+
+            // Get weekly volume over last 4 weeks
+            let recentSessions = sorted.filter { $0.0 >= fourWeeksAgo }
+            guard recentSessions.count >= 2 else { continue }
+
+            let recentVolumes = recentSessions.map { $0.1.totalVolume }
+            let olderSessions = sorted.filter { $0.0 < fourWeeksAgo }.suffix(4)
+            let olderVolumes = olderSessions.map { $0.1.totalVolume }
+
+            guard !olderVolumes.isEmpty else { continue }
+
+            let recentAvg = recentVolumes.reduce(0, +) / Double(recentVolumes.count)
+            let olderAvg = olderVolumes.reduce(0, +) / Double(olderVolumes.count)
+
+            guard olderAvg > 0 else { continue }
+            let change = ((recentAvg - olderAvg) / olderAvg) * 100
+
+            // Meaningful volume increase (>10%)
+            if change > 10 {
+                insights.append(Insight(
+                    id: UUID(),
+                    type: .progressiveOverload,
+                    title: "Volume Up",
+                    message: "\(name) +\(Int(change))% volume over 4 weeks",
+                    exerciseName: name,
+                    date: recentSessions.last?.0 ?? Date(),
+                    priority: 7,
+                    actionLabel: "Trend",
+                    metric: change
+                ))
+            }
+        }
+
+        return Array(insights.prefix(5))
+    }
+
+    // MARK: - Volume Milestones
+
+    private nonisolated func detectVolumeMilestones(in workouts: [Workout]) -> [Insight] {
+        var insights: [Insight] = []
+
+        // Total lifetime volume milestones
+        let totalVolume = workouts.reduce(0.0) { $0 + $1.totalVolume }
+        let milestones: [(threshold: Double, label: String)] = [
+            (10_000_000, "10M lbs"),
+            (5_000_000, "5M lbs"),
+            (2_500_000, "2.5M lbs"),
+            (1_000_000, "1M lbs"),
+            (500_000, "500k lbs"),
+            (250_000, "250k lbs"),
+            (100_000, "100k lbs")
+        ]
+
+        if let milestone = milestones.first(where: { totalVolume >= $0.threshold }) {
+            insights.append(Insight(
+                id: UUID(),
+                type: .milestone,
+                title: "Milestone",
+                message: "Lifetime volume: \(milestone.label) lifted",
+                exerciseName: nil,
+                date: Date(),
+                priority: 6,
+                actionLabel: nil,
+                metric: totalVolume
+            ))
+        }
+
+        // Total workout count milestones
+        let count = workouts.count
+        let countMilestones = [1000, 500, 250, 100, 50, 25]
+        if let cm = countMilestones.first(where: { count >= $0 }) {
+            insights.append(Insight(
+                id: UUID(),
+                type: .milestone,
+                title: "\(cm) Workouts",
+                message: "You've logged \(count) total sessions",
+                exerciseName: nil,
+                date: Date(),
+                priority: 5,
+                actionLabel: nil,
+                metric: Double(count)
+            ))
+        }
+
+        return insights
+    }
+
+    // MARK: - Consistency Milestones
+
+    private nonisolated func detectConsistencyMilestones(in workouts: [Workout]) -> [Insight] {
+        var insights: [Insight] = []
+        let calendar = Calendar.current
+
+        // Current weekly consistency
+        guard let twelveWeeksAgo = calendar.date(byAdding: .day, value: -84, to: Date()) else { return [] }
+        let recentWorkouts = workouts.filter { $0.date >= twelveWeeksAgo }
+
+        // Count unique weeks with workouts
+        let weekKeys = Set(recentWorkouts.map { workout -> Int in
+            let week = calendar.component(.weekOfYear, from: workout.date)
+            let year = calendar.component(.year, from: workout.date)
+            return year * 100 + week
+        })
+
+        let weeksWithWorkouts = weekKeys.count
+
+        // Perfect consistency = 12/12 weeks
+        if weeksWithWorkouts >= 12 {
+            insights.append(Insight(
+                id: UUID(),
+                type: .consistency,
+                title: "Perfect Streak",
+                message: "Trained every week for 12 straight weeks",
+                exerciseName: nil,
+                date: Date(),
+                priority: 9,
+                actionLabel: nil,
+                metric: 12
+            ))
+        } else if weeksWithWorkouts >= 8 {
+            insights.append(Insight(
+                id: UUID(),
+                type: .consistency,
+                title: "Consistent",
+                message: "\(weeksWithWorkouts)/12 weeks trained in the last 3 months",
+                exerciseName: nil,
+                date: Date(),
+                priority: 6,
+                actionLabel: nil,
+                metric: Double(weeksWithWorkouts)
+            ))
+        }
+
+        return insights
+    }
 }
 
 // MARK: - Supporting Types
@@ -220,12 +386,18 @@ enum InsightType: Sendable {
     case personalRecord
     case strengthGain
     case baseline
+    case progressiveOverload
+    case milestone
+    case consistency
 
     var iconName: String {
         switch self {
         case .personalRecord: return "trophy.fill"
         case .strengthGain: return "arrow.up.right.circle.fill"
         case .baseline: return "flag.fill"
+        case .progressiveOverload: return "chart.line.uptrend.xyaxis"
+        case .milestone: return "star.fill"
+        case .consistency: return "flame.fill"
         }
     }
 
@@ -234,6 +406,9 @@ enum InsightType: Sendable {
         case .personalRecord: return "yellow"
         case .strengthGain: return "green"
         case .baseline: return "cyan"
+        case .progressiveOverload: return "blue"
+        case .milestone: return "orange"
+        case .consistency: return "red"
         }
     }
 }

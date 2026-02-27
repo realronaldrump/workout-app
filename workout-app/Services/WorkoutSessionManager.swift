@@ -1,5 +1,7 @@
 import Foundation
 import Combine
+import SwiftUI
+import UIKit
 
 enum WorkoutSessionError: LocalizedError {
     case noActiveSession
@@ -40,9 +42,15 @@ final class WorkoutSessionManager: ObservableObject {
     @Published var activeSession: ActiveWorkoutSession?
     @Published var isPresentingSessionUI: Bool = false
 
+    // Rest timer
+    @Published var restTimerSecondsRemaining: Int = 0
+    @Published var restTimerIsActive: Bool = false
+    @Published var restTimerDuration: Int = 90 // default 90s
+
     private let fileName = "active_session_v1.json"
     private let draftStore = ActiveSessionDraftStore()
     private var persistTask: Task<Void, Never>?
+    private var restTimerTask: Task<Void, Never>?
 
     func restoreDraft() async {
         let url = fileURL()
@@ -62,7 +70,8 @@ final class WorkoutSessionManager: ObservableObject {
     func startSession(
         name: String,
         gymProfileId: UUID?,
-        preselectedExercise: String? = nil
+        preselectedExercise: String? = nil,
+        initialSetPrefill: SetPrefill? = nil
     ) {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let preselected = preselectedExercise?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -77,8 +86,17 @@ final class WorkoutSessionManager: ObservableObject {
 
         if let exercise = preselectedExercise?.trimmingCharacters(in: .whitespacesAndNewlines),
            !exercise.isEmpty {
+            let prefill = initialSetPrefill ?? SetPrefill()
             session.exercises = [
-                ActiveExercise(name: exercise, sets: [ActiveSet(order: 1)])
+                ActiveExercise(name: exercise, sets: [
+                    ActiveSet(
+                        order: 1,
+                        weight: prefill.weight,
+                        reps: prefill.reps,
+                        distance: prefill.distance,
+                        seconds: prefill.seconds
+                    )
+                ])
             ]
         }
 
@@ -105,6 +123,10 @@ final class WorkoutSessionManager: ObservableObject {
     }
 
     func addExercise(name: String) {
+        addExercise(name: name, initialSetPrefill: nil)
+    }
+
+    func addExercise(name: String, initialSetPrefill: SetPrefill? = nil) {
         guard var session = activeSession else { return }
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
@@ -113,7 +135,16 @@ final class WorkoutSessionManager: ObservableObject {
         let exists = session.exercises.contains { normalizedExerciseName($0.name) == normalized }
         guard !exists else { return }
 
-        session.exercises.append(ActiveExercise(name: trimmed, sets: [ActiveSet(order: 1)]))
+        let prefill = initialSetPrefill ?? SetPrefill()
+        session.exercises.append(ActiveExercise(name: trimmed, sets: [
+            ActiveSet(
+                order: 1,
+                weight: prefill.weight,
+                reps: prefill.reps,
+                distance: prefill.distance,
+                seconds: prefill.seconds
+            )
+        ]))
         touch(&session)
         activeSession = session
         schedulePersistDraft()
@@ -185,6 +216,11 @@ final class WorkoutSessionManager: ObservableObject {
         set.completedAt = set.isCompleted ? Date() : nil
         session.exercises[exerciseIndex].sets[setIndex] = set
 
+        // Auto-start rest timer when completing a set
+        if set.isCompleted {
+            startRestTimer()
+        }
+
         touch(&session)
         activeSession = session
         schedulePersistDraft()
@@ -206,6 +242,46 @@ final class WorkoutSessionManager: ObservableObject {
         touch(&session)
         activeSession = session
         schedulePersistDraft()
+    }
+
+    func moveExercise(from source: IndexSet, to destination: Int) {
+        guard var session = activeSession else { return }
+        session.exercises.move(fromOffsets: source, toOffset: destination)
+        touch(&session)
+        activeSession = session
+        schedulePersistDraft()
+    }
+
+    // MARK: - Rest Timer
+
+    func startRestTimer() {
+        restTimerSecondsRemaining = restTimerDuration
+        restTimerIsActive = true
+        restTimerTask?.cancel()
+        restTimerTask = Task { [weak self] in
+            while let self, self.restTimerSecondsRemaining > 0, !Task.isCancelled {
+                do {
+                    try await Task.sleep(nanoseconds: 1_000_000_000)
+                } catch { return }
+                guard !Task.isCancelled else { return }
+                self.restTimerSecondsRemaining -= 1
+                if self.restTimerSecondsRemaining <= 0 {
+                    self.restTimerIsActive = false
+                    Haptics.notify(.success)
+                }
+            }
+        }
+    }
+
+    func cancelRestTimer() {
+        restTimerTask?.cancel()
+        restTimerTask = nil
+        restTimerIsActive = false
+        restTimerSecondsRemaining = 0
+    }
+
+    func setRestTimerDuration(_ seconds: Int) {
+        restTimerDuration = max(15, min(600, seconds))
     }
 
     func finish() async throws -> LoggedWorkout {

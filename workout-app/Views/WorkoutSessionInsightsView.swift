@@ -85,7 +85,7 @@ struct WorkoutSessionInsightsView: View {
                     )
                     .foregroundStyle(Theme.Colors.accent)
                     .annotation(position: .trailing) {
-                        Text(formatVolume(point.volume))
+                        Text(SharedFormatters.volumeCompact(point.volume))
                             .font(Theme.Typography.caption)
                             .foregroundStyle(Theme.Colors.textTertiary)
                     }
@@ -96,7 +96,7 @@ struct WorkoutSessionInsightsView: View {
                         AxisGridLine()
                         AxisValueLabel {
                             if let axisValue = value.as(Double.self) {
-                                Text(formatVolume(axisValue))
+                                Text(SharedFormatters.volumeCompact(axisValue))
                             }
                         }
                     }
@@ -117,7 +117,7 @@ struct WorkoutSessionInsightsView: View {
 
             LazyVGrid(columns: statColumns, spacing: Theme.Spacing.md) {
                 MetricStatPill(title: "Duration", value: workout.duration)
-                MetricStatPill(title: "Volume", value: formatVolume(workout.totalVolume))
+                MetricStatPill(title: "Volume", value: SharedFormatters.volumeCompact(workout.totalVolume))
                 MetricStatPill(title: "Minutes", value: minutes > 0 ? "\(Int(round(minutes)))" : "--")
             }
         }
@@ -187,7 +187,7 @@ struct WorkoutSessionInsightsView: View {
                                 Text(item.name)
                                     .font(Theme.Typography.headline)
                                     .foregroundStyle(Theme.Colors.textPrimary)
-                                Text("\(formatVolume(item.volume)) volume")
+                                Text("\(SharedFormatters.volumeCompact(item.volume)) volume")
                                     .font(Theme.Typography.caption)
                                     .foregroundStyle(Theme.Colors.textSecondary)
                             }
@@ -205,15 +205,6 @@ struct WorkoutSessionInsightsView: View {
         }
     }
 
-    private func formatVolume(_ volume: Double) -> String {
-        if volume >= 1_000_000 {
-            return String(format: "%.1fM", volume / 1_000_000)
-        }
-        if volume >= 1000 {
-            return String(format: "%.1fk", volume / 1000)
-        }
-        return "\(Int(volume))"
-    }
 }
 
 private struct MetricStatPill: View {

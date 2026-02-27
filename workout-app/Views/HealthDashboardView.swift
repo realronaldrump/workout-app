@@ -171,31 +171,10 @@ struct HealthDashboardView: View {
                 .font(Theme.Typography.caption)
                 .foregroundStyle(Theme.Colors.textTertiary)
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: Theme.Spacing.sm) {
-                    ForEach(HealthTimeRange.allCases) { range in
-                        Button {
-                            if range == .custom {
-                                showingCustomRange = true
-                            } else {
-                                selectedRange = range
-                            }
-                        } label: {
-                            Text(range.title)
-                                .font(Theme.Typography.subheadline)
-                                .foregroundStyle(selectedRange == range ? Theme.Colors.textPrimary : Theme.Colors.textSecondary)
-                                .padding(.horizontal, Theme.Spacing.lg)
-                                .padding(.vertical, Theme.Spacing.sm)
-                                .frame(minHeight: 44)
-                                .background(
-                                    RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
-                                        .fill(selectedRange == range ? Theme.Colors.elevated : Theme.Colors.surface)
-                                )
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
+            TimeRangePillPicker(
+                options: HealthTimeRange.allCases.filter { $0 != .custom },
+                selected: $selectedRange
+            )
         }
     }
 

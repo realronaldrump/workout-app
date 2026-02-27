@@ -32,7 +32,7 @@ struct OverviewCardsView: View {
 
                 StatCard(
                     title: "Total Volume",
-                    value: formatVolume(stats.totalVolume),
+                    value: SharedFormatters.volumeCompact(stats.totalVolume),
                     icon: "scalemass.fill",
                     color: .green
                 )
@@ -57,14 +57,6 @@ struct OverviewCardsView: View {
         }
     }
 
-    private func formatVolume(_ volume: Double) -> String {
-        if volume >= 1000000 {
-            return String(format: "%.1fM", volume / 1000000)
-        } else if volume >= 1000 {
-            return String(format: "%.0fk", volume / 1000)
-        }
-        return "\(Int(volume))"
-    }
 }
 
 struct StatCard: View {
