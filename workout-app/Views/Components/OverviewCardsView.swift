@@ -39,9 +39,9 @@ struct OverviewCardsView: View {
                 )
 
                 StatCard(
-                    title: "Avg Duration",
-                    value: stats.avgWorkoutDuration,
-                    icon: "clock.fill",
+                    title: "Total Sets",
+                    value: "\(stats.totalSets)",
+                    icon: "number.square.fill",
                     color: .purple
                 )
             }

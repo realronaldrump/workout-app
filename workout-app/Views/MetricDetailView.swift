@@ -29,8 +29,6 @@ struct MetricDetailView: View {
                             streakSection
                         case .totalVolume:
                             totalVolumeSection
-                        case .avgDuration:
-                            avgDurationSection
                         }
                     }
                     .padding(Theme.Spacing.xl)
@@ -194,50 +192,6 @@ struct MetricDetailView: View {
         }
     }
 
-    private var avgDurationSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-            durationChart
-
-            let minutes = durationPoints.map(\.value)
-            if let avg = average(minutes), let min = minutes.min(), let max = minutes.max() {
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: Theme.Spacing.md) {
-                        MetricPill(title: "Average", value: SharedFormatters.durationMinutes(avg))
-                        MetricPill(title: "Min", value: SharedFormatters.durationMinutes(min))
-                        MetricPill(title: "Max", value: SharedFormatters.durationMinutes(max))
-                    }
-
-                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: Theme.Spacing.md) {
-                        MetricPill(title: "Average", value: SharedFormatters.durationMinutes(avg))
-                        MetricPill(title: "Min", value: SharedFormatters.durationMinutes(min))
-                        MetricPill(title: "Max", value: SharedFormatters.durationMinutes(max))
-                    }
-                }
-            }
-
-            let longest = sortedWorkouts
-                .map { (workout: $0, minutes: WorkoutAnalytics.durationMinutes(from: $0.duration)) }
-                .sorted { $0.minutes > $1.minutes }
-                .prefix(10)
-
-            if !longest.isEmpty {
-                Text("Longest Sessions")
-                    .font(Theme.Typography.title3)
-                    .foregroundColor(Theme.Colors.textPrimary)
-
-                ForEach(Array(longest), id: \.workout.id) { item in
-                    NavigationLink(destination: WorkoutDetailView(workout: item.workout)) {
-                        MetricWorkoutRow(
-                            workout: item.workout,
-                            subtitle: "\(SharedFormatters.durationMinutes(item.minutes)) | \(timeOfDayLabel(for: item.workout.date))"
-                        )
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-    }
-
     private var sortedWorkouts: [Workout] {
         workouts.sorted { $0.date > $1.date }
     }
@@ -247,7 +201,6 @@ struct MetricDetailView: View {
         case .sessions: return "Sessions"
         case .streak: return "Streak"
         case .totalVolume: return "Total Volume"
-        case .avgDuration: return "Avg Duration"
         }
     }
 
@@ -263,8 +216,6 @@ struct MetricDetailView: View {
         case .totalVolume:
             let total = workouts.reduce(0) { $0 + $1.totalVolume }
             return "sessions \(workouts.count) | total \(SharedFormatters.volumeCompact(total))"
-        case .avgDuration:
-            return "sessions \(workouts.count)"
         }
     }
 
@@ -346,10 +297,6 @@ struct MetricDetailView: View {
         }
     }
 
-    private func average(_ values: [Double]) -> Double? {
-        guard !values.isEmpty else { return nil }
-        return values.reduce(0, +) / Double(values.count)
-    }
 }
 
 private struct MetricWorkoutRow: View {
@@ -432,14 +379,6 @@ private extension MetricDetailView {
 
     func weekStart(for date: Date, calendar: Calendar) -> Date {
         calendar.dateInterval(of: .weekOfYear, for: date)?.start ?? calendar.startOfDay(for: date)
-    }
-
-    var durationPoints: [MetricPoint] {
-        sortedWorkouts.map { workout in
-            MetricPoint(date: workout.date, value: WorkoutAnalytics.durationMinutes(from: workout.duration))
-        }
-        .filter { $0.value > 0 }
-        .sorted { $0.date < $1.date }
     }
 
     var volumePoints: [MetricPoint] {
@@ -610,46 +549,6 @@ private extension MetricDetailView {
         }
     }
 
-    var durationChart: some View {
-        Group {
-            if durationPoints.isEmpty {
-                EmptyChartCard(title: "Duration Trend", message: "Not enough duration data to chart yet.")
-            } else {
-                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                    Text("Duration Trend")
-                        .font(Theme.Typography.title3)
-                        .foregroundColor(Theme.Colors.textPrimary)
-
-                    Chart(durationPoints) { point in
-                        LineMark(
-                            x: .value("Date", point.date),
-                            y: .value("Minutes", point.value)
-                        )
-                        .foregroundStyle(Theme.Colors.accentSecondary)
-                        .interpolationMethod(.catmullRom)
-                    }
-                    .chartXAxis {
-                        AxisMarks(values: .automatic(desiredCount: 4)) { _ in
-                            AxisValueLabel(format: .dateTime.month().day())
-                        }
-                    }
-                    .chartYAxis {
-                        AxisMarks { value in
-                            AxisGridLine()
-                            AxisValueLabel {
-                                if let axisValue = value.as(Double.self) {
-                                    Text(SharedFormatters.durationMinutes(axisValue))
-                                }
-                            }
-                        }
-                    }
-                    .frame(height: 180)
-                }
-                .padding(Theme.Spacing.lg)
-                .softCard(elevation: 2)
-            }
-        }
-    }
 }
 
 private struct EmptyChartCard: View {

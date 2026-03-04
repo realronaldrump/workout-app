@@ -14,49 +14,6 @@ struct WorkoutAnalytics {
         let tint: Color
     }
 
-    nonisolated static func durationMinutes(from duration: String) -> Double {
-        let trimmed = duration.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !trimmed.isEmpty else { return 0 }
-
-        if trimmed.contains(":") {
-            let parts = trimmed.split(separator: ":").compactMap { Double($0) }
-            if parts.count == 3 {
-                return (parts[0] * 60.0) + parts[1] + (parts[2] / 60.0)
-            } else if parts.count == 2 {
-                return parts[0] + (parts[1] / 60.0)
-            }
-        }
-
-        var hours = 0
-        var minutes = 0
-        var seconds = 0
-        var matched = false
-
-        if let hourMatch = trimmed.range(of: "(\\d+)\\s*h", options: .regularExpression) {
-            let hourString = String(trimmed[hourMatch]).replacingOccurrences(of: "h", with: "")
-            hours = Int(hourString.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
-            matched = true
-        }
-
-        if let minuteMatch = trimmed.range(of: "(\\d+)\\s*m", options: .regularExpression) {
-            let minuteString = String(trimmed[minuteMatch]).replacingOccurrences(of: "m", with: "")
-            minutes = Int(minuteString.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
-            matched = true
-        }
-
-        if let secondMatch = trimmed.range(of: "(\\d+)\\s*s", options: .regularExpression) {
-            let secondString = String(trimmed[secondMatch]).replacingOccurrences(of: "s", with: "")
-            seconds = Int(secondString.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
-            matched = true
-        }
-
-        if matched {
-            return Double(hours * 60 + minutes) + (Double(seconds) / 60.0)
-        }
-
-        return Double(trimmed) ?? 0
-    }
-
     /// Returns streak runs using the same rule as the app's streak calculation:
     /// consecutive workout-days, allowing up to `intentionalRestDays` between sessions.
     /// `workoutDayCount` counts workout days, not total calendar days spanned.
@@ -274,9 +231,6 @@ struct WorkoutAnalytics {
         let current = workouts.filter { currentRange.contains($0.date) }
         let previous = workouts.filter { previousRange.contains($0.date) }
 
-        let currentDuration = average(current.map { durationMinutes(from: $0.duration) })
-        let previousDuration = average(previous.map { durationMinutes(from: $0.duration) })
-
         let currentVolume = current.reduce(0) { $0 + $1.totalVolume }
         let previousVolume = previous.reduce(0) { $0 + $1.totalVolume }
 
@@ -285,8 +239,7 @@ struct WorkoutAnalytics {
 
         return [
             changeMetric(title: "Sessions", current: currentSessions, previous: previousSessions),
-            changeMetric(title: "Total Volume", current: currentVolume, previous: previousVolume),
-            changeMetric(title: "Avg Duration", current: currentDuration, previous: previousDuration)
+            changeMetric(title: "Total Volume", current: currentVolume, previous: previousVolume)
         ]
     }
 

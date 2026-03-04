@@ -169,7 +169,6 @@ enum SampleData {
             totalExercises: totalExercises,
             totalVolume: totalVolume,
             totalSets: totalSets,
-            avgWorkoutDuration: "58m",
             favoriteExercise: "Bench Press",
             strongestExercise: (name: "Back Squat", weight: 265),
             mostImprovedExercise: (name: "Bench Press", improvement: 6.2),

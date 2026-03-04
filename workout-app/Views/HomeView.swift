@@ -99,10 +99,9 @@ struct HomeView: View {
                                 .padding(.horizontal, Theme.Spacing.lg)
                         }
 
-                        // Data Insights (plateaus, efficiency, frequency)
+                        // Data Insights (plateaus, frequency)
                         DataInsightCards(
                             plateaus: correlationEngine.plateauAlerts,
-                            efficiencyTrends: correlationEngine.efficiencyTrends,
                             frequencyInsights: correlationEngine.frequencyInsights,
                             onExerciseTap: { name in
                                 selectedExercise = ExerciseSelection(id: name)
@@ -356,7 +355,6 @@ struct HomeView: View {
         let workouts = weeklyWorkouts
         let stats = workouts.isEmpty ? nil : dataManager.calculateStats(for: workouts)
         let sessions = stats.map { "\($0.totalWorkouts)" } ?? "0"
-        let avgDuration = stats?.avgWorkoutDuration ?? "--"
         let volumeText = stats.map { SharedFormatters.volumeCompact($0.totalVolume) } ?? "--"
         let allStats = dataManager.workouts.isEmpty ? nil : dataManager.calculateStats(for: dataManager.workouts)
         let streak = allStats?.currentStreak ?? 0
@@ -390,9 +388,6 @@ struct HomeView: View {
                     SummaryPill(title: "Sessions", value: sessions) {
                         selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: .sessions, scrollTarget: nil)
                     }
-                    SummaryPill(title: "Avg Duration", value: avgDuration) {
-                        selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: .avgDuration, scrollTarget: nil)
-                    }
                     SummaryPill(title: "Volume", value: volumeText) {
                         selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: .totalVolume, scrollTarget: nil)
                     }
@@ -401,9 +396,6 @@ struct HomeView: View {
                 VStack(spacing: Theme.Spacing.sm) {
                     SummaryPill(title: "Sessions", value: sessions) {
                         selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: .sessions, scrollTarget: nil)
-                    }
-                    SummaryPill(title: "Avg Duration", value: avgDuration) {
-                        selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: .avgDuration, scrollTarget: nil)
                     }
                     SummaryPill(title: "Volume", value: volumeText) {
                         selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: .totalVolume, scrollTarget: nil)
@@ -596,7 +588,7 @@ struct HomeView: View {
     private var weeklyChangeMetrics: [ChangeMetric] {
         let all = WorkoutAnalytics.changeMetrics(for: dataManager.workouts, window: changeWindow)
         let preferred = all.filter {
-            $0.title.contains("Sessions") || $0.title.contains("Volume") || $0.title.contains("Duration")
+            $0.title.contains("Sessions") || $0.title.contains("Volume")
         }
         return Array((preferred.isEmpty ? all : preferred).prefix(3))
     }
@@ -874,9 +866,6 @@ private struct CompactChangeCard: View {
     private func formatValue(_ metric: ChangeMetric) -> String {
         if metric.title.contains("Sessions") {
             return String(format: "%.0f", metric.current)
-        }
-        if metric.title.contains("Duration") {
-            return SharedFormatters.durationMinutes(metric.current)
         }
         if metric.title.contains("Volume") {
             return SharedFormatters.volumePrecise(metric.current)

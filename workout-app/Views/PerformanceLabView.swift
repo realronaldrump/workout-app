@@ -728,16 +728,14 @@ struct PerformanceLabView: View {
 
         let count = exercise.sets.reduce(0) { $0 + max($1.reps, 0) }
         let distance = exercise.sets.reduce(0.0) { $0 + max($1.distance, 0) }
-        let seconds = exercise.sets.reduce(0.0) { $0 + max($1.seconds, 0) }
 
-        // Cardio and bodyweight sets can be recorded as count/distance/time with zero weight.
+        // Cardio and bodyweight sets can be recorded as count/distance with zero weight.
         // Convert those metrics into effort points so tagged groups (e.g. Cardio/Floors) contribute.
         let countPoints = Double(count) * 10.0
         let distancePoints = distance * 100.0
-        let durationPoints = seconds / 60.0
         let fallbackSetPoints = Double(exercise.sets.count) * 25.0
 
-        return max(fallbackSetPoints, countPoints + distancePoints + durationPoints)
+        return max(fallbackSetPoints, countPoints + distancePoints)
     }
 
     private func percentLabel(for share: Double) -> String {
@@ -875,7 +873,6 @@ private struct PerformanceComparisonRow: View {
         switch metric.title {
         case "Sessions": return "Workouts"
         case "Total Volume": return "Weight Lifted"
-        case "Avg Duration": return "Avg Workout Length"
         default: return metric.title
         }
     }
@@ -901,8 +898,6 @@ private struct PerformanceComparisonRow: View {
             return "\(Int(round(value)))"
         case "Total Volume":
             return SharedFormatters.volumeWithUnit(value)
-        case "Avg Duration":
-            return SharedFormatters.durationMinutes(value)
         default:
             return String(format: "%.0f", value)
         }
@@ -912,7 +907,6 @@ private struct PerformanceComparisonRow: View {
         switch metric.title {
         case "Sessions": return "\(Int(round(value)))"
         case "Total Volume": return SharedFormatters.volumeWithUnit(value)
-        case "Avg Duration": return SharedFormatters.durationMinutes(value)
         default: return String(format: "%.1f", value)
         }
     }

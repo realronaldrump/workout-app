@@ -30,7 +30,6 @@ enum WorkoutMetricDetailKind: String, Identifiable, CaseIterable {
     case sessions
     case streak
     case totalVolume
-    case avgDuration
 
     var id: String { rawValue }
 }

@@ -149,7 +149,6 @@ struct WorkoutStats {
     let totalExercises: Int
     let totalVolume: Double
     let totalSets: Int
-    let avgWorkoutDuration: String
     let favoriteExercise: String?
     let strongestExercise: (name: String, weight: Double)?
     let mostImprovedExercise: (name: String, improvement: Double)?

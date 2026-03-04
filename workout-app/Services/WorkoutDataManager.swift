@@ -159,15 +159,11 @@ class WorkoutDataManager: ObservableObject {
         let (currentStreak, longestStreak) = calculateStreaks()
         let workoutsPerWeek = calculateWorkoutsPerWeek(for: filteredWorkouts)
 
-        // Calculate average duration
-        let avgDuration = calculateAverageDuration(for: filteredWorkouts)
-
         return WorkoutStats(
             totalWorkouts: filteredWorkouts.count,
             totalExercises: exerciseGroups.keys.count,
             totalVolume: filteredWorkouts.reduce(0) { $0 + $1.totalVolume },
             totalSets: filteredWorkouts.reduce(0) { $0 + $1.totalSets },
-            avgWorkoutDuration: avgDuration,
             favoriteExercise: favoriteExercise,
             strongestExercise: strongestExercise,
             mostImprovedExercise: mostImprovedExercise,
@@ -260,20 +256,6 @@ class WorkoutDataManager: ObservableObject {
         return Double(filteredWorkouts.count) / effectiveWeeks
     }
 
-    private func calculateAverageDuration(for filteredWorkouts: [Workout]) -> String {
-        let durations = filteredWorkouts
-            .map { WorkoutAnalytics.durationMinutes(from: $0.duration) }
-            .filter { $0 > 0 }
-
-        guard !durations.isEmpty else { return "0m" }
-
-        let avgMinutes = durations.reduce(0, +) / Double(durations.count)
-        let rounded = Int(round(avgMinutes))
-        if rounded >= 60 {
-            return "\(rounded / 60)h \(rounded % 60)m"
-        }
-        return "\(rounded)m"
-    }
     func clearAllData() {
         self.workouts = []
         self.importedWorkouts = []

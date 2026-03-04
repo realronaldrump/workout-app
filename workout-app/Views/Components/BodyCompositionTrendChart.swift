@@ -92,10 +92,11 @@ struct BodyCompositionTrendChart: View {
                         AreaMark(
                             x: .value("Date", point.date),
                             yStart: .value("Baseline", yDomain.lowerBound),
-                            yEnd: .value("Value", point.value)
+                            yEnd: .value("Value", point.value),
+                            series: .value("Series", "Actual")
                         )
                         .foregroundStyle(color.opacity(0.14))
-                        .interpolationMethod(.catmullRom)
+                        .interpolationMethod(.monotone)
                     }
                 }
 
@@ -115,22 +116,24 @@ struct BodyCompositionTrendChart: View {
                 ForEach(points) { point in
                     LineMark(
                         x: .value("Date", point.date),
-                        y: .value("Value", point.value)
+                        y: .value("Value", point.value),
+                        series: .value("Series", "Actual")
                     )
                     .foregroundStyle(color)
                     .lineStyle(StrokeStyle(lineWidth: 2.6, lineCap: .round))
-                    .interpolationMethod(.catmullRom)
+                    .interpolationMethod(.monotone)
                 }
 
                 if showMA7 {
                     ForEach(ma7) { point in
                         LineMark(
                             x: .value("Date", point.date),
-                            y: .value("7d MA", point.value)
+                            y: .value("7d MA", point.value),
+                            series: .value("Series", "7d MA")
                         )
                         .foregroundStyle(Theme.Colors.accentSecondary.opacity(0.9))
                         .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, dash: [2, 3]))
-                        .interpolationMethod(.catmullRom)
+                        .interpolationMethod(.monotone)
                     }
                 }
 
@@ -138,11 +141,12 @@ struct BodyCompositionTrendChart: View {
                     ForEach(ra30) { point in
                         LineMark(
                             x: .value("Date", point.date),
-                            y: .value("30d RA", point.value)
+                            y: .value("30d RA", point.value),
+                            series: .value("Series", "30d RA")
                         )
                         .foregroundStyle(Theme.Colors.accentTertiary.opacity(0.7))
                         .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, dash: [6, 3]))
-                        .interpolationMethod(.catmullRom)
+                        .interpolationMethod(.monotone)
                     }
                 }
 
@@ -152,14 +156,16 @@ struct BodyCompositionTrendChart: View {
 
                     LineMark(
                         x: .value("Date", start.date),
-                        y: .value("Trend", start.value)
+                        y: .value("Trend", start.value),
+                        series: .value("Series", "Trend")
                     )
                     .foregroundStyle(Theme.Colors.textTertiary.opacity(0.7))
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 5]))
 
                     LineMark(
                         x: .value("Date", end.date),
-                        y: .value("Trend", end.value)
+                        y: .value("Trend", end.value),
+                        series: .value("Series", "Trend")
                     )
                     .foregroundStyle(Theme.Colors.textTertiary.opacity(0.7))
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 5]))
@@ -173,14 +179,16 @@ struct BodyCompositionTrendChart: View {
 
                     LineMark(
                         x: .value("Date", start.date),
-                        y: .value("Forecast", start.value)
+                        y: .value("Forecast", start.value),
+                        series: .value("Series", "Forecast")
                     )
                     .foregroundStyle(Theme.Colors.textSecondary.opacity(0.65))
                     .lineStyle(StrokeStyle(lineWidth: 1.2, dash: [1, 4]))
 
                     LineMark(
                         x: .value("Date", end.date),
-                        y: .value("Forecast", end.value)
+                        y: .value("Forecast", end.value),
+                        series: .value("Series", "Forecast")
                     )
                     .foregroundStyle(Theme.Colors.textSecondary.opacity(0.65))
                     .lineStyle(StrokeStyle(lineWidth: 1.2, dash: [1, 4]))

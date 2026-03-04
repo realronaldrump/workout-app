@@ -108,17 +108,15 @@ struct WorkoutSessionInsightsView: View {
     }
 
     private var statsSection: some View {
-        let minutes = WorkoutAnalytics.durationMinutes(from: workout.duration)
-
         return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             Text("Stats")
                 .font(Theme.Typography.title3)
                 .foregroundStyle(Theme.Colors.textPrimary)
 
             LazyVGrid(columns: statColumns, spacing: Theme.Spacing.md) {
-                MetricStatPill(title: "Duration", value: workout.duration)
                 MetricStatPill(title: "Volume", value: SharedFormatters.volumeCompact(workout.totalVolume))
-                MetricStatPill(title: "Minutes", value: minutes > 0 ? "\(Int(round(minutes)))" : "--")
+                MetricStatPill(title: "Total Sets", value: "\(workout.totalSets)")
+                MetricStatPill(title: "Exercises", value: "\(workout.exercises.count)")
             }
         }
         .padding(Theme.Spacing.lg)

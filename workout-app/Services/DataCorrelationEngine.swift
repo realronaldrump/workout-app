@@ -13,7 +13,6 @@ final class DataCorrelationEngine: ObservableObject {
     @Published var recoveryReadiness: RecoveryReadiness?
     @Published var plateauAlerts: [PlateauAlert] = []
     @Published var frequencyInsights: [FrequencyInsight] = []
-    @Published var efficiencyTrends: [EfficiencyDataPoint] = []
     @Published var timeOfDayAnalysis: [TimeOfDayBucket] = []
     @Published var isAnalyzing = false
 
@@ -36,18 +35,16 @@ final class DataCorrelationEngine: ObservableObject {
             let readiness = Self.computeRecoveryReadiness(dailyHealth: dailyHealth)
             let plateaus = Self.detectPlateaus(workouts: workouts)
             let frequency = Self.analyzeFrequency(workouts: workouts, mappings: muscleMappings)
-            let efficiency = Self.computeEfficiency(workouts: workouts)
             let timeOfDay = Self.analyzeTimeOfDay(workouts: workouts)
 
-            return (correlations, readiness, plateaus, frequency, efficiency, timeOfDay)
+            return (correlations, readiness, plateaus, frequency, timeOfDay)
         }.value
 
         correlations = result.0
         recoveryReadiness = result.1
         plateauAlerts = result.2
         frequencyInsights = result.3
-        efficiencyTrends = result.4
-        timeOfDayAnalysis = result.5
+        timeOfDayAnalysis = result.4
         isAnalyzing = false
     }
 
@@ -68,7 +65,6 @@ final class DataCorrelationEngine: ObservableObject {
             dp.totalVolume += workout.totalVolume
             dp.maxWeight = max(dp.maxWeight, workout.exercises.map(\.maxWeight).max() ?? 0)
             dp.sessionCount += 1
-            dp.durationMinutes += Double(workout.estimatedDurationMinutes())
             dayMap[dayKey] = dp
         }
 
@@ -186,7 +182,6 @@ final class DataCorrelationEngine: ObservableObject {
         var totalVolume: Double = 0
         var maxWeight: Double = 0
         var sessionCount: Int = 0
-        var durationMinutes: Double = 0
     }
 
     private struct MetricCorrelationConfig {
@@ -488,30 +483,6 @@ final class DataCorrelationEngine: ObservableObject {
         return insights.sorted { $0.frequencyPerWeek > $1.frequencyPerWeek }
     }
 
-    // MARK: - Session Efficiency
-
-    private static func computeEfficiency(workouts: [Workout]) -> [EfficiencyDataPoint] {
-        let sorted = workouts.sorted { $0.date < $1.date }
-
-        return sorted.compactMap { workout in
-            let minutes = Double(workout.estimatedDurationMinutes())
-            guard minutes > 0 else { return nil }
-
-            let volumePerMinute = workout.totalVolume / minutes
-            let setsPerMinute = Double(workout.totalSets) / minutes
-
-            return EfficiencyDataPoint(
-                date: workout.date,
-                workoutName: workout.name,
-                durationMinutes: minutes,
-                totalVolume: workout.totalVolume,
-                totalSets: workout.totalSets,
-                volumePerMinute: volumePerMinute,
-                setsPerMinute: setsPerMinute
-            )
-        }
-    }
-
     // MARK: - Time of Day Analysis
 
     private static func analyzeTimeOfDay(workouts: [Workout]) -> [TimeOfDayBucket] {
@@ -521,7 +492,6 @@ final class DataCorrelationEngine: ObservableObject {
         struct BucketAccumulator {
             var sessions: Int = 0
             var totalVolume: Double = 0
-            var totalDuration: Double = 0
         }
 
         // 2-hour windows for tighter precision
@@ -544,7 +514,6 @@ final class DataCorrelationEngine: ObservableObject {
             if let idx = buckets.firstIndex(where: { $0.range.contains(hour) }) {
                 accumulators[idx].sessions += 1
                 accumulators[idx].totalVolume += workout.totalVolume
-                accumulators[idx].totalDuration += Double(workout.estimatedDurationMinutes())
             }
         }
 
@@ -564,7 +533,6 @@ final class DataCorrelationEngine: ObservableObject {
         return zip(buckets, accumulators).compactMap { bucket, acc in
             guard acc.sessions > 0 else { return nil }
             let avgVolume = acc.totalVolume / Double(acc.sessions)
-            let avgDuration = acc.totalDuration / Double(acc.sessions)
             let n = Double(acc.sessions)
             let confidenceScore = (n * avgVolume + k * globalAvgVolume) / (n + k)
             return TimeOfDayBucket(
@@ -572,7 +540,6 @@ final class DataCorrelationEngine: ObservableObject {
                 hourRange: bucket.range,
                 sessionCount: acc.sessions,
                 avgVolume: avgVolume,
-                avgDuration: avgDuration,
                 confidenceScore: confidenceScore,
                 meetsMinimum: acc.sessions >= minSessions
             )
@@ -729,24 +696,12 @@ struct FrequencyInsight: Identifiable {
     }
 }
 
-struct EfficiencyDataPoint: Identifiable {
-    let id = UUID()
-    let date: Date
-    let workoutName: String
-    let durationMinutes: Double
-    let totalVolume: Double
-    let totalSets: Int
-    let volumePerMinute: Double
-    let setsPerMinute: Double
-}
-
 struct TimeOfDayBucket: Identifiable {
     let id = UUID()
     let label: String
     let hourRange: ClosedRange<Int>
     let sessionCount: Int
     let avgVolume: Double
-    let avgDuration: Double
     /// Bayesian-weighted score that penalises low-sample buckets by pulling
     /// them toward the global average volume.
     let confidenceScore: Double

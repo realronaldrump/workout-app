@@ -331,11 +331,17 @@ struct BodyCompositionView: View {
 
     private var chartSection: some View {
         let forecastEnd = model.forecastPoints.first(where: { $0.horizonDays == 90 })?.date
-        // Only extend the domain into the future when the Forecast overlay is actually visible.
-        // Otherwise, we end up with a confusing "blank" region after the last real measurement.
+        let latestMeasurementDate = model.representativeSeries.last?.date
+        // Keep the right edge anchored to real data unless Forecast is visible.
+        // This avoids showing an empty tail after the latest measurement.
         let domainEnd: Date = {
-            guard showForecast, let forecastEnd else { return displayRange.end }
-            return max(displayRange.end, forecastEnd)
+            if showForecast, let forecastEnd {
+                return max(displayRange.end, forecastEnd)
+            }
+            if let latestMeasurementDate {
+                return min(displayRange.end, latestMeasurementDate)
+            }
+            return displayRange.end
         }()
 
         return VStack(alignment: .leading, spacing: Theme.Spacing.md) {

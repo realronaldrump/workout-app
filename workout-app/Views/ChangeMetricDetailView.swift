@@ -187,8 +187,6 @@ struct ChangeMetricDetailView: View {
                 sessionsSupporting
             case "Total Volume":
                 volumeSupporting
-            case "Avg Duration":
-                durationSupporting
             default:
                 Text("No supporting view for this metric.")
                     .font(Theme.Typography.body)
@@ -317,53 +315,12 @@ struct ChangeMetricDetailView: View {
         }
     }
 
-    private var durationSupporting: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            let longest = currentWorkouts
-                .map { (workout: $0, minutes: WorkoutAnalytics.durationMinutes(from: $0.duration)) }
-                .sorted { $0.minutes > $1.minutes }
-                .prefix(10)
-
-            if longest.isEmpty {
-                Text("No duration data in this window.")
-                    .font(Theme.Typography.body)
-                    .foregroundStyle(Theme.Colors.textSecondary)
-                    .padding(Theme.Spacing.lg)
-                    .softCard(elevation: 1)
-            } else {
-                ForEach(Array(longest), id: \.workout.id) { item in
-                    NavigationLink(destination: WorkoutDetailView(workout: item.workout)) {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(item.workout.name)
-                                    .font(Theme.Typography.headline)
-                                    .foregroundStyle(Theme.Colors.textPrimary)
-                                Text(SharedFormatters.durationMinutes(item.minutes))
-                                    .font(Theme.Typography.caption)
-                                    .foregroundStyle(Theme.Colors.textSecondary)
-                            }
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundStyle(Theme.Colors.textTertiary)
-                        }
-                        .padding(Theme.Spacing.lg)
-                        .softCard(elevation: 1)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-    }
-
     private var chartPoints: [ChartPoint] {
         switch metric.title {
         case "Sessions":
             return sessionChartPoints
         case "Total Volume":
             return seriesPoints(from: workouts, value: { $0.totalVolume })
-        case "Avg Duration":
-            return seriesPoints(from: workouts, value: { WorkoutAnalytics.durationMinutes(from: $0.duration) })
         default:
             return []
         }
@@ -402,8 +359,6 @@ struct ChangeMetricDetailView: View {
             return "\(sign)\(Int(metric.delta))"
         case "Total Volume":
             return "\(sign)\(SharedFormatters.volumePrecise(abs(metric.delta)))"
-        case "Avg Duration":
-            return "\(sign)\(SharedFormatters.durationMinutes(abs(metric.delta)))"
         default:
             return "\(sign)\(String(format: "%.1f", metric.delta))"
         }
@@ -419,8 +374,6 @@ struct ChangeMetricDetailView: View {
             return "\(Int(value))"
         case "Total Volume":
             return SharedFormatters.volumePrecise(value)
-        case "Avg Duration":
-            return SharedFormatters.durationMinutes(value)
         default:
             return String(format: "%.1f", value)
         }
@@ -432,8 +385,6 @@ struct ChangeMetricDetailView: View {
             return "\(Int(value))"
         case "Total Volume":
             return SharedFormatters.volumePrecise(value)
-        case "Avg Duration":
-            return SharedFormatters.durationMinutes(value)
         default:
             return String(format: "%.1f", value)
         }

@@ -4,7 +4,6 @@ import SwiftUI
 /// directly on the home screen. All insights are purely data-derived.
 struct DataInsightCards: View {
     let plateaus: [PlateauAlert]
-    let efficiencyTrends: [EfficiencyDataPoint]
     let frequencyInsights: [FrequencyInsight]
     let onExerciseTap: (String) -> Void
 
@@ -37,27 +36,6 @@ struct DataInsightCards: View {
                 detail: "e1RM flat at ~\(Int(plateau.currentE1RM)) lbs for \(plateau.weeksSinceProgress)w (\(plateau.sessionCount) sessions)",
                 action: { onExerciseTap(plateau.exerciseName) }
             ))
-        }
-
-        // Efficiency trend
-        if efficiencyTrends.count >= 10 {
-            let recent = Array(efficiencyTrends.suffix(5))
-            let older = Array(efficiencyTrends.prefix(5))
-            let recentAvg = recent.map(\.volumePerMinute).reduce(0, +) / Double(recent.count)
-            let olderAvg = older.map(\.volumePerMinute).reduce(0, +) / Double(older.count)
-
-            if olderAvg > 0 {
-                let change = ((recentAvg - olderAvg) / olderAvg) * 100
-                if abs(change) >= 5 {
-                    items.append(DataInsightItem(
-                        icon: change > 0 ? "gauge.with.dots.needle.33percent" : "gauge.with.dots.needle.67percent",
-                        tint: change > 0 ? Theme.Colors.success : Theme.Colors.accentSecondary,
-                        title: "Session efficiency \(change > 0 ? "up" : "down") \(String(format: "%.0f", abs(change)))%",
-                        detail: "\(String(format: "%.0f", recentAvg)) lbs/min recently vs \(String(format: "%.0f", olderAvg)) lbs/min earlier",
-                        action: nil
-                    ))
-                }
-            }
         }
 
         // Under-trained muscle groups

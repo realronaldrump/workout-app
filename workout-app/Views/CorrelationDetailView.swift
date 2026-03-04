@@ -37,11 +37,6 @@ struct CorrelationDetailView: View {
                                 .padding(.horizontal, Theme.Spacing.lg)
                         }
 
-                        // Efficiency trends
-                        if !engine.efficiencyTrends.isEmpty {
-                            efficiencySection
-                                .padding(.horizontal, Theme.Spacing.lg)
-                        }
                     }
                 }
                 .padding(.vertical, Theme.Spacing.xxl)
@@ -237,83 +232,6 @@ struct CorrelationDetailView: View {
             .padding(Theme.Spacing.lg)
             .softCard(elevation: 1)
         }
-    }
-
-    // MARK: - Efficiency
-
-    private var efficiencySection: some View {
-        let recentEfficiency = Array(engine.efficiencyTrends.suffix(10))
-        guard !recentEfficiency.isEmpty else { return AnyView(EmptyView()) }
-
-        let avgVolPerMin = recentEfficiency.map(\.volumePerMinute).reduce(0, +) / Double(recentEfficiency.count)
-        let avgSetsPerMin = recentEfficiency.map(\.setsPerMinute).reduce(0, +) / Double(recentEfficiency.count)
-
-        return AnyView(
-            VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-                Text("Session Efficiency")
-                    .font(Theme.Typography.sectionHeader)
-                    .foregroundColor(Theme.Colors.textPrimary)
-                    .tracking(1.0)
-
-                Text("How productive your sessions are per unit of time.")
-                    .font(Theme.Typography.caption)
-                    .foregroundColor(Theme.Colors.textSecondary)
-
-                HStack(spacing: Theme.Spacing.md) {
-                    VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                        Text("Vol / Min")
-                            .font(Theme.Typography.metricLabel)
-                            .foregroundColor(Theme.Colors.textSecondary)
-                            .textCase(.uppercase)
-                            .tracking(0.8)
-                        Text(String(format: "%.0f lbs", avgVolPerMin))
-                            .font(Theme.Typography.title3)
-                            .foregroundColor(Theme.Colors.textPrimary)
-                    }
-                    .padding(Theme.Spacing.lg)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .softCard(elevation: 2)
-
-                    VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                        Text("Sets / Min")
-                            .font(Theme.Typography.metricLabel)
-                            .foregroundColor(Theme.Colors.textSecondary)
-                            .textCase(.uppercase)
-                            .tracking(0.8)
-                        Text(String(format: "%.2f", avgSetsPerMin))
-                            .font(Theme.Typography.title3)
-                            .foregroundColor(Theme.Colors.textPrimary)
-                    }
-                    .padding(Theme.Spacing.lg)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .softCard(elevation: 2)
-                }
-
-                VStack(spacing: Theme.Spacing.sm) {
-                    ForEach(recentEfficiency) { point in
-                        HStack(spacing: Theme.Spacing.md) {
-                            Text(point.date.formatted(date: .abbreviated, time: .omitted))
-                                .font(Theme.Typography.metricLabel)
-                                .foregroundColor(Theme.Colors.textTertiary)
-                                .frame(width: 80, alignment: .leading)
-
-                            Text(point.workoutName)
-                                .font(Theme.Typography.caption)
-                                .foregroundColor(Theme.Colors.textSecondary)
-                                .lineLimit(1)
-
-                            Spacer()
-
-                            Text(String(format: "%.0f lbs/m", point.volumePerMinute))
-                                .font(Theme.Typography.metricLabel)
-                                .foregroundColor(Theme.Colors.textPrimary)
-                        }
-                    }
-                }
-                .padding(Theme.Spacing.lg)
-                .softCard(elevation: 1)
-            }
-        )
     }
 
     // MARK: - No Data
