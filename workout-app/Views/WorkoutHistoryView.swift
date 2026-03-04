@@ -49,7 +49,7 @@ struct WorkoutHistoryView: View {
                         .padding(.horizontal, Theme.Spacing.lg)
                         .padding(.top, Theme.Spacing.xl)
                     } else {
-                        ForEach(Array(groupedWorkouts.enumerated()), id: \.element.month) { sectionIndex, group in
+                        ForEach(Array(groupedWorkouts.enumerated()), id: \.element.month) { _, group in
                             VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                                 Text(group.month.uppercased())
                                     .font(Theme.Typography.metricLabel)

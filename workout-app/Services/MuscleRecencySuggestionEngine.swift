@@ -22,6 +22,14 @@ struct MuscleGroupSuggestion: Identifiable, Hashable, Sendable {
     let options: [SuggestedExerciseOption]
 }
 
+struct MuscleGroupRecency: Identifiable, Hashable, Sendable {
+    var id: String { group.rawValue }
+    let group: MuscleGroup
+    let lastTrained: Date?
+    let daysSince: Int?
+    let lastExercise: SuggestedExerciseOption?
+}
+
 enum MuscleRecencySuggestionEngine {
     /// Returns suggestions sorted by most-neglected (largest `daysSince`) first.
     nonisolated static func suggestions(
@@ -35,6 +43,105 @@ enum MuscleRecencySuggestionEngine {
     ) -> [MuscleGroupSuggestion] {
         guard !workouts.isEmpty else { return [] }
 
+        let aggregated = aggregate(
+            workouts: workouts,
+            muscleGroupsByExerciseName: muscleGroupsByExerciseName,
+            excluding: alreadyCoveredGroups
+        )
+        let lastTrainedByGroup = aggregated.lastTrainedByGroup
+        let exerciseStatsByGroup = aggregated.exerciseStatsByGroup
+
+        let groupSuggestions: [MuscleGroupSuggestion] = lastTrainedByGroup.compactMap { group, lastTrained in
+            let start = calendar.startOfDay(for: lastTrained)
+            let end = calendar.startOfDay(for: now)
+            let days = calendar.dateComponents([.day], from: start, to: end).day ?? 0
+
+            let options = sortedExerciseOptions(for: group, from: exerciseStatsByGroup)
+
+            return MuscleGroupSuggestion(
+                group: group,
+                lastTrained: lastTrained,
+                daysSince: max(0, days),
+                options: Array(options.prefix(maxOptionsPerGroup))
+            )
+        }
+
+        return groupSuggestions
+            .sorted { lhs, rhs in
+                if lhs.daysSince != rhs.daysSince { return lhs.daysSince > rhs.daysSince }
+                return lhs.group.displayName.localizedCaseInsensitiveCompare(rhs.group.displayName) == .orderedAscending
+            }
+            .prefix(maxGroups)
+            .map { $0 }
+    }
+
+    nonisolated static func allGroupRecency(
+        workouts: [Workout],
+        muscleGroupsByExerciseName: [String: [MuscleGroup]],
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> [MuscleGroupRecency] {
+        let aggregated = aggregate(
+            workouts: workouts,
+            muscleGroupsByExerciseName: muscleGroupsByExerciseName
+        )
+
+        return MuscleGroup.allCases
+            .map { group in
+                let lastTrained = aggregated.lastTrainedByGroup[group]
+                let daysSince: Int?
+                if let lastTrained {
+                    let start = calendar.startOfDay(for: lastTrained)
+                    let end = calendar.startOfDay(for: now)
+                    let days = calendar.dateComponents([.day], from: start, to: end).day ?? 0
+                    daysSince = max(0, days)
+                } else {
+                    daysSince = nil
+                }
+
+                return MuscleGroupRecency(
+                    group: group,
+                    lastTrained: lastTrained,
+                    daysSince: daysSince,
+                    lastExercise: sortedExerciseOptions(for: group, from: aggregated.exerciseStatsByGroup).first
+                )
+            }
+            .sorted { lhs, rhs in
+                switch (lhs.daysSince, rhs.daysSince) {
+                case let (left?, right?):
+                    if left != right { return left > right }
+                case (_?, nil):
+                    return true
+                case (nil, _?):
+                    return false
+                case (nil, nil):
+                    break
+                }
+
+                return lhs.group.displayName.localizedCaseInsensitiveCompare(rhs.group.displayName) == .orderedAscending
+            }
+    }
+
+    nonisolated private static func sortedExerciseOptions(
+        for group: MuscleGroup,
+        from exerciseStatsByGroup: [MuscleGroup: [String: (last: Date, count: Int)]]
+    ) -> [SuggestedExerciseOption] {
+        (exerciseStatsByGroup[group] ?? [:])
+            .map { name, stat in
+                SuggestedExerciseOption(name: name, lastPerformed: stat.last, frequency: stat.count)
+            }
+            .sorted { lhs, rhs in
+                if lhs.lastPerformed != rhs.lastPerformed { return lhs.lastPerformed > rhs.lastPerformed }
+                if lhs.frequency != rhs.frequency { return lhs.frequency > rhs.frequency }
+                return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+            }
+    }
+
+    nonisolated private static func aggregate(
+        workouts: [Workout],
+        muscleGroupsByExerciseName: [String: [MuscleGroup]],
+        excluding: Set<MuscleGroup> = []
+    ) -> (lastTrainedByGroup: [MuscleGroup: Date], exerciseStatsByGroup: [MuscleGroup: [String: (last: Date, count: Int)]]) {
         var lastTrainedByGroup: [MuscleGroup: Date] = [:]
         var exerciseStatsByGroup: [MuscleGroup: [String: (last: Date, count: Int)]] = [:]
 
@@ -44,7 +151,7 @@ enum MuscleRecencySuggestionEngine {
                 guard !groups.isEmpty else { continue }
 
                 for group in groups {
-                    if alreadyCoveredGroups.contains(group) { continue }
+                    if excluding.contains(group) { continue }
 
                     if let existing = lastTrainedByGroup[group] {
                         if workout.date > existing { lastTrainedByGroup[group] = workout.date }
@@ -64,35 +171,6 @@ enum MuscleRecencySuggestionEngine {
             }
         }
 
-        let groupSuggestions: [MuscleGroupSuggestion] = lastTrainedByGroup.compactMap { group, lastTrained in
-            let start = calendar.startOfDay(for: lastTrained)
-            let end = calendar.startOfDay(for: now)
-            let days = calendar.dateComponents([.day], from: start, to: end).day ?? 0
-
-            let options: [SuggestedExerciseOption] = (exerciseStatsByGroup[group] ?? [:])
-                .map { name, stat in
-                    SuggestedExerciseOption(name: name, lastPerformed: stat.last, frequency: stat.count)
-                }
-                .sorted { lhs, rhs in
-                    if lhs.lastPerformed != rhs.lastPerformed { return lhs.lastPerformed > rhs.lastPerformed }
-                    if lhs.frequency != rhs.frequency { return lhs.frequency > rhs.frequency }
-                    return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
-                }
-
-            return MuscleGroupSuggestion(
-                group: group,
-                lastTrained: lastTrained,
-                daysSince: max(0, days),
-                options: Array(options.prefix(maxOptionsPerGroup))
-            )
-        }
-
-        return groupSuggestions
-            .sorted { lhs, rhs in
-                if lhs.daysSince != rhs.daysSince { return lhs.daysSince > rhs.daysSince }
-                return lhs.group.displayName.localizedCaseInsensitiveCompare(rhs.group.displayName) == .orderedAscending
-            }
-            .prefix(maxGroups)
-            .map { $0 }
+        return (lastTrainedByGroup, exerciseStatsByGroup)
     }
 }

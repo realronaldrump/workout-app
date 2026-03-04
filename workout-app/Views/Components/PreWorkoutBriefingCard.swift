@@ -8,6 +8,7 @@ struct PreWorkoutBriefingCard: View {
     let sleepCorrelation: PerformanceCorrelation?
     let onStartSession: (String?) -> Void
     let onExerciseTap: (String) -> Void
+    let onViewAllMuscleRecency: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
@@ -140,11 +141,24 @@ struct PreWorkoutBriefingCard: View {
 
     private var muscleSuggestionsSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text("Consider Training")
+            HStack {
+                Text("Consider Training")
+                    .font(Theme.Typography.captionBold)
+                    .foregroundColor(Theme.Colors.textSecondary)
+                    .textCase(.uppercase)
+                    .tracking(0.8)
+
+                Spacer()
+
+                Button("View all") {
+                    onViewAllMuscleRecency()
+                }
                 .font(Theme.Typography.captionBold)
-                .foregroundColor(Theme.Colors.textSecondary)
+                .foregroundStyle(Theme.Colors.accent)
                 .textCase(.uppercase)
                 .tracking(0.8)
+                .buttonStyle(.plain)
+            }
 
             ForEach(muscleSuggestions) { suggestion in
                 HStack(spacing: Theme.Spacing.md) {

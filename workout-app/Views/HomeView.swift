@@ -22,6 +22,7 @@ struct HomeView: View {
     @State private var selectedWorkoutMetric: WorkoutMetricDetailSelection?
     @State private var selectedChangeMetric: ChangeMetric?
     @State private var showingMuscleBalance = false
+    @State private var showingMuscleRecency = false
     @State private var showRepeatWorkoutId: UUID?
     private let maxContentWidth: CGFloat = 820
 
@@ -81,11 +82,17 @@ struct HomeView: View {
                             },
                             onExerciseTap: { name in
                                 selectedExercise = ExerciseSelection(id: name)
+                            },
+                            onViewAllMuscleRecency: {
+                                showingMuscleRecency = true
                             }
                         )
                         .padding(.horizontal, Theme.Spacing.lg)
 
                         weeklySummarySection
+                            .padding(.horizontal, Theme.Spacing.lg)
+
+                        consistencySection
                             .padding(.horizontal, Theme.Spacing.lg)
 
                         // Change metrics — always visible (not collapsed)
@@ -145,6 +152,9 @@ struct HomeView: View {
                 dateRange: weeklyDateRange,
                 rangeLabel: "This Week"
             )
+        }
+        .navigationDestination(isPresented: $showingMuscleRecency) {
+            MuscleRecencyView(dataManager: dataManager)
         }
         .sheet(isPresented: $showingImportWizard) {
             StrongImportWizard(
@@ -403,6 +413,21 @@ struct HomeView: View {
         .animateOnAppear(delay: 0.15)
     }
 
+    private var consistencySection: some View {
+        let workouts = dataManager.workouts
+        let stats = dataManager.calculateStats(for: workouts)
+
+        return ConsistencyView(
+            stats: stats,
+            workouts: workouts,
+            timeRange: .allTime,
+            onTap: {
+                selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: .sessions, scrollTarget: nil)
+            }
+        )
+        .animateOnAppear(delay: 0.2)
+    }
+
     // MARK: - Change Metrics (always visible — key differentiator)
 
     private var changeSection: some View {
@@ -495,7 +520,13 @@ struct HomeView: View {
                 .foregroundColor(Theme.Colors.textPrimary)
                 .tracking(1.0)
 
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: Theme.Spacing.md), GridItem(.flexible(), spacing: Theme.Spacing.md)], spacing: Theme.Spacing.md) {
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible(), spacing: Theme.Spacing.md),
+                    GridItem(.flexible(), spacing: Theme.Spacing.md)
+                ],
+                spacing: Theme.Spacing.md
+            ) {
                 NavigationLink {
                     PerformanceLabView(dataManager: dataManager)
                 } label: {
@@ -521,6 +552,18 @@ struct HomeView: View {
                     WorkoutHistoryView(workouts: dataManager.workouts, showsBackButton: true)
                 } label: {
                     ExploreRow(title: "History", subtitle: "Past sessions", icon: "clock.fill", tint: Theme.Colors.accent)
+                }
+                .buttonStyle(PlainButtonStyle())
+
+                NavigationLink {
+                    MuscleRecencyView(dataManager: dataManager)
+                } label: {
+                    ExploreRow(
+                        title: "Muscles",
+                        subtitle: "Last worked",
+                        icon: "clock.arrow.trianglehead.counterclockwise.rotate.90",
+                        tint: Theme.Colors.accentSecondary
+                    )
                 }
                 .buttonStyle(PlainButtonStyle())
             }
@@ -694,356 +737,5 @@ struct HomeView: View {
             dailyHealth: healthManager.dailyHealthStore,
             muscleMappings: tagMappings
         )
-    }
-}
-
-private struct HomeEmptyState: View {
-    let onStart: () -> Void
-    let onImport: () -> Void
-
-    var body: some View {
-        VStack(spacing: Theme.Spacing.xl) {
-            VStack(spacing: Theme.Spacing.md) {
-                ZStack {
-                    Circle()
-                        .fill(Theme.Colors.accent.opacity(0.08))
-                        .frame(width: 80, height: 80)
-                    Image(systemName: "figure.strengthtraining.traditional")
-                        .font(.system(size: 32, weight: .medium))
-                        .foregroundColor(Theme.Colors.accent)
-                }
-
-                Text("You're Ready.")
-                    .font(Theme.Typography.sectionHeader)
-                    .foregroundColor(Theme.Colors.textPrimary)
-                    .tracking(0.8)
-
-                Text("Start a session or import your history.\nWe'll keep it simple from there.")
-                    .font(Theme.Typography.body)
-                    .foregroundColor(Theme.Colors.textSecondary)
-                    .multilineTextAlignment(.center)
-                    .lineSpacing(2)
-            }
-
-            VStack(spacing: Theme.Spacing.md) {
-                Button(
-                    action: {
-                        Haptics.selection()
-                        onStart()
-                    },
-                    label: {
-                        Text("Start a Session")
-                            .font(Theme.Typography.headline)
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, Theme.Spacing.lg)
-                            .frame(minHeight: 56)
-                            .background(Theme.accentGradient)
-                            .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge))
-                            .shadow(color: Theme.Colors.accent.opacity(0.25), radius: 12, x: 0, y: 6)
-                    }
-                )
-                .buttonStyle(.plain)
-
-                Button(
-                    action: {
-                        Haptics.selection()
-                        onImport()
-                    },
-                    label: {
-                        HStack(spacing: Theme.Spacing.sm) {
-                            Image(systemName: "arrow.down.to.line")
-                                .font(.system(size: 13, weight: .bold))
-                            Text("Import from Strong")
-                                .font(Theme.Typography.bodyBold)
-                        }
-                        .foregroundStyle(Theme.Colors.accent)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, Theme.Spacing.md)
-                        .frame(minHeight: 48)
-                        .softCard(cornerRadius: Theme.CornerRadius.xlarge, elevation: 1)
-                    }
-                )
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(Theme.Spacing.xl)
-        .softCard(elevation: 2)
-    }
-}
-
-// MARK: - Sync Status Pill
-
-private struct SyncStatusPill: View {
-    let text: String
-    let isActive: Bool
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Circle()
-                .fill(isActive ? Theme.Colors.success : Theme.Colors.textTertiary.opacity(0.5))
-                .frame(width: 6, height: 6)
-                .accessibilityHidden(true)
-            Text(text)
-                .font(Theme.Typography.metricLabel)
-                .textCase(.uppercase)
-                .tracking(0.6)
-                .foregroundStyle(isActive ? Theme.Colors.textSecondary : Theme.Colors.textTertiary)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(
-            Capsule()
-                .fill(Theme.Colors.surfaceRaised)
-        )
-        .overlay(
-            Capsule()
-                .strokeBorder(Theme.Colors.border.opacity(0.4), lineWidth: 1)
-        )
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Sync status: \(text)")
-    }
-}
-
-// MARK: - Compact Change Card (always-visible period-over-period delta)
-
-private struct CompactChangeCard: View {
-    let metric: ChangeMetric
-
-    private var tint: Color {
-        metric.isPositive ? Theme.Colors.success : Theme.Colors.warning
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            HStack(spacing: 5) {
-                Image(systemName: metric.isPositive ? "arrow.up.right" : "arrow.down.right")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundColor(tint)
-                Text(metric.title)
-                    .font(Theme.Typography.metricLabel)
-                    .foregroundColor(Theme.Colors.textTertiary)
-                    .textCase(.uppercase)
-                    .tracking(0.6)
-            }
-
-            Text(formatValue(metric))
-                .font(Theme.Typography.headline)
-                .foregroundColor(Theme.Colors.textPrimary)
-                .lineLimit(1)
-
-            if metric.percentChange != 0 {
-                Text(String(format: "%+.0f%%", metric.percentChange))
-                    .font(Theme.Typography.captionBold)
-                    .foregroundColor(tint)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(
-                        Capsule()
-                            .fill(tint.opacity(0.1))
-                    )
-            }
-        }
-        .padding(Theme.Spacing.lg)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .softCard(elevation: 1)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(metric.title): \(formatValue(metric)), \(metric.isPositive ? "increased" : "decreased")")
-    }
-
-    private func formatValue(_ metric: ChangeMetric) -> String {
-        if metric.title.contains("Sessions") {
-            return String(format: "%.0f", metric.current)
-        }
-        if metric.title.contains("Volume") {
-            return SharedFormatters.volumePrecise(metric.current)
-        }
-        return String(format: "%.1f", metric.current)
-    }
-}
-
-// MARK: - Home Workout Row (with repeat button)
-
-private struct HomeWorkoutRow: View {
-    let workout: Workout
-    let onRepeat: () -> Void
-    let onTap: () -> Void
-    @EnvironmentObject var healthManager: HealthKitManager
-
-    var body: some View {
-        Button(action: { onTap() }, label: {
-            HStack(spacing: Theme.Spacing.md) {
-                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                    HStack(alignment: .center) {
-                        Text(workout.name)
-                            .font(Theme.Typography.bodyBold)
-                            .foregroundColor(Theme.Colors.textPrimary)
-
-                        Spacer()
-
-                        Button {
-                            Haptics.selection()
-                            onRepeat()
-                        } label: {
-                            Image(systemName: "arrow.counterclockwise")
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundColor(Theme.Colors.accent)
-                                .frame(width: 28, height: 28)
-                                .background(Theme.Colors.accent.opacity(0.08))
-                                .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Repeat \(workout.name)")
-                    }
-
-                    Text(workout.date.formatted(date: .abbreviated, time: .shortened))
-                        .font(Theme.Typography.caption)
-                        .foregroundColor(Theme.Colors.textTertiary)
-
-                    HStack(spacing: Theme.Spacing.md) {
-                        Label(workout.duration, systemImage: "clock")
-                        Label("\(workout.exercises.count) exercises", systemImage: "figure.strengthtraining.traditional")
-                    }
-                    .font(Theme.Typography.caption)
-                    .foregroundColor(Theme.Colors.textSecondary)
-
-                    if let data = healthManager.getHealthData(for: workout.id) {
-                        HealthDataSummaryView(healthData: data)
-                    }
-                }
-
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundColor(Theme.Colors.textTertiary)
-            }
-            .padding(Theme.Spacing.lg)
-            .softCard(elevation: 1)
-        })
-        .buttonStyle(PlainButtonStyle())
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(workout.name), \(workout.date.formatted(date: .abbreviated, time: .shortened))")
-        .accessibilityHint("Double tap for details, or use the repeat button")
-    }
-}
-
-// MARK: - Reusable Components
-
-private struct SecondaryChip: View {
-    let title: String
-    let icon: String
-    let action: () -> Void
-
-    var body: some View {
-        Button(
-            action: {
-                Haptics.selection()
-                action()
-            },
-            label: {
-                HStack(spacing: Theme.Spacing.sm) {
-                    Image(systemName: icon)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(Theme.Colors.accent)
-                    Text(title)
-                        .font(Theme.Typography.captionBold)
-                        .textCase(.uppercase)
-                        .tracking(0.6)
-                }
-                .foregroundStyle(Theme.Colors.textPrimary)
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal, Theme.Spacing.lg)
-                .padding(.vertical, Theme.Spacing.md)
-                .frame(minHeight: 48)
-                .background(
-                    RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
-                        .fill(Theme.Colors.surfaceRaised)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
-                        .strokeBorder(Theme.Colors.border.opacity(0.4), lineWidth: 1)
-                )
-            }
-        )
-        .buttonStyle(.plain)
-    }
-}
-
-private struct SummaryPill: View {
-    let title: String
-    let value: String
-    var onTap: (() -> Void)?
-
-    var body: some View {
-        Group {
-            if let onTap {
-                MetricTileButton(action: onTap, content: { content })
-            } else {
-                content
-            }
-        }
-    }
-
-    private var content: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text(title)
-                .font(Theme.Typography.metricLabel)
-                .foregroundColor(Theme.Colors.textTertiary)
-                .textCase(.uppercase)
-                .tracking(0.6)
-
-            Text(value)
-                .font(Theme.Typography.headline)
-                .foregroundColor(Theme.Colors.textPrimary)
-                .lineLimit(1)
-        }
-        .padding(.horizontal, Theme.Spacing.md)
-        .padding(.vertical, Theme.Spacing.md)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                .fill(Theme.Colors.surfaceRaised)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                .strokeBorder(Theme.Colors.border.opacity(0.3), lineWidth: 1)
-        )
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(title): \(value)")
-        .accessibilityAddTraits(onTap != nil ? .isButton : [])
-    }
-}
-
-private struct ExploreRow: View {
-    let title: String
-    let subtitle: String
-    let icon: String
-    let tint: Color
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            ZStack {
-                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                    .fill(tint.opacity(0.08))
-                    .frame(width: 40, height: 40)
-                Image(systemName: icon)
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(tint)
-            }
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(Theme.Typography.bodyBold)
-                    .foregroundColor(Theme.Colors.textPrimary)
-                Text(subtitle)
-                    .font(Theme.Typography.caption)
-                    .foregroundColor(Theme.Colors.textSecondary)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(Theme.Spacing.lg)
-        .softCard(elevation: 1)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(title), \(subtitle)")
-        .accessibilityAddTraits(.isButton)
     }
 }
