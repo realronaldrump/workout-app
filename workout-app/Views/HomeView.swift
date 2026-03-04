@@ -23,6 +23,7 @@ struct HomeView: View {
     @State private var selectedChangeMetric: ChangeMetric?
     @State private var showingMuscleBalance = false
     @State private var showingMuscleRecency = false
+    @State private var showingConsistencyDetail = false
     @State private var showRepeatWorkoutId: UUID?
     private let maxContentWidth: CGFloat = 820
 
@@ -145,6 +146,9 @@ struct HomeView: View {
         }
         .navigationDestination(item: $selectedChangeMetric) { metric in
             ChangeMetricDetailView(metric: metric, window: changeWindow, workouts: dataManager.workouts)
+        }
+        .navigationDestination(isPresented: $showingConsistencyDetail) {
+            ConsistencyDetailView(workouts: dataManager.workouts)
         }
         .navigationDestination(isPresented: $showingMuscleBalance) {
             MuscleBalanceDetailView(
@@ -422,7 +426,7 @@ struct HomeView: View {
             workouts: workouts,
             timeRange: .allTime,
             onTap: {
-                selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: .sessions, scrollTarget: nil)
+                showingConsistencyDetail = true
             }
         )
         .animateOnAppear(delay: 0.2)

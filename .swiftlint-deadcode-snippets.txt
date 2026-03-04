@@ -1,0 +1,75 @@
+/Users/davis/my-apps/workout-app/workout-app/Theme.swift:57:static let warmTint = Color(uiColor: UIColor(hex: 0xF97316)).opacity(0.05)
+/Users/davis/my-apps/workout-app/workout-app/Theme.swift:58:static let successTint = Color(uiColor: UIColor(hex: 0x16A34A)).opacity(0.06)
+/Users/davis/my-apps/workout-app/workout-app/Theme.swift:84:static let elevated = UIColor(hex: 0xFFFFFF)
+/Users/davis/my-apps/workout-app/workout-app/Theme.swift:85:static let cardBackground = UIColor(hex: 0xFFFFFF)
+/Users/davis/my-apps/workout-app/workout-app/Theme.swift:89:static let textSecondary = UIColor(hex: 0x6B6560)
+/Users/davis/my-apps/workout-app/workout-app/Theme.swift:93:static let accentSecondary = UIColor(hex: 0xF97316)
+/Users/davis/my-apps/workout-app/workout-app/Theme.swift:181:static let sectionHeader2 = Font.custom("BebasNeue-Regular", size: 22, relativeTo: .title2)
+/Users/davis/my-apps/workout-app/workout-app/Theme.swift:184:static let tabLabel = Font.custom("BebasNeue-Regular", size: 11, relativeTo: .caption2)
+/Users/davis/my-apps/workout-app/workout-app/Theme.swift:185:static let heroTitle = Font.custom("BebasNeue-Regular", size: 38, relativeTo: .title)
+/Users/davis/my-apps/workout-app/workout-app/Theme.swift:188:static let largeTitle = Font.system(size: 36, weight: .heavy, design: .default)
+/Users/davis/my-apps/workout-app/workout-app/Theme.swift:197:static let footnote = Font.system(size: 13, weight: .medium, design: .default)
+/Users/davis/my-apps/workout-app/workout-app/Theme.swift:203:static let numberLarge = Font.system(size: 42, weight: .bold, design: .monospaced)
+/Users/davis/my-apps/workout-app/workout-app/Theme.swift:205:static let metricLarge = Font.system(size: 48, weight: .heavy, design: .monospaced)
+/Users/davis/my-apps/workout-app/workout-app/Theme.swift:221:static let slow = SwiftUI.Animation.easeInOut(duration: 0.45)
+/Users/davis/my-apps/workout-app/workout-app/Theme.swift:245:static let pill: CGFloat = 100
+/Users/davis/my-apps/workout-app/workout-app/Theme.swift:408:static let successGradient = LinearGradient(
+/Users/davis/my-apps/workout-app/workout-app/Theme.swift:452:func cardStyle() -> some View {
+/Users/davis/my-apps/workout-app/workout-app/Theme.swift:459:func tintedSection(_ color: Color, cornerRadius: CGFloat = Theme.CornerRadius.large) -> some View {
+/Users/davis/my-apps/workout-app/workout-app/Theme.swift:486:func blended(with color: Color, amount: Double) -> Color {
+/Users/davis/my-apps/workout-app/workout-app/Models/AppTimeRange.swift:21:var menuTitle: String {
+/Users/davis/my-apps/workout-app/workout-app/Models/AppTimeRange.swift:35:static let workoutPresets: [AppTimeRange] = [.week, .fourWeeks, .threeMonths, .year, .allTime]
+/Users/davis/my-apps/workout-app/workout-app/Models/AppTimeRange.swift:38:static let healthPresets: [AppTimeRange] = [.week, .fourWeeks, .threeMonths, .sixMonths, .year, .allTime]
+/Users/davis/my-apps/workout-app/workout-app/Models/AppTimeRange.swift:41:static let exercisePresets: [AppTimeRange] = [.sixWeeks, .threeMonths, .sixMonths, .year, .allTime]
+/Users/davis/my-apps/workout-app/workout-app/Models/AppTimeRange.swift:48:func interval(
+/Users/davis/my-apps/workout-app/workout-app/Models/ExerciseMetricPreferences.swift:48:var iconName: String {
+/Users/davis/my-apps/workout-app/workout-app/Models/WorkoutModels.swift:35:var averageReps: Double {
+/Users/davis/my-apps/workout-app/workout-app/Models/SampleData.swift:3:enum SampleData {
+/Users/davis/my-apps/workout-app/workout-app/Models/SampleData.swift:162:static let stats: WorkoutStats = {
+/Users/davis/my-apps/workout-app/workout-app/Models/SampleData.swift:182:static let insights: [Insight] = [
+/Users/davis/my-apps/workout-app/workout-app/Models/SampleData.swift:218:static let healthData: WorkoutHealthData = {
+/Users/davis/my-apps/workout-app/workout-app/Models/HealthData.swift:238:enum HealthSyncStatus: Codable {
+/Users/davis/my-apps/workout-app/workout-app/Models/HealthData.swift:244:var isSynced: Bool {
+/Users/davis/my-apps/workout-app/workout-app/Models/HealthData.swift:249:var isSyncing: Bool {
+/Users/davis/my-apps/workout-app/workout-app/Models/HealthData.swift:263:var displayText: String {
+/Users/davis/my-apps/workout-app/workout-app/Models/HealthData.swift:276:var iconName: String {
+/Users/davis/my-apps/workout-app/workout-app/Models/HealthData.swift:289:var iconColor: String {
+/Users/davis/my-apps/workout-app/workout-app/Views/DashboardView.swift:8:struct DashboardView: View {
+/Users/davis/my-apps/workout-app/workout-app/Views/ChangeMetricDetailView.swift:29:private var previousWorkouts: [Workout] {
+/Users/davis/my-apps/workout-app/workout-app/Views/HomeView.swift:26:@State private var showRepeatWorkoutId: UUID?
+/Users/davis/my-apps/workout-app/workout-app/Views/CorrelationDetailView.swift:9:@State private var selectedCorrelation: PerformanceCorrelation?
+/Users/davis/my-apps/workout-app/workout-app/Views/PerformanceLabView.swift:24:@EnvironmentObject var healthManager: HealthKitManager
+/Users/davis/my-apps/workout-app/workout-app/Views/OnboardingView.swift:328:private var primaryButtonColor: Color {
+/Users/davis/my-apps/workout-app/workout-app/Views/Health/DailyHealthDetailView.swift:159:private func formatDuration(_ duration: TimeInterval) -> String {
+/Users/davis/my-apps/workout-app/workout-app/Views/Components/VolumeProgressChart.swift:4:struct VolumeProgressChart: View {
+/Users/davis/my-apps/workout-app/workout-app/Views/Components/InsightCardView.swift:83:struct InsightsSectionView: View {
+/Users/davis/my-apps/workout-app/workout-app/Views/Components/InsightCardView.swift:85:let dataManager: WorkoutDataManager
+/Users/davis/my-apps/workout-app/workout-app/Views/Components/RecentWorkoutsView.swift:3:struct RecentWorkoutsView: View {
+/Users/davis/my-apps/workout-app/workout-app/Views/Components/RecentWorkoutsView.swift:6:@EnvironmentObject var healthManager: HealthKitManager
+/Users/davis/my-apps/workout-app/workout-app/Views/Components/FilterButtons.swift:3:struct FilterButton: View {
+/Users/davis/my-apps/workout-app/workout-app/Views/Components/MultiSelectSheet.swift:3:struct MultiSelectSheet<Item: Hashable & Identifiable>: View {
+/Users/davis/my-apps/workout-app/workout-app/Views/Components/InsightsStreamView.swift:12:struct InsightsStreamView: View {
+/Users/davis/my-apps/workout-app/workout-app/Views/Components/ExerciseBreakdownView.swift:4:struct ExerciseBreakdownView: View {
+/Users/davis/my-apps/workout-app/workout-app/Views/Components/CollapsibleSection.swift:3:struct CollapsibleSection<Content: View>: View {
+/Users/davis/my-apps/workout-app/workout-app/Views/Components/OverviewCardsView.swift:3:struct OverviewCardsView: View {
+/Users/davis/my-apps/workout-app/workout-app/Views/Components/HealthDataView.swift:7:@State private var showingAllHeartRateSamples = false
+/Users/davis/my-apps/workout-app/workout-app/Views/Components/HealthDataView.swift:469:struct HealthSyncButton: View {
+/Users/davis/my-apps/workout-app/workout-app/Views/Wizards/StrongImportWizard.swift:9:@EnvironmentObject var annotationsManager: WorkoutAnnotationsManager
+/Users/davis/my-apps/workout-app/workout-app/Views/Wizards/StrongImportWizard.swift:10:@EnvironmentObject var gymProfilesManager: GymProfilesManager
+/Users/davis/my-apps/workout-app/workout-app/Views/Session/WorkoutEditView.swift:8:@ObservedObject private var metricManager = ExerciseMetricManager.shared
+/Users/davis/my-apps/workout-app/workout-app/Services/iCloudDocumentManager.swift:8:@Published var isDocumentPickerPresented = false
+/Users/davis/my-apps/workout-app/workout-app/Services/iCloudDocumentManager.swift:69:func saveToiCloud(data: Data, fileName: String) throws {
+/Users/davis/my-apps/workout-app/workout-app/Services/iCloudDocumentManager.swift:78:func loadFromiCloud(fileName: String) throws -> Data {
+/Users/davis/my-apps/workout-app/workout-app/Services/iCloudDocumentManager.swift:87:func listWorkoutFiles() -> [URL] {
+/Users/davis/my-apps/workout-app/workout-app/Services/SharedFormatters.swift:62:static func durationMinutes(_ minutes: Double) -> String {
+/Users/davis/my-apps/workout-app/workout-app/Services/WorkoutAnalytics.swift:52:static func repRangeDistribution(for workouts: [Workout]) -> [RepRangeBucket] {
+/Users/davis/my-apps/workout-app/workout-app/Services/WorkoutAnalytics.swift:88:static func intensityZones(for workouts: [Workout]) -> [IntensityZoneBucket] {
+/Users/davis/my-apps/workout-app/workout-app/Services/WorkoutAnalytics.swift:203:static func consistentExerciseNames(
+/Users/davis/my-apps/workout-app/workout-app/Services/WorkoutAnalytics.swift:221:static func changeMetrics(for workouts: [Workout], windowDays: Int) -> [ChangeMetric] {
+/Users/davis/my-apps/workout-app/workout-app/Services/WorkoutAnalytics.swift:378:private static func average(_ values: [Double]) -> Double {
+/Users/davis/my-apps/workout-app/workout-app/Services/AdaptiveLuminanceManager.swift:5:final class AdaptiveLuminanceManager: ObservableObject {
+/Users/davis/my-apps/workout-app/workout-app/Services/HealthKitManager+Queries.swift:93:func fetchAppleWorkout(from start: Date, to end: Date) async throws -> HKWorkout? {
+/Users/davis/my-apps/workout-app/workout-app/Services/WorkoutSessionManager.swift:107:func updateSessionName(_ name: String) {
+/Users/davis/my-apps/workout-app/workout-app/Services/WorkoutSessionManager.swift:117:func setGymProfileId(_ gymProfileId: UUID?) {
+/Users/davis/my-apps/workout-app/workout-app/Services/WorkoutSessionManager.swift:239:func clearAllMuscleGroupSuggestionDismissals() {
+/Users/davis/my-apps/workout-app/workout-app/Services/WorkoutSessionManager.swift:247:func moveExercise(from source: IndexSet, to destination: Int) {
