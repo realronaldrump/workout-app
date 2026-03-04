@@ -62,7 +62,7 @@ struct ConsistencyView: View {
             ) {
                 ConsistencyMetricPill(
                     label: "Avg Sessions/Wk",
-                    value: String(format: "%.1f", stats.workoutsPerWeek)
+                    value: String(format: "%.1f", averageSessionsPerWeek)
                 )
                 ConsistencyMetricPill(
                     label: "This Week",
@@ -118,6 +118,14 @@ struct ConsistencyView: View {
 
     private var weeksAtGoal: Int {
         weeklyBuckets.filter { $0.sessions >= targetSessionsPerWeek }.count
+    }
+
+    private var averageSessionsPerWeek: Double {
+        guard !weeklyBuckets.isEmpty else { return 0 }
+        let totalSessions = weeklyBuckets.reduce(0) { partialResult, bucket in
+            partialResult + bucket.sessions
+        }
+        return Double(totalSessions) / Double(weeklyBuckets.count)
     }
 
     private var maxSessionsInDisplay: Int {

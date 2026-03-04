@@ -11,6 +11,9 @@ class WorkoutDataManager: ObservableObject {
     @Published var isLoading = false
     @Published var error: String?
 
+    private static let intentionalRestDaysKey = "intentionalRestDays"
+    private static let defaultIntentionalRestDays = 1
+
     private let identityStore = WorkoutIdentityStore()
 
     nonisolated func processImportedWorkoutSets(
@@ -177,7 +180,7 @@ class WorkoutDataManager: ObservableObject {
     private func calculateStreaks() -> (current: Int, longest: Int) {
         guard !workouts.isEmpty else { return (0, 0) }
 
-        let intentionalRestDays = max(0, UserDefaults.standard.integer(forKey: "intentionalRestDays"))
+        let intentionalRestDays = configuredIntentionalRestDays()
         let allowedGapDays = intentionalRestDays + 1 // e.g. 1 rest day => allow workout days 2 days apart
 
         // 1. Normalize all workout dates to start of day
@@ -230,30 +233,32 @@ class WorkoutDataManager: ObservableObject {
     private func calculateWorkoutsPerWeek(for filteredWorkouts: [Workout]) -> Double {
         guard !filteredWorkouts.isEmpty else { return 0 }
 
-        let calendar = Calendar.current
-        let intentionalRestDays = max(0, UserDefaults.standard.integer(forKey: "intentionalRestDays"))
-        let allowedGapDays = intentionalRestDays + 1
+        var calendar = Calendar.current
+        calendar.firstWeekday = 1 // Sunday
+        calendar.minimumDaysInFirstWeek = 1
 
-        // Use unique workout-days to avoid over-counting gaps when multiple sessions happen in one day.
-        let uniqueDays = Set(filteredWorkouts.map { calendar.startOfDay(for: $0.date) })
-        let sortedDays = uniqueDays.sorted()
-        guard !sortedDays.isEmpty else { return 0 }
-
-        // Effective span in days, capping gaps larger than the intentional rest window so long breaks don't
-        // dilute consistency/session frequency.
-        var effectiveDays = 1
-        var lastDay = sortedDays[0]
-        for index in 1..<sortedDays.count {
-            let day = sortedDays[index]
-            let diff = calendar.dateComponents([.day], from: lastDay, to: day).day ?? 0
-            if diff > 0 {
-                effectiveDays += min(diff, allowedGapDays)
-            }
-            lastDay = day
+        let sortedWorkouts = filteredWorkouts.sorted { $0.date < $1.date }
+        guard let firstWorkoutDate = sortedWorkouts.first?.date,
+              let lastWorkoutDate = sortedWorkouts.last?.date else {
+            return 0
         }
 
-        let effectiveWeeks = max(Double(effectiveDays) / 7.0, 1.0)
-        return Double(filteredWorkouts.count) / effectiveWeeks
+        let firstWeekStart = calendar.dateInterval(of: .weekOfYear, for: firstWorkoutDate)?.start
+            ?? calendar.startOfDay(for: firstWorkoutDate)
+        let lastWeekStart = calendar.dateInterval(of: .weekOfYear, for: lastWorkoutDate)?.start
+            ?? calendar.startOfDay(for: lastWorkoutDate)
+        let daySpan = calendar.dateComponents([.day], from: firstWeekStart, to: lastWeekStart).day ?? 0
+        let weekSpan = max((daySpan / 7) + 1, 1)
+
+        return Double(filteredWorkouts.count) / Double(weekSpan)
+    }
+
+    private func configuredIntentionalRestDays() -> Int {
+        let defaults = UserDefaults.standard
+        guard defaults.object(forKey: Self.intentionalRestDaysKey) != nil else {
+            return Self.defaultIntentionalRestDays
+        }
+        return max(0, defaults.integer(forKey: Self.intentionalRestDaysKey))
     }
 
     func clearAllData() {
