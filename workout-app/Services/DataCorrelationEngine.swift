@@ -10,10 +10,8 @@ import SwiftUI
 final class DataCorrelationEngine: ObservableObject {
 
     @Published var correlations: [PerformanceCorrelation] = []
-    @Published var recoveryReadiness: RecoveryReadiness?
-    @Published var plateauAlerts: [PlateauAlert] = []
+    @Published var recoverySignals: [RecoverySignal] = []
     @Published var frequencyInsights: [FrequencyInsight] = []
-    @Published var timeOfDayAnalysis: [TimeOfDayBucket] = []
     @Published var isAnalyzing = false
 
     /// Run full analysis. Call when workout or health data changes.
@@ -32,19 +30,15 @@ final class DataCorrelationEngine: ObservableObject {
                 healthStore: healthStore,
                 dailyHealth: dailyHealth
             )
-            let readiness = Self.computeRecoveryReadiness(dailyHealth: dailyHealth)
-            let plateaus = Self.detectPlateaus(workouts: workouts)
+            let recoverySignals = Self.computeRecoverySignals(dailyHealth: dailyHealth)
             let frequency = Self.analyzeFrequency(workouts: workouts, mappings: muscleMappings)
-            let timeOfDay = Self.analyzeTimeOfDay(workouts: workouts)
 
-            return (correlations, readiness, plateaus, frequency, timeOfDay)
+            return (correlations, recoverySignals, frequency)
         }.value
 
         correlations = result.0
-        recoveryReadiness = result.1
-        plateauAlerts = result.2
-        frequencyInsights = result.3
-        timeOfDayAnalysis = result.4
+        recoverySignals = result.1
+        frequencyInsights = result.2
         isAnalyzing = false
     }
 
@@ -203,12 +197,6 @@ final class DataCorrelationEngine: ObservableObject {
         }
     }
 
-    private struct ExercisePerformanceSnapshot {
-        let date: Date
-        let maxWeight: Double
-        let e1rm: Double
-    }
-
     private static func correlateMetricWithPerformance(
         dayMap: [Date: DayPerformance],
         dailyHealth: [Date: DailyHealthData],
@@ -258,11 +246,13 @@ final class DataCorrelationEngine: ObservableObject {
         )
     }
 
-    // MARK: - Recovery Readiness
+    // MARK: - Recovery Signals
 
-    private static func computeRecoveryReadiness(
+    /// Computes transparent recovery signals by comparing the recent 7-day
+    /// average to the prior 30-day baseline for each metric.
+    private static func computeRecoverySignals(
         dailyHealth: [Date: DailyHealthData]
-    ) -> RecoveryReadiness? {
+    ) -> [RecoverySignal] {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
 
@@ -275,7 +265,7 @@ final class DataCorrelationEngine: ObservableObject {
                 recentDays.append(data)
             }
         }
-        guard recentDays.count >= 2 else { return nil }
+        guard recentDays.count >= 2 else { return [] }
 
         // Gather baseline (past 30 days for comparison)
         var baselineDays: [DailyHealthData] = []
@@ -287,154 +277,54 @@ final class DataCorrelationEngine: ObservableObject {
             }
         }
 
-        var signals: [ReadinessSignal] = []
+        var signals: [RecoverySignal] = []
 
-        // HRV signal: higher than baseline = good
+        // HRV
         let recentHRV = recentDays.compactMap(\.heartRateVariability)
         let baseHRV = baselineDays.compactMap(\.heartRateVariability)
         if let avgRecent = average(recentHRV), let avgBase = average(baseHRV), avgBase > 0 {
-            let deviation = (avgRecent - avgBase) / avgBase
-            signals.append(ReadinessSignal(
+            let percentChange = ((avgRecent - avgBase) / avgBase) * 100
+            signals.append(RecoverySignal(
                 metric: "HRV",
                 icon: "waveform.path.ecg",
                 currentValue: avgRecent,
                 baselineValue: avgBase,
                 unit: "ms",
-                deviation: deviation,
-                direction: deviation >= 0 ? .favorable : .unfavorable,
-                weight: 0.35,
-                valueIncreased: avgRecent >= avgBase
+                percentChange: percentChange
             ))
         }
 
-        // Resting HR signal: lower than baseline = good
+        // Resting HR
         let recentRHR = recentDays.compactMap(\.restingHeartRate)
         let baseRHR = baselineDays.compactMap(\.restingHeartRate)
         if let avgRecent = average(recentRHR), let avgBase = average(baseRHR), avgBase > 0 {
-            let deviation = (avgBase - avgRecent) / avgBase // inverted: lower is better
-            signals.append(ReadinessSignal(
+            let percentChange = ((avgRecent - avgBase) / avgBase) * 100
+            signals.append(RecoverySignal(
                 metric: "Resting HR",
                 icon: "heart",
                 currentValue: avgRecent,
                 baselineValue: avgBase,
                 unit: "bpm",
-                deviation: deviation,
-                direction: deviation >= 0 ? .favorable : .unfavorable,
-                weight: 0.30,
-                valueIncreased: avgRecent >= avgBase
+                percentChange: percentChange
             ))
         }
 
-        // Sleep signal: more than baseline = good
+        // Sleep duration
         let recentSleep = recentDays.compactMap { $0.sleepSummary?.totalHours }
         let baseSleep = baselineDays.compactMap { $0.sleepSummary?.totalHours }
         if let avgRecent = average(recentSleep), let avgBase = average(baseSleep), avgBase > 0 {
-            let deviation = (avgRecent - avgBase) / avgBase
-            signals.append(ReadinessSignal(
+            let percentChange = ((avgRecent - avgBase) / avgBase) * 100
+            signals.append(RecoverySignal(
                 metric: "Sleep",
                 icon: "moon.zzz.fill",
                 currentValue: avgRecent,
                 baselineValue: avgBase,
                 unit: "hrs",
-                deviation: deviation,
-                direction: deviation >= 0 ? .favorable : .unfavorable,
-                weight: 0.35,
-                valueIncreased: avgRecent >= avgBase
+                percentChange: percentChange
             ))
         }
 
-        guard !signals.isEmpty else { return nil }
-
-        // Weighted composite score: 0.0 to 1.0
-        let totalWeight = signals.map(\.weight).reduce(0, +)
-        let weightedScore = signals.reduce(0.0) { sum, signal in
-            // Clamp deviation to [-1, 1], map to [0, 1]
-            let clamped = max(-1.0, min(1.0, signal.deviation))
-            let normalized = (clamped + 1.0) / 2.0 // 0 = very bad, 1 = very good
-            return sum + normalized * signal.weight
-        }
-        let score = totalWeight > 0 ? weightedScore / totalWeight : 0.5
-
-        return RecoveryReadiness(
-            score: score,
-            signals: signals,
-            dataPointCount: recentDays.count,
-            baselineDataPointCount: baselineDays.count
-        )
-    }
-
-    // MARK: - Plateau Detection
-
-    private static func detectPlateaus(workouts: [Workout]) -> [PlateauAlert] {
-        var alerts: [PlateauAlert] = []
-        let calendar = Calendar.current
-        guard let fourWeeksAgo = calendar.date(byAdding: .day, value: -28, to: Date()) else { return [] }
-
-        let allExercises = workouts.flatMap { $0.exercises }
-        let exerciseGroups = Dictionary(grouping: allExercises) { $0.name }
-
-        for name in exerciseGroups.keys {
-            // Need at least 6 sessions of an exercise to detect plateau
-            let history = workouts.compactMap { workout -> ExercisePerformanceSnapshot? in
-                guard let ex = workout.exercises.first(where: { $0.name == name }) else { return nil }
-                return ExercisePerformanceSnapshot(
-                    date: workout.date,
-                    maxWeight: ex.maxWeight,
-                    e1rm: ex.oneRepMax
-                )
-            }.sorted { $0.date < $1.date }
-
-            guard history.count >= 6 else { continue }
-
-            // Check last 4 weeks for stagnation in estimated 1RM
-            let recentHistory = history.filter { $0.date >= fourWeeksAgo }
-            guard recentHistory.count >= 3 else { continue }
-
-            let recent1RMs = recentHistory.map(\.e1rm)
-            let older1RMs = history.filter { $0.date < fourWeeksAgo }.suffix(6).map(\.e1rm)
-
-            guard !older1RMs.isEmpty else { continue }
-
-            let recentAvg = recent1RMs.reduce(0, +) / Double(recent1RMs.count)
-            let olderAvg = older1RMs.reduce(0, +) / Double(older1RMs.count)
-
-            // Plateau = recent avg within 2% of older avg (no meaningful progress)
-            let changePercent = olderAvg > 0 ? ((recentAvg - olderAvg) / olderAvg) * 100 : 0
-
-            if abs(changePercent) < 2.0 && recentHistory.count >= 3 {
-                // Confirm low variance (not just oscillating)
-                let variance = standardDeviation(recent1RMs)
-                let relativeVariance = recentAvg > 0 ? variance / recentAvg : 0
-
-                if relativeVariance < 0.05 { // less than 5% std dev = plateau
-                    alerts.append(PlateauAlert(
-                        exerciseName: name,
-                        currentE1RM: recentAvg,
-                        weeksSinceProgress: weeksStagnant(history: history),
-                        sessionCount: recentHistory.count,
-                        changePercent: changePercent
-                    ))
-                }
-            }
-        }
-
-        return alerts.sorted { $0.weeksSinceProgress > $1.weeksSinceProgress }
-    }
-
-    private static func weeksStagnant(history: [ExercisePerformanceSnapshot]) -> Int {
-        guard history.count >= 2 else { return 0 }
-        let calendar = Calendar.current
-
-        // Walk backward from most recent, find when they last set a new peak
-        var lastPeakDate = history.last?.date ?? Date()
-        var runningMax = 0.0
-        for entry in history where entry.e1rm > runningMax {
-            runningMax = entry.e1rm
-            lastPeakDate = entry.date
-        }
-
-        let weeks = calendar.dateComponents([.weekOfYear], from: lastPeakDate, to: Date()).weekOfYear ?? 0
-        return max(0, weeks)
+        return signals
     }
 
     // MARK: - Training Frequency Analysis
@@ -483,69 +373,6 @@ final class DataCorrelationEngine: ObservableObject {
         return insights.sorted { $0.frequencyPerWeek > $1.frequencyPerWeek }
     }
 
-    // MARK: - Time of Day Analysis
-
-    private static func analyzeTimeOfDay(workouts: [Workout]) -> [TimeOfDayBucket] {
-        guard workouts.count >= 5 else { return [] }
-        let calendar = Calendar.current
-
-        struct BucketAccumulator {
-            var sessions: Int = 0
-            var totalVolume: Double = 0
-        }
-
-        // 2-hour windows for tighter precision
-        let buckets: [(label: String, range: ClosedRange<Int>)] = [
-            ("5–7 AM",    5...6),
-            ("7–9 AM",    7...8),
-            ("9–11 AM",   9...10),
-            ("11 AM–1 PM", 11...12),
-            ("1–3 PM",    13...14),
-            ("3–5 PM",    15...16),
-            ("5–7 PM",    17...18),
-            ("7–9 PM",    19...20),
-            ("9–11 PM",   21...22)
-        ]
-
-        var accumulators = buckets.map { _ in BucketAccumulator() }
-
-        for workout in workouts {
-            let hour = calendar.component(.hour, from: workout.date)
-            if let idx = buckets.firstIndex(where: { $0.range.contains(hour) }) {
-                accumulators[idx].sessions += 1
-                accumulators[idx].totalVolume += workout.totalVolume
-            }
-        }
-
-        // Global average volume for Bayesian shrinkage
-        let totalSessions = accumulators.reduce(0) { $0 + $1.sessions }
-        let totalVolume = accumulators.reduce(0.0) { $0 + $1.totalVolume }
-        let globalAvgVolume = totalSessions > 0 ? totalVolume / Double(totalSessions) : 0
-
-        // A bucket must have at least 3 sessions or 3 % of all workouts
-        // (whichever is larger) to be considered reliable.
-        let minSessions = max(3, Int(ceil(Double(workouts.count) * 0.03)))
-
-        // Bayesian confidence weight — pulls low-sample buckets toward the
-        // global mean so a handful of outlier sessions can't dominate.
-        let k = 5.0
-
-        return zip(buckets, accumulators).compactMap { bucket, acc in
-            guard acc.sessions > 0 else { return nil }
-            let avgVolume = acc.totalVolume / Double(acc.sessions)
-            let n = Double(acc.sessions)
-            let confidenceScore = (n * avgVolume + k * globalAvgVolume) / (n + k)
-            return TimeOfDayBucket(
-                label: bucket.label,
-                hourRange: bucket.range,
-                sessionCount: acc.sessions,
-                avgVolume: avgVolume,
-                confidenceScore: confidenceScore,
-                meetsMinimum: acc.sessions >= minSessions
-            )
-        }
-    }
-
     // MARK: - Math Helpers
 
     private static func pearsonCorrelation(x: [Double], y: [Double]) -> Double {
@@ -562,13 +389,6 @@ final class DataCorrelationEngine: ObservableObject {
 
         guard denominator > 0 else { return 0 }
         return numerator / denominator
-    }
-
-    private static func standardDeviation(_ values: [Double]) -> Double {
-        guard values.count >= 2 else { return 0 }
-        let mean = values.reduce(0, +) / Double(values.count)
-        let variance = values.reduce(0) { $0 + ($1 - mean) * ($1 - mean) } / Double(values.count)
-        return sqrt(variance)
     }
 
     private static func average(_ values: [Double]) -> Double? {
@@ -588,24 +408,8 @@ struct PerformanceCorrelation: Identifiable {
     let dataPoints: Int
     let split: CorrelationSplit
 
-    var strengthLabel: String {
-        let abs = abs(coefficient)
-        if abs >= 0.7 { return "Strong" }
-        if abs >= 0.4 { return "Moderate" }
-        if abs >= 0.2 { return "Weak" }
-        return "Negligible"
-    }
-
-    var directionLabel: String {
-        coefficient > 0 ? "positive" : "negative"
-    }
-
     var tint: Color {
-        let abs = abs(coefficient)
-        if abs >= 0.7 { return Theme.Colors.success }
-        if abs >= 0.4 { return Theme.Colors.accent }
-        if abs >= 0.2 { return Theme.Colors.warning }
-        return Theme.Colors.textTertiary
+        Theme.Colors.accent
     }
 }
 
@@ -621,66 +425,15 @@ struct CorrelationSplit {
     }
 }
 
-struct RecoveryReadiness: Identifiable {
-    let id = UUID()
-    let score: Double // 0.0 to 1.0
-    let signals: [ReadinessSignal]
-    let dataPointCount: Int
-    let baselineDataPointCount: Int
-
-    var label: String {
-        if score >= 0.7 { return "Primed" }
-        if score >= 0.5 { return "Baseline" }
-        if score >= 0.3 { return "Fatigued" }
-        return "Depleted"
-    }
-
-    var tint: Color {
-        if score >= 0.7 { return Theme.Colors.success }
-        if score >= 0.5 { return Theme.Colors.accent }
-        if score >= 0.3 { return Theme.Colors.warning }
-        return Theme.Colors.error
-    }
-
-    var scorePercent: Int {
-        Int(round(score * 100))
-    }
-}
-
-struct ReadinessSignal: Identifiable {
+struct RecoverySignal: Identifiable {
     let id = UUID()
     let metric: String
     let icon: String
     let currentValue: Double
     let baselineValue: Double
     let unit: String
-    let deviation: Double
-    let direction: SignalDirection
-    let weight: Double
-    /// Whether the raw value increased compared to baseline (independent of whether that's good or bad)
-    let valueIncreased: Bool
-
-    enum SignalDirection {
-        case favorable
-        case unfavorable
-    }
-
-    var deviationPercent: Double {
-        abs(deviation) * 100
-    }
-
-    var tint: Color {
-        direction == .favorable ? Theme.Colors.success : Theme.Colors.warning
-    }
-}
-
-struct PlateauAlert: Identifiable {
-    let id = UUID()
-    let exerciseName: String
-    let currentE1RM: Double
-    let weeksSinceProgress: Int
-    let sessionCount: Int
-    let changePercent: Double
+    /// Signed percent change from baseline.
+    let percentChange: Double
 }
 
 struct FrequencyInsight: Identifiable {
@@ -694,18 +447,4 @@ struct FrequencyInsight: Identifiable {
         guard totalWeeks > 0 else { return 0 }
         return (Double(weeksHit) / Double(totalWeeks)) * 100
     }
-}
-
-struct TimeOfDayBucket: Identifiable {
-    let id = UUID()
-    let label: String
-    let hourRange: ClosedRange<Int>
-    let sessionCount: Int
-    let avgVolume: Double
-    /// Bayesian-weighted score that penalises low-sample buckets by pulling
-    /// them toward the global average volume.
-    let confidenceScore: Double
-    /// Whether this bucket meets the minimum session threshold to be
-    /// considered a reliable "best" recommendation.
-    let meetsMinimum: Bool
 }

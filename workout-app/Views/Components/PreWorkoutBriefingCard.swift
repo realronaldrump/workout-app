@@ -1,12 +1,10 @@
 import SwiftUI
 
-/// A data-driven pre-workout briefing card that surfaces recovery readiness,
-/// muscle recency suggestions, time-of-day performance patterns, and sleep
-/// correlation data — all derived purely from the user's own data.
+/// A data-driven pre-workout briefing card that surfaces transparent recovery
+/// signal deltas, muscle recency suggestions, and sleep correlation data.
 struct PreWorkoutBriefingCard: View {
-    let recoveryReadiness: RecoveryReadiness?
+    let recoverySignals: [RecoverySignal]
     let muscleSuggestions: [MuscleGroupSuggestion]
-    let bestTimeBucket: TimeOfDayBucket?
     let sleepCorrelation: PerformanceCorrelation?
     let onStartSession: (String?) -> Void
     let onExerciseTap: (String) -> Void
@@ -26,16 +24,12 @@ struct PreWorkoutBriefingCard: View {
                     .tracking(1.2)
             }
 
-            if let readiness = recoveryReadiness {
-                recoveryRow(readiness)
+            if !recoverySignals.isEmpty {
+                recoverySignalsRow
             }
 
             if let sleep = sleepCorrelation {
                 sleepInsightRow(sleep)
-            }
-
-            if let bucket = bestTimeBucket {
-                timeOfDayRow(bucket)
             }
 
             if !muscleSuggestions.isEmpty {
@@ -57,62 +51,56 @@ struct PreWorkoutBriefingCard: View {
     }
 
     private var isEmpty: Bool {
-        recoveryReadiness == nil && muscleSuggestions.isEmpty && bestTimeBucket == nil && sleepCorrelation == nil
+        recoverySignals.isEmpty && muscleSuggestions.isEmpty && sleepCorrelation == nil
     }
 
-    // MARK: - Recovery Readiness
+    // MARK: - Recovery Signals
 
-    private func recoveryRow(_ readiness: RecoveryReadiness) -> some View {
+    private var recoverySignalsRow: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            HStack(spacing: Theme.Spacing.sm) {
-                Circle()
-                    .fill(readiness.tint)
-                    .frame(width: 10, height: 10)
+            Text("Recovery Signals")
+                .font(Theme.Typography.headline)
+                .foregroundColor(Theme.Colors.textPrimary)
 
-                Text("Recovery: \(readiness.label)")
-                    .font(Theme.Typography.headline)
-                    .foregroundColor(Theme.Colors.textPrimary)
-
-                Spacer()
-
-                Text("\(readiness.scorePercent)%")
-                    .font(Theme.Typography.monoMedium)
-                    .foregroundColor(readiness.tint)
-            }
+            Text("7-day average vs prior 30-day baseline")
+                .font(Theme.Typography.microcopy)
+                .foregroundColor(Theme.Colors.textTertiary)
 
             // Signal breakdown
             HStack(spacing: Theme.Spacing.lg) {
-                ForEach(readiness.signals) { signal in
+                ForEach(recoverySignals) { signal in
                     VStack(spacing: 2) {
                         Image(systemName: signal.icon)
                             .font(.system(size: 12))
-                            .foregroundColor(signal.tint)
-                        Text(String(format: "%.0f", signal.currentValue))
+                            .foregroundColor(Theme.Colors.accentSecondary)
+                        Text(signal.metric)
+                            .font(Theme.Typography.microcopy)
+                            .foregroundColor(Theme.Colors.textTertiary)
+                        Text(String(format: "%.1f", signal.currentValue))
                             .font(Theme.Typography.monoSmall)
                             .foregroundColor(Theme.Colors.textPrimary)
                         Text(signal.unit)
                             .font(Theme.Typography.microcopy)
                             .foregroundColor(Theme.Colors.textTertiary)
-                        HStack(spacing: 2) {
-                            Image(systemName: signal.valueIncreased ? "arrow.up.right" : "arrow.down.right")
-                                .font(.system(size: 8, weight: .bold))
-                            Text(String(format: "%.0f%%", signal.deviationPercent))
-                                .font(Theme.Typography.microcopy)
-                        }
-                        .foregroundColor(signal.tint)
+                        Text(String(format: "%+.1f%%", signal.percentChange))
+                            .font(Theme.Typography.microcopy)
+                            .foregroundColor(Theme.Colors.textSecondary)
                     }
                     .accessibilityElement(children: .combine)
-                    .accessibilityLabel("\(signal.metric): \(String(format: "%.0f", signal.currentValue)) \(signal.unit), \(signal.valueIncreased ? "above" : "below") baseline")
+                    .accessibilityLabel(
+                        "\(signal.metric): \(String(format: "%.1f", signal.currentValue)) \(signal.unit), " +
+                        "\(String(format: "%+.1f", signal.percentChange)) percent vs baseline"
+                    )
                 }
             }
             .frame(maxWidth: .infinity)
             .padding(.top, Theme.Spacing.xs)
         }
         .padding(Theme.Spacing.md)
-        .background(readiness.tint.opacity(0.06))
+        .background(Theme.Colors.accent.opacity(0.06))
         .overlay(
             RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                .strokeBorder(readiness.tint.opacity(0.2), lineWidth: 1)
+                .strokeBorder(Theme.Colors.accent.opacity(0.2), lineWidth: 1)
         )
         .cornerRadius(Theme.CornerRadius.medium)
     }
@@ -138,35 +126,14 @@ struct PreWorkoutBriefingCard: View {
                     .font(Theme.Typography.microcopy)
                     .foregroundColor(Theme.Colors.textSecondary)
                 if abs(diff) >= 1 {
-                    Text("\(String(format: "%+.0f", diff))% volume on well-rested days")
+                    Text("\(String(format: "%+.0f", diff))% volume difference between sleep groups")
                         .font(Theme.Typography.microcopy)
-                        .foregroundColor(diff > 0 ? Theme.Colors.success : Theme.Colors.warning)
+                        .foregroundColor(Theme.Colors.textSecondary)
                 }
             }
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Sleep correlation: \(String(format: "%.0f", abs(diff))) percent volume difference based on sleep")
-    }
-
-    // MARK: - Time of Day
-
-    private func timeOfDayRow(_ bucket: TimeOfDayBucket) -> some View {
-        HStack(spacing: Theme.Spacing.md) {
-            Image(systemName: "clock.fill")
-                .font(.system(size: 16))
-                .foregroundColor(Theme.Colors.accentSecondary)
-                .frame(width: 28)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Best Time: \(bucket.label)")
-                    .font(Theme.Typography.captionBold)
-                    .foregroundColor(Theme.Colors.textPrimary)
-                Text("Avg \(SharedFormatters.volumeCompact(bucket.avgVolume)) volume across \(bucket.sessionCount) sessions")
-                    .font(Theme.Typography.microcopy)
-                    .foregroundColor(Theme.Colors.textSecondary)
-            }
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Best training time: \(bucket.label), average volume \(SharedFormatters.volumeCompact(bucket.avgVolume))")
     }
 
     // MARK: - Muscle Suggestions

@@ -3,9 +3,7 @@ import SwiftUI
 /// Surfaces key data-driven insights from the DataCorrelationEngine
 /// directly on the home screen. All insights are purely data-derived.
 struct DataInsightCards: View {
-    let plateaus: [PlateauAlert]
     let frequencyInsights: [FrequencyInsight]
-    let onExerciseTap: (String) -> Void
 
     var body: some View {
         let items = buildInsightItems()
@@ -26,27 +24,34 @@ struct DataInsightCards: View {
 
     private func buildInsightItems() -> [DataInsightItem] {
         var items: [DataInsightItem] = []
+        let mostFrequent = frequencyInsights.max(by: { $0.frequencyPerWeek < $1.frequencyPerWeek })
+        let leastFrequent = frequencyInsights.min(by: { $0.frequencyPerWeek < $1.frequencyPerWeek })
 
-        // Plateau alerts (high priority — actionable)
-        for plateau in plateaus.prefix(2) {
+        if let mostFrequent {
             items.append(DataInsightItem(
-                icon: "chart.line.flattrend.xyaxis",
-                tint: Theme.Colors.warning,
-                title: "\(plateau.exerciseName) plateau",
-                detail: "e1RM flat at ~\(Int(plateau.currentE1RM)) lbs for \(plateau.weeksSinceProgress)w (\(plateau.sessionCount) sessions)",
-                action: { onExerciseTap(plateau.exerciseName) }
+                icon: "chart.bar.xaxis",
+                tint: Theme.Colors.accent,
+                title: "Most frequent muscle group",
+                detail: "\(mostFrequent.muscleGroup): \(mostFrequent.weeksHit)/\(mostFrequent.totalWeeks) weeks (\(String(format: "%.1f", mostFrequent.frequencyPerWeek))x/week)"
             ))
         }
 
-        // Under-trained muscle groups
-        let underTrained = frequencyInsights.filter { $0.coveragePercent < 50 }.prefix(1)
-        for insight in underTrained {
+        if let leastFrequent,
+           leastFrequent.muscleGroup != mostFrequent?.muscleGroup {
             items.append(DataInsightItem(
-                icon: "exclamationmark.triangle",
+                icon: "clock.arrow.trianglehead.counterclockwise.rotate.90",
                 tint: Theme.Colors.accentSecondary,
-                title: "\(insight.muscleGroup) trained \(insight.weeksHit)/\(insight.totalWeeks) weeks",
-                detail: "\(String(format: "%.1f", insight.frequencyPerWeek))x/week — below 1x threshold",
-                action: nil
+                title: "Least frequent muscle group",
+                detail: "\(leastFrequent.muscleGroup): \(leastFrequent.weeksHit)/\(leastFrequent.totalWeeks) weeks (\(String(format: "%.1f", leastFrequent.frequencyPerWeek))x/week)"
+            ))
+        }
+
+        if let sampleWindow = frequencyInsights.first?.totalWeeks, !frequencyInsights.isEmpty {
+            items.append(DataInsightItem(
+                icon: "list.bullet.rectangle",
+                tint: Theme.Colors.textSecondary,
+                title: "Frequency coverage",
+                detail: "\(frequencyInsights.count) muscle groups tracked across the last \(sampleWindow) weeks"
             ))
         }
 
@@ -60,26 +65,13 @@ private struct DataInsightItem: Identifiable {
     let tint: Color
     let title: String
     let detail: String
-    let action: (() -> Void)?
 }
 
 private struct DataInsightRow: View {
     let item: DataInsightItem
 
     var body: some View {
-        Group {
-            if let action = item.action {
-                Button(action: {
-                    Haptics.selection()
-                    action()
-                }) {
-                    content
-                }
-                .buttonStyle(.plain)
-            } else {
-                content
-            }
-        }
+        content
     }
 
     private var content: some View {
@@ -101,17 +93,10 @@ private struct DataInsightRow: View {
             }
 
             Spacer()
-
-            if item.action != nil {
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundColor(Theme.Colors.textTertiary)
-            }
         }
         .padding(Theme.Spacing.md)
         .softCard(elevation: 1)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(item.title). \(item.detail)")
-        .accessibilityAddTraits(item.action != nil ? .isButton : [])
     }
 }

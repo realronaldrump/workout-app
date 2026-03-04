@@ -70,12 +70,11 @@ struct HomeView: View {
                         .padding(.horizontal, Theme.Spacing.lg)
                     } else {
                         // Pre-Workout Briefing — the app's unique differentiator.
-                        // Surfaces recovery, muscle recency, time-of-day, and sleep
-                        // correlation data all in one glanceable card.
+                        // Surfaces transparent recovery signals, muscle recency,
+                        // and sleep correlation data in one glanceable card.
                         PreWorkoutBriefingCard(
-                            recoveryReadiness: correlationEngine.recoveryReadiness,
+                            recoverySignals: correlationEngine.recoverySignals,
                             muscleSuggestions: muscleSuggestions,
-                            bestTimeBucket: bestPerformanceTimeBucket,
                             sleepCorrelation: sleepCorrelation,
                             onStartSession: { groupName in
                                 startQuickSession(exercise: groupName)
@@ -99,13 +98,9 @@ struct HomeView: View {
                                 .padding(.horizontal, Theme.Spacing.lg)
                         }
 
-                        // Data Insights (plateaus, frequency)
+                        // Data Insights (frequency snapshots)
                         DataInsightCards(
-                            plateaus: correlationEngine.plateauAlerts,
-                            frequencyInsights: correlationEngine.frequencyInsights,
-                            onExerciseTap: { name in
-                                selectedExercise = ExerciseSelection(id: name)
-                            }
+                            frequencyInsights: correlationEngine.frequencyInsights
                         )
                         .padding(.horizontal, Theme.Spacing.lg)
 
@@ -206,7 +201,7 @@ struct HomeView: View {
                     Text(greetingText)
                         .font(Theme.Typography.subheadline)
                         .foregroundColor(Theme.Colors.textSecondary)
-                    Text("Dashboard")
+                    Text("Today")
                         .font(Theme.Typography.screenTitle)
                         .foregroundColor(Theme.Colors.textPrimary)
                         .tracking(1.5)
@@ -634,13 +629,6 @@ struct HomeView: View {
             workouts: workouts,
             muscleGroupsByExerciseName: groupMappings
         )
-    }
-
-    private var bestPerformanceTimeBucket: TimeOfDayBucket? {
-        // Only consider buckets with enough sessions to be statistically
-        // meaningful, then rank by Bayesian confidence score.
-        let qualifying = correlationEngine.timeOfDayAnalysis.filter { $0.meetsMinimum }
-        return qualifying.max(by: { $0.confidenceScore < $1.confidenceScore })
     }
 
     private var sleepCorrelation: PerformanceCorrelation? {

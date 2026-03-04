@@ -16,7 +16,7 @@ struct CorrelationDetailView: View {
                 LazyVStack(alignment: .leading, spacing: Theme.Spacing.xxl) {
                     headerSection
 
-                    if engine.correlations.isEmpty && engine.frequencyInsights.isEmpty {
+                    if engine.correlations.isEmpty && engine.recoverySignals.isEmpty && engine.frequencyInsights.isEmpty {
                         noDataSection
                     } else {
                         // Correlations
@@ -25,9 +25,9 @@ struct CorrelationDetailView: View {
                                 .padding(.horizontal, Theme.Spacing.lg)
                         }
 
-                        // Recovery readiness detail
-                        if let readiness = engine.recoveryReadiness {
-                            recoveryDetailSection(readiness)
+                        // Recovery signal detail
+                        if !engine.recoverySignals.isEmpty {
+                            recoverySignalsSection
                                 .padding(.horizontal, Theme.Spacing.lg)
                         }
 
@@ -79,49 +79,36 @@ struct CorrelationDetailView: View {
         }
     }
 
-    // MARK: - Recovery Detail
+    // MARK: - Recovery Signals
 
-    private func recoveryDetailSection(_ readiness: RecoveryReadiness) -> some View {
+    private var recoverySignalsSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Recovery Readiness")
+            Text("Recovery Signals")
                 .font(Theme.Typography.sectionHeader)
                 .foregroundColor(Theme.Colors.textPrimary)
                 .tracking(1.0)
 
             VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-                // Score header
-                HStack {
-                    VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                        Text(readiness.label)
-                            .font(Theme.Typography.title3)
-                            .foregroundColor(readiness.tint)
-                        Text("\(readiness.dataPointCount)-day data vs \(readiness.baselineDataPointCount)-day baseline")
-                            .font(Theme.Typography.caption)
-                            .foregroundColor(Theme.Colors.textSecondary)
-                    }
-                    Spacer()
-                    Text("\(readiness.scorePercent)/100")
-                        .font(Theme.Typography.number)
-                        .foregroundColor(readiness.tint)
-                }
+                Text("Each row compares your recent 7-day average to the prior 30-day baseline.")
+                    .font(Theme.Typography.caption)
+                    .foregroundColor(Theme.Colors.textSecondary)
 
-                // Detailed signal breakdown
                 VStack(spacing: Theme.Spacing.md) {
-                    ForEach(readiness.signals) { signal in
+                    ForEach(engine.recoverySignals) { signal in
                         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                             HStack {
                                 Image(systemName: signal.icon)
                                     .font(.system(size: 14, weight: .bold))
-                                    .foregroundColor(signal.tint)
+                                    .foregroundColor(Theme.Colors.accentSecondary)
                                 Text(signal.metric)
                                     .font(Theme.Typography.headline)
                                     .foregroundColor(Theme.Colors.textPrimary)
 
                                 Spacer()
 
-                                Text(signal.valueIncreased ? "Above baseline" : "Below baseline")
+                                Text(String(format: "%+.1f%%", signal.percentChange))
                                     .font(Theme.Typography.metricLabel)
-                                    .foregroundColor(signal.tint)
+                                    .foregroundColor(Theme.Colors.textSecondary)
                                     .textCase(.uppercase)
                                     .tracking(0.5)
                             }
@@ -152,9 +139,9 @@ struct CorrelationDetailView: View {
                                         .font(Theme.Typography.metricLabel)
                                         .foregroundColor(Theme.Colors.textTertiary)
                                         .textCase(.uppercase)
-                                    Text(String(format: "%+.1f%%", signal.deviationPercent * (signal.direction == .favorable ? 1 : -1)))
+                                    Text(String(format: "%+.1f%%", signal.percentChange))
                                         .font(Theme.Typography.headline)
-                                        .foregroundColor(signal.tint)
+                                        .foregroundColor(Theme.Colors.textPrimary)
                                 }
                             }
                         }
@@ -163,18 +150,6 @@ struct CorrelationDetailView: View {
                     }
                 }
 
-                // Explanation
-                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                    Text("How this works")
-                        .font(Theme.Typography.captionBold)
-                        .foregroundColor(Theme.Colors.textSecondary)
-                        .textCase(.uppercase)
-                        .tracking(0.5)
-
-                    Text("Recovery readiness compares your recent 7-day biometric averages against your 30-day baseline. HRV, resting heart rate, and sleep duration are weighted to produce a composite score. Higher HRV, lower resting HR, and more sleep push the score up.")
-                        .font(Theme.Typography.caption)
-                        .foregroundColor(Theme.Colors.textTertiary)
-                }
             }
             .padding(Theme.Spacing.lg)
             .softCard(elevation: 2)
@@ -216,7 +191,7 @@ struct CorrelationDetailView: View {
                                     )
 
                                 RoundedRectangle(cornerRadius: 2)
-                                    .fill(barTint(for: insight.coveragePercent))
+                                    .fill(Theme.Colors.accentSecondary)
                                     .frame(width: max(4, barWidth))
                             }
                         }
@@ -256,12 +231,6 @@ struct CorrelationDetailView: View {
         .softCard(elevation: 2)
     }
 
-    private func barTint(for percent: Double) -> Color {
-        if percent >= 80 { return Theme.Colors.success }
-        if percent >= 50 { return Theme.Colors.accent }
-        if percent >= 25 { return Theme.Colors.warning }
-        return Theme.Colors.error
-    }
 }
 
 // MARK: - Correlation Card
@@ -287,9 +256,9 @@ private struct CorrelationCard: View {
                     Text(String(format: "r = %.2f", correlation.coefficient))
                         .font(Theme.Typography.number)
                         .foregroundColor(correlation.tint)
-                    Text("\(correlation.strengthLabel) \(correlation.directionLabel)")
+                    Text(correlation.coefficient >= 0 ? "Positive relationship" : "Negative relationship")
                         .font(Theme.Typography.metricLabel)
-                        .foregroundColor(correlation.tint)
+                        .foregroundColor(Theme.Colors.textSecondary)
                         .textCase(.uppercase)
                         .tracking(0.5)
                 }
@@ -325,12 +294,10 @@ private struct CorrelationCard: View {
             // Percent difference
             if abs(correlation.split.percentDifference) > 0.5 {
                 HStack(spacing: Theme.Spacing.xs) {
-                    Image(systemName: correlation.split.percentDifference > 0 ? "arrow.up.right" : "arrow.down.right")
-                        .font(.system(size: 10, weight: .bold))
-                    Text(String(format: "%+.1f%% volume difference", correlation.split.percentDifference))
+                    Text(String(format: "%+.1f%% volume difference between groups", correlation.split.percentDifference))
                         .font(Theme.Typography.captionBold)
                 }
-                .foregroundColor(correlation.split.percentDifference > 0 ? Theme.Colors.success : Theme.Colors.warning)
+                .foregroundColor(Theme.Colors.textSecondary)
             }
 
             // Data points

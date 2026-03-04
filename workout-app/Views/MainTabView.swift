@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum AppTab: String, CaseIterable, Hashable {
-    case dashboard
+    case today
     case health
     case history
     case profile
@@ -17,7 +17,7 @@ struct MainTabView: View {
     @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
     @State private var showingOnboarding = false
     @State private var pendingOnboarding = false
-    @State private var selectedTab: AppTab = .dashboard
+    @State private var selectedTab: AppTab = .today
     @State private var showSplash = true
     @EnvironmentObject private var sessionManager: WorkoutSessionManager
     @EnvironmentObject private var healthManager: HealthKitManager
@@ -52,9 +52,9 @@ struct MainTabView: View {
                 )
             }
             .tabItem {
-                Label("Dashboard", systemImage: "chart.bar.fill")
+                Label("Today", systemImage: "chart.bar.fill")
             }
-            .tag(AppTab.dashboard)
+            .tag(AppTab.today)
 
             NavigationStack {
                 HealthHubView()
