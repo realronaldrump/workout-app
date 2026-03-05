@@ -1,6 +1,6 @@
+import CoreLocation
 import Foundation
 import HealthKit
-import CoreLocation
 
 extension HealthKitManager {
     func fetchHeartRateSamples(from start: Date, to end: Date) async throws -> [HeartRateSample] {

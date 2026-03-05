@@ -1,4 +1,3 @@
-import Foundation
 
 /// Epley-formula one-rep max estimator used throughout the app.
 /// Centralised here so the formula is never duplicated.

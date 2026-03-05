@@ -1,5 +1,3 @@
-import Foundation
-
 /// Per-exercise cardio metric preferences.
 ///
 /// Cardio vs strength classification is driven by the exercise's `.cardio` muscle tag

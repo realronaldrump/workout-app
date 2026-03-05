@@ -1,7 +1,6 @@
 import Combine
 import Foundation
 import SwiftUI
-import CoreLocation
 import MapKit
 
 @MainActor

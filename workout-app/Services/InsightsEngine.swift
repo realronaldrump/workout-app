@@ -1,5 +1,5 @@
-import Foundation
 import Combine
+import Foundation
 
 /// Intelligent insights engine that analyzes workout data to provide
 /// lightweight, objective signals (e.g. PRs) without subjective coaching.

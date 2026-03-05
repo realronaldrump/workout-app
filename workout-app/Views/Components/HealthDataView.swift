@@ -1,5 +1,4 @@
 import SwiftUI
-import Charts
 
 /// Displays health data synced from Apple Health for a workout
 struct HealthDataView: View {

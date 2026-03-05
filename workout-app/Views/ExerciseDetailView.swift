@@ -1,5 +1,4 @@
 import SwiftUI
-import Charts
 
 struct ExerciseDetailView: View {
     let exerciseName: String

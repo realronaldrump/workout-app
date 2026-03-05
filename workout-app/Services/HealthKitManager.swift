@@ -1,6 +1,6 @@
+import Combine
 import Foundation
 import HealthKit
-import Combine
 
 /// Manages all interactions with Apple HealthKit.
 /// Handles authorization, data fetching, and syncing health data during workout windows.

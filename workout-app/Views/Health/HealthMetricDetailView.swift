@@ -1,5 +1,4 @@
 import SwiftUI
-import Charts
 
 struct HealthMetricDetailView: View {
     let metric: HealthMetric

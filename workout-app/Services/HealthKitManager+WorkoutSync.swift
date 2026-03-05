@@ -1,6 +1,6 @@
+import CoreLocation
 import Foundation
 import HealthKit
-import CoreLocation
 
 extension HealthKitManager {
     /// Sync health data for a single workout

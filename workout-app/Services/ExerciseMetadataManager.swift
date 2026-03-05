@@ -1,5 +1,5 @@
-import Foundation
 import Combine
+import Foundation
 
 class ExerciseMetadataManager: ObservableObject {
     static let shared = ExerciseMetadataManager()

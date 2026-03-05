@@ -1,5 +1,4 @@
 import SwiftUI
-import HealthKit
 
 struct HealthSyncWizard: View {
     @Binding var isPresented: Bool

@@ -1,5 +1,4 @@
 import SwiftUI
-import CoreLocation
 import MapKit
 
 private struct DetectedGymCandidate: Identifiable {

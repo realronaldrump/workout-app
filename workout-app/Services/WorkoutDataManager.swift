@@ -1,6 +1,5 @@
-import Foundation
-import SwiftUI
 import Combine
+import Foundation
 
 @MainActor
 class WorkoutDataManager: ObservableObject {

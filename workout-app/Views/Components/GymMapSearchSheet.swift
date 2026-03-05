@@ -1,6 +1,5 @@
 import SwiftUI
 import MapKit
-import CoreLocation
 
 struct GymMapPlace: Identifiable {
     let id: String

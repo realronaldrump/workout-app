@@ -1,6 +1,5 @@
 import SwiftUI
 import Charts
-import HealthKit
 
 @available(iOS 16.0, *)
 struct WorkoutHRChart: View {

@@ -1,7 +1,6 @@
-import Foundation
 import Combine
+import Foundation
 import HealthKit
-import SwiftUI
 
 @MainActor
 final class BodyCompositionViewModel: ObservableObject {
