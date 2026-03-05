@@ -11,6 +11,7 @@ output/
 
 # Xcode / SwiftPM
 DerivedData/
+.deriveddata/
 build/
 *.xcuserstate
 *.xccheckout
@@ -23,9 +24,16 @@ build/
 *.swp
 *.tmp
 *.xcuserdata/
+xcuserdata/
 .build/
 Packages/
 
 # Temporary files
 tmp/
 workout-app/build.log
+
+# Local diagnostics / analysis outputs
+.periphery*.log
+.swiftlint-deadcode*.log
+.swiftlint-xcodebuild*.log
+.swiftlint-deadcode-snippets.txt
