@@ -6,6 +6,7 @@ struct WorkoutDetailView: View {
     @EnvironmentObject var dataManager: WorkoutDataManager
     @EnvironmentObject var annotationsManager: WorkoutAnnotationsManager
     @EnvironmentObject var gymProfilesManager: GymProfilesManager
+    @EnvironmentObject var variantEngine: WorkoutVariantEngine
     // Removed local healthData state to use source of truth
     @State private var showingSyncError = false
     @State private var syncErrorMessage = ""
@@ -92,6 +93,10 @@ struct WorkoutDetailView: View {
                     )
 
                     GymAssignmentCard(workout: workout)
+
+                    if let review = variantEngine.review(for: workout.id) {
+                        variantReviewSection(review: review)
+                    }
 
                     // Health Data Section
                     if healthManager.isHealthKitAvailable() {
@@ -205,6 +210,36 @@ struct WorkoutDetailView: View {
     }
 
     // MARK: - Health Data Section
+
+    private func variantReviewSection(review: WorkoutVariantWorkoutReview) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            HStack {
+                Text("Variant Review")
+                    .font(Theme.Typography.title2)
+                    .foregroundColor(Theme.Colors.textPrimary)
+
+                Spacer()
+
+                NavigationLink {
+                    WorkoutVariantReviewView(focusWorkoutId: workout.id)
+                } label: {
+                    Text("Full View")
+                        .font(Theme.Typography.captionBold)
+                        .foregroundColor(Theme.Colors.accent)
+                        .textCase(.uppercase)
+                        .tracking(0.8)
+                }
+                .buttonStyle(.plain)
+            }
+
+            NavigationLink {
+                WorkoutVariantReviewView(focusWorkoutId: workout.id)
+            } label: {
+                WorkoutVariantSummaryCard(review: review, maxDifferences: 2)
+            }
+            .buttonStyle(.plain)
+        }
+    }
 
     @ViewBuilder
     private var healthDataSection: some View {

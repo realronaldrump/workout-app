@@ -9,6 +9,7 @@ struct LongestStreaksSection: View {
     var selectedRunId: String?
     var onSelectRun: ((StreakRun) -> Void)?
 
+    @EnvironmentObject private var intentionalBreaksManager: IntentionalBreaksManager
     @AppStorage("intentionalRestDays") private var intentionalRestDays: Int = 1
     @State private var isExpanded: Bool = false
 
@@ -89,7 +90,11 @@ struct LongestStreaksSection: View {
 
     private var runs: [StreakRun] {
         WorkoutAnalytics
-            .streakRuns(for: workouts, intentionalRestDays: intentionalRestDays)
+            .streakRuns(
+                for: workouts,
+                intentionalRestDays: intentionalRestDays,
+                intentionalBreakRanges: intentionalBreaksManager.savedBreaks
+            )
             .sorted {
                 if $0.workoutDayCount != $1.workoutDayCount {
                     return $0.workoutDayCount > $1.workoutDayCount
@@ -173,11 +178,16 @@ struct LongestStreaksPreview: View {
     let workouts: [Workout]
     var maxCount: Int = 2
 
+    @EnvironmentObject private var intentionalBreaksManager: IntentionalBreaksManager
     @AppStorage("intentionalRestDays") private var intentionalRestDays: Int = 1
 
     var body: some View {
         let runs = WorkoutAnalytics
-            .streakRuns(for: workouts, intentionalRestDays: intentionalRestDays)
+            .streakRuns(
+                for: workouts,
+                intentionalRestDays: intentionalRestDays,
+                intentionalBreakRanges: intentionalBreaksManager.savedBreaks
+            )
             .sorted {
                 if $0.workoutDayCount != $1.workoutDayCount {
                     return $0.workoutDayCount > $1.workoutDayCount

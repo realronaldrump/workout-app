@@ -24,6 +24,9 @@ struct PerformanceLabView: View {
     @EnvironmentObject var healthManager: HealthKitManager
     @EnvironmentObject var annotationsManager: WorkoutAnnotationsManager
     @EnvironmentObject var gymProfilesManager: GymProfilesManager
+    @EnvironmentObject var intentionalBreaksManager: IntentionalBreaksManager
+    @EnvironmentObject var variantEngine: WorkoutVariantEngine
+    @AppStorage("intentionalRestDays") private var intentionalRestDays: Int = 1
 
     @State private var selectedTimeFilter: TimeFilter = .twoWeeks
     @State private var customStartDate = Date()
@@ -188,6 +191,11 @@ struct PerformanceLabView: View {
 
                         comparisonSection
 
+                        PerformanceLabVariantSection(
+                            patterns: Array(variantEngine.library.standoutPatterns.prefix(2)),
+                            onSelectWorkout: { selectedWorkout = $0 }
+                        )
+
                         strengthGainsSection
 
                         muscleBalanceSection
@@ -305,11 +313,20 @@ struct PerformanceLabView: View {
     // MARK: - At a Glance
 
     private var atAGlanceSection: some View {
-        let streakRuns = WorkoutAnalytics.streakRuns(for: selectedRangeWorkouts, intentionalRestDays: 2)
+        let streakRuns = WorkoutAnalytics.streakRuns(
+            for: selectedRangeWorkouts,
+            intentionalRestDays: intentionalRestDays,
+            intentionalBreakRanges: intentionalBreaksManager.savedBreaks
+        )
         let currentStreak = streakRuns.last?.workoutDayCount ?? 0
         let bestStreak = streakRuns.map(\.workoutDayCount).max() ?? 0
-        let avgPerWeek = Double(selectedRangeWorkouts.count) / Double(selectedWindowWeeks)
-        let avgPerWeekText = String(format: "%.1f", avgPerWeek)
+        let rangeStats = selectedRangeWorkouts.isEmpty
+            ? nil
+            : dataManager.calculateStats(
+                for: selectedRangeWorkouts,
+                intentionalBreakRanges: intentionalBreaksManager.savedBreaks
+            )
+        let avgPerWeekText = String(format: "%.1f", rangeStats?.workoutsPerWeek ?? 0)
 
         return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             Text("At a Glance")

@@ -1,11 +1,10 @@
 import SwiftUI
 
 /// A data-driven pre-workout briefing card that surfaces transparent recovery
-/// signal deltas, muscle recency suggestions, and sleep correlation data.
+/// signal deltas and muscle recency suggestions.
 struct PreWorkoutBriefingCard: View {
     let recoverySignals: [RecoverySignal]
     let muscleSuggestions: [MuscleGroupSuggestion]
-    let sleepCorrelation: PerformanceCorrelation?
     let onStartSession: (String?) -> Void
     let onExerciseTap: (String) -> Void
     let onViewAllMuscleRecency: () -> Void
@@ -29,10 +28,6 @@ struct PreWorkoutBriefingCard: View {
                 recoverySignalsRow
             }
 
-            if let sleep = sleepCorrelation {
-                sleepInsightRow(sleep)
-            }
-
             if !muscleSuggestions.isEmpty {
                 muscleSuggestionsSection
             }
@@ -52,7 +47,7 @@ struct PreWorkoutBriefingCard: View {
     }
 
     private var isEmpty: Bool {
-        recoverySignals.isEmpty && muscleSuggestions.isEmpty && sleepCorrelation == nil
+        recoverySignals.isEmpty && muscleSuggestions.isEmpty
     }
 
     // MARK: - Recovery Signals
@@ -104,37 +99,6 @@ struct PreWorkoutBriefingCard: View {
                 .strokeBorder(Theme.Colors.accent.opacity(0.2), lineWidth: 1)
         )
         .cornerRadius(Theme.CornerRadius.medium)
-    }
-
-    // MARK: - Sleep Insight
-
-    private func sleepInsightRow(_ correlation: PerformanceCorrelation) -> some View {
-        let diff = correlation.split.percentDifference
-        let aboveLabel = correlation.split.aboveAverageLabel
-        let volumeAbove = SharedFormatters.volumeCompact(correlation.split.aboveAveragePerformance)
-        let volumeBelow = SharedFormatters.volumeCompact(correlation.split.belowAveragePerformance)
-
-        return HStack(spacing: Theme.Spacing.md) {
-            Image(systemName: "moon.zzz.fill")
-                .font(.system(size: 16))
-                .foregroundColor(Theme.Colors.accentTertiary)
-                .frame(width: 28)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Sleep → Volume")
-                    .font(Theme.Typography.captionBold)
-                    .foregroundColor(Theme.Colors.textPrimary)
-                Text("\(aboveLabel): avg \(volumeAbove) • below: avg \(volumeBelow)")
-                    .font(Theme.Typography.microcopy)
-                    .foregroundColor(Theme.Colors.textSecondary)
-                if abs(diff) >= 1 {
-                    Text("\(String(format: "%+.0f", diff))% volume difference between sleep groups")
-                        .font(Theme.Typography.microcopy)
-                        .foregroundColor(Theme.Colors.textSecondary)
-                }
-            }
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Sleep correlation: \(String(format: "%.0f", abs(diff))) percent volume difference based on sleep")
     }
 
     // MARK: - Muscle Suggestions

@@ -119,7 +119,13 @@ class WorkoutDataManager: ObservableObject {
         return calculateStats(for: workouts)
     }
 
-    func calculateStats(for filteredWorkouts: [Workout]) -> WorkoutStats {
+    func calculateStats(
+        for filteredWorkouts: [Workout],
+        intentionalBreakRanges: [IntentionalBreakRange]? = nil
+    ) -> WorkoutStats {
+        let breakRanges = intentionalBreakRanges ?? IntentionalBreaksStore.load(
+            key: IntentionalBreaksStore.savedBreaksKey
+        )
         let allExercises = filteredWorkouts.flatMap { $0.exercises }
         let exerciseGroups = Dictionary(grouping: allExercises) { $0.name }
 
@@ -158,8 +164,11 @@ class WorkoutDataManager: ObservableObject {
         }
 
         // Calculate streaks and consistency (use all workouts for streaks, filtered for other stats)
-        let (currentStreak, longestStreak) = calculateStreaks()
-        let workoutsPerWeek = calculateWorkoutsPerWeek(for: filteredWorkouts)
+        let (currentStreak, longestStreak) = calculateStreaks(intentionalBreakRanges: breakRanges)
+        let workoutsPerWeek = calculateWorkoutsPerWeek(
+            for: filteredWorkouts,
+            intentionalBreakRanges: breakRanges
+        )
 
         return WorkoutStats(
             totalWorkouts: filteredWorkouts.count,
@@ -176,7 +185,9 @@ class WorkoutDataManager: ObservableObject {
         )
     }
 
-    private func calculateStreaks() -> (current: Int, longest: Int) {
+    private func calculateStreaks(
+        intentionalBreakRanges: [IntentionalBreakRange]
+    ) -> (current: Int, longest: Int) {
         guard !workouts.isEmpty else { return (0, 0) }
 
         let intentionalRestDays = configuredIntentionalRestDays()
@@ -185,6 +196,11 @@ class WorkoutDataManager: ObservableObject {
         // 1. Normalize all workout dates to start of day
         let calendar = Calendar.current
         let uniqueDays = Set(workouts.map { calendar.startOfDay(for: $0.date) })
+        let breakDays = IntentionalBreaksAnalytics.breakDaySet(
+            from: intentionalBreakRanges,
+            excluding: uniqueDays,
+            calendar: calendar
+        )
 
         // 2. Sort unique days
         let sortedDays = uniqueDays.sorted()
@@ -199,7 +215,12 @@ class WorkoutDataManager: ObservableObject {
         // 3. Calculate consecutive workout-days, allowing a configurable rest window.
         for index in 1..<sortedDays.count {
             let currentDay = sortedDays[index]
-            let daysDiff = calendar.dateComponents([.day], from: lastDay, to: currentDay).day ?? 0
+            let daysDiff = IntentionalBreaksAnalytics.effectiveGapDays(
+                from: lastDay,
+                to: currentDay,
+                breakDays: breakDays,
+                calendar: calendar
+            )
 
             if daysDiff >= 1 && daysDiff <= allowedGapDays {
                 // Within the allowed rest window, streak continues (streak counts workout days, not calendar span).
@@ -218,7 +239,13 @@ class WorkoutDataManager: ObservableObject {
         // Check if the streak is still active (last workout was today or yesterday or day before yesterday?)
         if let lastWorkoutDay = sortedDays.last {
             let today = calendar.startOfDay(for: Date())
-            let daysSinceLast = calendar.dateComponents([.day], from: lastWorkoutDay, to: today).day ?? 0
+            let daysSinceLast = IntentionalBreaksAnalytics.effectiveGapDays(
+                from: lastWorkoutDay,
+                to: today,
+                breakDays: breakDays,
+                includeEnd: true,
+                calendar: calendar
+            )
 
             // If last workout was within the rest window, streak is still active.
             if daysSinceLast <= allowedGapDays {
@@ -229,7 +256,10 @@ class WorkoutDataManager: ObservableObject {
         return (currentStreak, longestStreak)
     }
 
-    private func calculateWorkoutsPerWeek(for filteredWorkouts: [Workout]) -> Double {
+    private func calculateWorkoutsPerWeek(
+        for filteredWorkouts: [Workout],
+        intentionalBreakRanges: [IntentionalBreakRange]
+    ) -> Double {
         guard !filteredWorkouts.isEmpty else { return 0 }
 
         var calendar = Calendar.current
@@ -242,14 +272,20 @@ class WorkoutDataManager: ObservableObject {
             return 0
         }
 
-        let firstWeekStart = calendar.dateInterval(of: .weekOfYear, for: firstWorkoutDate)?.start
-            ?? calendar.startOfDay(for: firstWorkoutDate)
-        let lastWeekStart = calendar.dateInterval(of: .weekOfYear, for: lastWorkoutDate)?.start
-            ?? calendar.startOfDay(for: lastWorkoutDate)
-        let daySpan = calendar.dateComponents([.day], from: firstWeekStart, to: lastWeekStart).day ?? 0
-        let weekSpan = max((daySpan / 7) + 1, 1)
+        let interval = DateInterval(start: firstWorkoutDate, end: lastWorkoutDate)
+        let workoutDays = Set(sortedWorkouts.map { calendar.startOfDay(for: $0.date) })
+        let breakDays = IntentionalBreaksAnalytics.breakDaySet(
+            from: intentionalBreakRanges,
+            excluding: workoutDays,
+            within: calendar.startOfDay(for: firstWorkoutDate)...calendar.startOfDay(for: lastWorkoutDate),
+            calendar: calendar
+        )
+        let effectiveWeeks = max(
+            IntentionalBreaksAnalytics.effectiveWeekUnits(in: interval, breakDays: breakDays, calendar: calendar),
+            1
+        )
 
-        return Double(filteredWorkouts.count) / Double(weekSpan)
+        return Double(filteredWorkouts.count) / effectiveWeeks
     }
 
     private func configuredIntentionalRestDays() -> Int {

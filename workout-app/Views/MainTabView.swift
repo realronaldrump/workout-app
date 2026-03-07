@@ -12,8 +12,10 @@ struct MainTabView: View {
     @StateObject private var iCloudManager = iCloudDocumentManager()
     @StateObject private var logStore = WorkoutLogStore()
     @StateObject private var annotationsManager: WorkoutAnnotationsManager
+    @StateObject private var intentionalBreaksManager: IntentionalBreaksManager
     @StateObject private var gymProfilesManager: GymProfilesManager
     @StateObject private var insightsEngine: InsightsEngine
+    @StateObject private var variantEngine = WorkoutVariantEngine()
     @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
     @State private var showingOnboarding = false
     @State private var pendingOnboarding = false
@@ -25,9 +27,11 @@ struct MainTabView: View {
 
     init() {
         let annotations = WorkoutAnnotationsManager()
+        let intentionalBreaks = IntentionalBreaksManager()
         let gyms = GymProfilesManager(annotationsManager: annotations)
         let dataManager = WorkoutDataManager()
         _annotationsManager = StateObject(wrappedValue: annotations)
+        _intentionalBreaksManager = StateObject(wrappedValue: intentionalBreaks)
         _gymProfilesManager = StateObject(wrappedValue: gyms)
         _dataManager = StateObject(wrappedValue: dataManager)
         _insightsEngine = StateObject(
@@ -84,8 +88,10 @@ struct MainTabView: View {
         .environmentObject(dataManager)
         .environmentObject(logStore)
         .environmentObject(annotationsManager)
+        .environmentObject(intentionalBreaksManager)
         .environmentObject(gymProfilesManager)
         .environmentObject(insightsEngine)
+        .environmentObject(variantEngine)
         .tint(Theme.Colors.accent)
         .overlay {
             if showSplash {
@@ -99,9 +105,22 @@ struct MainTabView: View {
             beginSplashIfNeeded()
             refreshOnboardingState()
             bootstrapStoresIfNeeded()
+            Task { await triggerVariantAnalysis() }
         }
-        .onChange(of: dataManager.workouts.count) { _, _ in
+        .onChange(of: dataManager.workouts) { _, _ in
             refreshOnboardingState()
+            Task {
+                await insightsEngine.generateInsights()
+                await triggerVariantAnalysis()
+            }
+        }
+        .onReceive(annotationsManager.$annotations) { _ in
+            Task { await triggerVariantAnalysis() }
+        }
+        .onReceive(gymProfilesManager.$gyms) { _ in
+            Task { await triggerVariantAnalysis() }
+        }
+        .onReceive(intentionalBreaksManager.$savedBreaks) { _ in
             Task { await insightsEngine.generateInsights() }
         }
         .fullScreenCover(isPresented: $showingOnboarding) {
@@ -131,6 +150,7 @@ struct MainTabView: View {
                 .environmentObject(dataManager)
                 .environmentObject(logStore)
                 .environmentObject(annotationsManager)
+                .environmentObject(intentionalBreaksManager)
                 .environmentObject(gymProfilesManager)
         }
     }
@@ -178,5 +198,13 @@ struct MainTabView: View {
             dataManager.setLoggedWorkouts(logStore.workouts)
             await sessionManager.restoreDraft()
         }
+    }
+
+    private func triggerVariantAnalysis() async {
+        await variantEngine.analyze(
+            workouts: dataManager.workouts,
+            annotations: annotationsManager.annotations,
+            gymNames: gymProfilesManager.gymNameSnapshot()
+        )
     }
 }

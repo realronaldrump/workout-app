@@ -4,6 +4,7 @@ import Charts
 struct ConsistencyDetailView: View {
     let workouts: [Workout]
 
+    @EnvironmentObject private var intentionalBreaksManager: IntentionalBreaksManager
     @AppStorage("sessionsPerWeekGoal") private var sessionsPerWeekGoal: Int = 4
     @AppStorage("intentionalRestDays") private var intentionalRestDays: Int = 1
 
@@ -115,7 +116,7 @@ struct ConsistencyDetailView: View {
                         .foregroundColor(Theme.Colors.textSecondary)
                 }
 
-                Text("Sunday-start calendar weeks · allows up to \(max(0, intentionalRestDays)) day\(max(0, intentionalRestDays) == 1 ? "" : "s") between sessions without breaking streaks.")
+                Text("Sunday-start calendar weeks. Saved break dates scale weekly goals down and keep excused gaps from breaking streaks.")
                     .font(Theme.Typography.caption)
                     .foregroundColor(Theme.Colors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -163,7 +164,7 @@ struct ConsistencyDetailView: View {
             ) {
                 HeroMetricChip(
                     title: "Goal Weeks",
-                    value: "\(goalHitWeeks)/\(weeklyBuckets.count)",
+                    value: activeGoalWeeks > 0 ? "\(goalHitWeeks)/\(activeGoalWeeks)" : "--",
                     tint: Theme.Colors.success
                 )
                 HeroMetricChip(
@@ -268,6 +269,7 @@ struct ConsistencyDetailView: View {
 
     private var selectedWeekSummary: some View {
         let bucket = selectedWeek
+        let requiredSessions = bucket.requiredSessions(targetSessionsPerWeek: targetSessionsPerWeek)
 
         return HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.sm) {
             Text(bucket.weekStart.formatted(Date.FormatStyle().month(.abbreviated).day()))
@@ -284,15 +286,27 @@ struct ConsistencyDetailView: View {
 
             Spacer()
 
-            Text(bucket.sessions >= targetSessionsPerWeek ? "Goal Hit" : "Needs \(max(targetSessionsPerWeek - bucket.sessions, 0))")
-                .font(Theme.Typography.captionBold)
-                .foregroundColor(bucket.sessions >= targetSessionsPerWeek ? Theme.Colors.success : Theme.Colors.warning)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(
-                    Capsule()
-                        .fill((bucket.sessions >= targetSessionsPerWeek ? Theme.Colors.success : Theme.Colors.warning).opacity(0.12))
-                )
+            Group {
+                if bucket.isFullyExcused {
+                    Text("Break Week")
+                        .foregroundColor(Theme.Colors.textSecondary)
+                        .background(
+                            Capsule()
+                                .fill(Theme.Colors.textTertiary.opacity(0.12))
+                        )
+                } else {
+                    let goalHit = bucket.sessions >= requiredSessions
+                    Text(goalHit ? "Goal Hit" : "Needs \(max(requiredSessions - bucket.sessions, 0))")
+                        .foregroundColor(goalHit ? Theme.Colors.success : Theme.Colors.warning)
+                        .background(
+                            Capsule()
+                                .fill((goalHit ? Theme.Colors.success : Theme.Colors.warning).opacity(0.12))
+                        )
+                }
+            }
+            .font(Theme.Typography.captionBold)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
         }
     }
 
@@ -366,6 +380,11 @@ struct ConsistencyDetailView: View {
                     label: "Minutes",
                     value: "\(bucket.totalMinutes)",
                     tint: Theme.Colors.warning
+                )
+                DetailMetricTile(
+                    label: "Excused Days",
+                    value: "\(bucket.excludedDayCount)",
+                    tint: Theme.Colors.textTertiary
                 )
             }
 
@@ -481,7 +500,7 @@ struct ConsistencyDetailView: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             sectionHeader(
                 title: "Streak Explorer",
-                subtitle: "Runs honor your allowed break setting. Tap a run to inspect it."
+                subtitle: "Runs honor your rest allowance plus saved intentional break dates. Tap a run to inspect it."
             )
 
             if streakRuns.isEmpty {
@@ -597,12 +616,19 @@ struct ConsistencyDetailView: View {
     }
 
     private var goalHitWeeks: Int {
-        weeklyBuckets.filter { $0.sessions >= targetSessionsPerWeek }.count
+        weeklyBuckets.filter {
+            let required = $0.requiredSessions(targetSessionsPerWeek: targetSessionsPerWeek)
+            return required > 0 && $0.sessions >= required
+        }.count
+    }
+
+    private var activeGoalWeeks: Int {
+        weeklyBuckets.filter { !$0.isFullyExcused }.count
     }
 
     private var goalHitRate: Double {
-        guard !weeklyBuckets.isEmpty else { return 0 }
-        return Double(goalHitWeeks) / Double(weeklyBuckets.count)
+        guard activeGoalWeeks > 0 else { return 0 }
+        return Double(goalHitWeeks) / Double(activeGoalWeeks)
     }
 
     private var averageSessionsPerWeek: Double {
@@ -610,7 +636,11 @@ struct ConsistencyDetailView: View {
         let total = weeklyBuckets.reduce(0) { partialResult, bucket in
             partialResult + bucket.sessions
         }
-        return Double(total) / Double(weeklyBuckets.count)
+        let effectiveWeeks = weeklyBuckets.reduce(0.0) { partialResult, bucket in
+            partialResult + bucket.activeWeekEquivalent
+        }
+        guard effectiveWeeks > 0 else { return 0 }
+        return Double(total) / effectiveWeeks
     }
 
     private var maxSessionsInRange: Int {
@@ -647,6 +677,18 @@ struct ConsistencyDetailView: View {
         }
     }
 
+    private var workoutDaysInRange: Set<Date> {
+        IntentionalBreaksAnalytics.normalizedWorkoutDays(for: workoutsInRange, calendar: calendar)
+    }
+
+    private var breakDaysInRange: Set<Date> {
+        intentionalBreaksManager.breakDaySet(
+            excluding: workoutDaysInRange,
+            within: rangeBounds.start...rangeBounds.end,
+            calendar: calendar
+        )
+    }
+
     private var weeklyBuckets: [ConsistencyWeekBucket] {
         guard !workouts.isEmpty else { return [] }
 
@@ -677,6 +719,17 @@ struct ConsistencyDetailView: View {
         while cursor <= lastWeekStart {
             let weekEnd = min(calendar.date(byAdding: .day, value: 6, to: cursor) ?? cursor, bounds.end)
             let aggregate = aggregates[cursor] ?? WeekAccumulator()
+            let trackedStart = max(cursor, bounds.start)
+            let trackedEnd = min(calendar.date(byAdding: .day, value: 6, to: cursor) ?? cursor, bounds.end)
+            let trackedDays = max((calendar.dateComponents([.day], from: trackedStart, to: trackedEnd).day ?? 0) + 1, 0)
+            let excludedDays = IntentionalBreaksAnalytics.dayCount(
+                from: trackedStart,
+                to: trackedEnd,
+                breakDays: breakDaysInRange,
+                includeStart: true,
+                includeEnd: true,
+                calendar: calendar
+            )
             buckets.append(
                 ConsistencyWeekBucket(
                     weekStart: cursor,
@@ -684,7 +737,9 @@ struct ConsistencyDetailView: View {
                     sessions: aggregate.sessions,
                     totalVolume: aggregate.totalVolume,
                     totalMinutes: aggregate.totalMinutes,
-                    uniqueWorkoutDays: aggregate.uniqueDays.count
+                    uniqueWorkoutDays: aggregate.uniqueDays.count,
+                    trackedDayCount: trackedDays,
+                    excludedDayCount: excludedDays
                 )
             )
 
@@ -703,7 +758,9 @@ struct ConsistencyDetailView: View {
                 sessions: 0,
                 totalVolume: 0,
                 totalMinutes: 0,
-                uniqueWorkoutDays: 0
+                uniqueWorkoutDays: 0,
+                trackedDayCount: 0,
+                excludedDayCount: 0
             )
         }
 
@@ -718,7 +775,9 @@ struct ConsistencyDetailView: View {
             sessions: 0,
             totalVolume: 0,
             totalMinutes: 0,
-            uniqueWorkoutDays: 0
+            uniqueWorkoutDays: 0,
+            trackedDayCount: 0,
+            excludedDayCount: 0
         )
     }
 
@@ -737,7 +796,11 @@ struct ConsistencyDetailView: View {
 
     private var streakRuns: [StreakRun] {
         WorkoutAnalytics
-            .streakRuns(for: workoutsInRange, intentionalRestDays: max(0, intentionalRestDays))
+            .streakRuns(
+                for: workoutsInRange,
+                intentionalRestDays: max(0, intentionalRestDays),
+                intentionalBreakRanges: intentionalBreaksManager.savedBreaks
+            )
             .sorted {
                 if $0.workoutDayCount != $1.workoutDayCount {
                     return $0.workoutDayCount > $1.workoutDayCount
@@ -754,7 +817,13 @@ struct ConsistencyDetailView: View {
 
         return streakRuns.first { run in
             let end = calendar.startOfDay(for: run.end)
-            let daysSince = calendar.dateComponents([.day], from: end, to: today).day ?? Int.max
+            let daysSince = IntentionalBreaksAnalytics.effectiveGapDays(
+                from: end,
+                to: today,
+                breakDays: breakDaysInRange,
+                includeEnd: true,
+                calendar: calendar
+            )
             return daysSince <= allowedGapDays
         }
     }
@@ -885,8 +954,30 @@ private struct ConsistencyWeekBucket: Identifiable {
     let totalVolume: Double
     let totalMinutes: Int
     let uniqueWorkoutDays: Int
+    let trackedDayCount: Int
+    let excludedDayCount: Int
 
     var id: Date { weekStart }
+
+    var eligibleDayCount: Int {
+        max(trackedDayCount - excludedDayCount, 0)
+    }
+
+    var activeWeekEquivalent: Double {
+        Double(eligibleDayCount) / 7.0
+    }
+
+    var isFullyExcused: Bool {
+        eligibleDayCount == 0
+    }
+
+    func requiredSessions(targetSessionsPerWeek: Int) -> Int {
+        IntentionalBreaksAnalytics.requiredSessionsForWeek(
+            targetSessionsPerWeek: targetSessionsPerWeek,
+            trackedDays: trackedDayCount,
+            excludedDays: excludedDayCount
+        )
+    }
 }
 
 private struct WeekdayConsistencyStat: Identifiable {
@@ -950,11 +1041,17 @@ private struct ConsistencyWeekPillar: View {
     }
 
     private var targetOffset: CGFloat {
-        min(barHeight, (CGFloat(targetSessionsPerWeek) / normalizedMax) * barHeight)
+        let adjustedTarget = Double(bucket.requiredSessions(targetSessionsPerWeek: targetSessionsPerWeek))
+        guard adjustedTarget > 0 else { return 0 }
+        return min(barHeight, (CGFloat(adjustedTarget) / normalizedMax) * barHeight)
     }
 
     private var fillStyle: AnyShapeStyle {
-        if bucket.sessions >= targetSessionsPerWeek {
+        if bucket.isFullyExcused {
+            return AnyShapeStyle(Theme.Colors.textTertiary.opacity(0.18))
+        }
+
+        if bucket.sessions >= bucket.requiredSessions(targetSessionsPerWeek: targetSessionsPerWeek) {
             return AnyShapeStyle(Theme.successGradient)
         }
         return AnyShapeStyle(
@@ -977,15 +1074,17 @@ private struct ConsistencyWeekPillar: View {
                         .fill(Theme.Colors.surface.opacity(0.7))
                         .frame(width: 24, height: barHeight)
 
-                    RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                        .fill(fillStyle)
-                        .frame(width: 24, height: fillHeight)
-                        .shadow(color: Theme.Colors.accent.opacity(0.2), radius: 6, x: 0, y: 3)
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                    .fill(fillStyle)
+                    .frame(width: 24, height: fillHeight)
+                    .shadow(color: Theme.Colors.accent.opacity(0.2), radius: 6, x: 0, y: 3)
 
-                    Rectangle()
-                        .fill(Theme.Colors.accentSecondary)
-                        .frame(width: 30, height: 1)
-                        .offset(y: -(targetOffset - 0.5))
+                    if targetOffset > 0 {
+                        Rectangle()
+                            .fill(Theme.Colors.accentSecondary)
+                            .frame(width: 30, height: 1)
+                            .offset(y: -(targetOffset - 0.5))
+                    }
                 }
 
                 Text("\(bucket.sessions)")
@@ -1019,6 +1118,9 @@ private struct ConsistencyWeekPillar: View {
     private var accessibilityLabel: String {
         let start = bucket.weekStart.formatted(Date.FormatStyle().month(.abbreviated).day())
         let end = bucket.weekEnd.formatted(Date.FormatStyle().month(.abbreviated).day().year())
+        if bucket.isFullyExcused {
+            return "Week \(start) to \(end), intentional break week"
+        }
         return "Week \(start) to \(end), \(bucket.sessions) sessions"
     }
 }

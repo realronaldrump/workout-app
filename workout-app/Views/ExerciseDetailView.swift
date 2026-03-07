@@ -7,6 +7,7 @@ struct ExerciseDetailView: View {
     @ObservedObject var gymProfilesManager: GymProfilesManager
     @ObservedObject private var metadataManager = ExerciseMetadataManager.shared
     @ObservedObject private var metricManager = ExerciseMetricManager.shared
+    @EnvironmentObject private var variantEngine: WorkoutVariantEngine
     @StateObject private var insightsEngine: InsightsEngine
     @State private var selectedChart = ChartType.weight
     @State private var selectedGymScope: GymScope = .all
@@ -16,6 +17,7 @@ struct ExerciseDetailView: View {
     @State private var customProgressEndDate = Date()
     @State private var showingCustomProgressRangePicker = false
     @State private var didInitializeProgressRange = false
+    @State private var selectedVariantWorkout: Workout?
 
     enum ChartType: String, CaseIterable, Hashable {
         case weight = "Max Weight"
@@ -108,6 +110,10 @@ struct ExerciseDetailView: View {
 
     private var exerciseInsights: [Insight] {
         insightsEngine.insights.filter { $0.exerciseName == exerciseName }
+    }
+
+    private var exerciseContextPatterns: [WorkoutVariantPattern] {
+        Array(variantEngine.patterns(for: exerciseName).prefix(3))
     }
 
     private var isCardio: Bool {
@@ -449,6 +455,27 @@ struct ExerciseDetailView: View {
                         }
                     }
 
+                    if !exerciseContextPatterns.isEmpty {
+                        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+                            Text("Context Patterns")
+                                .font(Theme.Typography.title3)
+                                .foregroundColor(Theme.Colors.textPrimary)
+
+                            Text("Where this lift tends to change when the surrounding workout changes.")
+                                .font(Theme.Typography.caption)
+                                .foregroundColor(Theme.Colors.textSecondary)
+
+                            ForEach(exerciseContextPatterns) { pattern in
+                                MetricTileButton(
+                                    action: { selectedVariantWorkout = pattern.representativeWorkout },
+                                    content: {
+                                        WorkoutVariantPatternCard(pattern: pattern, maxEvidence: 1)
+                                    }
+                                )
+                            }
+                        }
+                    }
+
                     PersonalRecordsView(
                         exerciseName: exerciseName,
                         history: scopedHistory
@@ -464,6 +491,9 @@ struct ExerciseDetailView: View {
         }
         .navigationTitle(exerciseName)
         .navigationBarTitleDisplayMode(.large)
+        .navigationDestination(item: $selectedVariantWorkout) { workout in
+            WorkoutDetailView(workout: workout)
+        }
         .sheet(isPresented: $showingCustomProgressRangePicker) {
             BrutalistDateRangeSheet(
                 title: "Chart Range",

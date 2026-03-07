@@ -7,10 +7,12 @@ struct HomeView: View {
     let gymProfilesManager: GymProfilesManager
     @EnvironmentObject var healthManager: HealthKitManager
     @EnvironmentObject var insightsEngine: InsightsEngine
+    @EnvironmentObject var intentionalBreaksManager: IntentionalBreaksManager
+    @EnvironmentObject var variantEngine: WorkoutVariantEngine
     @EnvironmentObject var sessionManager: WorkoutSessionManager
     @Binding var selectedTab: AppTab
 
-    @StateObject private var correlationEngine = DataCorrelationEngine()
+    @StateObject private var recoveryCoverageEngine = RecoveryCoverageEngine()
     @AppStorage("weightIncrement") private var weightIncrement: Double = 2.5
 
     @State private var showingImportWizard = false
@@ -71,13 +73,10 @@ struct HomeView: View {
                         )
                         .padding(.horizontal, Theme.Spacing.lg)
                     } else {
-                        // Pre-Workout Briefing — the app's unique differentiator.
-                        // Surfaces transparent recovery signals, muscle recency,
-                        // and sleep correlation data in one glanceable card.
+                        // Pre-workout briefing with recovery signals and muscle recency cues.
                         PreWorkoutBriefingCard(
-                            recoverySignals: correlationEngine.recoverySignals,
+                            recoverySignals: recoveryCoverageEngine.recoverySignals,
                             muscleSuggestions: muscleSuggestions,
-                            sleepCorrelation: sleepCorrelation,
                             onStartSession: { groupName in
                                 startQuickSession(exercise: groupName)
                             },
@@ -108,7 +107,10 @@ struct HomeView: View {
 
                         // Data Insights (frequency snapshots)
                         DataInsightCards(
-                            frequencyInsights: correlationEngine.frequencyInsights
+                            frequencyInsightsProvider: { window in
+                                recoveryCoverageEngine.frequencyInsights(for: window)
+                            },
+                            hasHistoricalFrequencyData: recoveryCoverageEngine.hasHistoricalFrequencyData
                         )
                         .padding(.horizontal, Theme.Spacing.lg)
 
@@ -185,11 +187,11 @@ struct HomeView: View {
                         healthDataSnapshot: Array(healthManager.healthDataStore.values)
                     )
                     await insightsEngine.generateInsights()
-                    await runCorrelationAnalysis()
+                    await refreshRecoveryCoverage()
                 }
             } else {
                 triggerAutoHealthSync()
-                Task { await runCorrelationAnalysis() }
+                Task { await refreshRecoveryCoverage() }
             }
         }
         .refreshable {
@@ -198,11 +200,14 @@ struct HomeView: View {
                 healthDataSnapshot: Array(healthManager.healthDataStore.values)
             )
             await insightsEngine.generateInsights()
-            await runCorrelationAnalysis()
+            await refreshRecoveryCoverage()
         }
         .onChange(of: dataManager.workouts.count) { _, _ in
             triggerAutoHealthSync()
-            Task { await runCorrelationAnalysis() }
+            Task { await refreshRecoveryCoverage() }
+        }
+        .onChange(of: intentionalBreaksManager.savedBreaks) { _, _ in
+            Task { await refreshRecoveryCoverage() }
         }
     }
 
@@ -362,10 +367,20 @@ struct HomeView: View {
 
     private var weeklySummarySection: some View {
         let workouts = weeklyWorkouts
-        let stats = workouts.isEmpty ? nil : dataManager.calculateStats(for: workouts)
+        let stats = workouts.isEmpty
+            ? nil
+            : dataManager.calculateStats(
+                for: workouts,
+                intentionalBreakRanges: intentionalBreaksManager.savedBreaks
+            )
         let sessions = stats.map { "\($0.totalWorkouts)" } ?? "0"
         let volumeText = stats.map { SharedFormatters.volumeCompact($0.totalVolume) } ?? "--"
-        let allStats = dataManager.workouts.isEmpty ? nil : dataManager.calculateStats(for: dataManager.workouts)
+        let allStats = dataManager.workouts.isEmpty
+            ? nil
+            : dataManager.calculateStats(
+                for: dataManager.workouts,
+                intentionalBreakRanges: intentionalBreaksManager.savedBreaks
+            )
         let streak = allStats?.currentStreak ?? 0
 
         return VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
@@ -419,7 +434,10 @@ struct HomeView: View {
 
     private var consistencySection: some View {
         let workouts = dataManager.workouts
-        let stats = dataManager.calculateStats(for: workouts)
+        let stats = dataManager.calculateStats(
+            for: workouts,
+            intentionalBreakRanges: intentionalBreaksManager.savedBreaks
+        )
 
         return ConsistencyView(
             stats: stats,
@@ -546,9 +564,9 @@ struct HomeView: View {
                 .buttonStyle(PlainButtonStyle())
 
                 NavigationLink {
-                    CorrelationDetailView(engine: correlationEngine)
+                    RecoveryCoverageDetailView(engine: recoveryCoverageEngine)
                 } label: {
-                    ExploreRow(title: "Correlations", subtitle: "Health data", icon: "waveform.path.ecg", tint: Theme.Colors.accentTertiary)
+                    ExploreRow(title: "Signals", subtitle: "Recovery + coverage", icon: "waveform.path.ecg", tint: Theme.Colors.accentTertiary)
                 }
                 .buttonStyle(PlainButtonStyle())
 
@@ -567,6 +585,18 @@ struct HomeView: View {
                         subtitle: "Last worked",
                         icon: "clock.arrow.trianglehead.counterclockwise.rotate.90",
                         tint: Theme.Colors.accentSecondary
+                    )
+                }
+                .buttonStyle(PlainButtonStyle())
+
+                NavigationLink {
+                    WorkoutVariantReviewView()
+                } label: {
+                    ExploreRow(
+                        title: "Variants",
+                        subtitle: "What changed",
+                        icon: "square.3.layers.3d",
+                        tint: Theme.Colors.accent
                     )
                 }
                 .buttonStyle(PlainButtonStyle())
@@ -678,10 +708,6 @@ struct HomeView: View {
         )
     }
 
-    private var sleepCorrelation: PerformanceCorrelation? {
-        correlationEngine.correlations.first { $0.healthMetric == .sleep }
-    }
-
     // MARK: - Actions
 
     private func startQuickSession(exercise: String?) {
@@ -732,14 +758,15 @@ struct HomeView: View {
         }
     }
 
-    private func runCorrelationAnalysis() async {
+    private func refreshRecoveryCoverage() async {
         let exerciseNames = Set(dataManager.workouts.flatMap { $0.exercises.map(\.name) })
         let tagMappings = ExerciseMetadataManager.shared.resolvedMappings(for: exerciseNames)
-        await correlationEngine.analyze(
+        await recoveryCoverageEngine.analyze(
             workouts: dataManager.workouts,
             healthStore: healthManager.healthDataStore,
             dailyHealth: healthManager.dailyHealthStore,
-            muscleMappings: tagMappings
+            muscleMappings: tagMappings,
+            intentionalBreakRanges: intentionalBreaksManager.savedBreaks
         )
     }
 }

@@ -76,7 +76,7 @@ struct Workout: Identifiable, Hashable {
         exercises.reduce(0) { $0 + $1.totalVolume }
     }
 
-    var totalSets: Int {
+    nonisolated var totalSets: Int {
         exercises.reduce(0) { $0 + $1.sets.count }
     }
 }
@@ -84,7 +84,7 @@ struct Workout: Identifiable, Hashable {
 extension Workout {
     /// Attempts to parse the user-facing duration string into minutes.
     /// Falls back to `defaultMinutes` when the string is empty or unparseable.
-    func estimatedDurationMinutes(defaultMinutes: Int = 60) -> Int {
+    nonisolated func estimatedDurationMinutes(defaultMinutes: Int = 60) -> Int {
         let trimmed = duration.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !trimmed.isEmpty else { return defaultMinutes }
 
@@ -137,7 +137,7 @@ extension Workout {
         return defaultMinutes
     }
 
-    func estimatedWindow(defaultMinutes: Int = 60) -> DateInterval {
+    nonisolated func estimatedWindow(defaultMinutes: Int = 60) -> DateInterval {
         let minutes = max(1, estimatedDurationMinutes(defaultMinutes: defaultMinutes))
         let end = date.addingTimeInterval(TimeInterval(minutes * 60))
         return DateInterval(start: date, end: end)

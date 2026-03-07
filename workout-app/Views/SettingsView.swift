@@ -6,6 +6,7 @@ struct SettingsView: View {
     @EnvironmentObject var healthManager: HealthKitManager
     @EnvironmentObject var logStore: WorkoutLogStore
     @EnvironmentObject var sessionManager: WorkoutSessionManager
+    @EnvironmentObject var intentionalBreaksManager: IntentionalBreaksManager
 
     @State private var showingImportWizard = false
     @State private var showingHealthWizard = false
@@ -177,6 +178,18 @@ struct SettingsView: View {
 
                         Divider().padding(.leading, 50)
 
+                        NavigationLink(destination: IntentionalBreaksView(dataManager: dataManager)) {
+                            SettingsInlineRow(
+                                icon: "calendar.badge.plus",
+                                color: Theme.Colors.warning,
+                                title: "Intentional Break Dates",
+                                subtitle: intentionalBreaksSubtitle
+                            )
+                        }
+                        .buttonStyle(PlainButtonStyle())
+
+                        Divider().padding(.leading, 50)
+
                         // Sessions per week goal (used by consistency visualization)
                         HStack(spacing: Theme.Spacing.sm) {
                             Image(systemName: "target")
@@ -314,6 +327,7 @@ struct SettingsView: View {
                     await sessionManager.discardDraft()
                     await MainActor.run {
                         healthManager.clearAllData()
+                        intentionalBreaksManager.clearAll()
                         dataManager.clearAllData()
                     }
                 }
@@ -321,7 +335,7 @@ struct SettingsView: View {
         } message: {
             Text(
                 "WARNING: This will permanently delete all imported CSV files, logged workouts, " +
-                "active session drafts, and health data from your device. This action cannot be undone."
+                "intentional break dates, active session drafts, and health data from your device. This action cannot be undone."
             )
         }
         .onAppear {
@@ -356,6 +370,24 @@ struct SettingsView: View {
             sessionsPerWeekGoal = 1
         } else if sessionsPerWeekGoal > 14 {
             sessionsPerWeekGoal = 14
+        }
+    }
+
+    private var intentionalBreaksSubtitle: String {
+        let suggestionCount = intentionalBreaksManager
+            .suggestions(for: dataManager.workouts, intentionalRestDays: intentionalRestDays)
+            .count
+        let savedCount = intentionalBreaksManager.savedBreaks.count
+
+        switch (savedCount, suggestionCount) {
+        case (0, 0):
+            return "Auto-detect workout gaps"
+        case (_, 0):
+            return "\(savedCount) saved range\(savedCount == 1 ? "" : "s")"
+        case (0, _):
+            return "\(suggestionCount) suggested gap\(suggestionCount == 1 ? "" : "s")"
+        default:
+            return "\(savedCount) saved · \(suggestionCount) suggested"
         }
     }
 }
