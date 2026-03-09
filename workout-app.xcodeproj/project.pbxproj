@@ -14,6 +14,10 @@
 		720442032F0458A200817762 /* Exceptions for "workout-app" folder in "workout-app" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
+				.claude,
+				.DS_Store,
+				.env,
+				.gitignore,
 				Info.plist,
 			);
 			target = 720441D02F04516A00817762 /* workout-app */;

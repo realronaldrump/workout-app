@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 
 struct ExerciseDetailView: View {
@@ -18,6 +19,9 @@ struct ExerciseDetailView: View {
     @State private var showingCustomProgressRangePicker = false
     @State private var didInitializeProgressRange = false
     @State private var selectedVariantWorkout: Workout?
+    @State private var scopedHistory: [(date: Date, sets: [WorkoutSet])] = []
+    @State private var cachedCardioConfig: ResolvedCardioMetricConfiguration?
+    @State private var availableChartTypes: [ChartType] = [.weight, .volume, .oneRepMax, .reps]
 
     enum ChartType: String, CaseIterable, Hashable {
         case weight = "Max Weight"
@@ -87,27 +91,6 @@ struct ExerciseDetailView: View {
         )
     }
 
-    private var scopedHistory: [(date: Date, sets: [WorkoutSet])] {
-        var history: [(date: Date, sets: [WorkoutSet])] = []
-        for workout in dataManager.workouts {
-            guard let exercise = workout.exercises.first(where: { $0.name == exerciseName }) else { continue }
-            let gymId = annotationsManager.annotation(for: workout.id)?.gymProfileId
-            let matches: Bool
-            switch selectedGymScope {
-            case .all:
-                matches = true
-            case .unassigned:
-                matches = gymId == nil
-            case .gym(let targetId):
-                matches = gymId == targetId
-            }
-            if matches {
-                history.append((date: workout.date, sets: exercise.sets))
-            }
-        }
-        return history.sorted { $0.date < $1.date }
-    }
-
     private var exerciseInsights: [Insight] {
         insightsEngine.insights.filter { $0.exerciseName == exerciseName }
     }
@@ -123,26 +106,7 @@ struct ExerciseDetailView: View {
     }
 
     private var cardioConfig: ResolvedCardioMetricConfiguration {
-        let sets = scopedHistory.flatMap(\.sets)
-        return metricManager.resolvedCardioConfiguration(for: exerciseName, historySets: sets)
-    }
-
-    private var availableChartTypes: [ChartType] {
-        if !isCardio {
-            return [.weight, .volume, .oneRepMax, .reps]
-        }
-
-        let sets = scopedHistory.flatMap(\.sets)
-        let hasDistance = sets.contains(where: { $0.distance > 0 })
-        let hasDuration = sets.contains(where: { $0.seconds > 0 })
-        let hasCount = sets.contains(where: { $0.reps > 0 })
-
-        var types: [ChartType] = []
-        if hasDistance { types.append(.distance) }
-        if hasDuration { types.append(.duration) }
-        if hasCount { types.append(.count) }
-
-        return types.isEmpty ? [.duration] : types
+        cachedCardioConfig ?? metricManager.resolvedCardioConfiguration(for: exerciseName, historySets: [])
     }
 
     private var locationLabel: String {
@@ -400,6 +364,48 @@ struct ExerciseDetailView: View {
         customProgressEndDate = today
     }
 
+    private func refreshScopedHistory() {
+        let historySessions = dataManager.exerciseHistorySessions(for: exerciseName).filter { session in
+            let gymId = annotationsManager.annotation(for: session.workoutId)?.gymProfileId
+            switch selectedGymScope {
+            case .all:
+                return true
+            case .unassigned:
+                return gymId == nil
+            case .gym(let targetId):
+                return gymId == targetId
+            }
+        }
+
+        scopedHistory = historySessions.map { (date: $0.date, sets: $0.sets) }
+
+        let sets = scopedHistory.flatMap(\.sets)
+        if isCardio {
+            cachedCardioConfig = metricManager.resolvedCardioConfiguration(for: exerciseName, historySets: sets)
+
+            let hasDistance = sets.contains(where: { $0.distance > 0 })
+            let hasDuration = sets.contains(where: { $0.seconds > 0 })
+            let hasCount = sets.contains(where: { $0.reps > 0 })
+
+            var types: [ChartType] = []
+            if hasDistance { types.append(.distance) }
+            if hasDuration { types.append(.duration) }
+            if hasCount { types.append(.count) }
+            availableChartTypes = types.isEmpty ? [.duration] : types
+        } else {
+            cachedCardioConfig = nil
+            availableChartTypes = [.weight, .volume, .oneRepMax, .reps]
+        }
+
+        if !availableChartTypes.contains(selectedChart) {
+            selectedChart = availableChartTypes.first ?? (isCardio ? .duration : .weight)
+        }
+
+        if selectedProgressRange == .custom {
+            clampCustomProgressRangeToScope()
+        }
+    }
+
     var body: some View {
         ZStack {
             AdaptiveBackground()
@@ -504,6 +510,7 @@ struct ExerciseDetailView: View {
             )
         }
         .onAppear {
+            refreshScopedHistory()
             initializeProgressRangeIfNeeded()
             if !availableChartTypes.contains(selectedChart) {
                 selectedChart = availableChartTypes.first ?? (isCardio ? .duration : .weight)
@@ -513,14 +520,24 @@ struct ExerciseDetailView: View {
             }
         }
         .onChange(of: selectedGymScope) { _, _ in
-            if selectedProgressRange == .custom {
-                clampCustomProgressRangeToScope()
-            }
+            refreshScopedHistory()
         }
         .onChange(of: availableChartTypes) { _, newValue in
             if !newValue.contains(selectedChart) {
                 selectedChart = newValue.first ?? selectedChart
             }
+        }
+        .onChange(of: dataManager.workouts) { _, _ in
+            refreshScopedHistory()
+        }
+        .onReceive(annotationsManager.$annotations) { _ in
+            refreshScopedHistory()
+        }
+        .onReceive(metadataManager.objectWillChange) { _ in
+            refreshScopedHistory()
+        }
+        .onReceive(metricManager.objectWillChange) { _ in
+            refreshScopedHistory()
         }
         .onChange(of: selectedChart) { _, _ in
             Haptics.selection()

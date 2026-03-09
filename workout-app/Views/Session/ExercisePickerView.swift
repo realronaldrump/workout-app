@@ -70,29 +70,17 @@ struct ExercisePickerView: View {
     }
 
     private var recentExercises: [String] {
-        var seen = Set<String>()
-        var result: [String] = []
-        result.reserveCapacity(10)
-
-        for workout in dataManager.workouts.sorted(by: { $0.date > $1.date }) {
-            for exercise in workout.exercises {
-                let name = exercise.name
-                let key = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-                if seen.insert(key).inserted {
-                    result.append(name)
-                    if result.count >= 10 { return result }
-                }
-            }
-        }
-
-        return result
+        dataManager.recentExerciseNames(limit: 10)
     }
 
     private var allExercises: [String] {
-        // Include a curated default catalog so the picker is useful before any workouts exist.
-        let names = dataManager.workouts.flatMap { $0.exercises.map(\.name) } + ExerciseMetadataManager.defaultExerciseNames
-        let unique = Set(names.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty })
-        return unique.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+        let catalogNames = ExerciseMetadataManager.defaultExerciseNames
+        if dataManager.allExerciseNames().isEmpty {
+            return catalogNames
+        }
+
+        return Array(Set(dataManager.allExerciseNames() + catalogNames))
+            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
     }
 
     private var filteredExercises: [String] {

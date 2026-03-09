@@ -19,45 +19,25 @@ struct ExerciseListView: View {
     }
 
     var exercises: [(name: String, stats: ExerciseStats)] {
-        let allExercises = dataManager.workouts.flatMap { $0.exercises }
-        let grouped = Dictionary(grouping: allExercises) { $0.name }
-
-        let exerciseStats = grouped.map { (name: String, exercises: [Exercise]) -> (String, ExerciseStats) in
-            let totalVolume = exercises.reduce(0) { $0 + $1.totalVolume }
-            let maxWeight = exercises.map { $0.maxWeight }.max() ?? 0
-            let frequency = exercises.count
-
-            let workoutDates = exercises.compactMap { exercise in
-                dataManager.workouts.first { workout in
-                    workout.exercises.contains { $0.id == exercise.id }
-                }?.date
-            }
-            let lastPerformed = workoutDates.max()
-
-            let stats = ExerciseStats(
-                totalVolume: totalVolume,
-                maxWeight: maxWeight,
-                frequency: frequency,
-                lastPerformed: lastPerformed,
-                oneRepMax: exercises.map { $0.oneRepMax }.max() ?? 0
-            )
-
-            return (name, stats)
-        }
-
-        let filtered = exerciseStats.filter { exercise in
-            searchText.isEmpty || exercise.0.localizedCaseInsensitiveContains(searchText)
+        let filtered = dataManager.exerciseSummaries().filter { exercise in
+            searchText.isEmpty || exercise.name.localizedCaseInsensitiveContains(searchText)
         }
 
         switch sortOrder {
         case .alphabetical:
-            return filtered.sorted { $0.0 < $1.0 }
+            return filtered.map { ($0.name, $0.stats) }
         case .volume:
-            return filtered.sorted { $0.1.totalVolume > $1.1.totalVolume }
+            return filtered
+                .sorted { $0.stats.totalVolume > $1.stats.totalVolume }
+                .map { ($0.name, $0.stats) }
         case .frequency:
-            return filtered.sorted { $0.1.frequency > $1.1.frequency }
+            return filtered
+                .sorted { $0.stats.frequency > $1.stats.frequency }
+                .map { ($0.name, $0.stats) }
         case .recent:
-            return filtered.sorted { ($0.1.lastPerformed ?? .distantPast) > ($1.1.lastPerformed ?? .distantPast) }
+            return filtered
+                .sorted { ($0.stats.lastPerformed ?? .distantPast) > ($1.stats.lastPerformed ?? .distantPast) }
+                .map { ($0.name, $0.stats) }
         }
     }
 

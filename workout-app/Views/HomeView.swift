@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 
 struct HomeView: View {
@@ -10,6 +11,7 @@ struct HomeView: View {
     @EnvironmentObject var intentionalBreaksManager: IntentionalBreaksManager
     @EnvironmentObject var variantEngine: WorkoutVariantEngine
     @EnvironmentObject var sessionManager: WorkoutSessionManager
+    @ObservedObject private var metadataManager = ExerciseMetadataManager.shared
     @Binding var selectedTab: AppTab
 
     @StateObject private var recoveryCoverageEngine = RecoveryCoverageEngine()
@@ -27,6 +29,10 @@ struct HomeView: View {
     @State private var showingMuscleRecency = false
     @State private var showingConsistencyDetail = false
     @State private var showRepeatWorkoutId: UUID?
+    @State private var cachedWeeklyStats: WorkoutStats?
+    @State private var cachedOverallStats: WorkoutStats?
+    @State private var cachedWeeklyChangeMetrics: [ChangeMetric] = []
+    @State private var cachedMuscleSuggestions: [MuscleGroupSuggestion] = []
     private let maxContentWidth: CGFloat = 820
 
     init(
@@ -76,7 +82,7 @@ struct HomeView: View {
                         // Pre-workout briefing with recovery signals and muscle recency cues.
                         PreWorkoutBriefingCard(
                             recoverySignals: recoveryCoverageEngine.recoverySignals,
-                            muscleSuggestions: muscleSuggestions,
+                            muscleSuggestions: cachedMuscleSuggestions,
                             onStartSession: { groupName in
                                 startQuickSession(exercise: groupName)
                             },
@@ -179,6 +185,7 @@ struct HomeView: View {
             QuickStartView(exerciseName: quickStartExercise)
         }
         .onAppear {
+            refreshHomeDerivedState()
             healthManager.refreshAuthorizationStatus()
             if dataManager.workouts.isEmpty {
                 Task {
@@ -202,12 +209,17 @@ struct HomeView: View {
             await insightsEngine.generateInsights()
             await refreshRecoveryCoverage()
         }
-        .onChange(of: dataManager.workouts.count) { _, _ in
+        .onChange(of: dataManager.workouts) { _, _ in
+            refreshHomeDerivedState()
             triggerAutoHealthSync()
             Task { await refreshRecoveryCoverage() }
         }
         .onChange(of: intentionalBreaksManager.savedBreaks) { _, _ in
+            refreshHomeDerivedState()
             Task { await refreshRecoveryCoverage() }
+        }
+        .onReceive(metadataManager.objectWillChange) { _ in
+            refreshHomeDerivedState()
         }
     }
 
@@ -366,22 +378,9 @@ struct HomeView: View {
     // MARK: - Weekly Summary
 
     private var weeklySummarySection: some View {
-        let workouts = weeklyWorkouts
-        let stats = workouts.isEmpty
-            ? nil
-            : dataManager.calculateStats(
-                for: workouts,
-                intentionalBreakRanges: intentionalBreaksManager.savedBreaks
-            )
-        let sessions = stats.map { "\($0.totalWorkouts)" } ?? "0"
-        let volumeText = stats.map { SharedFormatters.volumeCompact($0.totalVolume) } ?? "--"
-        let allStats = dataManager.workouts.isEmpty
-            ? nil
-            : dataManager.calculateStats(
-                for: dataManager.workouts,
-                intentionalBreakRanges: intentionalBreaksManager.savedBreaks
-            )
-        let streak = allStats?.currentStreak ?? 0
+        let sessions = cachedWeeklyStats.map { "\($0.totalWorkouts)" } ?? "0"
+        let volumeText = cachedWeeklyStats.map { SharedFormatters.volumeCompact($0.totalVolume) } ?? "--"
+        let streak = cachedOverallStats?.currentStreak ?? 0
 
         return VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             HStack(alignment: .firstTextBaseline) {
@@ -433,15 +432,9 @@ struct HomeView: View {
     }
 
     private var consistencySection: some View {
-        let workouts = dataManager.workouts
-        let stats = dataManager.calculateStats(
-            for: workouts,
-            intentionalBreakRanges: intentionalBreaksManager.savedBreaks
-        )
-
         return ConsistencyView(
-            stats: stats,
-            workouts: workouts,
+            stats: cachedOverallStats ?? emptyStats,
+            workouts: dataManager.workouts,
             timeRange: .allTime,
             onTap: {
                 showingConsistencyDetail = true
@@ -453,7 +446,7 @@ struct HomeView: View {
     // MARK: - Change Metrics (always visible — key differentiator)
 
     private var changeSection: some View {
-        let metrics = weeklyChangeMetrics
+        let metrics = cachedWeeklyChangeMetrics
         return Group {
             if !metrics.isEmpty {
                 VStack(alignment: .leading, spacing: Theme.Spacing.md) {
@@ -657,14 +650,6 @@ struct HomeView: View {
         )
     }
 
-    private var weeklyChangeMetrics: [ChangeMetric] {
-        let all = WorkoutAnalytics.changeMetrics(for: dataManager.workouts, window: changeWindow)
-        let preferred = all.filter {
-            $0.title.contains("Sessions") || $0.title.contains("Volume")
-        }
-        return Array((preferred.isEmpty ? all : preferred).prefix(3))
-    }
-
     private var homeHighlights: [HighlightItem] {
         var items: [HighlightItem] = []
 
@@ -692,19 +677,19 @@ struct HomeView: View {
         return items
     }
 
-    private var muscleSuggestions: [MuscleGroupSuggestion] {
-        let workouts = dataManager.workouts
-        guard !workouts.isEmpty else { return [] }
-
-        let exerciseNames = Set(workouts.flatMap { $0.exercises.map(\.name) })
-        let tagMappings = ExerciseMetadataManager.shared.resolvedMappings(for: exerciseNames)
-        let groupMappings: [String: [MuscleGroup]] = tagMappings.mapValues { tags in
-            tags.compactMap { $0.builtInGroup }
-        }
-
-        return MuscleRecencySuggestionEngine.suggestions(
-            workouts: workouts,
-            muscleGroupsByExerciseName: groupMappings
+    private var emptyStats: WorkoutStats {
+        WorkoutStats(
+            totalWorkouts: 0,
+            totalExercises: 0,
+            totalVolume: 0,
+            totalSets: 0,
+            favoriteExercise: nil,
+            strongestExercise: nil,
+            mostImprovedExercise: nil,
+            currentStreak: 0,
+            longestStreak: 0,
+            workoutsPerWeek: 0,
+            lastWorkoutDate: nil
         )
     }
 
@@ -756,6 +741,40 @@ struct HomeView: View {
         Task {
             await healthManager.syncRecentWorkoutsIfNeeded(dataManager.workouts)
         }
+    }
+
+    private func refreshHomeDerivedState() {
+        let workouts = dataManager.workouts
+        let breaks = intentionalBreaksManager.savedBreaks
+        let weekly = weeklyWorkouts
+
+        cachedWeeklyStats = weekly.isEmpty
+            ? nil
+            : dataManager.calculateStats(for: weekly, intentionalBreakRanges: breaks)
+        cachedOverallStats = workouts.isEmpty
+            ? nil
+            : dataManager.calculateStats(for: workouts, intentionalBreakRanges: breaks)
+
+        let allMetrics = WorkoutAnalytics.changeMetrics(for: workouts, window: changeWindow)
+        let preferredMetrics = allMetrics.filter {
+            $0.title.contains("Sessions") || $0.title.contains("Volume")
+        }
+        cachedWeeklyChangeMetrics = Array((preferredMetrics.isEmpty ? allMetrics : preferredMetrics).prefix(3))
+
+        guard !workouts.isEmpty else {
+            cachedMuscleSuggestions = []
+            return
+        }
+
+        let exerciseNames = Set(dataManager.allExerciseNames())
+        let tagMappings = metadataManager.resolvedMappings(for: exerciseNames)
+        let groupMappings: [String: [MuscleGroup]] = tagMappings.mapValues { tags in
+            tags.compactMap(\.builtInGroup)
+        }
+        cachedMuscleSuggestions = MuscleRecencySuggestionEngine.suggestions(
+            workouts: workouts,
+            muscleGroupsByExerciseName: groupMappings
+        )
     }
 
     private func refreshRecoveryCoverage() async {

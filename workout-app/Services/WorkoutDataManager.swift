@@ -1,6 +1,17 @@
 import Combine
 import Foundation
 
+struct ExerciseHistorySession {
+    let workoutId: UUID
+    let date: Date
+    let sets: [WorkoutSet]
+}
+
+struct ExerciseSummary {
+    let name: String
+    let stats: ExerciseStats
+}
+
 @MainActor
 class WorkoutDataManager: ObservableObject {
     @Published var workouts: [Workout] = []
@@ -14,6 +25,10 @@ class WorkoutDataManager: ObservableObject {
     private static let defaultIntentionalRestDays = 1
 
     private let identityStore = WorkoutIdentityStore()
+    private var exerciseHistoryCache: [String: [ExerciseHistorySession]] = [:]
+    private var exerciseSummariesCache: [ExerciseSummary] = []
+    private var allExerciseNamesCache: [String] = []
+    private var recentExerciseNamesCache: [String] = []
 
     nonisolated func processImportedWorkoutSets(
         _ sets: [WorkoutSet],
@@ -101,18 +116,28 @@ class WorkoutDataManager: ObservableObject {
 
     private func mergeSources() {
         workouts = (importedWorkouts + loggedWorkouts).sorted { $0.date > $1.date }
+        rebuildDerivedCaches()
     }
 
     func getExerciseHistory(for exerciseName: String) -> [(date: Date, sets: [WorkoutSet])] {
-        var history: [(date: Date, sets: [WorkoutSet])] = []
+        (exerciseHistoryCache[exerciseName] ?? []).map { (date: $0.date, sets: $0.sets) }
+    }
 
-        for workout in workouts {
-            if let exercise = workout.exercises.first(where: { $0.name == exerciseName }) {
-                history.append((date: workout.date, sets: exercise.sets))
-            }
-        }
+    func exerciseHistorySessions(for exerciseName: String) -> [ExerciseHistorySession] {
+        exerciseHistoryCache[exerciseName] ?? []
+    }
 
-        return history.sorted { $0.date < $1.date }
+    func exerciseSummaries() -> [ExerciseSummary] {
+        exerciseSummariesCache
+    }
+
+    func allExerciseNames() -> [String] {
+        allExerciseNamesCache
+    }
+
+    func recentExerciseNames(limit: Int? = nil) -> [String] {
+        guard let limit else { return recentExerciseNamesCache }
+        return Array(recentExerciseNamesCache.prefix(limit))
     }
 
     func calculateStats() -> WorkoutStats {
@@ -303,11 +328,81 @@ class WorkoutDataManager: ObservableObject {
         self.loggedWorkoutIds = []
         self.isLoading = false
         self.error = nil
+        self.exerciseHistoryCache = [:]
+        self.exerciseSummariesCache = []
+        self.allExerciseNamesCache = []
+        self.recentExerciseNamesCache = []
         self.identityStore.clear()
+    }
+
+    private func rebuildDerivedCaches() {
+        var historyByExercise: [String: [ExerciseHistorySession]] = [:]
+        var summaryByExercise: [String: ExerciseStatsAccumulator] = [:]
+        var allExerciseNames = Set<String>()
+        var seenRecentExerciseKeys = Set<String>()
+        var recentExerciseNames: [String] = []
+
+        recentExerciseNames.reserveCapacity(16)
+
+        for workout in workouts {
+            for exercise in workout.exercises {
+                historyByExercise[exercise.name, default: []].append(
+                    ExerciseHistorySession(workoutId: workout.id, date: workout.date, sets: exercise.sets)
+                )
+
+                var accumulator = summaryByExercise[exercise.name] ?? ExerciseStatsAccumulator()
+                accumulator.totalVolume += exercise.totalVolume
+                accumulator.maxWeight = max(accumulator.maxWeight, exercise.maxWeight)
+                accumulator.frequency += 1
+                accumulator.lastPerformed = max(accumulator.lastPerformed ?? workout.date, workout.date)
+                accumulator.oneRepMax = max(accumulator.oneRepMax, exercise.oneRepMax)
+                summaryByExercise[exercise.name] = accumulator
+
+                let trimmedName = exercise.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmedName.isEmpty else { continue }
+
+                allExerciseNames.insert(trimmedName)
+
+                let recentKey = trimmedName.lowercased()
+                if seenRecentExerciseKeys.insert(recentKey).inserted {
+                    recentExerciseNames.append(trimmedName)
+                }
+            }
+        }
+
+        for name in historyByExercise.keys {
+            historyByExercise[name]?.sort { $0.date < $1.date }
+        }
+
+        exerciseHistoryCache = historyByExercise
+        exerciseSummariesCache = summaryByExercise.map { name, accumulator in
+            ExerciseSummary(
+                name: name,
+                stats: ExerciseStats(
+                    totalVolume: accumulator.totalVolume,
+                    maxWeight: accumulator.maxWeight,
+                    frequency: accumulator.frequency,
+                    lastPerformed: accumulator.lastPerformed,
+                    oneRepMax: accumulator.oneRepMax
+                )
+            )
+        }
+        .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        allExerciseNamesCache = Array(allExerciseNames)
+            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+        recentExerciseNamesCache = recentExerciseNames
     }
 }
 
 private extension WorkoutDataManager {
+    struct ExerciseStatsAccumulator {
+        var totalVolume: Double = 0
+        var maxWeight: Double = 0
+        var frequency: Int = 0
+        var lastPerformed: Date?
+        var oneRepMax: Double = 0
+    }
+
     struct ImportedWorkoutBuildResult {
         let workout: Workout
         let resolvedId: UUID

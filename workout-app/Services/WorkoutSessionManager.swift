@@ -186,6 +186,14 @@ final class WorkoutSessionManager: ObservableObject {
         guard let exerciseIndex = session.exercises.firstIndex(where: { $0.id == exerciseId }) else { return }
         guard let setIndex = session.exercises[exerciseIndex].sets.firstIndex(where: { $0.id == setId }) else { return }
 
+        let currentSet = session.exercises[exerciseIndex].sets[setIndex]
+        if currentSet.weight == prefill.weight,
+           currentSet.reps == prefill.reps,
+           currentSet.distance == prefill.distance,
+           currentSet.seconds == prefill.seconds {
+            return
+        }
+
         session.exercises[exerciseIndex].sets[setIndex].weight = prefill.weight
         session.exercises[exerciseIndex].sets[setIndex].reps = prefill.reps
         session.exercises[exerciseIndex].sets[setIndex].distance = prefill.distance
@@ -413,7 +421,6 @@ final class WorkoutSessionManager: ObservableObject {
         encoder.dateEncodingStrategy = .iso8601
 
         do {
-            // Encode on MainActor to avoid Swift 6 actor-isolation violations.
             return try encoder.encode(session)
         } catch {
             print("Failed to encode active session draft: \(error)")
