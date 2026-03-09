@@ -7,7 +7,7 @@
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>This app does not write health data, but this permission is required by iOS.</string>
 	<key>CFBundleDisplayName</key>
-	<string>Big Beautiful Workout App</string>
+	<string>Davis Workout</string>
 	<key>CFBundleName</key>
 	<string>Davis's Big Beautiful Workout App</string>
 	<key>CFBundleIdentifier</key>
@@ -24,7 +24,7 @@
 	<string>Light</string>
 	<key>NSUbiquitousContainers</key>
 	<dict>
-		<key>iCloud.$(PRODUCT_BUNDLE_IDENTIFIER)</key>
+		<key>iCloud.davis.workout-app</key>
 		<dict>
 			<key>NSUbiquitousContainerIsDocumentScopePublic</key>
 			<true/>
