@@ -68,10 +68,11 @@ extension HealthKitManager {
             return .unavailable
         }
 
+        let readTypes = Self.normalizedAuthorizationReadTypes(for: [objectType])
         let (status, error): (HKAuthorizationRequestStatus, Error?) = await withCheckedContinuation { continuation in
             healthStore.getRequestStatusForAuthorization(
                 toShare: [],
-                read: [objectType]
+                read: readTypes
             ) { status, error in
                 continuation.resume(returning: (status, error))
             }

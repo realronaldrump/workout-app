@@ -128,6 +128,18 @@ class HealthKitManager: ObservableObject {
         return types
     }
 
+    static func normalizedAuthorizationReadTypes<S: Sequence>(
+        for requestedTypes: S
+    ) -> Set<HKObjectType> where S.Element == HKObjectType {
+        var normalizedTypes = Set(requestedTypes)
+
+        if normalizedTypes.contains(where: { $0.identifier == HKSeriesType.workoutRoute().identifier }) {
+            normalizedTypes.insert(HKObjectType.workoutType())
+        }
+
+        return normalizedTypes
+    }
+
     // MARK: - Initialization
 
     init() {
@@ -191,7 +203,10 @@ class HealthKitManager: ObservableObject {
             }
 
             do {
-                try await healthStore.requestAuthorization(toShare: [], read: allReadTypes)
+                try await healthStore.requestAuthorization(
+                    toShare: [],
+                    read: Self.normalizedAuthorizationReadTypes(for: allReadTypes)
+                )
                 // Await status update so callers can safely continue without a race.
                 await checkAuthorizationStatusAsync()
             } catch {
