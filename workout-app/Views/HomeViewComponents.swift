@@ -229,6 +229,242 @@ struct HomeWorkoutRow: View {
     }
 }
 
+struct HomeWeekBucket: Identifiable, Equatable {
+    let weekStart: Date
+    let referenceDate: Date
+    let workouts: [Workout]
+    let stats: WorkoutStats
+
+    var id: Date { weekStart }
+
+    private var calendar: Calendar {
+        var calendar = Calendar.current
+        calendar.firstWeekday = 1
+        calendar.minimumDaysInFirstWeek = 1
+        return calendar
+    }
+
+    private var currentWeekStart: Date {
+        SharedFormatters.startOfWeekSunday(for: referenceDate)
+    }
+
+    private var weekOffset: Int {
+        let days = calendar.dateComponents([.day], from: weekStart, to: currentWeekStart).day ?? 0
+        return max(0, days / 7)
+    }
+
+    var isCurrentWeek: Bool {
+        calendar.isDate(weekStart, inSameDayAs: currentWeekStart)
+    }
+
+    var displayEnd: Date {
+        let naturalEnd = calendar.date(byAdding: .day, value: 6, to: weekStart) ?? weekStart
+        return min(naturalEnd, referenceDate)
+    }
+
+    var title: String {
+        switch weekOffset {
+        case 0:
+            return "This Week"
+        case 1:
+            return "Last Week"
+        default:
+            return "Week of \(weekStart.formatted(Date.FormatStyle().month(.abbreviated).day()))"
+        }
+    }
+
+    var rangeLabel: String {
+        let start = weekStart.formatted(Date.FormatStyle().month(.abbreviated).day())
+        let end = displayEnd.formatted(Date.FormatStyle().month(.abbreviated).day())
+        return "\(start) - \(end)"
+    }
+
+    var sessionsValue: String {
+        "\(stats.totalWorkouts)"
+    }
+
+    var volumeValue: String {
+        stats.totalWorkouts == 0 ? "--" : SharedFormatters.volumeCompact(stats.totalVolume)
+    }
+
+    var sessionHeader: String {
+        isCurrentWeek ? "Sessions So Far" : "Sessions"
+    }
+
+    var emptyMessage: String {
+        if isCurrentWeek {
+            return "No sessions logged yet. Swipe to revisit previous weeks."
+        }
+        return "No sessions were logged during this week."
+    }
+
+    var statusLabel: String {
+        if stats.totalWorkouts == 0 {
+            return isCurrentWeek ? "Open week" : "Rest week"
+        }
+        return stats.totalWorkouts == 1 ? "1 session" : "\(stats.totalWorkouts) sessions"
+    }
+}
+
+struct WeeklySummaryCarouselCard: View {
+    let bucket: HomeWeekBucket
+    let showsSwipeHint: Bool
+    let onMetricTap: (WorkoutMetricDetailKind) -> Void
+    let onWorkoutTap: (Workout) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
+            HStack(alignment: .top, spacing: Theme.Spacing.md) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(bucket.title)
+                        .font(Theme.Typography.title3)
+                        .foregroundColor(Theme.Colors.textPrimary)
+                    Text(bucket.rangeLabel)
+                        .font(Theme.Typography.caption)
+                        .foregroundColor(Theme.Colors.textSecondary)
+                }
+
+                Spacer(minLength: 0)
+
+                Text(bucket.statusLabel)
+                    .font(Theme.Typography.captionBold)
+                    .foregroundColor(bucket.stats.totalWorkouts == 0 ? Theme.Colors.textTertiary : Theme.Colors.accent)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(
+                        Capsule()
+                            .fill(
+                                (bucket.stats.totalWorkouts == 0 ? Theme.Colors.border : Theme.Colors.accent)
+                                    .opacity(0.12)
+                            )
+                    )
+            }
+
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: Theme.Spacing.md) {
+                    SummaryPill(title: "Sessions", value: bucket.sessionsValue, onTap: bucket.workouts.isEmpty ? nil : {
+                        onMetricTap(.sessions)
+                    })
+                    SummaryPill(title: "Volume", value: bucket.volumeValue, onTap: bucket.workouts.isEmpty ? nil : {
+                        onMetricTap(.totalVolume)
+                    })
+                }
+
+                VStack(spacing: Theme.Spacing.sm) {
+                    SummaryPill(title: "Sessions", value: bucket.sessionsValue, onTap: bucket.workouts.isEmpty ? nil : {
+                        onMetricTap(.sessions)
+                    })
+                    SummaryPill(title: "Volume", value: bucket.volumeValue, onTap: bucket.workouts.isEmpty ? nil : {
+                        onMetricTap(.totalVolume)
+                    })
+                }
+            }
+
+            if bucket.workouts.isEmpty {
+                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                    Text(bucket.emptyMessage)
+                        .font(Theme.Typography.body)
+                        .foregroundColor(Theme.Colors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(Theme.Spacing.lg)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
+                        .fill(Theme.Colors.surfaceRaised)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
+                        .strokeBorder(Theme.Colors.border.opacity(0.35), lineWidth: 1)
+                )
+            } else {
+                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                    Text(bucket.sessionHeader)
+                        .font(Theme.Typography.metricLabel)
+                        .foregroundColor(Theme.Colors.textTertiary)
+                        .textCase(.uppercase)
+                        .tracking(0.8)
+
+                    ForEach(bucket.workouts.prefix(3)) { workout in
+                        WeeklySessionPreviewCard(workout: workout) {
+                            onWorkoutTap(workout)
+                        }
+                    }
+
+                    if bucket.workouts.count > 3 {
+                        Text("+\(bucket.workouts.count - 3) more sessions that week")
+                            .font(Theme.Typography.caption)
+                            .foregroundColor(Theme.Colors.textTertiary)
+                    }
+                }
+            }
+
+            if showsSwipeHint {
+                HStack(spacing: Theme.Spacing.sm) {
+                    Image(systemName: "hand.draw")
+                        .font(Theme.Typography.captionBold)
+                    Text("Swipe to move through earlier weeks.")
+                        .font(Theme.Typography.caption)
+                }
+                .foregroundColor(Theme.Colors.textTertiary)
+            }
+        }
+        .padding(.vertical, Theme.Spacing.sm)
+    }
+}
+
+private struct WeeklySessionPreviewCard: View {
+    let workout: Workout
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: Theme.Spacing.md) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(workout.name)
+                        .font(Theme.Typography.bodyBold)
+                        .foregroundColor(Theme.Colors.textPrimary)
+                        .lineLimit(1)
+                    Text(workout.date.formatted(date: .abbreviated, time: .shortened))
+                        .font(Theme.Typography.caption)
+                        .foregroundColor(Theme.Colors.textSecondary)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 0)
+
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text(workout.duration)
+                        .font(Theme.Typography.captionBold)
+                        .foregroundColor(Theme.Colors.textSecondary)
+                    Text("\(workout.exercises.count) exercises")
+                        .font(Theme.Typography.caption)
+                        .foregroundColor(Theme.Colors.textTertiary)
+                }
+
+                Image(systemName: "chevron.right")
+                    .font(Theme.Typography.caption2Bold)
+                    .foregroundColor(Theme.Colors.textTertiary)
+            }
+            .padding(.horizontal, Theme.Spacing.md)
+            .padding(.vertical, Theme.Spacing.md)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
+                    .fill(Theme.Colors.surfaceRaised)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
+                    .strokeBorder(Theme.Colors.border.opacity(0.35), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(workout.name), \(workout.date.formatted(date: .abbreviated, time: .shortened))")
+        .accessibilityHint("Double tap for workout details")
+    }
+}
+
 // MARK: - Reusable Components
 
 struct SecondaryChip: View {

@@ -29,10 +29,12 @@ struct HomeView: View {
     @State private var showingConsistencyDetail = false
     @State private var showRepeatWorkoutId: UUID?
     @State private var cachedWeeklyStats: WorkoutStats?
+    @State private var cachedWeekBuckets: [HomeWeekBucket] = []
     @State private var cachedOverallStats: WorkoutStats?
     @State private var cachedWeeklyChangeMetrics: [ChangeMetric] = []
     @State private var cachedMuscleSuggestions: [MuscleGroupSuggestion] = []
     @State private var cachedHomeHighlights: [HighlightItem] = []
+    @State private var selectedWeekBucketStart: Date?
     @State private var derivedStateTask: Task<Void, Never>?
     @State private var recoveryCoverageTask: Task<Void, Never>?
     private let maxContentWidth: CGFloat = 820
@@ -150,7 +152,7 @@ struct HomeView: View {
         .navigationDestination(item: $selectedWorkoutMetric) { selection in
             MetricDetailView(
                 kind: selection.kind,
-                workouts: weeklyWorkouts,
+                workouts: selectedWeekBucket?.workouts ?? weeklyWorkouts,
                 scrollTarget: selection.scrollTarget
             )
         }
@@ -386,9 +388,9 @@ struct HomeView: View {
     // MARK: - Weekly Summary
 
     private var weeklySummarySection: some View {
-        let sessions = cachedWeeklyStats.map { "\($0.totalWorkouts)" } ?? "0"
-        let volumeText = cachedWeeklyStats.map { SharedFormatters.volumeCompact($0.totalVolume) } ?? "--"
         let streak = cachedOverallStats?.currentStreak ?? 0
+        let buckets = cachedWeekBuckets
+        let selectedBucket = selectedWeekBucket ?? buckets.first
 
         return VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             HStack(alignment: .firstTextBaseline) {
@@ -414,27 +416,38 @@ struct HomeView: View {
                 }
             }
 
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: Theme.Spacing.md) {
-                    SummaryPill(title: "Sessions", value: sessions) {
-                        selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: .sessions, scrollTarget: nil)
-                    }
-                    SummaryPill(title: "Volume", value: volumeText) {
-                        selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: .totalVolume, scrollTarget: nil)
+            if let selectedBucket {
+                TabView(selection: selectedWeekSelection) {
+                    ForEach(buckets) { bucket in
+                        WeeklySummaryCarouselCard(
+                            bucket: bucket,
+                            showsSwipeHint: buckets.count > 1,
+                            onMetricTap: { kind in
+                                selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: kind, scrollTarget: nil)
+                            },
+                            onWorkoutTap: { workout in
+                                selectedWorkout = workout
+                            }
+                        )
+                        .tag(Optional(bucket.weekStart))
                     }
                 }
+                .tabViewStyle(.page(indexDisplayMode: .never))
+                .frame(height: weeklySummaryCardHeight(for: selectedBucket))
 
-                VStack(spacing: Theme.Spacing.sm) {
-                    SummaryPill(title: "Sessions", value: sessions) {
-                        selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: .sessions, scrollTarget: nil)
+                if buckets.count > 1 {
+                    HStack(spacing: 8) {
+                        ForEach(buckets) { bucket in
+                            Capsule()
+                                .fill(isSelectedWeekBucket(bucket) ? Theme.Colors.accent : Theme.Colors.border.opacity(0.5))
+                                .frame(width: isSelectedWeekBucket(bucket) ? 20 : 8, height: 8)
+                                .animation(Theme.Animation.spring, value: selectedWeekBucketStart)
+                        }
                     }
-                    SummaryPill(title: "Volume", value: volumeText) {
-                        selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: .totalVolume, scrollTarget: nil)
-                    }
+                    .frame(maxWidth: .infinity)
                 }
             }
         }
-        .padding(Theme.Spacing.lg)
         .softCard(elevation: 2)
         .animateOnAppear(delay: 0.15)
     }
@@ -639,6 +652,20 @@ struct HomeView: View {
         return dataManager.workouts.filter { $0.date >= weekStart && $0.date <= now }
     }
 
+    private var selectedWeekBucket: HomeWeekBucket? {
+        if let selectedWeekBucketStart {
+            return cachedWeekBuckets.first { Calendar.current.isDate($0.weekStart, inSameDayAs: selectedWeekBucketStart) }
+        }
+        return cachedWeekBuckets.first
+    }
+
+    private var selectedWeekSelection: Binding<Date?> {
+        Binding(
+            get: { selectedWeekBucketStart ?? cachedWeekBuckets.first?.weekStart },
+            set: { selectedWeekBucketStart = $0 }
+        )
+    }
+
     private var weeklyDateRange: DateInterval {
         let now = Date()
         let weekStart = SharedFormatters.startOfWeekSunday(for: now)
@@ -755,10 +782,14 @@ struct HomeView: View {
         let workouts = dataManager.workouts
         let breaks = intentionalBreaksManager.savedBreaks
         let weekly = weeklyWorkouts
+        let weekBuckets = buildWeekBuckets(workouts: workouts, intentionalBreakRanges: breaks)
 
-        cachedWeeklyStats = weekly.isEmpty
-            ? nil
-            : dataManager.calculateStats(for: weekly, intentionalBreakRanges: breaks)
+        cachedWeekBuckets = weekBuckets
+        cachedWeeklyStats = weekBuckets.first?.stats ?? (
+            weekly.isEmpty
+                ? nil
+                : dataManager.calculateStats(for: weekly, intentionalBreakRanges: breaks)
+        )
         cachedOverallStats = workouts.isEmpty
             ? nil
             : dataManager.calculateStats(for: workouts, intentionalBreakRanges: breaks)
@@ -783,6 +814,7 @@ struct HomeView: View {
             workouts: workouts,
             muscleGroupsByExerciseName: groupMappings
         )
+        syncSelectedWeekBucket()
     }
 
     private func scheduleHomeDerivedStateRefresh(debounceNs: UInt64 = 150_000_000) {
@@ -817,5 +849,79 @@ struct HomeView: View {
 
     private func rebuildHomeHighlights() {
         cachedHomeHighlights = buildHomeHighlights()
+    }
+
+    private func buildWeekBuckets(
+        workouts: [Workout],
+        intentionalBreakRanges: [IntentionalBreakRange]
+    ) -> [HomeWeekBucket] {
+        let now = Date()
+        let calendar = Calendar.current
+        let currentWeekStart = SharedFormatters.startOfWeekSunday(for: now)
+        let grouped = Dictionary(grouping: workouts) { workout in
+            SharedFormatters.startOfWeekSunday(for: workout.date)
+        }
+
+        guard let earliestWorkout = workouts.last else {
+            return [
+                HomeWeekBucket(
+                    weekStart: currentWeekStart,
+                    referenceDate: now,
+                    workouts: [],
+                    stats: emptyStats
+                )
+            ]
+        }
+
+        let earliestWeekStart = SharedFormatters.startOfWeekSunday(for: earliestWorkout.date)
+        var buckets: [HomeWeekBucket] = []
+        var cursor = currentWeekStart
+
+        while cursor >= earliestWeekStart {
+            let weekWorkouts = (grouped[cursor] ?? []).sorted { $0.date > $1.date }
+            let stats = weekWorkouts.isEmpty
+                ? emptyStats
+                : dataManager.calculateStats(for: weekWorkouts, intentionalBreakRanges: intentionalBreakRanges)
+            buckets.append(
+                HomeWeekBucket(
+                    weekStart: cursor,
+                    referenceDate: now,
+                    workouts: weekWorkouts,
+                    stats: stats
+                )
+            )
+
+            guard let previousWeek = calendar.date(byAdding: .day, value: -7, to: cursor) else { break }
+            cursor = previousWeek
+        }
+
+        return buckets
+    }
+
+    private func syncSelectedWeekBucket() {
+        guard !cachedWeekBuckets.isEmpty else {
+            selectedWeekBucketStart = nil
+            return
+        }
+
+        if let selectedWeekBucketStart,
+           cachedWeekBuckets.contains(where: { Calendar.current.isDate($0.weekStart, inSameDayAs: selectedWeekBucketStart) }) {
+            return
+        }
+
+        selectedWeekBucketStart = cachedWeekBuckets.first?.weekStart
+    }
+
+    private func isSelectedWeekBucket(_ bucket: HomeWeekBucket) -> Bool {
+        guard let selectedWeekBucketStart else {
+            return bucket == cachedWeekBuckets.first
+        }
+        return Calendar.current.isDate(bucket.weekStart, inSameDayAs: selectedWeekBucketStart)
+    }
+
+    private func weeklySummaryCardHeight(for bucket: HomeWeekBucket) -> CGFloat {
+        let visibleSessionCount = min(bucket.workouts.count, 3)
+        let baseHeight: CGFloat = bucket.workouts.isEmpty ? 188 : 188 + (CGFloat(visibleSessionCount) * 76)
+        return min(baseHeight, 416)
     }
 }
