@@ -77,25 +77,14 @@ struct WorkoutHistoryView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             if showsBackButton {
-                Button {
+                AppToolbarIconButton(
+                    systemImage: "chevron.left",
+                    accessibilityLabel: "Back",
+                    variant: .subtle
+                ) {
                     dismiss()
-                } label: {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(Theme.Colors.textPrimary)
-                        .frame(width: 40, height: 40)
-                        .background(
-                            Circle()
-                                .fill(Theme.Colors.surfaceRaised)
-                        )
-                        .overlay(
-                            Circle()
-                                .strokeBorder(Theme.Colors.border.opacity(0.5), lineWidth: 1)
-                        )
                 }
-                .buttonStyle(.plain)
                 .padding(.bottom, Theme.Spacing.xs)
-                .accessibilityLabel("Back")
             }
 
             Text("History")
@@ -115,7 +104,7 @@ struct WorkoutHistoryView: View {
     private var searchField: some View {
         HStack(spacing: Theme.Spacing.sm) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 14, weight: .semibold))
+                .font(Theme.Typography.subheadlineStrong)
                 .foregroundStyle(Theme.Colors.textTertiary)
 
             TextField("Search workouts or exercises", text: $searchText)
@@ -169,7 +158,7 @@ struct WorkoutHistoryRow: View {
                             repeatThisWorkout()
                         } label: {
                             Image(systemName: "arrow.counterclockwise")
-                                .font(.system(size: 11, weight: .bold))
+                                .font(Theme.Typography.caption2Bold)
                                 .foregroundColor(Theme.Colors.accent)
                                 .frame(width: 28, height: 28)
                                 .background(Theme.Colors.accentTint)
@@ -204,7 +193,7 @@ struct WorkoutHistoryRow: View {
                 }
 
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .bold))
+                    .font(Theme.Typography.captionBold)
                     .foregroundStyle(Theme.Colors.textTertiary)
             }
             .padding(Theme.Spacing.lg)
@@ -223,7 +212,7 @@ struct WorkoutHistoryRow: View {
     private func metric(_ value: String, systemImage: String) -> some View {
         HStack(spacing: 6) {
             Image(systemName: systemImage)
-                .font(.system(size: 12, weight: .semibold))
+                .font(Theme.Typography.captionStrong)
                 .foregroundStyle(Theme.Colors.accentSecondary)
                 .frame(width: 14)
                 .accessibilityHidden(true)

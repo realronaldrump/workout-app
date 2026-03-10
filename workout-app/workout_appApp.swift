@@ -29,6 +29,7 @@ struct WorkoutApp: App {
     var body: some Scene {
         WindowGroup {
             MainTabView()
+                .font(Theme.Typography.body)
                 .environmentObject(healthManager)
                 .environmentObject(sessionManager)
                 .buttonStyle(AppInteractionButtonStyle())

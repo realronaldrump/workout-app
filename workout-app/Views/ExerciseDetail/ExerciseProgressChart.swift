@@ -374,7 +374,7 @@ struct ExerciseProgressChart: View {
             .annotation(position: .top) {
                 if dataPoint.date == prDate {
                     Image(systemName: "trophy.fill")
-                        .font(.caption2)
+                        .font(Theme.Typography.caption2)
                         .foregroundColor(Theme.Colors.gold)
                         .opacity(isAppearing ? 1 : 0)
                 }

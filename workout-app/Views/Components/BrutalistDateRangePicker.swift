@@ -31,7 +31,7 @@ struct BrutalistDateRangePickerRow: View {
                 Spacer(minLength: 0)
 
                 Image(systemName: "calendar")
-                    .font(.system(size: 14, weight: .bold))
+                    .font(Theme.Typography.subheadlineBold)
                     .foregroundStyle(Theme.Colors.accentSecondary)
                     .frame(width: 36, height: 36)
                     .background(
@@ -172,7 +172,7 @@ struct BrutalistDateRangeSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    AppPillButton(title: "Done", systemImage: "checkmark") {
+                    AppToolbarButton(title: "Done", systemImage: "checkmark", variant: .accent) {
                         dismiss()
                     }
                 }

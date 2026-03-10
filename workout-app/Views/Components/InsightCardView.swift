@@ -28,7 +28,7 @@ struct InsightCardView: View {
             label: {
                 HStack(spacing: Theme.Spacing.lg) {
                     Image(systemName: insight.type.iconName)
-                        .font(.system(size: 18, weight: .bold))
+                        .font(Theme.Typography.title4Bold)
                         .foregroundColor(iconColor)
                         .frame(width: 40, height: 40)
                         .background(iconColor.opacity(0.10))
@@ -50,7 +50,7 @@ struct InsightCardView: View {
 
                     if insight.actionLabel != nil {
                         Image(systemName: "chevron.right")
-                            .font(.caption.weight(.semibold))
+                            .font(Theme.Typography.captionStrong)
                             .foregroundColor(Theme.Colors.textTertiary)
                     }
                 }
@@ -146,7 +146,7 @@ struct EmptyInsightsView: View {
     var body: some View {
         HStack(spacing: Theme.Spacing.lg) {
             Image(systemName: "sparkles")
-                .font(.title2)
+                .font(Theme.Iconography.title2)
                 .foregroundColor(Theme.Colors.textTertiary)
 
             VStack(alignment: .leading, spacing: Theme.Spacing.xs) {

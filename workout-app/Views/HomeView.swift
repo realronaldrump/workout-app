@@ -281,12 +281,12 @@ struct HomeView: View {
                 label: {
                     HStack(spacing: Theme.Spacing.sm) {
                         Image(systemName: "bolt.fill")
-                            .font(.system(size: 18, weight: .bold))
+                            .font(Theme.Typography.title4Bold)
                         Text("Start a Session")
                             .font(Theme.Typography.headline)
                         Spacer()
                         Image(systemName: "arrow.right")
-                            .font(.system(size: 14, weight: .bold))
+                            .font(Theme.Typography.subheadlineBold)
                             .foregroundStyle(Color.white.opacity(0.7))
                     }
                     .foregroundStyle(.white)
@@ -323,7 +323,7 @@ struct HomeView: View {
                     label: {
                         HStack(spacing: Theme.Spacing.md) {
                             Image(systemName: "arrow.counterclockwise")
-                                .font(.system(size: 13, weight: .bold))
+                                .font(Theme.Typography.footnoteBold)
                                 .foregroundStyle(Theme.Colors.accent)
                                 .frame(width: 32, height: 32)
                                 .background(Theme.Colors.accent.opacity(0.1))
@@ -344,7 +344,7 @@ struct HomeView: View {
                                 .font(Theme.Typography.caption)
                                 .foregroundStyle(Theme.Colors.textTertiary)
                             Image(systemName: "chevron.right")
-                                .font(.system(size: 11, weight: .bold))
+                                .font(Theme.Typography.caption2Bold)
                                 .foregroundStyle(Theme.Colors.textTertiary)
                         }
                         .padding(.horizontal, Theme.Spacing.lg)
@@ -392,7 +392,7 @@ struct HomeView: View {
                 if streak > 0 {
                     HStack(spacing: 5) {
                         Image(systemName: "flame.fill")
-                            .font(.system(size: 11, weight: .bold))
+                            .font(Theme.Typography.caption2Bold)
                         Text("\(streak)w streak")
                             .font(Theme.Typography.captionBold)
                     }
@@ -507,7 +507,7 @@ struct HomeView: View {
                         Text("See All")
                             .font(Theme.Typography.captionBold)
                         Image(systemName: "arrow.right")
-                            .font(.system(size: 10, weight: .bold))
+                            .font(Theme.Typography.microLabel)
                     }
                     .foregroundColor(Theme.Colors.accent)
                 }

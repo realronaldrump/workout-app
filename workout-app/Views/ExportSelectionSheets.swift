@@ -24,13 +24,6 @@ struct ExportExerciseSelectionSheet: View {
                 AdaptiveBackground()
 
                 VStack(spacing: Theme.Spacing.md) {
-                    HStack {
-                        Spacer()
-                        AppPillButton(title: "Done", systemImage: "checkmark", variant: .subtle) {
-                            dismiss()
-                        }
-                    }
-
                     ExportSelectionSearchField(text: $searchText, placeholder: "Search exercises")
 
                     selectionToolbar(
@@ -73,7 +66,7 @@ struct ExportExerciseSelectionSheet: View {
                                                         ? Theme.Colors.accent
                                                         : Theme.Colors.textTertiary
                                                 )
-                                                .font(.system(size: 18, weight: .semibold))
+                                                .font(Theme.Typography.title4)
 
                                             Text(exerciseName)
                                                 .font(Theme.Typography.body)
@@ -102,6 +95,13 @@ struct ExportExerciseSelectionSheet: View {
             }
             .navigationTitle("Select Exercises")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    AppToolbarButton(title: "Done", systemImage: "checkmark", variant: .accent) {
+                        dismiss()
+                    }
+                }
+            }
         }
     }
 
@@ -152,13 +152,6 @@ struct ExportWorkoutDateSelectionSheet: View {
                 AdaptiveBackground()
 
                 VStack(spacing: Theme.Spacing.md) {
-                    HStack {
-                        Spacer()
-                        AppPillButton(title: "Done", systemImage: "checkmark", variant: .subtle) {
-                            dismiss()
-                        }
-                    }
-
                     HStack(spacing: Theme.Spacing.md) {
                         Text("\(selectedCount) selected")
                             .font(Theme.Typography.captionBold)
@@ -215,7 +208,7 @@ struct ExportWorkoutDateSelectionSheet: View {
                                                         ? Theme.Colors.accent
                                                         : Theme.Colors.textTertiary
                                                 )
-                                                .font(.system(size: 18, weight: .semibold))
+                                                .font(Theme.Typography.title4)
 
                                             VStack(alignment: .leading, spacing: 2) {
                                                 Text(option.date.formatted(date: .abbreviated, time: .omitted))
@@ -248,6 +241,13 @@ struct ExportWorkoutDateSelectionSheet: View {
             }
             .navigationTitle("Select Workout Dates")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    AppToolbarButton(title: "Done", systemImage: "checkmark", variant: .accent) {
+                        dismiss()
+                    }
+                }
+            }
         }
     }
 }
@@ -274,13 +274,6 @@ struct ExportMuscleGroupSelectionSheet: View {
                 AdaptiveBackground()
 
                 VStack(spacing: Theme.Spacing.md) {
-                    HStack {
-                        Spacer()
-                        AppPillButton(title: "Done", systemImage: "checkmark", variant: .subtle) {
-                            dismiss()
-                        }
-                    }
-
                     ExportSelectionSearchField(text: $searchText, placeholder: "Search muscle groups")
 
                     HStack(spacing: Theme.Spacing.md) {
@@ -339,11 +332,11 @@ struct ExportMuscleGroupSelectionSheet: View {
                                                         ? Theme.Colors.accent
                                                         : Theme.Colors.textTertiary
                                                 )
-                                                .font(.system(size: 18, weight: .semibold))
+                                                .font(Theme.Typography.title4)
 
                                             Image(systemName: tag.iconName)
                                                 .foregroundStyle(tag.tint)
-                                                .font(.system(size: 15, weight: .semibold))
+                                                .font(Theme.Typography.calloutStrong)
                                                 .frame(width: 22, height: 22)
                                                 .background(tag.tint.opacity(0.12))
                                                 .cornerRadius(Theme.CornerRadius.small)
@@ -379,6 +372,13 @@ struct ExportMuscleGroupSelectionSheet: View {
             }
             .navigationTitle("Select Muscle Groups")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    AppToolbarButton(title: "Done", systemImage: "checkmark", variant: .accent) {
+                        dismiss()
+                    }
+                }
+            }
         }
     }
 }
@@ -390,7 +390,7 @@ private struct ExportSelectionSearchField: View {
     var body: some View {
         HStack(spacing: Theme.Spacing.sm) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 14, weight: .semibold))
+                .font(Theme.Typography.subheadlineStrong)
                 .foregroundStyle(Theme.Colors.textTertiary)
 
             TextField(placeholder, text: $text)

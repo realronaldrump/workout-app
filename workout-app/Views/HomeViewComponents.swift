@@ -12,7 +12,7 @@ struct HomeEmptyState: View {
                         .fill(Theme.Colors.accent.opacity(0.08))
                         .frame(width: 80, height: 80)
                     Image(systemName: "figure.strengthtraining.traditional")
-                        .font(.system(size: 32, weight: .medium))
+                        .font(Theme.Iconography.hero)
                         .foregroundColor(Theme.Colors.accent)
                 }
 
@@ -56,7 +56,7 @@ struct HomeEmptyState: View {
                     label: {
                         HStack(spacing: Theme.Spacing.sm) {
                             Image(systemName: "arrow.down.to.line")
-                                .font(.system(size: 13, weight: .bold))
+                                .font(Theme.Typography.footnoteBold)
                             Text("Import from Strong")
                                 .font(Theme.Typography.bodyBold)
                         }
@@ -121,7 +121,7 @@ struct CompactChangeCard: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             HStack(spacing: 5) {
                 Image(systemName: metric.isPositive ? "arrow.up.right" : "arrow.down.right")
-                    .font(.system(size: 10, weight: .bold))
+                    .font(Theme.Typography.microLabel)
                     .foregroundColor(tint)
                 Text(metric.title)
                     .font(Theme.Typography.metricLabel)
@@ -189,7 +189,7 @@ struct HomeWorkoutRow: View {
                             onRepeat()
                         } label: {
                             Image(systemName: "arrow.counterclockwise")
-                                .font(.system(size: 11, weight: .bold))
+                                .font(Theme.Typography.caption2Bold)
                                 .foregroundColor(Theme.Colors.accent)
                                 .frame(width: 28, height: 28)
                                 .background(Theme.Colors.accent.opacity(0.08))
@@ -216,7 +216,7 @@ struct HomeWorkoutRow: View {
                 }
 
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 11, weight: .bold))
+                    .font(Theme.Typography.caption2Bold)
                     .foregroundColor(Theme.Colors.textTertiary)
             }
             .padding(Theme.Spacing.lg)
@@ -245,7 +245,7 @@ struct SecondaryChip: View {
             label: {
                 HStack(spacing: Theme.Spacing.sm) {
                     Image(systemName: icon)
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(Theme.Typography.subheadlineStrong)
                         .foregroundStyle(Theme.Colors.accent)
                     Text(title)
                         .font(Theme.Typography.captionBold)
@@ -329,7 +329,7 @@ struct ExploreRow: View {
                     .fill(tint.opacity(0.08))
                     .frame(width: 40, height: 40)
                 Image(systemName: icon)
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(Theme.Typography.bodyBold)
                     .foregroundColor(tint)
             }
 

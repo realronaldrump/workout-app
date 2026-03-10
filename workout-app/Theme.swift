@@ -175,7 +175,10 @@ enum Theme {
     enum Typography {
         // Bebas Neue — brand headings, section titles, labels
         static let wordmarkHuge = Font.custom("BebasNeue-Regular", size: 56, relativeTo: .largeTitle)
+        static let wordmarkHugeCompact = Font.custom("BebasNeue-Regular", size: 44, relativeTo: .largeTitle)
         static let wordmarkBig = Font.custom("BebasNeue-Regular", size: 38, relativeTo: .title)
+        static let wordmarkBigCompact = Font.custom("BebasNeue-Regular", size: 30, relativeTo: .title)
+        static let eyebrowRounded = Font.system(size: 14, weight: .semibold, design: .rounded)
         static let screenTitle = Font.custom("BebasNeue-Regular", size: 42, relativeTo: .largeTitle)
         static let sectionHeader = Font.custom("BebasNeue-Regular", size: 26, relativeTo: .title)
         static let sectionHeader2 = Font.custom("BebasNeue-Regular", size: 22, relativeTo: .title2)
@@ -189,14 +192,28 @@ enum Theme {
         static let title = Font.system(size: 30, weight: .heavy, design: .default)
         static let title2 = Font.custom("BebasNeue-Regular", size: 24, relativeTo: .title2)
         static let title3 = Font.custom("BebasNeue-Regular", size: 20, relativeTo: .title3)
+        static let avatarMonogram = Font.system(size: 28, weight: .bold, design: .default)
+        static let bodyLarge = Font.system(size: 18, weight: .regular, design: .default)
+        static let title4 = Font.system(size: 18, weight: .semibold, design: .default)
+        static let title4Bold = Font.system(size: 18, weight: .bold, design: .default)
         static let headline = Font.system(size: 17, weight: .bold, design: .default)
         static let body = Font.system(size: 16, weight: .regular, design: .default)
         static let bodyBold = Font.system(size: 16, weight: .semibold, design: .default)
+        static let bodyStrong = Font.system(size: 16, weight: .bold, design: .default)
         static let callout = Font.system(size: 15, weight: .medium, design: .default)
+        static let calloutStrong = Font.system(size: 15, weight: .semibold, design: .default)
+        static let calloutBold = Font.system(size: 15, weight: .bold, design: .default)
         static let subheadline = Font.system(size: 14, weight: .medium, design: .default)
+        static let subheadlineStrong = Font.system(size: 14, weight: .semibold, design: .default)
+        static let subheadlineBold = Font.system(size: 14, weight: .bold, design: .default)
         static let footnote = Font.system(size: 13, weight: .medium, design: .default)
+        static let footnoteStrong = Font.system(size: 13, weight: .semibold, design: .default)
+        static let footnoteBold = Font.system(size: 13, weight: .bold, design: .default)
         static let caption = Font.system(size: 12, weight: .medium, design: .default)
+        static let captionStrong = Font.system(size: 12, weight: .semibold, design: .default)
         static let captionBold = Font.system(size: 12, weight: .bold, design: .default)
+        static let caption2 = Font.system(size: 11, weight: .medium, design: .default)
+        static let caption2Bold = Font.system(size: 11, weight: .bold, design: .default)
 
         // Monospaced for numbers — precision data
         static let number = Font.system(size: 28, weight: .bold, design: .monospaced)
@@ -206,10 +223,34 @@ enum Theme {
         static let metric = Font.system(size: 30, weight: .bold, design: .monospaced)
         static let condensed = Font.system(size: 16, weight: .semibold, design: .default)
         static let microcopy = Font.system(size: 13, weight: .regular, design: .default)
+        static let microcopySmall = Font.system(size: 10, weight: .regular, design: .default)
+        static let microLabel = Font.system(size: 10, weight: .bold, design: .default)
 
         // Mono helpers for data-dense UI
         static let monoMedium = Font.system(size: 18, weight: .bold, design: .monospaced)
         static let monoSmall = Font.system(size: 14, weight: .semibold, design: .monospaced)
+    }
+
+    enum Iconography {
+        static let micro = Font.system(size: 10, weight: .medium, design: .default)
+        static let small = Font.system(size: 12, weight: .regular, design: .default)
+        static let medium = Font.system(size: 14, weight: .regular, design: .default)
+        static let mediumStrong = Font.system(size: 14, weight: .semibold, design: .default)
+        static let title3 = Font.system(size: 20, weight: .regular, design: .default)
+        static let title3Strong = Font.system(size: 20, weight: .semibold, design: .default)
+        static let action = Font.system(size: 22, weight: .regular, design: .default)
+        static let title2 = Font.system(size: 24, weight: .regular, design: .default)
+        static let title2Strong = Font.system(size: 24, weight: .semibold, design: .default)
+        static let title2Bold = Font.system(size: 24, weight: .bold, design: .default)
+        static let prominent = Font.system(size: 28, weight: .regular, design: .default)
+        static let hero = Font.system(size: 32, weight: .medium, design: .default)
+        static let feature = Font.system(size: 40, weight: .regular, design: .default)
+        static let featureLarge = Font.system(size: 48, weight: .medium, design: .default)
+        static let dashboard = Font.system(size: 52, weight: .regular, design: .default)
+        static let display = Font.system(size: 56, weight: .regular, design: .default)
+        static let wizard = Font.system(size: 60, weight: .regular, design: .default)
+        static let wizardHero = Font.system(size: 80, weight: .regular, design: .default)
+        static let largeTitle = Font.system(size: 34, weight: .regular, design: .default)
     }
 
     // MARK: - Animation
@@ -367,6 +408,29 @@ struct BrutalistButtonChrome: ViewModifier {
     }
 }
 
+struct ToolbarButtonChrome: ViewModifier {
+    var fill: Color = Theme.Colors.surface
+    var border: Color = Theme.Colors.border
+
+    func body(content: Content) -> some View {
+        content
+            .background(
+                Capsule(style: .continuous)
+                    .fill(fill)
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .strokeBorder(border.opacity(0.9), lineWidth: 1)
+            )
+            .shadow(
+                color: Color.black.opacity(0.035),
+                radius: 10,
+                x: 0,
+                y: 4
+            )
+    }
+}
+
 /// Default interaction style for app controls.
 /// Provides consistent pressed/disabled feedback with smooth spring animation.
 struct AppInteractionButtonStyle: ButtonStyle {
@@ -445,6 +509,18 @@ extension View {
                 cornerRadius: cornerRadius,
                 borderWidth: borderWidth,
                 shadowOffset: shadowOffset
+            )
+        )
+    }
+
+    func toolbarButtonChrome(
+        fill: Color = Theme.Colors.surface,
+        border: Color = Theme.Colors.border
+    ) -> some View {
+        modifier(
+            ToolbarButtonChrome(
+                fill: fill,
+                border: border
             )
         )
     }
@@ -568,7 +644,7 @@ struct PRMarkerView: View {
     var body: some View {
         HStack(spacing: 5) {
             Image(systemName: "trophy.fill")
-                .font(.system(size: 10, weight: .bold))
+                .font(Theme.Typography.microLabel)
             Text("PR")
                 .font(Theme.Typography.metricLabel)
         }

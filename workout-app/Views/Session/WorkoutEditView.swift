@@ -126,7 +126,7 @@ struct WorkoutEditView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    AppPillButton(title: "Close", systemImage: "xmark", variant: .subtle) {
+                    AppToolbarButton(title: "Close", systemImage: "xmark", variant: .subtle) {
                         dismiss()
                     }
                 }
@@ -308,7 +308,7 @@ private struct LoggedExerciseEditorCard: View {
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "plus")
-                            .font(.system(size: 12, weight: .bold))
+                            .font(Theme.Typography.captionBold)
                         Text("Set")
                             .font(Theme.Typography.captionBold)
                     }
@@ -404,7 +404,7 @@ private struct LoggedSetEditorRow: View {
                 onDelete()
             } label: {
                 Image(systemName: "trash")
-                    .font(.system(size: 14, weight: .bold))
+                    .font(Theme.Typography.subheadlineBold)
                     .foregroundStyle(Theme.Colors.error)
                     .frame(width: 28, height: 28)
                     .background(Theme.Colors.error.opacity(0.12))

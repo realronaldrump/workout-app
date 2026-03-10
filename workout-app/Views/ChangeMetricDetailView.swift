@@ -219,7 +219,7 @@ struct ChangeMetricDetailView: View {
                             }
                             Spacer()
                             Image(systemName: "chevron.right")
-                                .font(.caption)
+                                .font(Theme.Typography.caption)
                                 .foregroundStyle(Theme.Colors.textTertiary)
                         }
                         .padding(Theme.Spacing.lg)
@@ -261,7 +261,7 @@ struct ChangeMetricDetailView: View {
                             }
                             Spacer()
                             Image(systemName: "chevron.right")
-                                .font(.caption)
+                                .font(Theme.Typography.caption)
                                 .foregroundStyle(Theme.Colors.textTertiary)
                         }
                         .padding(Theme.Spacing.lg)
@@ -302,7 +302,7 @@ struct ChangeMetricDetailView: View {
                                 }
                                 Spacer()
                                 Image(systemName: "chevron.right")
-                                    .font(.caption)
+                                    .font(Theme.Typography.caption)
                                     .foregroundStyle(Theme.Colors.textTertiary)
                             }
                             .padding(Theme.Spacing.lg)

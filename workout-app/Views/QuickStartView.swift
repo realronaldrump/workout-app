@@ -34,7 +34,7 @@ struct QuickStartView: View {
 
                         Spacer()
 
-                        AppPillButton(title: "Close", systemImage: "xmark", variant: .subtle) {
+                        AppToolbarButton(title: "Close", systemImage: "xmark", variant: .subtle) {
                             dismiss()
                         }
                     }
@@ -122,7 +122,7 @@ struct QuickStartView: View {
                             Spacer()
 
                             Image(systemName: "chevron.right")
-                                .font(.caption)
+                                .font(Theme.Typography.caption)
                                 .foregroundStyle(Theme.Colors.textTertiary)
                         }
                         .padding(Theme.Spacing.lg)

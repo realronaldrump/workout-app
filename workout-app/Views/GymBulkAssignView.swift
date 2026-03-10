@@ -209,7 +209,7 @@ struct GymBulkAssignView: View {
     private var searchField: some View {
         HStack(spacing: Theme.Spacing.sm) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 14, weight: .semibold))
+                .font(Theme.Typography.subheadlineStrong)
                 .foregroundStyle(Theme.Colors.textTertiary)
 
             TextField("Search workouts or exercises", text: $searchText)

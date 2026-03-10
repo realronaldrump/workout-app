@@ -63,7 +63,7 @@ struct HealthCustomRangeSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    AppPillButton(title: "Done", systemImage: "checkmark") {
+                    AppToolbarButton(title: "Done", systemImage: "checkmark", variant: .accent) {
                         dismiss()
                     }
                 }
@@ -71,4 +71,3 @@ struct HealthCustomRangeSheet: View {
         }
     }
 }
-

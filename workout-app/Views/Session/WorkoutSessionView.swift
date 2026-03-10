@@ -92,14 +92,14 @@ struct WorkoutSessionView: View {
                             } label: {
                                 HStack(spacing: Theme.Spacing.md) {
                                     Image(systemName: "plus.circle.fill")
-                                        .font(.system(size: 22))
+                                        .font(Theme.Iconography.action)
                                         .foregroundStyle(Theme.Colors.accent)
                                     Text("Add Exercise")
                                         .font(Theme.Typography.headline)
                                         .foregroundColor(Theme.Colors.textPrimary)
                                     Spacer()
                                     Image(systemName: "chevron.right")
-                                        .font(.caption)
+                                        .font(Theme.Typography.caption)
                                         .foregroundStyle(Theme.Colors.textTertiary)
                                 }
                                 .padding(Theme.Spacing.lg)
@@ -213,7 +213,7 @@ struct WorkoutSessionView: View {
                 Haptics.selection()
             } label: {
                 Image(systemName: "chevron.down")
-                    .font(.system(size: 16, weight: .bold))
+                    .font(Theme.Typography.bodyStrong)
                     .foregroundStyle(Theme.Colors.textPrimary)
                     .frame(width: 34, height: 34)
                     .background(
@@ -258,7 +258,7 @@ struct WorkoutSessionView: View {
                 Haptics.selection()
             } label: {
                 Image(systemName: "trash")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(Theme.Typography.bodyBold)
                     .foregroundStyle(Theme.Colors.error)
                     .frame(width: 34, height: 34)
                     .background(
@@ -345,7 +345,7 @@ struct WorkoutSessionView: View {
                     Haptics.selection()
                 } label: {
                     Image(systemName: "gear")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(Theme.Typography.subheadlineStrong)
                         .foregroundStyle(Theme.Colors.textSecondary)
                         .frame(width: 28, height: 28)
                         .background(Theme.Colors.surface.opacity(0.35))
@@ -358,7 +358,7 @@ struct WorkoutSessionView: View {
                     Haptics.selection()
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 20))
+                        .font(Theme.Iconography.title3)
                         .foregroundStyle(Theme.Colors.textTertiary)
                 }
                 .buttonStyle(.plain)
@@ -478,7 +478,7 @@ struct WorkoutSessionView: View {
                         Haptics.selection()
                     } label: {
                         Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 22))
+                            .font(Theme.Iconography.action)
                             .foregroundStyle(Theme.Colors.success)
                     }
                     .buttonStyle(.plain)
@@ -780,7 +780,7 @@ private struct SessionExerciseCard: View {
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
-                        .font(.title3)
+                        .font(Theme.Iconography.title3)
                         .foregroundColor(Theme.Colors.textSecondary)
                 }
                 .buttonStyle(.plain)
@@ -811,7 +811,7 @@ private struct SessionExerciseCard: View {
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "plus")
-                            .font(.system(size: 12, weight: .bold))
+                            .font(Theme.Typography.captionBold)
                         Text("Add Set")
                             .font(Theme.Typography.subheadline)
                     }
@@ -931,7 +931,7 @@ private struct SessionSetRow: View {
                     Haptics.selection()
                 } label: {
                     Image(systemName: set.isCompleted ? "checkmark.circle.fill" : "circle")
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(Theme.Typography.title4)
                         .foregroundStyle(set.isCompleted ? Theme.Colors.success : Theme.Colors.textTertiary)
                 }
                 .buttonStyle(.plain)
@@ -981,7 +981,7 @@ private struct SessionSetRow: View {
                     }
                 } label: {
                     Image(systemName: "ellipsis")
-                        .font(.system(size: 14, weight: .bold))
+                        .font(Theme.Typography.subheadlineBold)
                         .foregroundStyle(Theme.Colors.textTertiary)
                         .frame(width: 28, height: 28)
                         .background(Theme.Colors.surface.opacity(0.35))
@@ -1035,7 +1035,7 @@ private struct SessionSetRow: View {
                 Haptics.impact(.light)
             } label: {
                 Image(systemName: "minus")
-                    .font(.system(size: 10, weight: .bold))
+                    .font(Theme.Typography.microLabel)
                     .foregroundStyle(Theme.Colors.textTertiary)
                     .frame(width: 22, height: 30)
             }
@@ -1060,7 +1060,7 @@ private struct SessionSetRow: View {
                 Haptics.impact(.light)
             } label: {
                 Image(systemName: "plus")
-                    .font(.system(size: 10, weight: .bold))
+                    .font(Theme.Typography.microLabel)
                     .foregroundStyle(Theme.Colors.accent)
                     .frame(width: 22, height: 30)
             }
@@ -1191,7 +1191,7 @@ private struct MuscleSuggestionCard: View {
                         .fill(suggestion.group.color.opacity(0.16))
                         .frame(width: 36, height: 36)
                     Image(systemName: suggestion.group.iconName)
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(Theme.Typography.bodyBold)
                         .foregroundStyle(suggestion.group.color)
                 }
 
@@ -1210,7 +1210,7 @@ private struct MuscleSuggestionCard: View {
                     onDismiss()
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 18))
+                        .font(Theme.Typography.bodyLarge)
                         .foregroundStyle(Theme.Colors.textTertiary)
                 }
                 .buttonStyle(.plain)

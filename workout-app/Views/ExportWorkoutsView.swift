@@ -141,7 +141,7 @@ struct ExportWorkoutsView: View {
     private var header: some View {
         VStack(spacing: Theme.Spacing.sm) {
             Image(systemName: "square.and.arrow.up")
-                .font(.system(size: 56))
+                .font(Theme.Iconography.display)
                 .foregroundStyle(.white)
                 .padding()
                 .background(
@@ -359,7 +359,7 @@ struct ExportWorkoutsView: View {
                         },
                         label: {
                             Image(systemName: "square.and.arrow.up")
-                                .font(.headline)
+                                .font(Theme.Typography.headline)
                                 .frame(width: 48, height: 48)
                                 .background(Theme.Colors.cardBackground)
                                 .foregroundStyle(Theme.Colors.textPrimary)
@@ -448,7 +448,7 @@ struct ExportWorkoutsView: View {
                         },
                         label: {
                             Image(systemName: "square.and.arrow.up")
-                                .font(.headline)
+                                .font(Theme.Typography.headline)
                                 .frame(width: 48, height: 48)
                                 .background(Theme.Colors.cardBackground)
                                 .foregroundStyle(Theme.Colors.textPrimary)
@@ -567,7 +567,7 @@ struct ExportWorkoutsView: View {
                         .foregroundStyle(Theme.Colors.textPrimary)
                     Spacer()
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(Theme.Typography.captionStrong)
                         .foregroundStyle(Theme.Colors.textTertiary)
                 }
                 .padding(Theme.Spacing.md)
@@ -660,7 +660,7 @@ struct ExportWorkoutsView: View {
                         .foregroundStyle(Theme.Colors.textPrimary)
                     Spacer()
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(Theme.Typography.captionStrong)
                         .foregroundStyle(Theme.Colors.textTertiary)
                 }
                 .padding(Theme.Spacing.md)
@@ -753,7 +753,7 @@ struct ExportWorkoutsView: View {
                         .foregroundStyle(Theme.Colors.textPrimary)
                     Spacer()
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(Theme.Typography.captionStrong)
                         .foregroundStyle(Theme.Colors.textTertiary)
                 }
                 .padding(Theme.Spacing.md)
@@ -855,7 +855,7 @@ struct ExportWorkoutsView: View {
             },
             label: {
                 Image(systemName: "square.and.arrow.up")
-                    .font(.headline)
+                    .font(Theme.Typography.headline)
                     .frame(width: 48, height: 48)
                     .background(Theme.Colors.cardBackground)
                     .foregroundStyle(Theme.Colors.textPrimary)
@@ -1435,75 +1435,75 @@ private struct ExportCustomRangeSheet: View {
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-                    HStack {
-                        Spacer()
-                        AppPillButton(title: "Done", systemImage: "checkmark", variant: .subtle) {
-                            dismiss()
+                        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                            Text("Start")
+                                .font(Theme.Typography.metricLabel)
+                                .foregroundStyle(Theme.Colors.textTertiary)
+                                .textCase(.uppercase)
+                                .tracking(0.8)
+
+                            DatePicker(
+                                "Start",
+                                selection: $draftStartDate,
+                                in: ...latestSelectableDate,
+                                displayedComponents: .date
+                            )
+                            .datePickerStyle(.graphical)
+                            .labelsHidden()
+                            .tint(Theme.Colors.accent)
                         }
+                        .padding(Theme.Spacing.lg)
+                        .softCard(elevation: 2)
+
+                        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                            Text("End")
+                                .font(Theme.Typography.metricLabel)
+                                .foregroundStyle(Theme.Colors.textTertiary)
+                                .textCase(.uppercase)
+                                .tracking(0.8)
+
+                            DatePicker(
+                                "End",
+                                selection: $draftEndDate,
+                                in: draftStartDate...latestSelectableDate,
+                                displayedComponents: .date
+                            )
+                            .datePickerStyle(.graphical)
+                            .labelsHidden()
+                            .tint(Theme.Colors.accent)
+                        }
+                        .padding(Theme.Spacing.lg)
+                        .softCard(elevation: 2)
+
+                        Button {
+                            let calendar = Calendar.current
+                            startDate = calendar.startOfDay(for: draftStartDate)
+                            endDate = calendar.startOfDay(for: draftEndDate)
+                            Haptics.selection()
+                            dismiss()
+                        } label: {
+                            Text("Apply Range")
+                                .font(Theme.Typography.headline)
+                                .foregroundStyle(Theme.Colors.textPrimary)
+                                .frame(maxWidth: .infinity)
+                                .padding(Theme.Spacing.md)
+                                .background(Theme.Colors.elevated)
+                                .cornerRadius(Theme.CornerRadius.large)
+                        }
+                        .buttonStyle(.plain)
                     }
-
-                    VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                        Text("Start")
-                            .font(Theme.Typography.metricLabel)
-                            .foregroundStyle(Theme.Colors.textTertiary)
-                            .textCase(.uppercase)
-                            .tracking(0.8)
-
-                        DatePicker(
-                            "Start",
-                            selection: $draftStartDate,
-                            in: ...latestSelectableDate,
-                            displayedComponents: .date
-                        )
-                        .datePickerStyle(.graphical)
-                        .labelsHidden()
-                        .tint(Theme.Colors.accent)
-                    }
-                    .padding(Theme.Spacing.lg)
-                    .softCard(elevation: 2)
-
-                    VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                        Text("End")
-                            .font(Theme.Typography.metricLabel)
-                            .foregroundStyle(Theme.Colors.textTertiary)
-                            .textCase(.uppercase)
-                            .tracking(0.8)
-
-                        DatePicker(
-                            "End",
-                            selection: $draftEndDate,
-                            in: draftStartDate...latestSelectableDate,
-                            displayedComponents: .date
-                        )
-                        .datePickerStyle(.graphical)
-                        .labelsHidden()
-                        .tint(Theme.Colors.accent)
-                    }
-                    .padding(Theme.Spacing.lg)
-                    .softCard(elevation: 2)
-
-                    Button {
-                        let calendar = Calendar.current
-                        startDate = calendar.startOfDay(for: draftStartDate)
-                        endDate = calendar.startOfDay(for: draftEndDate)
-                        Haptics.selection()
-                        dismiss()
-                    } label: {
-                        Text("Apply Range")
-                            .font(Theme.Typography.headline)
-                            .foregroundStyle(Theme.Colors.textPrimary)
-                            .frame(maxWidth: .infinity)
-                            .padding(Theme.Spacing.md)
-                            .background(Theme.Colors.elevated)
-                            .cornerRadius(Theme.CornerRadius.large)
-                    }
-                    .buttonStyle(.plain)
-                }
                 }
                 .padding(Theme.Spacing.xl)
             }
             .navigationTitle("Custom Range")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    AppToolbarButton(title: "Done", systemImage: "checkmark", variant: .accent) {
+                        dismiss()
+                    }
+                }
+            }
         }
     }
 }

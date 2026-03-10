@@ -54,7 +54,7 @@ struct MuscleRecencyView: View {
                     .fill(row.group.color.opacity(0.14))
                     .frame(width: 38, height: 38)
                 Image(systemName: row.group.iconName)
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(Theme.Typography.bodyBold)
                     .foregroundStyle(row.group.color)
             }
 

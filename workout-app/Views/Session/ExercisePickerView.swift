@@ -60,7 +60,7 @@ struct ExercisePickerView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    AppPillButton(title: "Close", systemImage: "xmark", variant: .subtle) {
+                    AppToolbarButton(title: "Close", systemImage: "xmark", variant: .subtle) {
                         dismiss()
                     }
                 }
@@ -104,7 +104,7 @@ struct ExercisePickerView: View {
         } label: {
             HStack(spacing: Theme.Spacing.md) {
                 Image(systemName: "plus.circle.fill")
-                    .font(.system(size: 22))
+                    .font(Theme.Iconography.action)
                     .foregroundStyle(Theme.Colors.accent)
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Create")
@@ -116,7 +116,7 @@ struct ExercisePickerView: View {
                 }
                 Spacer()
                 Image(systemName: "chevron.right")
-                    .font(.caption)
+                    .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Colors.textTertiary)
             }
             .padding(Theme.Spacing.lg)
@@ -143,7 +143,7 @@ struct ExercisePickerView: View {
                     .foregroundColor(Theme.Colors.textPrimary)
                 Spacer()
                 Image(systemName: "chevron.right")
-                    .font(.caption)
+                    .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Colors.textTertiary)
             }
             .padding(Theme.Spacing.lg)

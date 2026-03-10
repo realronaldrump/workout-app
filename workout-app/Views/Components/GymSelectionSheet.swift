@@ -95,7 +95,7 @@ struct GymSelectionSheet: View {
                             } label: {
                                 HStack(spacing: Theme.Spacing.md) {
                                     Image(systemName: "plus.circle.fill")
-                                        .font(.system(size: 24))
+                                        .font(Theme.Iconography.title2)
                                         .foregroundStyle(Theme.Colors.accent)
 
                                     VStack(alignment: .leading, spacing: 4) {
@@ -109,7 +109,7 @@ struct GymSelectionSheet: View {
 
                                     Spacer()
                                     Image(systemName: "chevron.right")
-                                        .font(.caption)
+                                        .font(Theme.Typography.caption)
                                         .foregroundStyle(Theme.Colors.textTertiary)
                                 }
                                 .padding(Theme.Spacing.lg)
@@ -125,7 +125,7 @@ struct GymSelectionSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    AppPillButton(title: "Close", systemImage: "xmark", variant: .subtle) {
+                    AppToolbarButton(title: "Close", systemImage: "xmark", variant: .subtle) {
                         dismiss()
                     }
                 }
@@ -150,7 +150,7 @@ struct GymSelectionSheet: View {
                         .fill(tint.opacity(0.16))
                         .frame(width: 36, height: 36)
                     Image(systemName: icon)
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(Theme.Typography.bodyBold)
                         .foregroundColor(tint)
                 }
 
@@ -169,7 +169,7 @@ struct GymSelectionSheet: View {
 
                 if selected == selection {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 18))
+                        .font(Theme.Typography.bodyLarge)
                         .foregroundColor(Theme.Colors.accent)
                 }
             }

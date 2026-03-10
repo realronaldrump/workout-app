@@ -36,7 +36,7 @@ struct HighlightCardView: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             HStack(spacing: Theme.Spacing.sm) {
                 Image(systemName: item.icon)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(Theme.Typography.captionStrong)
                     .foregroundColor(item.tint)
                     .frame(width: 24, height: 24)
                     .background(item.tint.opacity(0.12))

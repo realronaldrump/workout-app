@@ -162,29 +162,18 @@ struct WorkoutDetailView: View {
 
     private var workoutTopBar: some View {
         HStack(spacing: Theme.Spacing.sm) {
-            Button {
+            AppToolbarIconButton(
+                systemImage: "chevron.left",
+                accessibilityLabel: "Back",
+                variant: .subtle
+            ) {
                 dismiss()
-            } label: {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(Theme.Colors.textPrimary)
-                    .frame(width: 34, height: 34)
-                    .background(
-                        Circle()
-                            .fill(Theme.Colors.surfaceRaised)
-                    )
-                    .overlay(
-                        Circle()
-                            .strokeBorder(Theme.Colors.border.opacity(0.5), lineWidth: 1)
-                    )
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Back")
 
             Spacer()
 
             if isLoggedWorkout {
-                AppPillButton(title: "Edit", systemImage: "pencil") {
+                AppToolbarButton(title: "Edit", systemImage: "pencil", variant: .accent) {
                     showingEdit = true
                     Haptics.selection()
                 }
@@ -278,7 +267,7 @@ struct WorkoutDetailView: View {
                     SyncPulse()
                 } else {
                     Image(systemName: hasData ? "arrow.triangle.2.circlepath" : "heart.text.square")
-                        .font(.system(size: 14))
+                        .font(Theme.Iconography.medium)
                 }
 
                 Text(hasData ? "Re-sync" : "Sync")
@@ -300,7 +289,7 @@ struct WorkoutDetailView: View {
     private var noHealthDataCard: some View {
         VStack(spacing: Theme.Spacing.md) {
             Image(systemName: "heart.text.square")
-                .font(.system(size: 40))
+                .font(Theme.Iconography.feature)
                 .foregroundColor(Theme.Colors.textTertiary)
 
             Text("No health data yet")
@@ -389,7 +378,7 @@ struct ExerciseCard: View {
                         Spacer()
 
                         Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                            .font(.caption)
+                            .font(Theme.Typography.caption)
                             .foregroundColor(Theme.Colors.textTertiary)
                     }
                 }

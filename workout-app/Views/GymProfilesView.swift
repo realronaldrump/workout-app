@@ -81,7 +81,7 @@ struct GymProfilesView: View {
 
                             Spacer()
                             Image(systemName: "chevron.right")
-                                .font(.caption)
+                                .font(Theme.Typography.caption)
                                 .foregroundStyle(Theme.Colors.textTertiary)
                         }
                         .padding()
@@ -118,7 +118,7 @@ struct GymProfilesView: View {
         }
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                AppPillIconButton(systemImage: "plus", accessibilityLabel: "Add gym") {
+                AppToolbarIconButton(systemImage: "plus", accessibilityLabel: "Add gym", variant: .accent) {
                     showingAddSheet = true
                 }
             }
@@ -451,7 +451,7 @@ struct GymProfilesView: View {
                 if let address = gym.address, !address.isEmpty {
                     HStack(spacing: 6) {
                         Image(systemName: "mappin")
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(Theme.Typography.captionStrong)
                             .foregroundColor(Theme.Colors.textTertiary)
                         Text(address)
                             .font(Theme.Typography.caption)
@@ -472,7 +472,7 @@ struct GymProfilesView: View {
                 }
             } label: {
                 Image(systemName: "ellipsis.circle")
-                    .font(.title3)
+                    .font(Theme.Iconography.title3)
                     .foregroundColor(Theme.Colors.textSecondary)
             }
             .buttonStyle(.plain)
@@ -598,7 +598,7 @@ private struct GymProfileEditorView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    AppPillButton(title: "Cancel", systemImage: "xmark", variant: .subtle) {
+                    AppToolbarButton(title: "Cancel", systemImage: "xmark", variant: .subtle) {
                         dismiss()
                     }
                 }

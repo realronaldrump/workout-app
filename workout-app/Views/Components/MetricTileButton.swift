@@ -39,7 +39,7 @@ struct MetricTileButton<Content: View>: View {
                 .overlay(alignment: chevronAlignment) {
                     if chevronPlacement != .none {
                         Image(systemName: "chevron.right")
-                            .font(.caption.weight(.bold))
+                            .font(Theme.Typography.captionBold)
                             .foregroundStyle(Theme.Colors.textTertiary)
                             .padding(Theme.Spacing.md)
                             .accessibilityHidden(true)

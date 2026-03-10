@@ -187,7 +187,7 @@ private struct DataInsightRow: View {
         Button(action: action) {
             HStack(spacing: Theme.Spacing.md) {
                 Image(systemName: item.icon)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(Theme.Typography.footnoteStrong)
                     .foregroundColor(item.tint)
                     .frame(width: 30, height: 30)
                     .background(item.tint.opacity(0.10))
@@ -218,7 +218,7 @@ private struct DataInsightRow: View {
                 }
 
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 11, weight: .bold))
+                    .font(Theme.Typography.caption2Bold)
                     .foregroundColor(Theme.Colors.textTertiary)
             }
             .padding(Theme.Spacing.md)
@@ -313,10 +313,9 @@ private struct DataInsightDetailSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") {
+                    AppToolbarButton(title: "Done", systemImage: "checkmark", variant: .accent) {
                         dismiss()
                     }
-                    .tint(Theme.Colors.accent)
                 }
             }
         }
@@ -326,7 +325,7 @@ private struct DataInsightDetailSheet: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             HStack(spacing: Theme.Spacing.sm) {
                 Image(systemName: item.icon)
-                    .font(.system(size: 15, weight: .bold))
+                    .font(Theme.Typography.calloutBold)
                     .foregroundColor(item.tint)
                     .frame(width: 34, height: 34)
                     .background(item.tint.opacity(0.10))

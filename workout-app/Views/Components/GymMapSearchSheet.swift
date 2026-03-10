@@ -194,7 +194,7 @@ struct GymMapSearchSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    AppPillButton(title: "Close", systemImage: "xmark", variant: .subtle) {
+                    AppToolbarButton(title: "Close", systemImage: "xmark", variant: .subtle) {
                         dismiss()
                     }
                 }
@@ -279,7 +279,7 @@ struct GymMapSearchSheet: View {
                                 .fill(Theme.Colors.accentSecondary)
                                 .frame(width: 22, height: 22)
                             Image(systemName: "figure.strengthtraining.traditional")
-                                .font(.system(size: 10, weight: .bold))
+                                .font(Theme.Typography.microLabel)
                                 .foregroundStyle(.white)
                         }
                     }
@@ -292,7 +292,7 @@ struct GymMapSearchSheet: View {
                                 .fill(selectedPlaceId == result.id ? Theme.Colors.accent : Theme.Colors.textSecondary)
                                 .frame(width: 22, height: 22)
                             Image(systemName: "mappin")
-                                .font(.system(size: 11, weight: .bold))
+                                .font(Theme.Typography.caption2Bold)
                                 .foregroundStyle(.white)
                         }
                     }
@@ -393,7 +393,7 @@ struct GymMapSearchSheet: View {
                         .fill(Theme.Colors.accent.opacity(selectedPlaceId == place.id ? 0.25 : 0.12))
                         .frame(width: 34, height: 34)
                     Image(systemName: place.isSavedGym ? "bookmark.fill" : "dumbbell.fill")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(Theme.Typography.subheadlineStrong)
                         .foregroundStyle(Theme.Colors.accent)
                 }
 
@@ -418,7 +418,7 @@ struct GymMapSearchSheet: View {
 
                 if selectedPlaceId == place.id {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(Theme.Typography.title4)
                         .foregroundStyle(Theme.Colors.accent)
                 }
             }

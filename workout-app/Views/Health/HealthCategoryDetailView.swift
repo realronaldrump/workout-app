@@ -98,7 +98,7 @@ private struct HealthMetricRow: View {
             HStack(alignment: .firstTextBaseline) {
                 HStack(spacing: Theme.Spacing.xs) {
                     Image(systemName: metric.icon)
-                        .font(.caption)
+                        .font(Theme.Typography.caption)
                         .foregroundStyle(metric.chartColor)
                     Text(metric.title)
                         .font(Theme.Typography.subheadline)

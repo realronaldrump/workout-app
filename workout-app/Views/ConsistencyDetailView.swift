@@ -411,7 +411,7 @@ struct ConsistencyDetailView: View {
                                     .font(Theme.Typography.captionBold)
                                     .foregroundColor(Theme.Colors.textTertiary)
                                 Image(systemName: "chevron.right")
-                                    .font(.caption.weight(.bold))
+                                    .font(Theme.Typography.captionBold)
                                     .foregroundColor(Theme.Colors.textTertiary)
                             }
                             .padding(.horizontal, Theme.Spacing.md)
@@ -563,7 +563,7 @@ struct ConsistencyDetailView: View {
                                     }
                                     Spacer()
                                     Image(systemName: "chevron.right")
-                                        .font(.caption.weight(.bold))
+                                        .font(Theme.Typography.captionBold)
                                         .foregroundColor(Theme.Colors.textTertiary)
                                 }
                                 .padding(.horizontal, Theme.Spacing.md)

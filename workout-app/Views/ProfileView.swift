@@ -67,7 +67,7 @@ struct ProfileView: View {
                     .shadow(color: Theme.Colors.accent.opacity(0.25), radius: 16, x: 0, y: 8)
 
                 Text(initials)
-                    .font(.system(size: 28, weight: .bold, design: .default))
+                    .font(Theme.Typography.avatarMonogram)
                     .foregroundStyle(.white)
             }
 
@@ -234,7 +234,7 @@ private struct ProfileFieldRow: View {
     var body: some View {
         HStack(alignment: .center, spacing: Theme.Spacing.md) {
             Image(systemName: icon)
-                .font(.system(size: 13, weight: .semibold))
+                .font(Theme.Typography.footnoteStrong)
                 .foregroundStyle(.white)
                 .frame(width: 32, height: 32)
                 .background(color)
@@ -270,7 +270,7 @@ private struct ProfileLinkRow: View {
     var body: some View {
         HStack(spacing: Theme.Spacing.md) {
             Image(systemName: icon)
-                .font(.system(size: 13, weight: .semibold))
+                .font(Theme.Typography.footnoteStrong)
                 .foregroundStyle(.white)
                 .frame(width: 32, height: 32)
                 .background(color)
@@ -294,7 +294,7 @@ private struct ProfileLinkRow: View {
             }
 
             Image(systemName: "chevron.right")
-                .font(.system(size: 11, weight: .bold))
+                .font(Theme.Typography.caption2Bold)
                 .foregroundStyle(Theme.Colors.textTertiary)
         }
         .padding(Theme.Spacing.lg)

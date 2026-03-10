@@ -72,7 +72,7 @@ struct RecoveryCoverageDetailView: View {
                         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                             HStack {
                                 Image(systemName: signal.icon)
-                                    .font(.system(size: 14, weight: .bold))
+                                    .font(Theme.Typography.subheadlineBold)
                                     .foregroundColor(Theme.Colors.accentSecondary)
                                 Text(signal.metric)
                                     .font(Theme.Typography.headline)
@@ -168,7 +168,7 @@ struct RecoveryCoverageDetailView: View {
     private var noDataSection: some View {
         VStack(spacing: Theme.Spacing.md) {
             Image(systemName: "chart.xyaxis.line")
-                .font(.system(size: 40))
+                .font(Theme.Iconography.feature)
                 .foregroundColor(Theme.Colors.textTertiary)
 
             Text("Not enough data yet")

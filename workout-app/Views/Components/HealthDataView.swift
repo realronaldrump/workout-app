@@ -61,7 +61,7 @@ struct HealthDataView: View {
     private var noDataView: some View {
         VStack(spacing: Theme.Spacing.md) {
             Image(systemName: "heart.slash")
-                .font(.system(size: 40))
+                .font(Theme.Iconography.feature)
                 .foregroundColor(Theme.Colors.textTertiary)
 
             Text("No health data found")
@@ -177,7 +177,7 @@ struct HealthDataView: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
             HStack(spacing: Theme.Spacing.xs) {
                 Image(systemName: icon)
-                    .font(.system(size: 12))
+                    .font(Theme.Iconography.small)
                     .foregroundColor(color)
                 Text(title)
                     .font(Theme.Typography.caption)
@@ -448,15 +448,15 @@ struct HealthDataSummaryView: View {
     private func compactMetric(icon: String, value: String, unit: String, color: Color) -> some View {
         HStack(spacing: 4) {
             Image(systemName: icon)
-                .font(.system(size: 10))
+                .font(Theme.Iconography.micro)
                 .foregroundColor(color)
 
             Text(value)
-                .font(.system(size: 12, weight: .semibold))
+                .font(Theme.Typography.captionStrong)
                 .foregroundColor(Theme.Colors.textPrimary)
 
             Text(unit)
-                .font(.system(size: 10))
+                .font(Theme.Typography.microcopySmall)
                 .foregroundColor(Theme.Colors.textTertiary)
         }
     }

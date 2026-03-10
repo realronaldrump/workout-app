@@ -35,7 +35,7 @@ struct GymBadge: View {
     var body: some View {
         HStack(spacing: 5) {
             Image(systemName: icon)
-                .font(.system(size: 10, weight: .semibold))
+                .font(Theme.Typography.microLabel)
             Text(text)
                 .font(Theme.Typography.metricLabel)
                 .lineLimit(1)

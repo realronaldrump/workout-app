@@ -75,11 +75,11 @@ struct MultiSelectSheet<Item: Hashable & Identifiable>: View {
                                     if localSelection.contains(item) {
                                         Image(systemName: "checkmark.circle.fill")
                                             .foregroundStyle(Theme.Colors.accent)
-                                            .font(.title3)
+                                            .font(Theme.Iconography.title3)
                                     } else {
                                         Image(systemName: "circle")
                                             .foregroundStyle(Theme.Colors.textTertiary)
-                                            .font(.title3)
+                                            .font(Theme.Iconography.title3)
                                     }
                                 }
                                 .padding(.vertical, Theme.Spacing.xs)
@@ -96,11 +96,12 @@ struct MultiSelectSheet<Item: Hashable & Identifiable>: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                        .foregroundStyle(Theme.Colors.textPrimary)
+                    AppToolbarButton(title: "Cancel", systemImage: "xmark", variant: .subtle) {
+                        dismiss()
+                    }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") {
+                    AppToolbarButton(title: "Done", systemImage: "checkmark", variant: .accent) {
                         if localSelection.count == items.count {
                             selectedItems = nil // All selected
                         } else {
@@ -108,8 +109,6 @@ struct MultiSelectSheet<Item: Hashable & Identifiable>: View {
                         }
                         dismiss()
                     }
-                    .foregroundStyle(Theme.Colors.accent)
-                    .font(.headline)
                 }
             }
         }

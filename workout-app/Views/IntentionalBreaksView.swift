@@ -542,7 +542,7 @@ private struct BreakEditorSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    AppPillButton(title: "Done", systemImage: "xmark", variant: .subtle) {
+                    AppToolbarButton(title: "Done", systemImage: "checkmark", variant: .accent) {
                         dismiss()
                     }
                 }

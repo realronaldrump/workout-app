@@ -204,7 +204,7 @@ struct MetricDetailView: View {
                 if !workouts.isEmpty {
                     HStack(spacing: 6) {
                         Image(systemName: stackedSessionDayCount == 0 ? "checkmark.circle.fill" : "square.stack.3d.up.fill")
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(Theme.Typography.captionStrong)
                         Text(stackedSessionDayCount == 0 ? "One per day" : "\(stackedSessionDayCount) stacked")
                             .font(Theme.Typography.captionBold)
                     }
@@ -692,7 +692,7 @@ struct MetricDetailView: View {
                             }
                             Spacer()
                             Image(systemName: "chevron.right")
-                                .font(.caption.weight(.bold))
+                                .font(Theme.Typography.captionBold)
                                 .foregroundColor(Theme.Colors.textTertiary)
                         }
                         .padding(.horizontal, Theme.Spacing.md)
@@ -1251,7 +1251,7 @@ private struct MetricWorkoutRow: View {
             }
 
             Image(systemName: "chevron.right")
-                .font(.caption.weight(.bold))
+                .font(Theme.Typography.captionBold)
                 .foregroundColor(Theme.Colors.textTertiary)
         }
         .padding(.horizontal, Theme.Spacing.md)
@@ -1352,7 +1352,7 @@ private struct SessionDayTile: View {
                         .foregroundColor(day.hasSessions ? .white : Theme.Colors.textTertiary)
 
                     Text(day.tileSubtitle)
-                        .font(.system(size: isCompact ? 10 : 11, weight: .semibold))
+                        .font(isCompact ? Theme.Typography.microLabel : Theme.Typography.caption2Bold)
                         .foregroundColor(day.hasSessions ? .white.opacity(0.88) : Theme.Colors.textTertiary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.75)

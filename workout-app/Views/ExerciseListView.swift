@@ -111,10 +111,10 @@ struct ExerciseListView: View {
     private var topBar: some View {
         ZStack {
             HStack {
-                AppPillIconButton(
+                AppToolbarIconButton(
                     systemImage: "chevron.left",
                     accessibilityLabel: "Back",
-                    tint: Theme.Colors.textPrimary
+                    variant: .subtle
                 ) {
                     dismiss()
                 }
@@ -141,7 +141,7 @@ struct ExerciseListView: View {
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: "arrow.up.arrow.down")
-                    .font(.system(size: 12, weight: .bold))
+                    .font(Theme.Typography.captionBold)
                     .foregroundStyle(Theme.Colors.accent)
                 Text(sortOrder.rawValue)
                     .font(Theme.Typography.captionBold)
@@ -150,14 +150,10 @@ struct ExerciseListView: View {
                     .tracking(0.8)
             }
             .padding(.horizontal, Theme.Spacing.md)
-            .padding(.vertical, Theme.Spacing.xs)
-            .background(
-                Capsule()
-                    .fill(Theme.Colors.surfaceRaised)
-            )
-            .overlay(
-                Capsule()
-                    .strokeBorder(Theme.Colors.border.opacity(0.5), lineWidth: 1)
+            .frame(minHeight: 38)
+            .toolbarButtonChrome(
+                fill: Theme.Colors.surface.blended(with: Theme.Colors.background, amount: 0.2),
+                border: Theme.Colors.border.opacity(0.88)
             )
         }
         .buttonStyle(.plain)
@@ -166,7 +162,7 @@ struct ExerciseListView: View {
     private var searchField: some View {
         HStack(spacing: Theme.Spacing.sm) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 14, weight: .semibold))
+                .font(Theme.Typography.subheadlineStrong)
                 .foregroundStyle(Theme.Colors.textTertiary)
 
             TextField("Search exercises", text: $searchText)
@@ -240,7 +236,7 @@ struct ExerciseRowView: View {
             Spacer()
 
             Image(systemName: "chevron.right")
-                .font(.system(size: 12, weight: .bold))
+                .font(Theme.Typography.captionBold)
                 .foregroundColor(Theme.Colors.textTertiary)
         }
         .padding(Theme.Spacing.lg)
@@ -265,7 +261,7 @@ private struct ExerciseMetricPill: View {
     var body: some View {
         HStack(spacing: 3) {
             Image(systemName: icon)
-                .font(.system(size: 10, weight: .medium))
+                .font(Theme.Iconography.micro)
             Text(text)
                 .font(Theme.Typography.caption)
         }

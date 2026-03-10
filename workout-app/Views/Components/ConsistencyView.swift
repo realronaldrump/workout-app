@@ -513,7 +513,7 @@ struct CalendarHeatmap: View {
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(0..<7, id: \.self) { index in
                     Text(dayLabel(for: index))
-                        .font(.caption2)
+                        .font(Theme.Typography.caption2)
                         .foregroundColor(Theme.Colors.textTertiary)
                         .frame(height: 12)
                 }
@@ -535,7 +535,7 @@ struct CalendarHeatmap: View {
         // Legend
         HStack(spacing: 8) {
             Text("0")
-                .font(.caption2)
+                .font(Theme.Typography.caption2)
                 .foregroundColor(Theme.Colors.textTertiary)
 
             ForEach([0.0, 0.25, 0.5, 0.75, 1.0], id: \.self) { intensity in
@@ -545,7 +545,7 @@ struct CalendarHeatmap: View {
             }
 
             Text(SharedFormatters.volumeCompact(maxVolume))
-                .font(.caption2)
+                .font(Theme.Typography.caption2)
                 .foregroundColor(Theme.Colors.textTertiary)
         }
         .padding(.top, 8)

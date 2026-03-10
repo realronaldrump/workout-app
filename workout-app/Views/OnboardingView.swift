@@ -182,7 +182,7 @@ struct OnboardingView: View {
 
             VStack(spacing: Theme.Spacing.lg) {
                 Image(systemName: "square.and.arrow.down.on.square")
-                    .font(.system(size: 48, weight: .medium))
+                    .font(Theme.Iconography.featureLarge)
                     .foregroundStyle(Theme.Colors.accent)
                     .frame(width: 100, height: 100)
                     .background(
@@ -220,7 +220,7 @@ struct OnboardingView: View {
 
             VStack(spacing: Theme.Spacing.lg) {
                 Image(systemName: "heart.fill")
-                    .font(.system(size: 48, weight: .medium))
+                    .font(Theme.Iconography.featureLarge)
                     .foregroundStyle(Theme.Colors.error)
                     .frame(width: 100, height: 100)
                     .background(

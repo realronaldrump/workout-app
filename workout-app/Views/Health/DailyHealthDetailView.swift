@@ -177,7 +177,7 @@ private struct DailyOverviewCard: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             HStack(spacing: Theme.Spacing.xs) {
                 Image(systemName: icon)
-                    .font(.caption)
+                    .font(Theme.Typography.caption)
                     .foregroundStyle(tint)
                 Text(title)
                     .font(Theme.Typography.caption)
@@ -209,7 +209,7 @@ private struct DailyMetricRow: View {
         HStack {
             HStack(spacing: Theme.Spacing.xs) {
                 Image(systemName: metric.icon)
-                    .font(.caption)
+                    .font(Theme.Typography.caption)
                     .foregroundStyle(metric.chartColor)
                 Text(metric.title)
                     .font(Theme.Typography.subheadline)

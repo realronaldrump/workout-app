@@ -8,7 +8,7 @@ struct WorkoutVariantSummaryCard: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             HStack(spacing: Theme.Spacing.sm) {
                 Image(systemName: "square.3.layers.3d")
-                    .font(.system(size: 13, weight: .bold))
+                    .font(Theme.Typography.footnoteBold)
                     .foregroundStyle(Theme.Colors.accent)
                     .frame(width: 28, height: 28)
                     .background(Theme.Colors.accentTint)
@@ -93,7 +93,7 @@ struct WorkoutVariantDetailCard: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             HStack(alignment: .top, spacing: Theme.Spacing.md) {
                 Image(systemName: difference.kind.iconName)
-                    .font(.system(size: 16, weight: .bold))
+                    .font(Theme.Typography.bodyStrong)
                     .foregroundStyle(Theme.Colors.accent)
                     .frame(width: 34, height: 34)
                     .background(Theme.Colors.accentTint)
@@ -148,7 +148,7 @@ struct WorkoutVariantDifferenceRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: Theme.Spacing.sm) {
             Image(systemName: difference.kind.iconName)
-                .font(.system(size: 12, weight: .bold))
+                .font(Theme.Typography.captionBold)
                 .foregroundStyle(Theme.Colors.accent)
                 .frame(width: 26, height: 26)
                 .background(Theme.Colors.accentTint)
@@ -178,7 +178,7 @@ struct WorkoutVariantMetricRow: View {
     var body: some View {
         HStack(spacing: Theme.Spacing.md) {
             Image(systemName: comparison.kind.iconName)
-                .font(.system(size: 12, weight: .bold))
+                .font(Theme.Typography.captionBold)
                 .foregroundStyle(deltaTint)
                 .frame(width: 28, height: 28)
                 .background(deltaTint.opacity(0.10))

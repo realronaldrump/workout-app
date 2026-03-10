@@ -83,7 +83,7 @@ struct AutoGymTaggingReportView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    AppPillButton(title: "Done", systemImage: "checkmark", variant: .subtle) {
+                    AppToolbarButton(title: "Done", systemImage: "checkmark", variant: .accent) {
                         dismiss()
                     }
                 }

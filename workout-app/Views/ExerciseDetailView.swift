@@ -231,7 +231,7 @@ struct ExerciseDetailView: View {
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: "calendar")
-                    .font(.system(size: 12, weight: .bold))
+                    .font(Theme.Typography.captionBold)
                     .foregroundStyle(Theme.Colors.accent)
 
                 Text("Range \(selectedProgressRange.shortLabel)")
@@ -241,7 +241,7 @@ struct ExerciseDetailView: View {
                     .minimumScaleFactor(0.85)
 
                 Image(systemName: "chevron.down")
-                    .font(.system(size: 12, weight: .bold))
+                    .font(Theme.Typography.captionBold)
                     .foregroundStyle(Theme.Colors.textTertiary)
             }
             .padding(.horizontal, Theme.Spacing.md)
@@ -283,7 +283,7 @@ struct ExerciseDetailView: View {
     private func progressChartPlaceholder(message: String, showResetButton: Bool) -> some View {
         VStack(spacing: Theme.Spacing.md) {
             Image(systemName: "calendar.badge.exclamationmark")
-                .font(.system(size: 24, weight: .bold))
+                .font(Theme.Iconography.title2Bold)
                 .foregroundStyle(Theme.Colors.textTertiary)
 
             Text(message)
@@ -603,7 +603,7 @@ struct ExerciseDetailView: View {
             HStack(spacing: 6) {
                 GymBadge(text: locationLabel, style: locationBadgeStyle)
                 Image(systemName: "chevron.down")
-                    .font(.caption)
+                    .font(Theme.Typography.caption)
                     .foregroundColor(Theme.Colors.textTertiary)
             }
         }

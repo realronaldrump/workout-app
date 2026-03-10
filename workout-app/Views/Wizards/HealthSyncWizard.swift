@@ -41,7 +41,7 @@ struct HealthSyncWizard: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    AppPillButton(title: "Close", systemImage: "xmark", variant: .subtle) {
+                    AppToolbarButton(title: "Close", systemImage: "xmark", variant: .subtle) {
                         handleCloseTapped()
                     }
                 }
@@ -83,7 +83,7 @@ struct HealthSyncWizard: View {
             Spacer()
 
             Image(systemName: "heart.text.square.fill")
-                .font(.system(size: 80))
+                .font(Theme.Iconography.wizardHero)
                 .foregroundStyle(Theme.Colors.error)
                 .padding()
                 .background(
@@ -118,7 +118,7 @@ struct HealthSyncWizard: View {
             Spacer()
 
             Image(systemName: "lock.shield.fill")
-                .font(.system(size: 60))
+                .font(Theme.Iconography.wizard)
                 .foregroundStyle(Theme.Colors.accent)
 
             VStack(spacing: Theme.Spacing.md) {
@@ -187,7 +187,7 @@ struct HealthSyncWizard: View {
             Spacer()
 
             Image(systemName: "checkmark.seal.fill")
-                .font(.system(size: 80))
+                .font(Theme.Iconography.wizardHero)
                 .foregroundStyle(Theme.Colors.success)
                 .symbolEffect(.bounce)
 

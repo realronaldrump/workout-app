@@ -26,7 +26,7 @@ struct SettingsView: View {
                 // Header
                 VStack(spacing: Theme.Spacing.sm) {
                     Image(systemName: "gearshape.fill")
-                        .font(.system(size: 48, weight: .medium))
+                        .font(Theme.Iconography.featureLarge)
                         .foregroundStyle(.white)
                         .frame(width: 88, height: 88)
                         .background(
@@ -122,7 +122,7 @@ struct SettingsView: View {
                         // Weight increment
                         HStack(spacing: Theme.Spacing.sm) {
                             Image(systemName: "ruler.fill")
-                                .font(.system(size: 14, weight: .semibold))
+                                .font(Theme.Typography.subheadlineStrong)
                                 .foregroundStyle(.white)
                                 .frame(width: 32, height: 32)
                                 .background(Theme.Colors.accentSecondary)
@@ -149,7 +149,7 @@ struct SettingsView: View {
                         // Intentional rest window (used for streak/consistency calculations)
                         HStack(spacing: Theme.Spacing.sm) {
                             Image(systemName: "bed.double.fill")
-                                .font(.system(size: 14, weight: .semibold))
+                                .font(Theme.Typography.subheadlineStrong)
                                 .foregroundStyle(.white)
                                 .frame(width: 32, height: 32)
                                 .background(Theme.Colors.accent)
@@ -193,7 +193,7 @@ struct SettingsView: View {
                         // Sessions per week goal (used by consistency visualization)
                         HStack(spacing: Theme.Spacing.sm) {
                             Image(systemName: "target")
-                                .font(.system(size: 14, weight: .semibold))
+                                .font(Theme.Typography.subheadlineStrong)
                                 .foregroundStyle(.white)
                                 .frame(width: 32, height: 32)
                                 .background(Theme.Colors.success)
@@ -256,7 +256,7 @@ struct SettingsView: View {
                         label: {
                             HStack(spacing: Theme.Spacing.sm) {
                                 Image(systemName: "trash.fill")
-                                    .font(.system(size: 14, weight: .semibold))
+                                    .font(Theme.Typography.subheadlineStrong)
                                     .foregroundStyle(.white)
                                     .frame(width: 32, height: 32)
                                     .background(Theme.Colors.error)
@@ -269,7 +269,7 @@ struct SettingsView: View {
                                 Spacer()
 
                                 Image(systemName: "chevron.right")
-                                    .font(.system(size: 12, weight: .bold))
+                                    .font(Theme.Typography.captionBold)
                                     .foregroundStyle(Theme.Colors.error.opacity(0.5))
                             }
                             .padding()
@@ -415,7 +415,7 @@ private struct SettingsInlineRow: View {
     var body: some View {
         HStack(spacing: Theme.Spacing.sm) {
             Image(systemName: icon)
-                .font(.system(size: 14, weight: .semibold))
+                .font(Theme.Typography.subheadlineStrong)
                 .foregroundStyle(.white)
                 .frame(width: 32, height: 32)
                 .background(color)
@@ -433,7 +433,7 @@ private struct SettingsInlineRow: View {
             Spacer()
 
             Image(systemName: "chevron.right")
-                .font(.system(size: 12, weight: .bold))
+                .font(Theme.Typography.captionBold)
                 .foregroundStyle(Theme.Colors.textTertiary)
         }
         .padding()
@@ -453,7 +453,7 @@ struct SettingsRow: View {
         Button(action: action) {
             HStack(spacing: Theme.Spacing.sm) {
                 Image(systemName: icon)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(Theme.Typography.subheadlineStrong)
                     .foregroundStyle(.white)
                     .frame(width: 32, height: 32)
                     .background(color)
@@ -477,7 +477,7 @@ struct SettingsRow: View {
                 }
 
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .bold))
+                    .font(Theme.Typography.captionBold)
                     .foregroundStyle(Theme.Colors.textTertiary)
             }
             .padding()

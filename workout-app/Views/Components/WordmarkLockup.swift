@@ -11,7 +11,7 @@ struct WordmarkLockup: View {
     var body: some View {
         VStack(spacing: 10) {
             Text("Davis's")
-                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .font(Theme.Typography.eyebrowRounded)
                 .foregroundStyle(secondaryText)
                 .textCase(.uppercase)
                 .tracking(2.0)
@@ -22,7 +22,7 @@ struct WordmarkLockup: View {
                         .font(Theme.Typography.wordmarkHuge)
 
                     Text("BIG BEAUTIFUL")
-                        .font(.custom("BebasNeue-Regular", size: 44, relativeTo: .largeTitle))
+                        .font(Theme.Typography.wordmarkHugeCompact)
                 }
                 .tracking(1.5)
                 .foregroundStyle(primaryText)
@@ -34,7 +34,7 @@ struct WordmarkLockup: View {
                         .font(Theme.Typography.wordmarkBig)
 
                     Text("WORKOUT APP")
-                        .font(.custom("BebasNeue-Regular", size: 30, relativeTo: .title))
+                        .font(Theme.Typography.wordmarkBigCompact)
                 }
                 .tracking(1.0)
                 .foregroundStyle(primaryText)

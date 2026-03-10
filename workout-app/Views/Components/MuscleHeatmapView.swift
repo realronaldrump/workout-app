@@ -64,7 +64,7 @@ struct MuscleHeatmapView: View {
                         onOpen()
                     } label: {
                         Image(systemName: "chevron.right")
-                            .font(.caption.weight(.semibold))
+                            .font(Theme.Typography.captionStrong)
                             .foregroundStyle(Theme.Colors.textTertiary)
                             .frame(width: 44, height: 44)
                             .contentShape(Rectangle())
@@ -179,7 +179,7 @@ struct MuscleGroupTile: View {
             VStack(spacing: Theme.Spacing.sm) {
                 // Icon
                 Image(systemName: muscleGroup.iconName)
-                    .font(.system(size: 24, weight: .semibold))
+                    .font(Theme.Iconography.title2Strong)
                     .foregroundColor(color.opacity(opacity))
 
                 // Name

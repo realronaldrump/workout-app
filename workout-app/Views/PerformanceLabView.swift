@@ -376,7 +376,7 @@ struct PerformanceLabView: View {
     private func glanceTile(value: String, label: String, icon: String) -> some View {
         VStack(spacing: Theme.Spacing.sm) {
             Image(systemName: icon)
-                .font(.title3)
+                .font(Theme.Iconography.title3)
                 .foregroundColor(Theme.Colors.accent)
             Text(value)
                 .font(Theme.Typography.number)
@@ -533,7 +533,7 @@ struct PerformanceLabView: View {
             Spacer()
 
             Image(systemName: "chevron.right")
-                .font(.caption)
+                .font(Theme.Typography.caption)
                 .foregroundColor(Theme.Colors.textTertiary)
         }
         .padding(.horizontal, Theme.Spacing.lg)
@@ -552,7 +552,7 @@ struct PerformanceLabView: View {
         }()
 
         Image(systemName: icon)
-            .font(.title2)
+            .font(Theme.Iconography.title2)
             .foregroundColor(color)
     }
 

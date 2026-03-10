@@ -33,7 +33,7 @@ struct ErrorCard: View {
     var body: some View {
         VStack(spacing: Theme.Spacing.md) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 32))
+                .font(Theme.Iconography.hero)
                 .foregroundColor(Theme.Colors.warning)
                 .accessibilityHidden(true)
 

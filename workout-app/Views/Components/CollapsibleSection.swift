@@ -40,7 +40,7 @@ struct CollapsibleSection<Content: View>: View {
                     Spacer()
 
                     Image(systemName: "chevron.down")
-                        .font(.caption)
+                        .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.Colors.textTertiary)
                         .rotationEffect(.degrees(isExpanded ? 180 : 0))
                         .animation(reduceMotion ? .easeOut(duration: 0.15) : .spring(response: 0.35, dampingFraction: 0.9), value: isExpanded)

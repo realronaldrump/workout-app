@@ -394,7 +394,7 @@ private struct TagToggleRow: View {
 
                 if isSelected {
                     Image(systemName: "checkmark")
-                        .font(.caption)
+                        .font(Theme.Typography.caption)
                         .foregroundStyle(tint)
                 }
             }

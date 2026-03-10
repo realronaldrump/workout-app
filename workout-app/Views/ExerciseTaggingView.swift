@@ -188,7 +188,7 @@ private struct ExerciseTaggingRow: View {
             Spacer(minLength: 0)
 
             Image(systemName: "chevron.right")
-                .font(.caption)
+                .font(Theme.Typography.caption)
                 .foregroundStyle(Theme.Colors.textTertiary)
         }
         .padding(Theme.Spacing.lg)

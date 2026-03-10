@@ -59,7 +59,7 @@ struct GymAssignmentCard: View {
                     HStack(spacing: 6) {
                         GymBadge(text: selectionLabel, style: badgeStyle)
                         Image(systemName: "chevron.down")
-                            .font(.caption)
+                            .font(Theme.Typography.caption)
                             .foregroundColor(Theme.Colors.textTertiary)
                     }
                 }
@@ -166,7 +166,7 @@ private struct GymQuickAddSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    AppPillButton(title: "Cancel", systemImage: "xmark", variant: .subtle) {
+                    AppToolbarButton(title: "Cancel", systemImage: "xmark", variant: .subtle) {
                         dismiss()
                     }
                 }

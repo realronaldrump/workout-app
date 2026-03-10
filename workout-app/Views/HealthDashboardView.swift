@@ -115,7 +115,7 @@ struct HealthDashboardView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    AppPillButton(title: "Done", systemImage: "checkmark") {
+                    AppToolbarButton(title: "Done", systemImage: "checkmark", variant: .accent) {
                         dismiss()
                     }
                 }
@@ -192,7 +192,7 @@ struct HealthDashboardView: View {
                         } label: {
                             HStack(spacing: Theme.Spacing.xs) {
                                 Image(systemName: category.icon)
-                                    .font(.caption)
+                                    .font(Theme.Typography.caption)
                                 Text(category.title)
                                     .font(Theme.Typography.subheadline)
                             }
@@ -384,7 +384,7 @@ struct HealthDashboardView: View {
     private var emptyState: some View {
         VStack(spacing: Theme.Spacing.lg) {
             Image(systemName: "heart.text.square")
-                .font(.system(size: 52))
+                .font(Theme.Iconography.dashboard)
                 .foregroundStyle(Theme.Colors.textTertiary)
                 .padding(.top, Theme.Spacing.xl)
 
@@ -900,7 +900,7 @@ private struct MetricSummaryCard: View {
                 if let delta = model.delta {
                     HStack(spacing: 4) {
                         Image(systemName: delta.isPositive ? "arrow.up" : "arrow.down")
-                            .font(.caption2)
+                            .font(Theme.Typography.caption2)
                         Text(delta.text)
                             .font(Theme.Typography.caption)
                     }
@@ -1114,7 +1114,7 @@ private struct CustomRangeSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    AppPillButton(title: "Done", systemImage: "checkmark") {
+                    AppToolbarButton(title: "Done", systemImage: "checkmark", variant: .accent) {
                         dismiss()
                     }
                 }
@@ -1406,7 +1406,7 @@ private struct WorkoutHealthCard: View {
     private func metricPill(icon: String, value: String, unit: String, color: Color) -> some View {
         HStack(spacing: 4) {
             Image(systemName: icon)
-                .font(.caption)
+                .font(Theme.Typography.caption)
                 .foregroundStyle(color)
             Text(value)
                 .font(Theme.Typography.subheadline)

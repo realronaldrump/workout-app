@@ -79,7 +79,7 @@ struct LongestStreaksSection: View {
                             .textCase(.uppercase)
                             .tracking(0.8)
                         Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                            .font(.caption.weight(.bold))
+                            .font(Theme.Typography.captionBold)
                             .foregroundColor(Theme.Colors.accent)
                     }
                 }

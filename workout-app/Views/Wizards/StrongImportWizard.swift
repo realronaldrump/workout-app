@@ -60,7 +60,7 @@ struct StrongImportWizard: View {
     private var topBar: some View {
         ZStack {
             HStack {
-                AppPillButton(title: "Close", systemImage: "xmark", variant: .subtle) {
+                AppToolbarButton(title: "Close", systemImage: "xmark", variant: .subtle) {
                     isPresented = false
                 }
                 Spacer()
@@ -131,7 +131,7 @@ struct StrongImportWizard: View {
             Spacer()
 
             Image(systemName: "square.and.arrow.down.on.square")
-                .font(.system(size: 80))
+                .font(Theme.Iconography.wizardHero)
                 .foregroundStyle(Theme.Colors.accent)
                 .padding()
                 .background(
@@ -191,7 +191,7 @@ struct StrongImportWizard: View {
                         label: {
                             VStack(spacing: Theme.Spacing.md) {
                                 Image(systemName: "doc.text.fill")
-                                    .font(.largeTitle)
+                                    .font(Theme.Iconography.largeTitle)
                                 Text("Select CSV File")
                                     .font(Theme.Typography.headline)
                             }
@@ -228,7 +228,7 @@ struct StrongImportWizard: View {
         ScrollView {
             VStack(spacing: Theme.Spacing.xl) {
                 Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 80))
+                    .font(Theme.Iconography.wizardHero)
                     .foregroundStyle(Theme.Colors.success)
                     .symbolEffect(.bounce, value: step)
 
@@ -270,7 +270,7 @@ struct StrongImportWizard: View {
                 NavigationLink(destination: GymBulkAssignView(autoStartAutoTagging: true)) {
                     HStack(spacing: Theme.Spacing.md) {
                         Image(systemName: "mappin.and.ellipse")
-                            .font(.system(size: 28))
+                            .font(Theme.Iconography.prominent)
                             .foregroundStyle(Theme.Colors.accent)
 
                         VStack(alignment: .leading, spacing: 4) {
@@ -284,7 +284,7 @@ struct StrongImportWizard: View {
 
                         Spacer()
                         Image(systemName: "chevron.right")
-                            .font(.caption)
+                            .font(Theme.Typography.caption)
                             .foregroundStyle(Theme.Colors.textTertiary)
                     }
                     .padding(Theme.Spacing.lg)

@@ -139,7 +139,7 @@ struct HealthHubView: View {
                                 .tint(Theme.Colors.accent)
                         } else {
                             Image(systemName: "arrow.clockwise")
-                                .font(.system(size: 16, weight: .bold))
+                                .font(Theme.Typography.bodyStrong)
                                 .foregroundStyle(Theme.Colors.textPrimary)
                         }
                     }
@@ -446,7 +446,7 @@ private struct HealthSummaryCard: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             HStack(spacing: Theme.Spacing.xs) {
                 Image(systemName: model.icon)
-                    .font(.caption)
+                    .font(Theme.Typography.caption)
                     .foregroundStyle(model.tint)
                 Text(model.title)
                     .font(Theme.Typography.metricLabel)
@@ -478,7 +478,7 @@ private struct HealthCategoryCard: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             HStack {
                 Image(systemName: category.icon)
-                    .font(.title3)
+                    .font(Theme.Iconography.title3)
                     .foregroundStyle(category.tint)
                 Spacer()
             }

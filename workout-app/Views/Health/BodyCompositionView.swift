@@ -149,7 +149,7 @@ struct BodyCompositionView: View {
                                 .tint(Theme.Colors.accent)
                         } else {
                             Image(systemName: "arrow.clockwise")
-                                .font(.system(size: 16, weight: .bold))
+                                .font(Theme.Typography.bodyStrong)
                                 .foregroundStyle(Theme.Colors.textPrimary)
                         }
                     }
@@ -415,7 +415,7 @@ struct BodyCompositionView: View {
             HStack(spacing: 6) {
                 if isOn.wrappedValue && isEnabled {
                     Image(systemName: "checkmark")
-                        .font(.caption2.weight(.bold))
+                        .font(Theme.Typography.caption2Bold)
                 }
 
                 Text(title)

@@ -6,7 +6,7 @@ struct MuscleTagBadge: View {
     var body: some View {
         HStack(spacing: 5) {
             Image(systemName: tag.iconName)
-                .font(.system(size: 10, weight: .semibold))
+                .font(Theme.Typography.microLabel)
             Text(tag.displayName)
                 .font(Theme.Typography.metricLabel)
                 .lineLimit(1)

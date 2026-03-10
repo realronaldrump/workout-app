@@ -49,7 +49,7 @@ struct OverviewCardsView: View {
             if let lastWorkout = stats.lastWorkoutDate {
                 HStack(spacing: Theme.Spacing.sm) {
                     Image(systemName: "calendar")
-                        .font(.caption)
+                        .font(Theme.Typography.caption)
                     Text("last \(lastWorkout.formatted(date: .abbreviated, time: .omitted))")
                         .font(Theme.Typography.caption)
                 }
@@ -87,7 +87,7 @@ struct StatCard: View {
     private var cardContent: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             Image(systemName: icon)
-                .font(.system(size: 20, weight: .semibold))
+                .font(Theme.Iconography.title3Strong)
                 .foregroundColor(color)
                 .accessibilityHidden(true)
 

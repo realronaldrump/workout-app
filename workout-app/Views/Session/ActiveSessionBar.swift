@@ -32,7 +32,7 @@ struct ActiveSessionBar: View {
                     } label: {
                         HStack(spacing: 6) {
                             Image(systemName: "bolt.fill")
-                                .font(.system(size: 12, weight: .bold))
+                                .font(Theme.Typography.captionBold)
                             Text("Resume")
                                 .font(Theme.Typography.subheadline)
                         }

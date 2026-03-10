@@ -13,7 +13,7 @@ struct PreWorkoutBriefingCard: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             HStack(spacing: Theme.Spacing.sm) {
                 Image(systemName: "brain.head.profile")
-                    .font(.system(size: 13, weight: .bold))
+                    .font(Theme.Typography.footnoteBold)
                     .foregroundColor(Theme.Colors.accent)
                     .frame(width: 28, height: 28)
                     .background(Theme.Colors.accentTint)
@@ -67,7 +67,7 @@ struct PreWorkoutBriefingCard: View {
                 ForEach(recoverySignals) { signal in
                     VStack(spacing: 2) {
                         Image(systemName: signal.icon)
-                            .font(.system(size: 12))
+                            .font(Theme.Iconography.small)
                             .foregroundColor(Theme.Colors.accentSecondary)
                         Text(signal.metric)
                             .font(Theme.Typography.microcopy)
@@ -158,7 +158,7 @@ struct PreWorkoutBriefingCard: View {
                         onStartSession(suggestion.group.displayName)
                     } label: {
                         Image(systemName: "plus.circle")
-                            .font(.system(size: 18))
+                            .font(Theme.Typography.bodyLarge)
                             .foregroundColor(Theme.Colors.accent)
                     }
                     .buttonStyle(.plain)

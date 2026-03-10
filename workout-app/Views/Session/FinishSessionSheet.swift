@@ -34,7 +34,7 @@ struct FinishSessionSheet: View {
                             .foregroundColor(Theme.Colors.textSecondary)
                     }
                     Spacer()
-                    AppPillButton(title: "Close", systemImage: "xmark", variant: .subtle) {
+                    AppToolbarButton(title: "Close", systemImage: "xmark", variant: .subtle) {
                         dismiss()
                     }
                 }

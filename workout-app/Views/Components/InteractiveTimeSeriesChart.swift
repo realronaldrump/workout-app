@@ -296,7 +296,7 @@ struct InteractiveTimeSeriesChart: View {
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "magnifyingglass")
-                        .font(.caption)
+                        .font(Theme.Typography.caption)
                     Text("Zoom \(zoomLabel)")
                         .font(Theme.Typography.caption)
                 }
