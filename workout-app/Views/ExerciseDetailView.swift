@@ -276,9 +276,10 @@ struct ExerciseDetailView: View {
     @ViewBuilder
     private func progressChartPlaceholder(message: String, showResetButton: Bool) -> some View {
         VStack(spacing: Theme.Spacing.md) {
-            Image(systemName: "calendar.badge.exclamationmark")
+            Image(systemName: "chart.line.uptrend.xyaxis")
                 .font(Theme.Iconography.title2Bold)
                 .foregroundStyle(Theme.Colors.textTertiary)
+                .accessibilityHidden(true)
 
             Text(message)
                 .font(Theme.Typography.subheadline)

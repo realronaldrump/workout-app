@@ -47,16 +47,12 @@ struct VolumeProgressChart: View {
     private var chartContainer: some View {
         Group {
             if chartData.isEmpty {
-                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                    Text("No workouts in this range.")
-                        .font(Theme.Typography.body)
-                        .foregroundColor(Theme.Colors.textSecondary)
-                    Text("Log a workout to see volume trends.")
-                        .font(Theme.Typography.caption)
-                        .foregroundColor(Theme.Colors.textTertiary)
-                }
-                .padding(Theme.Spacing.lg)
-                .softCard(elevation: 2)
+                EmptyStateCard(
+                    title: "No workouts in this range",
+                    message: "Log a workout to see volume trends.",
+                    icon: "chart.line.uptrend.xyaxis",
+                    tint: Theme.Colors.accent
+                )
             } else {
                 Chart {
                     ForEach(chartData, id: \.date) { dataPoint in

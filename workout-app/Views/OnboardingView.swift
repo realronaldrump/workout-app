@@ -208,6 +208,21 @@ struct OnboardingView: View {
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, Theme.Spacing.xl)
                 }
+
+                DisclosureGroup("What gets imported?") {
+                    VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                        learnMoreBullet("Workout names, dates & durations")
+                        learnMoreBullet("Exercise names & order")
+                        learnMoreBullet("Sets, reps, weight & RPE")
+                        learnMoreBullet("Cardio distance, time & calories")
+                        learnMoreBullet("Workout notes")
+                    }
+                    .padding(.top, Theme.Spacing.sm)
+                }
+                .font(Theme.Typography.subheadline)
+                .foregroundStyle(Theme.Colors.textSecondary)
+                .tint(Theme.Colors.textTertiary)
+                .padding(.horizontal, Theme.Spacing.xl)
             }
 
             Spacer()
@@ -246,6 +261,22 @@ struct OnboardingView: View {
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, Theme.Spacing.xl)
                 }
+
+                DisclosureGroup("What health data do we read?") {
+                    VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                        learnMoreBullet("Sleep duration & stages")
+                        learnMoreBullet("Resting & workout heart rate")
+                        learnMoreBullet("Heart rate variability (HRV)")
+                        learnMoreBullet("Active energy & step count")
+                        learnMoreBullet("Body weight & composition")
+                        learnMoreBullet("VO₂ Max & respiratory rate")
+                    }
+                    .padding(.top, Theme.Spacing.sm)
+                }
+                .font(Theme.Typography.subheadline)
+                .foregroundStyle(Theme.Colors.textSecondary)
+                .tint(Theme.Colors.textTertiary)
+                .padding(.horizontal, Theme.Spacing.xl)
 
                 healthStatusPill
             }
@@ -296,6 +327,16 @@ struct OnboardingView: View {
                 .strokeBorder(Theme.Colors.border.opacity(0.4), lineWidth: 1)
         )
         .padding(.top, Theme.Spacing.sm)
+    }
+
+    private func learnMoreBullet(_ text: String) -> some View {
+        HStack(alignment: .top, spacing: Theme.Spacing.sm) {
+            Text("•")
+                .foregroundStyle(Theme.Colors.textTertiary)
+            Text(text)
+                .foregroundStyle(Theme.Colors.textSecondary)
+        }
+        .font(Theme.Typography.subheadline)
     }
 
     private var primaryButtonTitle: String {

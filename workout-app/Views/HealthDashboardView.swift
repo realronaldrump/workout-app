@@ -187,6 +187,8 @@ struct HealthDashboardView: View {
                             )
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel(category.title)
+                        .accessibilityAddTraits(selectedCategory == category ? .isSelected : [])
                     }
                 }
             }
@@ -368,6 +370,7 @@ struct HealthDashboardView: View {
                 .font(Theme.Iconography.dashboard)
                 .foregroundStyle(Theme.Colors.textTertiary)
                 .padding(.top, Theme.Spacing.xl)
+                .accessibilityHidden(true)
 
             Text("No health data yet")
                 .font(Theme.Typography.title2)
@@ -378,6 +381,30 @@ struct HealthDashboardView: View {
                 .foregroundStyle(Theme.Colors.textSecondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
+
+            if healthManager.authorizationStatus == .denied {
+                Button {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
+                } label: {
+                    HStack(spacing: Theme.Spacing.sm) {
+                        Image(systemName: "gear")
+                            .font(Theme.Typography.subheadlineBold)
+                        Text("Open Settings")
+                            .font(Theme.Typography.subheadlineBold)
+                    }
+                    .foregroundStyle(Theme.Colors.accent)
+                    .padding(.horizontal, Theme.Spacing.xl)
+                    .padding(.vertical, Theme.Spacing.md)
+                    .frame(minHeight: 44)
+                    .background(
+                        RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
+                            .fill(Theme.Colors.accent.opacity(Theme.Opacity.subtleFill))
+                    )
+                }
+                .buttonStyle(.plain)
+            }
         }
         .padding(Theme.Spacing.xl)
         .softCard(elevation: 1)

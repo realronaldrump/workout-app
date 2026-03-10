@@ -42,7 +42,7 @@ struct ProfileView: View {
                         LinearGradient(
                             colors: [
                                 Theme.Colors.accent,
-                                Color(uiColor: UIColor(hex: 0x3B82F6))
+                                Theme.Colors.accent.opacity(0.7)
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
@@ -70,6 +70,7 @@ struct ProfileView: View {
                         .tracking(1.0)
                 }
             }
+            .accessibilityElement(children: .combine)
 
             HStack(spacing: Theme.Spacing.md) {
                 MetricTileButton(
@@ -82,6 +83,8 @@ struct ProfileView: View {
                     }
                 )
                 .frame(maxWidth: .infinity)
+                .accessibilityLabel("\(dataManager.workouts.count) workouts")
+                .accessibilityHint("Double tap to view workout history")
 
                 MetricTileButton(
                     chevronPlacement: .bottomTrailing,
@@ -93,6 +96,8 @@ struct ProfileView: View {
                     }
                 )
                 .frame(maxWidth: .infinity)
+                .accessibilityLabel("\(uniqueExercisesCount) exercises")
+                .accessibilityHint("Double tap to view exercise list")
             }
             .padding(.horizontal, Theme.Spacing.md)
         }

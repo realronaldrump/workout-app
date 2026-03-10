@@ -5,8 +5,39 @@ struct ExercisePickerView: View {
     @EnvironmentObject private var dataManager: WorkoutDataManager
 
     @State private var searchText: String = ""
+    @AppStorage("favoriteExercises") private var favoriteExercisesData: String = "[]"
 
     let onSelect: (String) -> Void
+
+    private var favoriteExerciseNames: [String] {
+        guard let data = favoriteExercisesData.data(using: .utf8),
+              let array = try? JSONDecoder().decode([String].self, from: data) else { return [] }
+        return array.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }
+
+    private func isFavorite(_ name: String) -> Bool {
+        favoriteExerciseNames.contains(name)
+    }
+
+    private func toggleFavorite(_ name: String) {
+        var favorites: Set<String>
+        if let data = favoriteExercisesData.data(using: .utf8),
+           let array = try? JSONDecoder().decode([String].self, from: data) {
+            favorites = Set(array)
+        } else {
+            favorites = []
+        }
+        if favorites.contains(name) {
+            favorites.remove(name)
+        } else {
+            favorites.insert(name)
+        }
+        if let data = try? JSONEncoder().encode(Array(favorites)),
+           let string = String(data: data, encoding: .utf8) {
+            favoriteExercisesData = string
+        }
+        Haptics.selection()
+    }
 
     var body: some View {
         NavigationStack {
@@ -29,7 +60,17 @@ struct ExercisePickerView: View {
                                 }
                             }
 
-                            sectionHeader(recentExercises.isEmpty ? "All" : "All Others")
+                            let favs = favoriteExerciseNames.filter { !recentExercises.contains($0) }
+                            if !favs.isEmpty {
+                                sectionHeader("Favorites")
+                                VStack(spacing: Theme.Spacing.sm) {
+                                    ForEach(favs, id: \.self) { name in
+                                        exerciseRow(name)
+                                    }
+                                }
+                            }
+
+                            sectionHeader(recentExercises.isEmpty && favs.isEmpty ? "All" : "All Others")
                             VStack(spacing: Theme.Spacing.sm) {
                                 ForEach(allExercisesExcludingRecent, id: \.self) { name in
                                     exerciseRow(name)
@@ -85,7 +126,8 @@ struct ExercisePickerView: View {
 
     private var allExercisesExcludingRecent: [String] {
         let recent = Set(recentExercises)
-        return allExercises.filter { !recent.contains($0) }
+        let favs = Set(favoriteExerciseNames)
+        return allExercises.filter { !recent.contains($0) && !favs.contains($0) }
     }
 
     private var filteredExercises: [String] {
@@ -138,22 +180,36 @@ struct ExercisePickerView: View {
     }
 
     private func exerciseRow(_ name: String) -> some View {
-        Button {
-            onSelect(name)
-            dismiss()
-        } label: {
-            HStack {
-                Text(name)
-                    .font(Theme.Typography.headline)
-                    .foregroundColor(Theme.Colors.textPrimary)
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textTertiary)
+        HStack(spacing: 0) {
+            Button {
+                onSelect(name)
+                dismiss()
+            } label: {
+                HStack {
+                    Text(name)
+                        .font(Theme.Typography.headline)
+                        .foregroundColor(Theme.Colors.textPrimary)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Colors.textTertiary)
+                }
+                .padding(Theme.Spacing.lg)
             }
-            .padding(Theme.Spacing.lg)
-            .softCard(elevation: 1)
+            .buttonStyle(.plain)
+
+            Button {
+                toggleFavorite(name)
+            } label: {
+                Image(systemName: isFavorite(name) ? "star.fill" : "star")
+                    .font(Theme.Typography.callout)
+                    .foregroundStyle(isFavorite(name) ? Theme.Colors.warning : Theme.Colors.textTertiary)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(isFavorite(name) ? "Remove from favorites" : "Add to favorites")
         }
-        .buttonStyle(.plain)
+        .softCard(elevation: 1)
     }
 }

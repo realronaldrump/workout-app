@@ -35,7 +35,7 @@ struct WorkoutHistoryView: View {
                 }
                 .padding(.horizontal, Theme.Spacing.lg)
                 .padding(.vertical, Theme.Spacing.xl)
-                .frame(maxWidth: 960, alignment: .leading)
+                .frame(maxWidth: Theme.Layout.maxContentWidth, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .center)
             }
         }
@@ -337,6 +337,11 @@ struct WorkoutHistoryView: View {
                 .padding(.top, Theme.Spacing.xl)
             } else {
                 VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
+                    // Inline active filter summary — stays visible when scrolled past the filter deck
+                    if hasActiveFilters {
+                        activeFilterSummaryBar
+                    }
+
                     ForEach(groupedWorkouts, id: \.month) { group in
                         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                             Text(group.month.uppercased())
@@ -417,6 +422,54 @@ struct WorkoutHistoryView: View {
         || selectedLocations != nil
         || selectedExercises != nil
         || selectedDurationBands != nil
+    }
+
+    private var activeFilterSummaryBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: Theme.Spacing.sm) {
+                Image(systemName: "line.3.horizontal.decrease.circle.fill")
+                    .font(Theme.Typography.captionBold)
+                    .foregroundStyle(Theme.Colors.accent)
+
+                if selectedTimeWindow != .allTime {
+                    filterPill(selectedTimeWindow.title, tint: Theme.Colors.accentSecondary)
+                }
+                if selectedLocations != nil {
+                    filterPill(locationSummary, tint: Theme.Colors.accentSecondary)
+                }
+                if selectedExercises != nil {
+                    filterPill(exerciseSummary, tint: Theme.Colors.accent)
+                }
+                if selectedDurationBands != nil {
+                    filterPill(durationSummary, tint: Theme.Colors.success)
+                }
+                if !searchText.isEmpty {
+                    filterPill("\"\(searchText)\"", tint: Theme.Colors.textSecondary)
+                }
+
+                Button {
+                    clearFilters()
+                    Haptics.selection()
+                } label: {
+                    Text("Clear")
+                        .font(Theme.Typography.captionBold)
+                        .foregroundStyle(Theme.Colors.error)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private func filterPill(_ text: String, tint: Color) -> some View {
+        Text(text)
+            .font(Theme.Typography.captionBold)
+            .foregroundStyle(tint)
+            .padding(.horizontal, Theme.Spacing.sm)
+            .padding(.vertical, Theme.Spacing.xs)
+            .background(
+                Capsule().fill(tint.opacity(Theme.Opacity.subtleFill))
+            )
+            .lineLimit(1)
     }
 
     private var activeFilterCount: Int {
@@ -720,7 +773,7 @@ struct WorkoutHistoryRow: View {
                     + "\(workout.duration), \(workout.exercises.count) exercises, "
                     + "\(SharedFormatters.volumeWithUnit(workout.totalVolume))"
                 )
-                .accessibilityHint("Double tap for workout details")
+                .accessibilityHint("Double tap for workout details, swipe left to repeat")
             }
             .buttonStyle(.plain)
 
@@ -740,6 +793,15 @@ struct WorkoutHistoryRow: View {
         }
         .padding(Theme.Spacing.lg)
         .softCard(elevation: 1)
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            Button {
+                Haptics.selection()
+                repeatThisWorkout()
+            } label: {
+                Label("Repeat", systemImage: "arrow.counterclockwise")
+            }
+            .tint(Theme.Colors.accent)
+        }
     }
 
     private func metric(_ value: String, systemImage: String) -> some View {

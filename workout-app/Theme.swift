@@ -285,6 +285,28 @@ enum Theme {
         static let xlarge: CGFloat = 20
         static let pill: CGFloat = 100
     }
+
+    // MARK: - Chart Heights
+
+    enum ChartHeight {
+        static let compact: CGFloat = 120
+        static let standard: CGFloat = 200
+        static let expanded: CGFloat = 280
+    }
+
+    // MARK: - Layout
+
+    enum Layout {
+        static let maxContentWidth: CGFloat = 880
+    }
+
+    // MARK: - Opacity — semantic fill levels for tinted backgrounds
+
+    enum Opacity {
+        static let subtleFill: Double = 0.06
+        static let mediumFill: Double = 0.12
+        static let strongFill: Double = 0.20
+    }
 }
 
 // MARK: - Adaptive Background
@@ -496,6 +518,15 @@ extension View {
             .softCard(elevation: 2)
     }
 
+    /// Consistent section header styling: uppercase, tracked, tertiary color.
+    func sectionHeaderStyle() -> some View {
+        self
+            .font(Theme.Typography.metricLabel)
+            .foregroundStyle(Theme.Colors.textTertiary)
+            .tracking(1.0)
+            .textCase(.uppercase)
+    }
+
     /// Tinted section background — adds subtle color behind a content section
     func tintedSection(_ color: Color, cornerRadius: CGFloat = Theme.CornerRadius.large) -> some View {
         self
@@ -565,13 +596,14 @@ extension UIColor {
 struct AnimateOnAppearModifier: ViewModifier {
     let delay: Double
     @State private var isVisible = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func body(content: Content) -> some View {
         content
             .opacity(isVisible ? 1 : 0)
-            .offset(y: isVisible ? 0 : 12)
-            .scaleEffect(isVisible ? 1 : 0.98)
-            .animation(Theme.Animation.gentleSpring.delay(delay), value: isVisible)
+            .offset(y: isVisible || reduceMotion ? 0 : 12)
+            .scaleEffect(isVisible || reduceMotion ? 1 : 0.98)
+            .animation(reduceMotion ? .easeOut(duration: 0.15) : Theme.Animation.gentleSpring.delay(delay), value: isVisible)
             .onAppear {
                 isVisible = true
             }
@@ -584,13 +616,14 @@ struct StaggeredAppearModifier: ViewModifier {
     let index: Int
     let baseDelay: Double
     @State private var isVisible = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func body(content: Content) -> some View {
         content
             .opacity(isVisible ? 1 : 0)
-            .offset(y: isVisible ? 0 : 16)
-            .scaleEffect(isVisible ? 1 : 0.96)
-            .animation(Theme.Animation.gentleSpring.delay(baseDelay + Double(index) * 0.06), value: isVisible)
+            .offset(y: isVisible || reduceMotion ? 0 : 16)
+            .scaleEffect(isVisible || reduceMotion ? 1 : 0.96)
+            .animation(reduceMotion ? .easeOut(duration: 0.15) : Theme.Animation.gentleSpring.delay(baseDelay + Double(index) * 0.06), value: isVisible)
             .onAppear { isVisible = true }
     }
 }

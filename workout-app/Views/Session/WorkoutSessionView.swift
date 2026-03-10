@@ -30,6 +30,7 @@ struct WorkoutSessionView: View {
     @State private var showingRestSettings = false
     @State private var finishErrorMessage: String?
     @State private var isFinishing = false
+    @State private var finishDidSave = false
     @State private var exerciseCardContexts: [String: SessionExerciseContext] = [:]
     @State private var cachedMuscleSuggestions: [MuscleGroupSuggestion] = []
     @State private var cachedCanFinishSession = false
@@ -145,6 +146,7 @@ struct WorkoutSessionView: View {
             .sheet(isPresented: $showingFinishSheet) {
                 FinishSessionSheet(
                     isFinishing: isFinishing,
+                    didSave: finishDidSave,
                     summary: cachedSummary,
                     errorMessage: finishErrorMessage,
                     onFinish: { finishSession() },
@@ -583,7 +585,11 @@ struct WorkoutSessionView: View {
                 }
 
                 Haptics.notify(.success)
+                finishDidSave = true
+                // Brief delay so the success overlay is visible before sheet dismisses
+                try? await Task.sleep(nanoseconds: 900_000_000)
                 showingFinishSheet = false
+                finishDidSave = false
             } catch {
                 finishErrorMessage = error.localizedDescription
             }
@@ -1091,7 +1097,8 @@ private struct SessionSetRow: View {
                 Image(systemName: "minus")
                     .font(Theme.Typography.microLabel)
                     .foregroundStyle(Theme.Colors.textTertiary)
-                    .frame(width: 22, height: 30)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
 
@@ -1116,7 +1123,8 @@ private struct SessionSetRow: View {
                 Image(systemName: "plus")
                     .font(Theme.Typography.microLabel)
                     .foregroundStyle(Theme.Colors.accent)
-                    .frame(width: 22, height: 30)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
         }

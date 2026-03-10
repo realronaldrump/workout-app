@@ -320,6 +320,8 @@ struct HomeView: View {
             )
             .buttonStyle(.plain)
             .padding(.horizontal, Theme.Spacing.lg)
+            .accessibilityLabel("Start a Session")
+            .accessibilityHint("Begin a new workout session")
             .animateOnAppear(delay: 0.05)
 
             // Repeat last workout
@@ -363,6 +365,9 @@ struct HomeView: View {
                 )
                 .buttonStyle(.plain)
                 .padding(.horizontal, Theme.Spacing.lg)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Repeat last workout: \(lastWorkout.name)")
+                .accessibilityHint("Double tap to start this workout again")
                 .animateOnAppear(delay: 0.1)
             }
 

@@ -60,17 +60,17 @@ struct ExerciseTaggingView: View {
 
                         if uniqueExercises.isEmpty {
                             EmptyStateCard(
-                                icon: "tray",
-                                tint: Theme.Colors.textTertiary,
                                 title: "No exercises yet",
-                                message: "Import workouts first, then come back here to tag your exercises."
+                                message: "Import workouts first, then come back here to tag your exercises.",
+                                icon: "tray",
+                                tint: Theme.Colors.textTertiary
                             )
                         } else if filteredExercises.isEmpty {
                             EmptyStateCard(
-                                icon: "magnifyingglass",
-                                tint: Theme.Colors.accent,
                                 title: "No matches",
-                                message: "Try a different search."
+                                message: "Try a different search.",
+                                icon: "magnifyingglass",
+                                tint: Theme.Colors.accent
                             )
                         } else {
                             LazyVStack(alignment: .leading, spacing: Theme.Spacing.lg) {
@@ -196,32 +196,3 @@ private struct ExerciseTaggingRow: View {
     }
 }
 
-private struct EmptyStateCard: View {
-    let icon: String
-    let tint: Color
-    let title: String
-    let message: String
-
-    var body: some View {
-        HStack(alignment: .top, spacing: Theme.Spacing.md) {
-            Image(systemName: icon)
-                .foregroundStyle(.white)
-                .frame(width: 36, height: 36)
-                .background(tint)
-                .cornerRadius(Theme.CornerRadius.large)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(Theme.Typography.headline)
-                    .foregroundStyle(Theme.Colors.textPrimary)
-                Text(message)
-                    .font(Theme.Typography.body)
-                    .foregroundStyle(Theme.Colors.textSecondary)
-            }
-
-            Spacer(minLength: 0)
-        }
-        .padding(Theme.Spacing.lg)
-        .softCard(elevation: 1)
-    }
-}

@@ -257,6 +257,7 @@ struct InteractiveTimeSeriesChart: View {
                 }
             }
             .frame(height: height)
+            .accessibilityLabel(headerText)
 
             controls
         }
@@ -303,6 +304,7 @@ struct InteractiveTimeSeriesChart: View {
                 .foregroundStyle(Theme.Colors.textSecondary)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Zoom level: \(zoomLabel)")
 
             Spacer()
 
@@ -315,6 +317,8 @@ struct InteractiveTimeSeriesChart: View {
             .tracking(0.8)
             .buttonStyle(.plain)
             .disabled(abs(effectiveVisibleLength - fullLength) < 1)
+            .accessibilityLabel("Reset zoom")
+            .accessibilityHint("Show all data points")
         }
 
         if fullLength - effectiveVisibleLength > 60 {
@@ -332,6 +336,7 @@ struct InteractiveTimeSeriesChart: View {
                     in: minVisibleEnd.timeIntervalSinceReferenceDate...fullXDomain.upperBound.timeIntervalSinceReferenceDate
                 )
                 .tint(color)
+                .accessibilityLabel("Pan chart date range")
             }
         }
     }

@@ -144,20 +144,4 @@ struct WorkoutHealthInsightsView: View {
     }
 }
 
-private struct EmptyStateCard: View {
-    let title: String
-    let message: String
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text(title)
-                .font(Theme.Typography.headline)
-                .foregroundStyle(Theme.Colors.textPrimary)
-            Text(message)
-                .font(Theme.Typography.body)
-                .foregroundStyle(Theme.Colors.textSecondary)
-        }
-        .padding(Theme.Spacing.lg)
-        .softCard(elevation: 1)
-    }
-}

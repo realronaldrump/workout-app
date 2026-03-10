@@ -88,6 +88,25 @@ struct SettingsView: View {
                             }
                         }
 
+                        if healthManager.authorizationStatus == .denied {
+                            Button {
+                                if let url = URL(string: UIApplication.openSettingsURLString) {
+                                    UIApplication.shared.open(url)
+                                }
+                            } label: {
+                                HStack(spacing: Theme.Spacing.sm) {
+                                    Image(systemName: "gear")
+                                        .font(Theme.Typography.caption)
+                                    Text("Open Settings to grant Health access")
+                                        .font(Theme.Typography.caption)
+                                }
+                                .foregroundStyle(Theme.Colors.accent)
+                                .padding(.horizontal, Theme.Spacing.xl)
+                                .padding(.vertical, Theme.Spacing.sm)
+                            }
+                            .buttonStyle(.plain)
+                        }
+
                         Divider().padding(.leading, 50)
 
                         NavigationLink(destination: HealthPermissionAuditView()) {
@@ -314,7 +333,7 @@ struct SettingsView: View {
                         .font(Theme.Typography.captionBold)
                         .foregroundStyle(Theme.Colors.textTertiary)
 
-                    Text("Version 1.0.0")
+                    Text(appVersionDisplay)
                         .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.Colors.textTertiary)
                 }
@@ -441,6 +460,13 @@ struct SettingsView: View {
         case .notDetermined:
             return "See every requested Health data type"
         }
+    }
+
+    private var appVersionDisplay: String {
+        let info = Bundle.main.infoDictionary
+        let version = info?["CFBundleShortVersionString"] as? String ?? "Unknown"
+        let build = info?["CFBundleVersion"] as? String ?? "?"
+        return "Version \(version) (\(build))"
     }
 }
 

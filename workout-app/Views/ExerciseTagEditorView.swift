@@ -212,10 +212,10 @@ struct ExerciseTagEditorView: View {
 
             if metadataManager.knownCustomTags.isEmpty {
                 EmptyStateCard(
-                    icon: "tag.slash.fill",
-                    tint: Theme.Colors.textTertiary,
                     title: "No custom groups yet",
-                    message: "Add one above and it will appear here."
+                    message: "Add one above and it will appear here.",
+                    icon: "tag.slash.fill",
+                    tint: Theme.Colors.textTertiary
                 )
             } else {
                 VStack(spacing: Theme.Spacing.sm) {
@@ -436,32 +436,3 @@ private struct ActionRow: View {
     }
 }
 
-private struct EmptyStateCard: View {
-    let icon: String
-    let tint: Color
-    let title: String
-    let message: String
-
-    var body: some View {
-        HStack(alignment: .top, spacing: Theme.Spacing.md) {
-            Image(systemName: icon)
-                .foregroundStyle(.white)
-                .frame(width: 36, height: 36)
-                .background(tint)
-                .cornerRadius(Theme.CornerRadius.large)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(Theme.Typography.headline)
-                    .foregroundStyle(Theme.Colors.textPrimary)
-                Text(message)
-                    .font(Theme.Typography.body)
-                    .foregroundStyle(Theme.Colors.textSecondary)
-            }
-
-            Spacer(minLength: 0)
-        }
-        .padding(Theme.Spacing.lg)
-        .softCard(elevation: 1)
-    }
-}

@@ -11,6 +11,29 @@ struct ExerciseListView: View {
     @State private var showingQuickStart = false
     @State private var quickStartExercise: String?
     @State private var cachedExercises: [(name: String, stats: ExerciseStats)] = []
+    @AppStorage("favoriteExercises") private var favoriteExercisesData: String = "[]"
+
+    private var favoriteExercises: Set<String> {
+        get {
+            guard let data = favoriteExercisesData.data(using: .utf8),
+                  let array = try? JSONDecoder().decode([String].self, from: data) else { return [] }
+            return Set(array)
+        }
+    }
+
+    private func toggleFavorite(_ name: String) {
+        var favorites = favoriteExercises
+        if favorites.contains(name) {
+            favorites.remove(name)
+        } else {
+            favorites.insert(name)
+        }
+        if let data = try? JSONEncoder().encode(Array(favorites)),
+           let string = String(data: data, encoding: .utf8) {
+            favoriteExercisesData = string
+        }
+        Haptics.selection()
+    }
 
     enum SortOrder: String, CaseIterable {
         case alphabetical = "Name"
@@ -42,6 +65,16 @@ struct ExerciseListView: View {
         }
     }
 
+    private var favoriteExerciseRows: [(name: String, stats: ExerciseStats)] {
+        guard searchText.isEmpty else { return [] }
+        return cachedExercises.filter { favoriteExercises.contains($0.name) }
+    }
+
+    private var nonFavoriteExerciseRows: [(name: String, stats: ExerciseStats)] {
+        guard searchText.isEmpty else { return cachedExercises }
+        return cachedExercises.filter { !favoriteExercises.contains($0.name) }
+    }
+
     var body: some View {
         ZStack {
             AdaptiveBackground()
@@ -56,6 +89,26 @@ struct ExerciseListView: View {
 
                 ScrollView(showsIndicators: false) {
                     LazyVStack(spacing: Theme.Spacing.sm) {
+                        if !favoriteExerciseRows.isEmpty {
+                            Text("Favorites")
+                                .sectionHeaderStyle()
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, Theme.Spacing.xs)
+                                .padding(.top, Theme.Spacing.sm)
+
+                            ForEach(favoriteExerciseRows, id: \.name) { exercise in
+                                exerciseRow(exercise, showsInlineFavoriteControl: true)
+                            }
+
+                            if !nonFavoriteExerciseRows.isEmpty {
+                                Text("All")
+                                    .sectionHeaderStyle()
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.horizontal, Theme.Spacing.xs)
+                                    .padding(.top, Theme.Spacing.md)
+                            }
+                        }
+
                         if cachedExercises.isEmpty {
                             ContentUnavailableView(
                                 "No matches",
@@ -64,27 +117,8 @@ struct ExerciseListView: View {
                             )
                             .padding(.top, Theme.Spacing.xl)
                         } else {
-                            ForEach(Array(cachedExercises.enumerated()), id: \.element.name) { _, exercise in
-                                NavigationLink(
-                                    destination: ExerciseDetailView(
-                                        exerciseName: exercise.name,
-                                        dataManager: dataManager,
-                                        annotationsManager: annotationsManager,
-                                        gymProfilesManager: gymProfilesManager
-                                    )
-                                ) {
-                                    ExerciseRowView(name: exercise.name, stats: exercise.stats)
-                                }
-                                .buttonStyle(.plain)
-                                .contextMenu {
-                                    Button("View History") {
-                                        selectedExercise = ExerciseSelection(id: exercise.name)
-                                    }
-                                    Button("Quick Start") {
-                                        quickStartExercise = exercise.name
-                                        showingQuickStart = true
-                                    }
-                                }
+                            ForEach(nonFavoriteExerciseRows, id: \.name) { exercise in
+                                exerciseRow(exercise)
                             }
                         }
                     }
@@ -209,6 +243,61 @@ struct ExerciseListView: View {
             return "clock"
         }
     }
+
+    private func exerciseRow(
+        _ exercise: (name: String, stats: ExerciseStats),
+        showsInlineFavoriteControl: Bool = false
+    ) -> some View {
+        HStack(spacing: 0) {
+            NavigationLink(
+                destination: ExerciseDetailView(
+                    exerciseName: exercise.name,
+                    dataManager: dataManager,
+                    annotationsManager: annotationsManager,
+                    gymProfilesManager: gymProfilesManager
+                )
+            ) {
+                ExerciseRowView(
+                    name: exercise.name,
+                    stats: exercise.stats,
+                    showsCard: false
+                )
+            }
+            .buttonStyle(.plain)
+
+            if showsInlineFavoriteControl {
+                Button {
+                    toggleFavorite(exercise.name)
+                } label: {
+                    Image(systemName: "star.fill")
+                        .font(Theme.Typography.callout)
+                        .foregroundStyle(Theme.Colors.warning)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Remove from favorites")
+            }
+        }
+        .softCard(elevation: 1)
+        .contextMenu {
+            Button {
+                toggleFavorite(exercise.name)
+            } label: {
+                Label(
+                    favoriteExercises.contains(exercise.name) ? "Unfavorite" : "Favorite",
+                    systemImage: favoriteExercises.contains(exercise.name) ? "star.slash" : "star"
+                )
+            }
+            Button("View History") {
+                selectedExercise = ExerciseSelection(id: exercise.name)
+            }
+            Button("Quick Start") {
+                quickStartExercise = exercise.name
+                showingQuickStart = true
+            }
+        }
+    }
 }
 
 struct ExerciseStats {
@@ -222,6 +311,7 @@ struct ExerciseStats {
 struct ExerciseRowView: View {
     let name: String
     let stats: ExerciseStats
+    var showsCard: Bool = true
 
     var body: some View {
         HStack(spacing: Theme.Spacing.md) {
@@ -248,7 +338,7 @@ struct ExerciseRowView: View {
                 .foregroundColor(Theme.Colors.textTertiary)
         }
         .padding(Theme.Spacing.lg)
-        .softCard(elevation: 1)
+        .modifier(ExerciseRowCardModifier(isEnabled: showsCard))
     }
 
     private func formatWeight(_ weight: Double) -> String {
@@ -259,6 +349,18 @@ struct ExerciseRowView: View {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .abbreviated
         return formatter.localizedString(for: date, relativeTo: Date())
+    }
+}
+
+private struct ExerciseRowCardModifier: ViewModifier {
+    let isEnabled: Bool
+
+    func body(content: Content) -> some View {
+        if isEnabled {
+            content.softCard(elevation: 1)
+        } else {
+            content
+        }
     }
 }
 

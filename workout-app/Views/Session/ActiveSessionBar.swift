@@ -3,6 +3,7 @@ import SwiftUI
 struct ActiveSessionBar: View {
     @EnvironmentObject private var sessionManager: WorkoutSessionManager
     @State private var showingDiscardAlert = false
+    @State private var pulseScale: CGFloat = 1.0
 
     var body: some View {
         if let session = sessionManager.activeSession {
@@ -17,12 +18,19 @@ struct ActiveSessionBar: View {
                     Haptics.selection()
                 } label: {
                     HStack(spacing: Theme.Spacing.md) {
-                        Image(systemName: "bolt.fill")
-                            .font(Theme.Typography.captionBold)
-                            .foregroundStyle(Theme.Colors.accent)
-                            .frame(width: 32, height: 32)
-                            .background(Theme.Colors.accentTint)
-                            .clipShape(Circle())
+                        ZStack {
+                            Circle()
+                                .fill(Theme.Colors.accent.opacity(0.2))
+                                .frame(width: 32, height: 32)
+                                .scaleEffect(pulseScale)
+
+                            Image(systemName: "bolt.fill")
+                                .font(Theme.Typography.captionBold)
+                                .foregroundStyle(Theme.Colors.accent)
+                                .frame(width: 32, height: 32)
+                                .background(Theme.Colors.accentTint)
+                                .clipShape(Circle())
+                        }
 
                         VStack(alignment: .leading, spacing: 2) {
                             Text(session.name)
@@ -72,6 +80,11 @@ struct ActiveSessionBar: View {
                 }
             } message: {
                 Text("This will permanently delete your in-progress session.")
+            }
+            .onAppear {
+                withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
+                    pulseScale = 1.35
+                }
             }
         }
     }
