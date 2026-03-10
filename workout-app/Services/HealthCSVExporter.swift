@@ -464,6 +464,8 @@ private extension HealthCSVExporter {
     }
 
     nonisolated static func hasMeaningfulHealthData(_ healthData: WorkoutHealthData) -> Bool {
+        let avgRespiratoryRate = healthData.avgRespiratoryRate
+
         healthData.avgHeartRate != nil ||
         healthData.maxHeartRate != nil ||
         healthData.minHeartRate != nil ||
@@ -487,7 +489,7 @@ private extension HealthCSVExporter {
         healthData.restingHeartRate != nil ||
         !healthData.bloodOxygenSamples.isEmpty ||
         !healthData.respiratoryRateSamples.isEmpty ||
-        healthData.avgRespiratoryRate != nil ||
+        avgRespiratoryRate != nil ||
         healthData.bodyMass != nil ||
         healthData.bodyFatPercentage != nil ||
         healthData.bodyTemperature != nil ||
