@@ -28,7 +28,6 @@ struct HomeView: View {
     @State private var showingMuscleRecency = false
     @State private var showingConsistencyDetail = false
     @State private var showRepeatWorkoutId: UUID?
-    @State private var cachedWeeklyStats: WorkoutStats?
     @State private var cachedWeekBuckets: [HomeWeekBucket] = []
     @State private var cachedOverallStats: WorkoutStats?
     @State private var cachedWeeklyChangeMetrics: [ChangeMetric] = []
@@ -448,6 +447,7 @@ struct HomeView: View {
                 }
             }
         }
+        .padding(Theme.Spacing.lg)
         .softCard(elevation: 2)
         .animateOnAppear(delay: 0.15)
     }
@@ -781,15 +781,9 @@ struct HomeView: View {
     private func refreshHomeDerivedState() {
         let workouts = dataManager.workouts
         let breaks = intentionalBreaksManager.savedBreaks
-        let weekly = weeklyWorkouts
         let weekBuckets = buildWeekBuckets(workouts: workouts, intentionalBreakRanges: breaks)
 
         cachedWeekBuckets = weekBuckets
-        cachedWeeklyStats = weekBuckets.first?.stats ?? (
-            weekly.isEmpty
-                ? nil
-                : dataManager.calculateStats(for: weekly, intentionalBreakRanges: breaks)
-        )
         cachedOverallStats = workouts.isEmpty
             ? nil
             : dataManager.calculateStats(for: workouts, intentionalBreakRanges: breaks)
@@ -914,7 +908,7 @@ struct HomeView: View {
 
     private func isSelectedWeekBucket(_ bucket: HomeWeekBucket) -> Bool {
         guard let selectedWeekBucketStart else {
-            return bucket == cachedWeekBuckets.first
+            return Calendar.current.isDate(bucket.weekStart, inSameDayAs: cachedWeekBuckets.first?.weekStart ?? bucket.weekStart)
         }
         return Calendar.current.isDate(bucket.weekStart, inSameDayAs: selectedWeekBucketStart)
     }

@@ -229,7 +229,7 @@ struct HomeWorkoutRow: View {
     }
 }
 
-struct HomeWeekBucket: Identifiable, Equatable {
+struct HomeWeekBucket: Identifiable {
     let weekStart: Date
     let referenceDate: Date
     let workouts: [Workout]
