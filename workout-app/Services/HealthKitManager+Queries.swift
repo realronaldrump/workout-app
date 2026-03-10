@@ -2,6 +2,11 @@ import CoreLocation
 import Foundation
 import HealthKit
 
+struct ResolvedWorkoutLocation {
+    let location: CLLocation
+    let source: WorkoutLocationSource
+}
+
 extension HealthKitManager {
     func fetchHeartRateSamples(from start: Date, to end: Date) async throws -> [HeartRateSample] {
         let unit = HKUnit(from: "count/min")
@@ -145,11 +150,13 @@ extension HealthKitManager {
         relaxedStartDifferenceSeconds: TimeInterval = 8 * 60 * 60
     ) -> HKWorkout? {
         let window = workout.estimatedWindow(defaultMinutes: 60)
+        let preferredActivityTypes = inferredAppleWorkoutActivityTypes(for: workout)
 
         struct ScoredCandidate {
             let workout: HKWorkout
             let score: Double
             let startDiff: TimeInterval
+            let preferredTypeMatch: Bool
         }
 
         func scoreCandidate(_ candidate: HKWorkout) -> ScoredCandidate {
@@ -157,9 +164,17 @@ extension HealthKitManager {
             let durationDiff = abs(candidate.duration - window.duration)
             let candidateInterval = DateInterval(start: candidate.startDate, end: candidate.endDate)
             let overlap = candidateInterval.intersection(with: window)?.duration ?? 0
+            let preferredTypeMatch = preferredActivityTypes.isEmpty ||
+                activityType(candidate.workoutActivityType, matchesAnyOf: preferredActivityTypes)
+            let activityPenalty = preferredTypeMatch ? 0.0 : 30.0 * 60.0
             // Lower is better. Prefer close start time, similar duration, and overlap.
-            let score = startDiff + (durationDiff * 0.35) - (overlap * 0.25)
-            return ScoredCandidate(workout: candidate, score: score, startDiff: startDiff)
+            let score = startDiff + (durationDiff * 0.35) - (overlap * 0.25) + activityPenalty
+            return ScoredCandidate(
+                workout: candidate,
+                score: score,
+                startDiff: startDiff,
+                preferredTypeMatch: preferredTypeMatch
+            )
         }
 
         let strictMatches = candidates
@@ -181,6 +196,9 @@ extension HealthKitManager {
         // Avoid low-confidence assignments when the top two relaxed candidates are too close.
         if relaxedMatches.count > 1 {
             let second = relaxedMatches[1]
+            if relaxedBest.preferredTypeMatch != second.preferredTypeMatch {
+                return relaxedBest.workout
+            }
             if (second.score - relaxedBest.score) < (20 * 60) {
                 return nil
             }
@@ -205,6 +223,28 @@ extension HealthKitManager {
             strictStartDifferenceSeconds: strictStartDifferenceSeconds,
             relaxedStartDifferenceSeconds: relaxedStartDifferenceSeconds
         )
+    }
+
+    func fetchWorkoutLocation(for workout: HKWorkout) async throws -> ResolvedWorkoutLocation? {
+        var routeError: Error?
+
+        do {
+            if let routeLocation = try await fetchWorkoutRouteStartLocation(for: workout) {
+                return ResolvedWorkoutLocation(location: routeLocation, source: .route)
+            }
+        } catch {
+            routeError = error
+        }
+
+        if let metadataLocation = Self.extractLocationFromMetadata(workout.metadata) {
+            return ResolvedWorkoutLocation(location: metadataLocation, source: .metadata)
+        }
+
+        if let routeError {
+            throw routeError
+        }
+
+        return nil
     }
 
     func fetchWorkoutRoutes(for workout: HKWorkout) async throws -> [HKWorkoutRoute] {
@@ -309,6 +349,166 @@ extension HealthKitManager {
 
             healthStore.execute(query)
         }
+    }
+
+    private nonisolated func inferredAppleWorkoutActivityTypes(for workout: Workout) -> Set<HKWorkoutActivityType> {
+        let combined = ([workout.name] + workout.exercises.map(\.name))
+            .joined(separator: " ")
+            .lowercased()
+        var inferred: Set<HKWorkoutActivityType> = []
+
+        if combined.contains("stair") || combined.contains("stepper") || combined.contains("stepmill") {
+            inferred.formUnion([.stairClimbing, .stairs, .stepTraining])
+        }
+        if combined.contains("ellipt") {
+            inferred.insert(.elliptical)
+        }
+        if combined.contains("row") || combined.contains("erg") {
+            inferred.insert(.rowing)
+        }
+        if combined.contains("cycle") || combined.contains("bike") || combined.contains("spin") || combined.contains("peloton") {
+            inferred.insert(.cycling)
+        }
+        if combined.contains("run") || combined.contains("treadmill") || combined.contains("jog") {
+            inferred.insert(.running)
+        }
+        if combined.contains("walk") || combined.contains("hike") {
+            inferred.insert(.walking)
+        }
+        if combined.contains("yoga") {
+            inferred.insert(.yoga)
+        }
+        if combined.contains("pilates") {
+            inferred.insert(.pilates)
+        }
+        if combined.contains("hiit") || combined.contains("interval") {
+            inferred.insert(.highIntensityIntervalTraining)
+        }
+
+        let strengthKeywords = [
+            "bench", "press", "squat", "deadlift", "curl", "extension", "raise",
+            "pulldown", "pull down", "lat pull", "row", "lunge", "fly",
+            "tricep", "bicep", "shoulder", "leg press", "rdl", "weight", "strength"
+        ]
+        let hasStrengthKeyword = strengthKeywords.contains { combined.contains($0) }
+        let hasWeightedSet = workout.exercises.contains { exercise in
+            exercise.sets.contains { $0.weight > 0 }
+        }
+
+        if hasStrengthKeyword || hasWeightedSet {
+            inferred.formUnion([.traditionalStrengthTraining, .functionalStrengthTraining, .crossTraining])
+        }
+
+        return inferred
+    }
+
+    private nonisolated func activityType(
+        _ candidate: HKWorkoutActivityType,
+        matchesAnyOf preferredTypes: Set<HKWorkoutActivityType>
+    ) -> Bool {
+        guard !preferredTypes.isEmpty else { return true }
+        if preferredTypes.contains(candidate) { return true }
+
+        let strengthTypes: Set<HKWorkoutActivityType> = [
+            .traditionalStrengthTraining,
+            .functionalStrengthTraining,
+            .crossTraining
+        ]
+        if strengthTypes.contains(candidate), !preferredTypes.isDisjoint(with: strengthTypes) {
+            return true
+        }
+
+        let stairTypes: Set<HKWorkoutActivityType> = [
+            .stairClimbing,
+            .stairs,
+            .stepTraining
+        ]
+        if stairTypes.contains(candidate), !preferredTypes.isDisjoint(with: stairTypes) {
+            return true
+        }
+
+        return false
+    }
+
+    private nonisolated static func extractLocationFromMetadata(
+        _ metadata: [String: Any]?
+    ) -> CLLocation? {
+        guard let metadata, !metadata.isEmpty else { return nil }
+
+        if let latitude = metadataCoordinateComponent(in: metadata, matching: ["latitude", "lat"]),
+           let longitude = metadataCoordinateComponent(in: metadata, matching: ["longitude", "lon", "lng"]),
+           CLLocationCoordinate2DIsValid(CLLocationCoordinate2D(latitude: latitude, longitude: longitude)) {
+            return CLLocation(latitude: latitude, longitude: longitude)
+        }
+
+        for (key, value) in metadata {
+            let normalizedKey = normalizeMetadataKey(key)
+            guard normalizedKey.contains("location") || normalizedKey.contains("coordinate") else { continue }
+            if let coordinate = coordinatePair(from: value) {
+                return CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+            }
+        }
+
+        return nil
+    }
+
+    private nonisolated static func metadataCoordinateComponent(
+        in metadata: [String: Any],
+        matching hints: [String]
+    ) -> Double? {
+        for (key, value) in metadata {
+            let normalizedKey = normalizeMetadataKey(key)
+            guard hints.contains(where: { normalizedKey == $0 || normalizedKey.hasSuffix(".\($0)") || normalizedKey.contains($0) }) else {
+                continue
+            }
+            guard let number = numericMetadataValue(value) else { continue }
+            return number
+        }
+        return nil
+    }
+
+    private nonisolated static func coordinatePair(
+        from value: Any
+    ) -> CLLocationCoordinate2D? {
+        guard let stringValue = stringMetadataValue(value) else { return nil }
+        let components = stringValue
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        guard components.count == 2,
+              let latitude = Double(components[0]),
+              let longitude = Double(components[1]) else {
+            return nil
+        }
+
+        let coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+        return CLLocationCoordinate2DIsValid(coordinate) ? coordinate : nil
+    }
+
+    private nonisolated static func numericMetadataValue(_ value: Any) -> Double? {
+        if let number = value as? NSNumber {
+            return number.doubleValue
+        }
+        if let string = value as? String {
+            return Double(string.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+        return nil
+    }
+
+    private nonisolated static func stringMetadataValue(_ value: Any) -> String? {
+        if let string = value as? String {
+            return string
+        }
+        if let number = value as? NSNumber {
+            return number.stringValue
+        }
+        return nil
+    }
+
+    private nonisolated static func normalizeMetadataKey(_ key: String) -> String {
+        key
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "_", with: ".")
     }
 
     func fetchQuantitySamples(

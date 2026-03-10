@@ -206,14 +206,19 @@ extension HealthKitManager {
                 healthData.avgPower = avgPower.doubleValue(for: .watt())
             }
 
-            // Try to capture the start location (if Health has a route sample for this workout).
+            // Capture the best workout location Apple Health exposes for this workout.
             do {
-                if let startLocation = try await fetchWorkoutRouteStartLocation(for: appleWorkout) {
-                    healthData.workoutRouteStartLatitude = startLocation.coordinate.latitude
-                    healthData.workoutRouteStartLongitude = startLocation.coordinate.longitude
+                if let resolvedLocation = try await fetchWorkoutLocation(for: appleWorkout) {
+                    healthData.workoutLocationLatitude = resolvedLocation.location.coordinate.latitude
+                    healthData.workoutLocationLongitude = resolvedLocation.location.coordinate.longitude
+                    healthData.workoutLocationSource = resolvedLocation.source
+                    if resolvedLocation.source == .route {
+                        healthData.workoutRouteStartLatitude = resolvedLocation.location.coordinate.latitude
+                        healthData.workoutRouteStartLongitude = resolvedLocation.location.coordinate.longitude
+                    }
                 }
             } catch {
-                // Route data is optional; don't fail the overall health sync.
+                // Workout location is optional; don't fail the overall health sync.
             }
         }
 
@@ -317,8 +322,8 @@ extension HealthKitManager {
         return results
     }
 
-    /// Best-effort route-location hydration for recent workouts.
-    /// Used by Gym discovery so it can work even when route points weren't previously cached.
+    /// Best-effort workout-location hydration for recent workouts.
+    /// Used by gym discovery so it can work even when locations weren't previously cached.
     func hydrateRouteStartLocationsForRecentWorkouts(
         _ workouts: [Workout],
         maxWorkouts: Int = 120
@@ -330,14 +335,18 @@ extension HealthKitManager {
             throw HealthKitError.authorizationFailed("Health access is not authorized.")
         }
 
-        try await requestWorkoutRouteAuthorization()
+        do {
+            try await requestWorkoutRouteAuthorization()
+        } catch {
+            print("Workout route authorization unavailable during location hydration: \(error)")
+        }
 
         let sorted = workouts.sorted { $0.date > $1.date }
         let targets = sorted
             .prefix(maxWorkouts)
             .filter { workout in
                 guard let cached = healthDataStore[workout.id] else { return true }
-                return cached.workoutRouteStartLatitude == nil || cached.workoutRouteStartLongitude == nil
+                return cached.resolvedWorkoutLocationCoordinate == nil
             }
 
         guard !targets.isEmpty else { return 0 }
@@ -356,8 +365,8 @@ extension HealthKitManager {
         guard !appleWorkouts.isEmpty else { return 0 }
 
         let appleByUUID = Dictionary(uniqueKeysWithValues: appleWorkouts.map { ($0.uuid, $0) })
-        var routeStartByAppleUUID: [UUID: CLLocation] = [:]
-        var appleUUIDsWithNoRoute: Set<UUID> = []
+        var locationByAppleUUID: [UUID: ResolvedWorkoutLocation] = [:]
+        var appleUUIDsWithNoLocation: Set<UUID> = []
         var updated = 0
 
         for workout in targets {
@@ -378,22 +387,28 @@ extension HealthKitManager {
             guard let appleWorkout else { continue }
 
             let appleUUID = appleWorkout.uuid
-            let startLocation: CLLocation?
-            if let existing = routeStartByAppleUUID[appleUUID] {
-                startLocation = existing
-            } else if appleUUIDsWithNoRoute.contains(appleUUID) {
-                startLocation = nil
+            let resolvedLocation: ResolvedWorkoutLocation?
+            if let existing = locationByAppleUUID[appleUUID] {
+                resolvedLocation = existing
+            } else if appleUUIDsWithNoLocation.contains(appleUUID) {
+                resolvedLocation = nil
             } else {
-                let fetched = try await fetchWorkoutRouteStartLocation(for: appleWorkout)
-                if let fetched {
-                    routeStartByAppleUUID[appleUUID] = fetched
-                } else {
-                    appleUUIDsWithNoRoute.insert(appleUUID)
+                let fetched: ResolvedWorkoutLocation?
+                do {
+                    fetched = try await fetchWorkoutLocation(for: appleWorkout)
+                } catch {
+                    print("Failed to hydrate workout location for \(appleUUID): \(error)")
+                    fetched = nil
                 }
-                startLocation = fetched
+                if let fetched {
+                    locationByAppleUUID[appleUUID] = fetched
+                } else {
+                    appleUUIDsWithNoLocation.insert(appleUUID)
+                }
+                resolvedLocation = fetched
             }
 
-            guard let startLocation else { continue }
+            guard let resolvedLocation else { continue }
 
             var healthData = cached ?? WorkoutHealthData(
                 workoutId: workout.id,
@@ -402,8 +417,14 @@ extension HealthKitManager {
                 workoutEndTime: workout.estimatedWindow(defaultMinutes: 60).end
             )
             healthData.appleWorkoutUUID = appleWorkout.uuid
-            healthData.workoutRouteStartLatitude = startLocation.coordinate.latitude
-            healthData.workoutRouteStartLongitude = startLocation.coordinate.longitude
+            healthData.appleWorkoutType = appleWorkout.workoutActivityType.name
+            healthData.workoutLocationLatitude = resolvedLocation.location.coordinate.latitude
+            healthData.workoutLocationLongitude = resolvedLocation.location.coordinate.longitude
+            healthData.workoutLocationSource = resolvedLocation.source
+            if resolvedLocation.source == .route {
+                healthData.workoutRouteStartLatitude = resolvedLocation.location.coordinate.latitude
+                healthData.workoutRouteStartLongitude = resolvedLocation.location.coordinate.longitude
+            }
             healthDataStore[workout.id] = healthData
             updated += 1
         }

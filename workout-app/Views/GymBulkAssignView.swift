@@ -22,17 +22,27 @@ private struct AutoTaggingQueryWindow {
     let end: Date
 }
 
+private struct CachedWorkoutLocationSnapshot {
+    let workoutDate: Date
+    let appleWorkoutUUID: UUID?
+    let appleWorkoutType: String?
+    let location: CLLocation
+}
+
 private struct AutoTaggingRuntime {
     let maxDistanceMeters: Double
+    let relaxedMaxDistanceMeters: Double
     let maxStartDiffSeconds: TimeInterval
     let relaxedStartDiffSeconds: TimeInterval
     let gymCoordinates: [UUID: CLLocationCoordinate2D]
     let appleWorkouts: [HKWorkout]
     let appleByUUID: [UUID: HKWorkout]
+    let cachedLocationByAppleUUID: [UUID: CLLocation]
+    let historicalLocations: [CachedWorkoutLocationSnapshot]
 
     var routePermissionDenied: Bool
-    var routeStartByAppleUUID: [UUID: CLLocation] = [:]
-    var appleUUIDsWithNoRoute: Set<UUID> = []
+    var resolvedLocationByAppleUUID: [UUID: CLLocation] = [:]
+    var appleUUIDsWithNoLocation: Set<UUID> = []
 
     var assignments: [UUID: UUID] = [:]
     var items: [AutoGymTaggingItem] = []
@@ -94,8 +104,7 @@ struct GymBulkAssignView: View {
         }
 
         if let healthCoordinate = healthManager.healthDataStore.values.compactMap({ entry -> CLLocationCoordinate2D? in
-            guard let lat = entry.workoutRouteStartLatitude, let lon = entry.workoutRouteStartLongitude else { return nil }
-            return CLLocationCoordinate2D(latitude: lat, longitude: lon)
+            entry.resolvedWorkoutLocationCoordinate
         }).first {
             return healthCoordinate
         }
@@ -305,7 +314,7 @@ struct GymBulkAssignView: View {
             }
 
             Text(
-                "Tries to detect gyms from Apple Health workout route data first. " +
+                "Tries to detect gyms from Apple Health workout location data first. " +
                 "If a workout can’t be matched, you can resolve it with searchable map selection."
             )
                 .font(Theme.Typography.caption)
@@ -556,6 +565,7 @@ struct GymBulkAssignView: View {
 
     private func prepareAutoTaggingRuntime(for targets: [Workout]) async throws -> AutoTaggingRuntime {
         let maxDistanceMeters: Double = 250
+        let relaxedMaxDistanceMeters: Double = 450
         let maxStartDiffSeconds: TimeInterval = 20 * 60
         let relaxedStartDiffSeconds: TimeInterval = 12 * 60 * 60
 
@@ -567,14 +577,22 @@ struct GymBulkAssignView: View {
         )
         let appleWorkouts = try await healthManager.fetchAppleWorkouts(from: window.start, to: window.end)
         let appleByUUID = Dictionary(uniqueKeysWithValues: appleWorkouts.map { ($0.uuid, $0) })
+        let historicalLocations = healthManager.healthDataStore.values.compactMap(cachedWorkoutLocationSnapshot(from:))
+        let cachedLocationByAppleUUID = historicalLocations.reduce(into: [UUID: CLLocation]()) { partialResult, snapshot in
+            guard let appleWorkoutUUID = snapshot.appleWorkoutUUID else { return }
+            partialResult[appleWorkoutUUID] = snapshot.location
+        }
 
         var runtime = AutoTaggingRuntime(
             maxDistanceMeters: maxDistanceMeters,
+            relaxedMaxDistanceMeters: relaxedMaxDistanceMeters,
             maxStartDiffSeconds: maxStartDiffSeconds,
             relaxedStartDiffSeconds: relaxedStartDiffSeconds,
             gymCoordinates: gymCoordinates,
             appleWorkouts: appleWorkouts,
             appleByUUID: appleByUUID,
+            cachedLocationByAppleUUID: cachedLocationByAppleUUID,
+            historicalLocations: historicalLocations,
             routePermissionDenied: routePermissionDenied
         )
         runtime.items.reserveCapacity(targets.count)
@@ -625,23 +643,30 @@ struct GymBulkAssignView: View {
         runtime: inout AutoTaggingRuntime
     ) async {
         let cached = healthManager.getHealthData(for: workout.id)
-        if let cachedLocation = cachedRouteStartLocation(from: cached) {
+        if let cachedLocation = cachedWorkoutLocation(from: cached) {
             applyLocationAssignment(cachedLocation, to: workout, runtime: &runtime)
             return
         }
 
-        guard let appleWorkout = resolveAppleWorkout(for: workout, cachedHealthData: cached, runtime: runtime) else {
+        let appleWorkout = resolveAppleWorkout(for: workout, cachedHealthData: cached, runtime: runtime)
+        if appleWorkout == nil,
+           let historicalLocation = historicalCachedLocation(for: workout, appleWorkout: nil, runtime: runtime) {
+            applyLocationAssignment(historicalLocation, to: workout, runtime: &runtime)
+            return
+        }
+
+        guard let appleWorkout else {
             runtime.skippedNoMatchingWorkout += 1
             runtime.items.append(.skipped(workout: workout, reason: "No matching Apple workout near this timestamp"))
             queueFallbackCandidate(for: workout, location: nil, runtime: &runtime)
             return
         }
 
-        guard let startLocation = await fetchRouteStartLocation(for: appleWorkout, runtime: &runtime) else {
+        guard let startLocation = await fetchWorkoutLocation(for: workout, appleWorkout: appleWorkout, runtime: &runtime) else {
             runtime.skippedNoRoute += 1
             let reason = runtime.routePermissionDenied
-                ? "No route/start location available (route permission unavailable)"
-                : "No route/start location in Apple Health"
+                ? "No workout location available (route permission unavailable)"
+                : "No workout location returned by Apple Health"
             runtime.items.append(.skipped(workout: workout, reason: reason))
             queueFallbackCandidate(for: workout, location: nil, runtime: &runtime)
             return
@@ -650,12 +675,21 @@ struct GymBulkAssignView: View {
         applyLocationAssignment(startLocation, to: workout, runtime: &runtime)
     }
 
-    private func cachedRouteStartLocation(from cachedHealthData: WorkoutHealthData?) -> CLLocation? {
-        guard let lat = cachedHealthData?.workoutRouteStartLatitude,
-              let lon = cachedHealthData?.workoutRouteStartLongitude else {
-            return nil
-        }
-        return CLLocation(latitude: lat, longitude: lon)
+    private func cachedWorkoutLocation(from cachedHealthData: WorkoutHealthData?) -> CLLocation? {
+        guard let coordinate = cachedHealthData?.resolvedWorkoutLocationCoordinate else { return nil }
+        return CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+    }
+
+    private func cachedWorkoutLocationSnapshot(
+        from healthData: WorkoutHealthData
+    ) -> CachedWorkoutLocationSnapshot? {
+        guard let coordinate = healthData.resolvedWorkoutLocationCoordinate else { return nil }
+        return CachedWorkoutLocationSnapshot(
+            workoutDate: healthData.workoutDate,
+            appleWorkoutUUID: healthData.appleWorkoutUUID,
+            appleWorkoutType: healthData.appleWorkoutType,
+            location: CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+        )
     }
 
     private func resolveAppleWorkout(
@@ -674,21 +708,30 @@ struct GymBulkAssignView: View {
         )
     }
 
-    private func fetchRouteStartLocation(
-        for appleWorkout: HKWorkout,
+    private func fetchWorkoutLocation(
+        for workout: Workout,
+        appleWorkout: HKWorkout,
         runtime: inout AutoTaggingRuntime
     ) async -> CLLocation? {
         let appleUUID = appleWorkout.uuid
-        if let cachedLocation = runtime.routeStartByAppleUUID[appleUUID] {
+        if let cachedLocation = runtime.resolvedLocationByAppleUUID[appleUUID] {
             return cachedLocation
         }
-        if runtime.appleUUIDsWithNoRoute.contains(appleUUID) {
+        if let cachedLocation = runtime.cachedLocationByAppleUUID[appleUUID] {
+            runtime.resolvedLocationByAppleUUID[appleUUID] = cachedLocation
+            return cachedLocation
+        }
+        if let historicalLocation = historicalCachedLocation(for: workout, appleWorkout: appleWorkout, runtime: runtime) {
+            runtime.resolvedLocationByAppleUUID[appleUUID] = historicalLocation
+            return historicalLocation
+        }
+        if runtime.appleUUIDsWithNoLocation.contains(appleUUID) {
             return nil
         }
 
         do {
-            if let location = try await healthManager.fetchWorkoutRouteStartLocation(for: appleWorkout) {
-                runtime.routeStartByAppleUUID[appleUUID] = location
+            if let location = try await healthManager.fetchWorkoutLocation(for: appleWorkout)?.location {
+                runtime.resolvedLocationByAppleUUID[appleUUID] = location
                 return location
             }
         } catch let error as HealthKitError {
@@ -699,8 +742,54 @@ struct GymBulkAssignView: View {
             // Keep processing with map fallback.
         }
 
-        runtime.appleUUIDsWithNoRoute.insert(appleUUID)
+        runtime.appleUUIDsWithNoLocation.insert(appleUUID)
         return nil
+    }
+
+    private func historicalCachedLocation(
+        for workout: Workout,
+        appleWorkout: HKWorkout?,
+        runtime: AutoTaggingRuntime
+    ) -> CLLocation? {
+        let preferredAppleType = appleWorkout?.workoutActivityType.name
+        let strictCandidates = runtime.historicalLocations.filter { snapshot in
+            abs(snapshot.workoutDate.timeIntervalSince(workout.date)) <= runtime.maxStartDiffSeconds
+        }
+        if let exact = bestHistoricalLocation(
+            from: strictCandidates,
+            workoutDate: workout.date,
+            preferredAppleType: preferredAppleType
+        ) {
+            return exact
+        }
+
+        guard let preferredAppleType else { return nil }
+
+        let relaxedCandidates = runtime.historicalLocations.filter { snapshot in
+            guard snapshot.appleWorkoutType == preferredAppleType else { return false }
+            return abs(snapshot.workoutDate.timeIntervalSince(workout.date)) <= runtime.relaxedStartDiffSeconds
+        }
+        return bestHistoricalLocation(
+            from: relaxedCandidates,
+            workoutDate: workout.date,
+            preferredAppleType: preferredAppleType
+        )
+    }
+
+    private func bestHistoricalLocation(
+        from snapshots: [CachedWorkoutLocationSnapshot],
+        workoutDate: Date,
+        preferredAppleType: String?
+    ) -> CLLocation? {
+        let sorted = snapshots.sorted { lhs, rhs in
+            let lhsTypeMatch = preferredAppleType != nil && lhs.appleWorkoutType == preferredAppleType
+            let rhsTypeMatch = preferredAppleType != nil && rhs.appleWorkoutType == preferredAppleType
+            if lhsTypeMatch != rhsTypeMatch {
+                return lhsTypeMatch
+            }
+            return abs(lhs.workoutDate.timeIntervalSince(workoutDate)) < abs(rhs.workoutDate.timeIntervalSince(workoutDate))
+        }
+        return sorted.first?.location
     }
 
     private func applyLocationAssignment(
@@ -719,9 +808,24 @@ struct GymBulkAssignView: View {
             to: location,
             gymCoordinates: runtime.gymCoordinates,
             maxDistanceMeters: runtime.maxDistanceMeters
+        ) ?? uniqueNearbyGym(
+            to: location,
+            gymCoordinates: runtime.gymCoordinates,
+            maxDistanceMeters: runtime.relaxedMaxDistanceMeters
         ) else {
             runtime.skippedNoGymMatch += 1
-            runtime.items.append(.skipped(workout: workout, reason: "No gym within \(Int(runtime.maxDistanceMeters))m"))
+            let nearestDistance = nearestGym(
+                to: location,
+                gymCoordinates: runtime.gymCoordinates,
+                maxDistanceMeters: .greatestFiniteMagnitude
+            )?.distanceMeters
+            let reason: String
+            if let nearestDistance {
+                reason = "No confident gym match (nearest saved gym is \(Int(nearestDistance.rounded()))m away)"
+            } else {
+                reason = "No saved gym coordinates were close enough"
+            }
+            runtime.items.append(.skipped(workout: workout, reason: reason))
             queueFallbackCandidate(for: workout, location: location, runtime: &runtime)
             return
         }
@@ -795,6 +899,27 @@ struct GymBulkAssignView: View {
         }
 
         return best
+    }
+
+    private func uniqueNearbyGym(
+        to location: CLLocation,
+        gymCoordinates: [UUID: CLLocationCoordinate2D],
+        maxDistanceMeters: Double
+    ) -> GymDistanceMatch? {
+        let candidates = gymCoordinates.compactMap { gymId, coordinate -> GymDistanceMatch? in
+            let gymLocation = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+            let distance = location.distance(from: gymLocation)
+            guard distance <= maxDistanceMeters else { return nil }
+            let name = gymProfilesManager.gymName(for: gymId) ?? "Gym"
+            return GymDistanceMatch(gymId: gymId, gymName: name, distanceMeters: distance)
+        }
+        .sorted { $0.distanceMeters < $1.distanceMeters }
+
+        guard let best = candidates.first else { return nil }
+        guard candidates.count > 1 else { return best }
+
+        let secondBest = candidates[1]
+        return (secondBest.distanceMeters - best.distanceMeters) >= 125 ? best : nil
     }
 
     private func toggleSelection(for id: UUID) {

@@ -272,13 +272,13 @@ struct GymProfilesView: View {
 
         Task {
             var healthSnapshot = await MainActor.run { Array(healthManager.healthDataStore.values) }
-            let cachedRoutePointCount = healthSnapshot.reduce(into: 0) { partialResult, entry in
-                if entry.workoutRouteStartLatitude != nil && entry.workoutRouteStartLongitude != nil {
+            let cachedLocationCount = healthSnapshot.reduce(into: 0) { partialResult, entry in
+                if entry.resolvedWorkoutLocationCoordinate != nil {
                     partialResult += 1
                 }
             }
 
-            if cachedRoutePointCount == 0 {
+            if cachedLocationCount == 0 {
                 let workoutsSnapshot = await MainActor.run { dataManager.workouts }
                 do {
                     _ = try await healthManager.hydrateRouteStartLocationsForRecentWorkouts(workoutsSnapshot, maxWorkouts: 180)
@@ -292,8 +292,8 @@ struct GymProfilesView: View {
 
             let gymsSnapshot = await MainActor.run { gymProfilesManager.gyms }
             let candidates = await discoverGymCandidates(from: healthSnapshot, existingGyms: gymsSnapshot)
-            let finalRoutePointCount = healthSnapshot.reduce(into: 0) { partialResult, entry in
-                if entry.workoutRouteStartLatitude != nil && entry.workoutRouteStartLongitude != nil {
+            let finalLocationCount = healthSnapshot.reduce(into: 0) { partialResult, entry in
+                if entry.resolvedWorkoutLocationCoordinate != nil {
                     partialResult += 1
                 }
             }
@@ -302,8 +302,8 @@ struct GymProfilesView: View {
                 candidateGyms = candidates
                 if candidateGyms.isEmpty && candidateGymError == nil && healthSnapshot.isEmpty {
                     candidateGymError = "No synced Health workouts found yet. Run Health Sync first."
-                } else if candidateGyms.isEmpty && candidateGymError == nil && finalRoutePointCount == 0 {
-                    candidateGymError = "No workout route location points were available from Apple Health for these workouts."
+                } else if candidateGyms.isEmpty && candidateGymError == nil && finalLocationCount == 0 {
+                    candidateGymError = "No workout locations were available from Apple Health for these workouts."
                 }
                 isDetectingCandidateGyms = false
             }
@@ -315,10 +315,10 @@ struct GymProfilesView: View {
         existingGyms: [GymProfile]
     ) async -> [DetectedGymCandidate] {
         let routePoints: [(coordinate: CLLocationCoordinate2D, workoutDate: Date)] = healthData.compactMap { entry in
-            guard let latitude = entry.workoutRouteStartLatitude, let longitude = entry.workoutRouteStartLongitude else {
+            guard let coordinate = entry.resolvedWorkoutLocationCoordinate else {
                 return nil
             }
-            return (CLLocationCoordinate2D(latitude: latitude, longitude: longitude), entry.workoutDate)
+            return (coordinate, entry.workoutDate)
         }
 
         guard !routePoints.isEmpty else { return [] }

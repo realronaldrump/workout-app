@@ -1,4 +1,10 @@
+import CoreLocation
 import Foundation
+
+enum WorkoutLocationSource: String, Codable, Sendable {
+    case route
+    case metadata
+}
 
 // MARK: - Core Health Data Model
 
@@ -84,6 +90,10 @@ struct WorkoutHealthData: Identifiable, Codable {
     /// If present, derived from an `HKWorkoutRoute` associated with the matching Apple workout.
     var workoutRouteStartLatitude: Double?
     var workoutRouteStartLongitude: Double?
+    /// Best available workout location derived from Apple Health workout data.
+    var workoutLocationLatitude: Double?
+    var workoutLocationLongitude: Double?
+    var workoutLocationSource: WorkoutLocationSource?
 
     init(
         id: UUID = UUID(),
@@ -124,7 +134,10 @@ struct WorkoutHealthData: Identifiable, Codable {
         appleWorkoutDuration: TimeInterval? = nil,
         appleWorkoutUUID: UUID? = nil,
         workoutRouteStartLatitude: Double? = nil,
-        workoutRouteStartLongitude: Double? = nil
+        workoutRouteStartLongitude: Double? = nil,
+        workoutLocationLatitude: Double? = nil,
+        workoutLocationLongitude: Double? = nil,
+        workoutLocationSource: WorkoutLocationSource? = nil
     ) {
         self.id = id
         self.workoutId = workoutId
@@ -165,6 +178,19 @@ struct WorkoutHealthData: Identifiable, Codable {
         self.appleWorkoutUUID = appleWorkoutUUID
         self.workoutRouteStartLatitude = workoutRouteStartLatitude
         self.workoutRouteStartLongitude = workoutRouteStartLongitude
+        self.workoutLocationLatitude = workoutLocationLatitude
+        self.workoutLocationLongitude = workoutLocationLongitude
+        self.workoutLocationSource = workoutLocationSource
+    }
+
+    var resolvedWorkoutLocationCoordinate: CLLocationCoordinate2D? {
+        if let latitude = workoutLocationLatitude, let longitude = workoutLocationLongitude {
+            return CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+        }
+        if let latitude = workoutRouteStartLatitude, let longitude = workoutRouteStartLongitude {
+            return CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+        }
+        return nil
     }
 
     /// Checks if meaningful health data was synced
