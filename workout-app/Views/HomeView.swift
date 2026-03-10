@@ -852,9 +852,11 @@ struct HomeView: View {
         let now = Date()
         let calendar = Calendar.current
         let currentWeekStart = SharedFormatters.startOfWeekSunday(for: now)
+        let boundsEnd = calendar.startOfDay(for: now)
         let grouped = Dictionary(grouping: workouts) { workout in
             SharedFormatters.startOfWeekSunday(for: workout.date)
         }
+        let workoutDays = IntentionalBreaksAnalytics.normalizedWorkoutDays(for: workouts, calendar: calendar)
 
         guard let earliestWorkout = workouts.last else {
             return [
@@ -862,17 +864,51 @@ struct HomeView: View {
                     weekStart: currentWeekStart,
                     referenceDate: now,
                     workouts: [],
-                    stats: emptyStats
+                    stats: emptyStats,
+                    trackedDayCount: max((calendar.dateComponents([.day], from: currentWeekStart, to: boundsEnd).day ?? 0) + 1, 0),
+                    excludedDayCount: 0
                 )
             ]
         }
 
+        let boundsStart = calendar.startOfDay(for: earliestWorkout.date)
+        let breakDays = IntentionalBreaksAnalytics.breakDaySet(
+            from: intentionalBreakRanges,
+            excluding: workoutDays,
+            within: boundsStart...boundsEnd,
+            calendar: calendar
+        )
         let earliestWeekStart = SharedFormatters.startOfWeekSunday(for: earliestWorkout.date)
         var buckets: [HomeWeekBucket] = []
         var cursor = currentWeekStart
 
         while cursor >= earliestWeekStart {
             let weekWorkouts = (grouped[cursor] ?? []).sorted { $0.date > $1.date }
+            let weekEnd = calendar.date(byAdding: .day, value: 6, to: cursor) ?? cursor
+            let trackedStart = max(cursor, boundsStart)
+            let trackedEnd = min(weekEnd, boundsEnd)
+            let trackedDays = trackedStart <= trackedEnd
+                ? max((calendar.dateComponents([.day], from: trackedStart, to: trackedEnd).day ?? 0) + 1, 0)
+                : 0
+            let excludedDays = trackedStart <= trackedEnd
+                ? IntentionalBreaksAnalytics.dayCount(
+                    from: trackedStart,
+                    to: trackedEnd,
+                    breakDays: breakDays,
+                    includeStart: true,
+                    includeEnd: true,
+                    calendar: calendar
+                )
+                : 0
+            let eligibleDays = max(trackedDays - excludedDays, 0)
+            let shouldInclude = cursor == currentWeekStart || !weekWorkouts.isEmpty || eligibleDays == 0
+
+            guard shouldInclude else {
+                guard let previousWeek = calendar.date(byAdding: .day, value: -7, to: cursor) else { break }
+                cursor = previousWeek
+                continue
+            }
+
             let stats = weekWorkouts.isEmpty
                 ? emptyStats
                 : dataManager.calculateStats(for: weekWorkouts, intentionalBreakRanges: intentionalBreakRanges)
@@ -881,7 +917,9 @@ struct HomeView: View {
                     weekStart: cursor,
                     referenceDate: now,
                     workouts: weekWorkouts,
-                    stats: stats
+                    stats: stats,
+                    trackedDayCount: trackedDays,
+                    excludedDayCount: excludedDays
                 )
             )
 

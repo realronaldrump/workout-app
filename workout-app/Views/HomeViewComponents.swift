@@ -234,6 +234,8 @@ struct HomeWeekBucket: Identifiable {
     let referenceDate: Date
     let workouts: [Workout]
     let stats: WorkoutStats
+    let trackedDayCount: Int
+    let excludedDayCount: Int
 
     var id: Date { weekStart }
 
@@ -283,15 +285,33 @@ struct HomeWeekBucket: Identifiable {
         "\(stats.totalWorkouts)"
     }
 
+    var eligibleDayCount: Int {
+        max(trackedDayCount - excludedDayCount, 0)
+    }
+
+    var isFullyExcused: Bool {
+        eligibleDayCount == 0
+    }
+
+    var isSavedBreakWeek: Bool {
+        workouts.isEmpty && isFullyExcused
+    }
+
     var volumeValue: String {
         stats.totalWorkouts == 0 ? "--" : SharedFormatters.volumeCompact(stats.totalVolume)
     }
 
     var sessionHeader: String {
+        if isSavedBreakWeek {
+            return "Saved Break"
+        }
         isCurrentWeek ? "Sessions So Far" : "Sessions"
     }
 
     var emptyMessage: String {
+        if isSavedBreakWeek {
+            return "This week is fully covered by your saved break dates."
+        }
         if isCurrentWeek {
             return "No sessions logged yet. Swipe to revisit previous weeks."
         }
@@ -299,8 +319,11 @@ struct HomeWeekBucket: Identifiable {
     }
 
     var statusLabel: String {
+        if isSavedBreakWeek {
+            return "Saved break"
+        }
         if stats.totalWorkouts == 0 {
-            return isCurrentWeek ? "Open week" : "Rest week"
+            return isCurrentWeek ? "Open week" : "No sessions"
         }
         return stats.totalWorkouts == 1 ? "1 session" : "\(stats.totalWorkouts) sessions"
     }
@@ -316,10 +339,10 @@ struct WeeklySummaryCarouselCard: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             HStack(alignment: .top, spacing: Theme.Spacing.md) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(bucket.title)
+                    Text(bucket.rangeLabel)
                         .font(Theme.Typography.title3)
                         .foregroundColor(Theme.Colors.textPrimary)
-                    Text(bucket.rangeLabel)
+                    Text(bucket.title)
                         .font(Theme.Typography.caption)
                         .foregroundColor(Theme.Colors.textSecondary)
                 }
@@ -362,6 +385,11 @@ struct WeeklySummaryCarouselCard: View {
 
             if bucket.workouts.isEmpty {
                 VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                    Text(bucket.sessionHeader)
+                        .font(Theme.Typography.metricLabel)
+                        .foregroundColor(Theme.Colors.textTertiary)
+                        .textCase(.uppercase)
+                        .tracking(0.8)
                     Text(bucket.emptyMessage)
                         .font(Theme.Typography.body)
                         .foregroundColor(Theme.Colors.textSecondary)
