@@ -6,6 +6,7 @@ import Foundation
 @MainActor
 class InsightsEngine: ObservableObject {
     @Published var insights: [Insight] = []
+    private var generation = 0
 
     private let dataManager: WorkoutDataManager
     private let annotationsProvider: () -> [UUID: WorkoutAnnotation]
@@ -23,6 +24,9 @@ class InsightsEngine: ObservableObject {
 
     /// Analyzes all workout data and generates prioritized insights
     func generateInsights() async {
+        generation += 1
+        let currentGeneration = generation
+
         // Capture snapshot of data to pass to background tasks
         let workoutsSnapshot = dataManager.workouts
         let annotationsSnapshot = annotationsProvider()
@@ -69,6 +73,7 @@ class InsightsEngine: ObservableObject {
         }.value
 
         // Update on MainActor
+        guard currentGeneration == generation else { return }
         self.insights = newInsights.sorted { $0.priority > $1.priority }
     }
 

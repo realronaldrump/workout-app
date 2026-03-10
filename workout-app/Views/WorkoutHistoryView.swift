@@ -4,9 +4,10 @@ struct WorkoutHistoryView: View {
     let workouts: [Workout]
     var showsBackButton: Bool = false
     @State private var searchText = ""
+    @State private var cachedGroupedWorkouts: [(month: String, workouts: [Workout])] = []
     @Environment(\.dismiss) private var dismiss
 
-    private var groupedWorkouts: [(month: String, workouts: [Workout])] {
+    private func buildGroupedWorkouts() -> [(month: String, workouts: [Workout])] {
         let filtered = workouts.filter { workout in
             searchText.isEmpty ||
             workout.name.localizedCaseInsensitiveContains(searchText) ||
@@ -40,7 +41,7 @@ struct WorkoutHistoryView: View {
                         )
                         .padding(.horizontal, Theme.Spacing.lg)
                         .padding(.top, Theme.Spacing.xl)
-                    } else if groupedWorkouts.isEmpty {
+                    } else if cachedGroupedWorkouts.isEmpty {
                         ContentUnavailableView(
                             "No matches",
                             systemImage: "magnifyingglass",
@@ -49,7 +50,7 @@ struct WorkoutHistoryView: View {
                         .padding(.horizontal, Theme.Spacing.lg)
                         .padding(.top, Theme.Spacing.xl)
                     } else {
-                        ForEach(Array(groupedWorkouts.enumerated()), id: \.element.month) { _, group in
+                        ForEach(Array(cachedGroupedWorkouts.enumerated()), id: \.element.month) { _, group in
                             VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                                 Text(group.month.uppercased())
                                     .font(Theme.Typography.metricLabel)
@@ -58,9 +59,8 @@ struct WorkoutHistoryView: View {
                                     .padding(.leading, 4)
 
                                 VStack(spacing: Theme.Spacing.sm) {
-                                    ForEach(Array(group.workouts.enumerated()), id: \.element.id) { rowIndex, workout in
+                                    ForEach(Array(group.workouts.enumerated()), id: \.element.id) { _, workout in
                                         WorkoutHistoryRow(workout: workout)
-                                            .staggeredAppear(index: rowIndex)
                                     }
                                 }
                             }
@@ -72,6 +72,15 @@ struct WorkoutHistoryView: View {
             }
         }
         .navigationBarHidden(true)
+        .onAppear {
+            cachedGroupedWorkouts = buildGroupedWorkouts()
+        }
+        .onChange(of: searchText) { _, _ in
+            cachedGroupedWorkouts = buildGroupedWorkouts()
+        }
+        .onChange(of: workouts) { _, _ in
+            cachedGroupedWorkouts = buildGroupedWorkouts()
+        }
     }
 
     private var header: some View {

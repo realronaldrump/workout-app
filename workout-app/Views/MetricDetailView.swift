@@ -16,6 +16,7 @@ struct MetricDetailView: View {
     @State private var selectedStreakRunId: String?
     @State private var selectedSessionDay: Date?
     @State private var selectedVolumeWorkoutId: UUID?
+    @State private var cachedSortedWorkouts: [Workout] = []
 
     private var sundayCalendar: Calendar {
         var calendar = Calendar.current
@@ -25,7 +26,7 @@ struct MetricDetailView: View {
     }
 
     private var sortedWorkouts: [Workout] {
-        workouts.sorted { $0.date > $1.date }
+        cachedSortedWorkouts
     }
 
     var body: some View {
@@ -36,18 +37,14 @@ struct MetricDetailView: View {
                 ScrollView(showsIndicators: false) {
                     VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
                         heroCard
-                            .animateOnAppear(delay: 0)
 
                         switch kind {
                         case .sessions:
                             sessionsSection
-                                .animateOnAppear(delay: 0.05)
                         case .streak:
                             streakSection
-                                .animateOnAppear(delay: 0.05)
                         case .totalVolume:
                             totalVolumeSection
-                                .animateOnAppear(delay: 0.05)
                         }
                     }
                     .padding(.horizontal, Theme.Spacing.lg)
@@ -56,16 +53,22 @@ struct MetricDetailView: View {
                     .frame(maxWidth: .infinity, alignment: .center)
                 }
                 .onAppear {
+                    refreshCachedWorkouts()
                     syncSelections()
                     autoScrollIfNeeded(using: proxy)
                 }
-                .onChange(of: workouts.count) { _, _ in
+                .onChange(of: workouts) { _, _ in
+                    refreshCachedWorkouts()
                     syncSelections()
                 }
             }
         }
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func refreshCachedWorkouts() {
+        cachedSortedWorkouts = workouts.sorted { $0.date > $1.date }
     }
 
     private var detailBackground: some View {

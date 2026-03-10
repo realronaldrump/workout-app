@@ -12,6 +12,7 @@ struct ConsistencyDetailView: View {
     @State private var selectedWeekStart: Date?
     @State private var selectedStreakRunId: String?
     @State private var selectedWeekday: Int?
+    @State private var cachedSortedWorkouts: [Workout] = []
 
     private var calendar: Calendar {
         var calendar = Calendar.current
@@ -21,7 +22,7 @@ struct ConsistencyDetailView: View {
     }
 
     private var sortedWorkouts: [Workout] {
-        workouts.sorted { $0.date < $1.date }
+        cachedSortedWorkouts
     }
 
     private var targetSessionsPerWeek: Int {
@@ -35,19 +36,14 @@ struct ConsistencyDetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
                     heroCard
-                        .animateOnAppear(delay: 0)
 
                     rangePicker
-                        .animateOnAppear(delay: 0.04)
 
                     weeklyExplorerSection
-                        .animateOnAppear(delay: 0.08)
 
                     weekdayPatternSection
-                        .animateOnAppear(delay: 0.12)
 
                     streakExplorerSection
-                        .animateOnAppear(delay: 0.16)
                 }
                 .padding(.horizontal, Theme.Spacing.lg)
                 .padding(.vertical, Theme.Spacing.xl)
@@ -58,14 +54,20 @@ struct ConsistencyDetailView: View {
         .navigationTitle("Consistency")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
+            refreshCachedWorkouts()
             syncSelections()
         }
         .onChange(of: selectedRange) { _, _ in
             syncSelections()
         }
-        .onChange(of: workouts.count) { _, _ in
+        .onChange(of: workouts) { _, _ in
+            refreshCachedWorkouts()
             syncSelections()
         }
+    }
+
+    private func refreshCachedWorkouts() {
+        cachedSortedWorkouts = workouts.sorted { $0.date < $1.date }
     }
 
     private var consistencyBackground: some View {

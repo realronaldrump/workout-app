@@ -9,6 +9,8 @@ struct HealthHubView: View {
     @State private var showingHealthWizard = false
     @State private var showAllDays = false
     @State private var selectedMetric: HealthMetric?
+    @State private var cachedDailyData: [DailyHealthData] = []
+    @State private var cachedSummaryCards: [HealthSummaryCardModel] = []
     @State private var customRange: DateInterval = {
         let end = Date()
         let start = Calendar.current.date(byAdding: .day, value: -28, to: end) ?? end
@@ -31,14 +33,8 @@ struct HealthHubView: View {
         formatRange(currentRange)
     }
 
-    private var dailyData: [DailyHealthData] {
-        healthManager.dailyHealthStore.values
-            .filter { currentRange.contains($0.dayStart) }
-            .sorted { $0.dayStart < $1.dayStart }
-    }
-
     private var timelineDays: [DailyHealthData] {
-        let sorted = dailyData.sorted { $0.dayStart > $1.dayStart }
+        let sorted = cachedDailyData.sorted { $0.dayStart > $1.dayStart }
         if showAllDays {
             return sorted
         }
@@ -46,7 +42,7 @@ struct HealthHubView: View {
     }
 
     private var headerSubtitle: String {
-        let dayCount = dailyData.count
+        let dayCount = cachedDailyData.count
         let countLabel = dayCount == 1 ? "1 day" : "\(dayCount) days"
         return "\(rangeLabel) • \(countLabel)"
     }
@@ -66,7 +62,7 @@ struct HealthHubView: View {
                     } else if healthManager.authorizationStatus != .authorized {
                         accessCard
                     } else {
-                        if dailyData.isEmpty {
+                        if cachedDailyData.isEmpty {
                             emptyState
                         } else {
                             summarySection
@@ -96,13 +92,16 @@ struct HealthHubView: View {
         }
         .onAppear {
             healthManager.refreshAuthorizationStatus()
+            refreshCachedContent()
             triggerDailySync(force: false)
         }
         .onChange(of: selectedRange) { _, _ in
+            refreshCachedContent()
             triggerDailySync(force: false)
         }
         .onChange(of: customRange) { _, _ in
             if selectedRange == .custom {
+                refreshCachedContent()
                 triggerDailySync(force: false)
             }
         }
@@ -110,6 +109,9 @@ struct HealthHubView: View {
             if newValue == .authorized {
                 triggerDailySync(force: false)
             }
+        }
+        .onReceive(healthManager.$dailyHealthStore) { _ in
+            refreshCachedContent()
         }
     }
 
@@ -195,7 +197,7 @@ struct HealthHubView: View {
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: Theme.Spacing.md) {
-                    ForEach(summaryCards) { card in
+                    ForEach(cachedSummaryCards) { card in
                         MetricTileButton(
                             action: {
                                 selectedMetric = card.metric
@@ -220,7 +222,7 @@ struct HealthHubView: View {
 
                 Spacer()
 
-                if dailyData.count > 14 {
+                if cachedDailyData.count > 14 {
                     Button(showAllDays ? "Show Less" : "Show All") {
                         withAnimation(Theme.Animation.smooth) {
                             showAllDays.toggle()
@@ -340,7 +342,7 @@ struct HealthHubView: View {
         .softCard(elevation: 1)
     }
 
-    private var summaryCards: [HealthSummaryCardModel] {
+    private func buildSummaryCards(from dailyData: [DailyHealthData]) -> [HealthSummaryCardModel] {
         let avgSteps = average(dailyData.compactMap { $0.steps })
         let avgSleep = average(dailyData.compactMap { $0.sleepSummary?.totalHours })
         let avgRestingHR = average(dailyData.compactMap { $0.restingHeartRate })
@@ -402,19 +404,13 @@ struct HealthHubView: View {
     }
 
     private func formatRange(_ range: DateInterval) -> String {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .none
-        let start = formatter.string(from: range.start)
-        let end = formatter.string(from: range.end)
+        let start = HealthHubFormatters.mediumDate.string(from: range.start)
+        let end = HealthHubFormatters.mediumDate.string(from: range.end)
         return "\(start) – \(end)"
     }
 
     private func formatSyncDate(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        return formatter.string(from: date)
+        HealthHubFormatters.mediumDateTime.string(from: date)
     }
 
     private func triggerDailySync(force: Bool) {
@@ -428,6 +424,14 @@ struct HealthHubView: View {
                 await healthManager.ensureDailyHealthData(range: currentRange)
             }
         }
+    }
+
+    private func refreshCachedContent() {
+        let filtered = healthManager.dailyHealthStore.values
+            .filter { currentRange.contains($0.dayStart) }
+            .sorted { $0.dayStart < $1.dayStart }
+        cachedDailyData = filtered
+        cachedSummaryCards = buildSummaryCards(from: filtered)
     }
 }
 
@@ -502,9 +506,7 @@ private struct DailyTimelineRow: View {
     let day: DailyHealthData
 
     private var title: String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "EEEE"
-        return formatter.string(from: day.dayStart)
+        HealthHubFormatters.weekday.string(from: day.dayStart)
     }
 
     private var subtitle: String {
@@ -514,10 +516,7 @@ private struct DailyTimelineRow: View {
         if Calendar.current.isDateInYesterday(day.dayStart) {
             return "Yesterday"
         }
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .none
-        return formatter.string(from: day.dayStart)
+        return HealthHubFormatters.mediumDate.string(from: day.dayStart)
     }
 
     var body: some View {
@@ -558,6 +557,28 @@ private struct DailyTimelineRow: View {
         .padding(Theme.Spacing.md)
         .softCard(elevation: 1)
     }
+}
+
+private enum HealthHubFormatters {
+    static let mediumDate: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter
+    }()
+
+    static let mediumDateTime: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter
+    }()
+
+    static let weekday: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEEE"
+        return formatter
+    }()
 }
 
 private struct DailyTimelineStat: View {

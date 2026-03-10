@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct HighlightItem: Identifiable {
-    let id = UUID()
+    let id: String
     let title: String
     let value: String
     let subtitle: String?

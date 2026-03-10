@@ -21,6 +21,8 @@ struct MainTabView: View {
     @State private var pendingOnboarding = false
     @State private var selectedTab: AppTab = .today
     @State private var showSplash = true
+    @State private var insightsRefreshTask: Task<Void, Never>?
+    @State private var variantAnalysisTask: Task<Void, Never>?
     @EnvironmentObject private var sessionManager: WorkoutSessionManager
     @EnvironmentObject private var healthManager: HealthKitManager
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -109,23 +111,21 @@ struct MainTabView: View {
             beginSplashIfNeeded()
             refreshOnboardingState()
             bootstrapStoresIfNeeded()
-            Task { await triggerVariantAnalysis() }
+            scheduleVariantAnalysis()
         }
         .onChange(of: dataManager.workouts) { _, _ in
             refreshOnboardingState()
-            Task {
-                await insightsEngine.generateInsights()
-                await triggerVariantAnalysis()
-            }
+            scheduleInsightsRefresh()
+            scheduleVariantAnalysis()
         }
         .onReceive(annotationsManager.$annotations) { _ in
-            Task { await triggerVariantAnalysis() }
+            scheduleVariantAnalysis()
         }
         .onReceive(gymProfilesManager.$gyms) { _ in
-            Task { await triggerVariantAnalysis() }
+            scheduleVariantAnalysis()
         }
         .onReceive(intentionalBreaksManager.$savedBreaks) { _ in
-            Task { await insightsEngine.generateInsights() }
+            scheduleInsightsRefresh()
         }
         .fullScreenCover(isPresented: $showingOnboarding) {
             OnboardingView(
@@ -156,6 +156,8 @@ struct MainTabView: View {
                 .environmentObject(annotationsManager)
                 .environmentObject(intentionalBreaksManager)
                 .environmentObject(gymProfilesManager)
+                .environmentObject(insightsEngine)
+                .environmentObject(variantEngine)
         }
     }
 
@@ -210,5 +212,23 @@ struct MainTabView: View {
             annotations: annotationsManager.annotations,
             gymNames: gymProfilesManager.gymNameSnapshot()
         )
+    }
+
+    private func scheduleInsightsRefresh(debounceNs: UInt64 = 250_000_000) {
+        insightsRefreshTask?.cancel()
+        insightsRefreshTask = Task {
+            try? await Task.sleep(nanoseconds: debounceNs)
+            guard !Task.isCancelled else { return }
+            await insightsEngine.generateInsights()
+        }
+    }
+
+    private func scheduleVariantAnalysis(debounceNs: UInt64 = 250_000_000) {
+        variantAnalysisTask?.cancel()
+        variantAnalysisTask = Task {
+            try? await Task.sleep(nanoseconds: debounceNs)
+            guard !Task.isCancelled else { return }
+            await triggerVariantAnalysis()
+        }
     }
 }

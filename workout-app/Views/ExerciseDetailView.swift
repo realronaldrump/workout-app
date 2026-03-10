@@ -9,8 +9,8 @@ struct ExerciseDetailView: View {
     @ObservedObject private var metadataManager = ExerciseMetadataManager.shared
     @ObservedObject private var metricManager = ExerciseMetricManager.shared
     @EnvironmentObject private var healthManager: HealthKitManager
+    @EnvironmentObject private var insightsEngine: InsightsEngine
     @EnvironmentObject private var variantEngine: WorkoutVariantEngine
-    @StateObject private var insightsEngine: InsightsEngine
     @State private var selectedChart = ChartType.weight
     @State private var selectedGymScope: GymScope = .all
     @State private var showingLocationPicker = false
@@ -25,6 +25,7 @@ struct ExerciseDetailView: View {
     @State private var availableChartTypes: [ChartType] = [.weight, .volume, .oneRepMax, .reps]
     @State private var progressForensicsReview: ExerciseForensicsReview?
     @State private var isLoadingProgressForensics = false
+    @State private var progressForensicsTask: Task<Void, Never>?
 
     enum ChartType: String, CaseIterable, Hashable {
         case weight = "Max Weight"
@@ -85,13 +86,6 @@ struct ExerciseDetailView: View {
         self.dataManager = dataManager
         self.annotationsManager = annotationsManager
         self.gymProfilesManager = gymProfilesManager
-        _insightsEngine = StateObject(
-            wrappedValue: InsightsEngine(
-                dataManager: dataManager,
-                annotationsProvider: { annotationsManager.annotations },
-                gymNameProvider: { gymProfilesManager.gymNameSnapshot() }
-            )
-        )
     }
 
     private var exerciseInsights: [Insight] {
@@ -560,14 +554,11 @@ struct ExerciseDetailView: View {
             if !availableChartTypes.contains(selectedChart) {
                 selectedChart = availableChartTypes.first ?? (isCardio ? .duration : .weight)
             }
-            Task {
-                await insightsEngine.generateInsights()
-                await refreshProgressForensics()
-            }
+            scheduleProgressForensicsRefresh()
         }
         .onChange(of: selectedGymScope) { _, _ in
             refreshScopedHistory()
-            Task { await refreshProgressForensics() }
+            scheduleProgressForensicsRefresh()
         }
         .onChange(of: availableChartTypes) { _, newValue in
             if !newValue.contains(selectedChart) {
@@ -576,11 +567,11 @@ struct ExerciseDetailView: View {
         }
         .onChange(of: dataManager.workouts) { _, _ in
             refreshScopedHistory()
-            Task { await refreshProgressForensics() }
+            scheduleProgressForensicsRefresh()
         }
         .onReceive(annotationsManager.$annotations) { _ in
             refreshScopedHistory()
-            Task { await refreshProgressForensics() }
+            scheduleProgressForensicsRefresh()
         }
         .onReceive(metadataManager.objectWillChange) { _ in
             refreshScopedHistory()
@@ -589,10 +580,13 @@ struct ExerciseDetailView: View {
             refreshScopedHistory()
         }
         .onChange(of: healthManager.authorizationStatus) { _, _ in
-            Task { await refreshProgressForensics() }
+            scheduleProgressForensicsRefresh()
         }
         .onChange(of: selectedChart) { _, _ in
             Haptics.selection()
+        }
+        .onDisappear {
+            progressForensicsTask?.cancel()
         }
     }
 
@@ -687,5 +681,14 @@ struct ExerciseDetailView: View {
             bodyMassSamples: bodyMassSamples
         )
         isLoadingProgressForensics = false
+    }
+
+    private func scheduleProgressForensicsRefresh(debounceNs: UInt64 = 200_000_000) {
+        progressForensicsTask?.cancel()
+        progressForensicsTask = Task {
+            try? await Task.sleep(nanoseconds: debounceNs)
+            guard !Task.isCancelled else { return }
+            await refreshProgressForensics()
+        }
     }
 }

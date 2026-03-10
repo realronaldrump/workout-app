@@ -10,6 +10,7 @@ struct ExerciseListView: View {
     @State private var selectedExercise: ExerciseSelection?
     @State private var showingQuickStart = false
     @State private var quickStartExercise: String?
+    @State private var cachedExercises: [(name: String, stats: ExerciseStats)] = []
 
     enum SortOrder: String, CaseIterable {
         case alphabetical = "Name"
@@ -18,24 +19,24 @@ struct ExerciseListView: View {
         case recent = "Recent"
     }
 
-    var exercises: [(name: String, stats: ExerciseStats)] {
+    private func buildExercises() -> [(name: String, stats: ExerciseStats)] {
         let filtered = dataManager.exerciseSummaries().filter { exercise in
             searchText.isEmpty || exercise.name.localizedCaseInsensitiveContains(searchText)
         }
 
         switch sortOrder {
         case .alphabetical:
-            return filtered.map { ($0.name, $0.stats) }
+                            return filtered.map { ($0.name, $0.stats) }
         case .volume:
-            return filtered
+                            return filtered
                 .sorted { $0.stats.totalVolume > $1.stats.totalVolume }
                 .map { ($0.name, $0.stats) }
         case .frequency:
-            return filtered
+                            return filtered
                 .sorted { $0.stats.frequency > $1.stats.frequency }
                 .map { ($0.name, $0.stats) }
         case .recent:
-            return filtered
+                            return filtered
                 .sorted { ($0.stats.lastPerformed ?? .distantPast) > ($1.stats.lastPerformed ?? .distantPast) }
                 .map { ($0.name, $0.stats) }
         }
@@ -55,7 +56,7 @@ struct ExerciseListView: View {
 
                 ScrollView(showsIndicators: false) {
                     LazyVStack(spacing: Theme.Spacing.sm) {
-                        if exercises.isEmpty {
+                        if cachedExercises.isEmpty {
                             ContentUnavailableView(
                                 "No matches",
                                 systemImage: "magnifyingglass",
@@ -63,7 +64,7 @@ struct ExerciseListView: View {
                             )
                             .padding(.top, Theme.Spacing.xl)
                         } else {
-                            ForEach(Array(exercises.enumerated()), id: \.element.name) { index, exercise in
+                            ForEach(Array(cachedExercises.enumerated()), id: \.element.name) { _, exercise in
                                 NavigationLink(
                                     destination: ExerciseDetailView(
                                         exerciseName: exercise.name,
@@ -75,7 +76,6 @@ struct ExerciseListView: View {
                                     ExerciseRowView(name: exercise.name, stats: exercise.stats)
                                 }
                                 .buttonStyle(.plain)
-                                .staggeredAppear(index: index)
                                 .contextMenu {
                                     Button("View History") {
                                         selectedExercise = ExerciseSelection(id: exercise.name)
@@ -105,6 +105,18 @@ struct ExerciseListView: View {
         }
         .sheet(isPresented: $showingQuickStart) {
             QuickStartView(exerciseName: quickStartExercise)
+        }
+        .onAppear {
+            cachedExercises = buildExercises()
+        }
+        .onChange(of: searchText) { _, _ in
+            cachedExercises = buildExercises()
+        }
+        .onChange(of: sortOrder) { _, _ in
+            cachedExercises = buildExercises()
+        }
+        .onChange(of: dataManager.workouts) { _, _ in
+            cachedExercises = buildExercises()
         }
     }
 

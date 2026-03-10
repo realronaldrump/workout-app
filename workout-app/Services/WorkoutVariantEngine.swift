@@ -5,12 +5,16 @@ import Foundation
 final class WorkoutVariantEngine: ObservableObject {
     @Published private(set) var library: WorkoutVariantLibrary = .empty
     @Published private(set) var isAnalyzing = false
+    private var generation = 0
 
     func analyze(
         workouts: [Workout],
         annotations: [UUID: WorkoutAnnotation],
         gymNames: [UUID: String]
     ) async {
+        generation += 1
+        let currentGeneration = generation
+
         guard !workouts.isEmpty else {
             library = .empty
             isAnalyzing = false
@@ -30,6 +34,7 @@ final class WorkoutVariantEngine: ObservableObject {
             )
         }.value
 
+        guard currentGeneration == generation else { return }
         library = result
         isAnalyzing = false
     }

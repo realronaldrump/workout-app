@@ -9,7 +9,6 @@ struct HomeView: View {
     @EnvironmentObject var healthManager: HealthKitManager
     @EnvironmentObject var insightsEngine: InsightsEngine
     @EnvironmentObject var intentionalBreaksManager: IntentionalBreaksManager
-    @EnvironmentObject var variantEngine: WorkoutVariantEngine
     @EnvironmentObject var sessionManager: WorkoutSessionManager
     @ObservedObject private var metadataManager = ExerciseMetadataManager.shared
     @Binding var selectedTab: AppTab
@@ -33,6 +32,9 @@ struct HomeView: View {
     @State private var cachedOverallStats: WorkoutStats?
     @State private var cachedWeeklyChangeMetrics: [ChangeMetric] = []
     @State private var cachedMuscleSuggestions: [MuscleGroupSuggestion] = []
+    @State private var cachedHomeHighlights: [HighlightItem] = []
+    @State private var derivedStateTask: Task<Void, Never>?
+    @State private var recoveryCoverageTask: Task<Void, Never>?
     private let maxContentWidth: CGFloat = 820
 
     init(
@@ -106,8 +108,8 @@ struct HomeView: View {
                             .padding(.horizontal, Theme.Spacing.lg)
 
                         // Highlights — always visible (not collapsed)
-                        if !homeHighlights.isEmpty {
-                            HighlightsSectionView(title: "Highlights", items: homeHighlights)
+                        if !cachedHomeHighlights.isEmpty {
+                            HighlightsSectionView(title: "Highlights", items: cachedHomeHighlights)
                                 .padding(.horizontal, Theme.Spacing.lg)
                         }
 
@@ -186,6 +188,7 @@ struct HomeView: View {
         }
         .onAppear {
             refreshHomeDerivedState()
+            rebuildHomeHighlights()
             healthManager.refreshAuthorizationStatus()
             if dataManager.workouts.isEmpty {
                 Task {
@@ -194,11 +197,12 @@ struct HomeView: View {
                         healthDataSnapshot: Array(healthManager.healthDataStore.values)
                     )
                     await insightsEngine.generateInsights()
+                    rebuildHomeHighlights()
                     await refreshRecoveryCoverage()
                 }
             } else {
                 triggerAutoHealthSync()
-                Task { await refreshRecoveryCoverage() }
+                scheduleRecoveryCoverageRefresh()
             }
         }
         .refreshable {
@@ -207,19 +211,23 @@ struct HomeView: View {
                 healthDataSnapshot: Array(healthManager.healthDataStore.values)
             )
             await insightsEngine.generateInsights()
+            rebuildHomeHighlights()
             await refreshRecoveryCoverage()
         }
         .onChange(of: dataManager.workouts) { _, _ in
-            refreshHomeDerivedState()
+            scheduleHomeDerivedStateRefresh()
             triggerAutoHealthSync()
-            Task { await refreshRecoveryCoverage() }
+            scheduleRecoveryCoverageRefresh()
         }
         .onChange(of: intentionalBreaksManager.savedBreaks) { _, _ in
-            refreshHomeDerivedState()
-            Task { await refreshRecoveryCoverage() }
+            scheduleHomeDerivedStateRefresh()
+            scheduleRecoveryCoverageRefresh()
         }
         .onReceive(metadataManager.objectWillChange) { _ in
-            refreshHomeDerivedState()
+            scheduleHomeDerivedStateRefresh()
+        }
+        .onReceive(insightsEngine.$insights) { _ in
+            rebuildHomeHighlights()
         }
     }
 
@@ -514,13 +522,12 @@ struct HomeView: View {
             }
 
             VStack(spacing: Theme.Spacing.md) {
-                ForEach(Array(dataManager.workouts.prefix(3).enumerated()), id: \.element.id) { index, workout in
+                ForEach(Array(dataManager.workouts.prefix(3).enumerated()), id: \.element.id) { _, workout in
                     HomeWorkoutRow(
                         workout: workout,
                         onRepeat: { repeatWorkout(workout) },
                         onTap: { selectedWorkout = workout }
                     )
-                    .staggeredAppear(index: index, baseDelay: 0.2)
                 }
             }
         }
@@ -650,7 +657,7 @@ struct HomeView: View {
         )
     }
 
-    private var homeHighlights: [HighlightItem] {
+    private func buildHomeHighlights() -> [HighlightItem] {
         var items: [HighlightItem] = []
 
         let allowedTypes: Set<InsightType> = [.personalRecord, .strengthGain, .baseline]
@@ -660,6 +667,7 @@ struct HomeView: View {
             let highlightValue = SharedFormatters.sanitizedHighlightValue(from: insight.message)
             items.append(
                 HighlightItem(
+                    id: "\(insight.title)-\(insight.exerciseName ?? "none")-\(Int(insight.date.timeIntervalSince1970))",
                     title: insight.title,
                     value: highlightValue,
                     subtitle: insight.date.formatted(date: .abbreviated, time: .omitted),
@@ -777,6 +785,15 @@ struct HomeView: View {
         )
     }
 
+    private func scheduleHomeDerivedStateRefresh(debounceNs: UInt64 = 150_000_000) {
+        derivedStateTask?.cancel()
+        derivedStateTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: debounceNs)
+            guard !Task.isCancelled else { return }
+            refreshHomeDerivedState()
+        }
+    }
+
     private func refreshRecoveryCoverage() async {
         let exerciseNames = Set(dataManager.workouts.flatMap { $0.exercises.map(\.name) })
         let tagMappings = ExerciseMetadataManager.shared.resolvedMappings(for: exerciseNames)
@@ -787,5 +804,18 @@ struct HomeView: View {
             muscleMappings: tagMappings,
             intentionalBreakRanges: intentionalBreaksManager.savedBreaks
         )
+    }
+
+    private func scheduleRecoveryCoverageRefresh(debounceNs: UInt64 = 250_000_000) {
+        recoveryCoverageTask?.cancel()
+        recoveryCoverageTask = Task {
+            try? await Task.sleep(nanoseconds: debounceNs)
+            guard !Task.isCancelled else { return }
+            await refreshRecoveryCoverage()
+        }
+    }
+
+    private func rebuildHomeHighlights() {
+        cachedHomeHighlights = buildHomeHighlights()
     }
 }
