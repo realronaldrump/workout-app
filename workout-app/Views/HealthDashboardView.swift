@@ -7,7 +7,6 @@ struct HealthDashboardView: View {
     @EnvironmentObject var healthManager: HealthKitManager
     @EnvironmentObject var dataManager: WorkoutDataManager
     @EnvironmentObject private var dateRangeContext: HealthDateRangeContext
-    @Environment(\.dismiss) var dismiss
 
     @State private var selectedCategory: HealthCategory = .all
     @State private var selectedDetailKind: HealthMetricKind?
@@ -108,11 +107,6 @@ struct HealthDashboardView: View {
             .navigationTitle("Health Insights")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    AppToolbarButton(title: "Done", systemImage: "checkmark", variant: .accent) {
-                        dismiss()
-                    }
-                }
                 ToolbarItem(placement: .topBarTrailing) {
                     HealthDateRangeToolbarMenu(earliestDate: earliestDate)
                 }

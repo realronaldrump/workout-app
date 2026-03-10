@@ -540,13 +540,6 @@ private struct BreakEditorSheet: View {
             }
             .navigationTitle(draft.navigationTitle)
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    AppToolbarButton(title: "Done", systemImage: "checkmark", variant: .accent) {
-                        dismiss()
-                    }
-                }
-            }
         }
     }
 

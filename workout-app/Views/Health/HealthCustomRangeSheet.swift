@@ -67,13 +67,6 @@ struct HealthCustomRangeSheet: View {
             }
             .navigationTitle("Custom Range")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    AppToolbarButton(title: "Done", systemImage: "checkmark", variant: .accent) {
-                        dismiss()
-                    }
-                }
-            }
         }
     }
 }
