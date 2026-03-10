@@ -66,8 +66,9 @@ struct ConsistencyView: View {
                     value: String(format: "%.1f", averageSessionsPerWeek)
                 )
                 ConsistencyMetricPill(
-                    label: "This Week",
-                    value: thisWeekGoal > 0 ? "\(thisWeekSessions)/\(thisWeekGoal)" : "Break"
+                    label: "Week Progress",
+                    value: thisWeekProgressValue,
+                    detail: thisWeekProgressDetail
                 )
                 ConsistencyMetricPill(
                     label: "Current Streak",
@@ -123,6 +124,16 @@ struct ConsistencyView: View {
 
     private var thisWeekGoal: Int {
         weeklyBuckets.last?.requiredSessions(targetSessionsPerWeek: targetSessionsPerWeek) ?? targetSessionsPerWeek
+    }
+
+    private var thisWeekProgressValue: String {
+        guard thisWeekGoal > 0 else { return "Break" }
+        return "\(thisWeekSessions) of \(thisWeekGoal)"
+    }
+
+    private var thisWeekProgressDetail: String? {
+        guard thisWeekGoal > 0 else { return "intentional break week" }
+        return "completed / needed so far"
     }
 
     private var weeksAtGoal: Int {
@@ -287,6 +298,7 @@ private struct WeeklyConsistencyBucket: Identifiable {
 private struct ConsistencyMetricPill: View {
     let label: String
     let value: String
+    var detail: String? = nil
     var highlight: Bool = false
 
     var body: some View {
@@ -301,6 +313,13 @@ private struct ConsistencyMetricPill: View {
                 .font(Theme.Typography.subheadline)
                 .foregroundColor(highlight ? Theme.Colors.success : Theme.Colors.textPrimary)
                 .monospacedDigit()
+
+            if let detail {
+                Text(detail)
+                    .font(Theme.Typography.caption)
+                    .foregroundColor(Theme.Colors.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, Theme.Spacing.md)
