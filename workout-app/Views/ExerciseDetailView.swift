@@ -8,6 +8,7 @@ struct ExerciseDetailView: View {
     @ObservedObject var gymProfilesManager: GymProfilesManager
     @ObservedObject private var metadataManager = ExerciseMetadataManager.shared
     @ObservedObject private var metricManager = ExerciseMetricManager.shared
+    @EnvironmentObject private var healthManager: HealthKitManager
     @EnvironmentObject private var variantEngine: WorkoutVariantEngine
     @StateObject private var insightsEngine: InsightsEngine
     @State private var selectedChart = ChartType.weight
@@ -22,6 +23,8 @@ struct ExerciseDetailView: View {
     @State private var scopedHistory: [(date: Date, sets: [WorkoutSet])] = []
     @State private var cachedCardioConfig: ResolvedCardioMetricConfiguration?
     @State private var availableChartTypes: [ChartType] = [.weight, .volume, .oneRepMax, .reps]
+    @State private var progressForensicsReview: ExerciseForensicsReview?
+    @State private var isLoadingProgressForensics = false
 
     enum ChartType: String, CaseIterable, Hashable {
         case weight = "Max Weight"
@@ -145,6 +148,22 @@ struct ExerciseDetailView: View {
     private var progressChartHistory: [(date: Date, sets: [WorkoutSet])] {
         guard let bounds = progressChartRangeBounds(for: selectedProgressRange) else { return scopedHistory }
         return scopedHistory.filter { $0.date >= bounds.start && $0.date <= bounds.end }
+    }
+
+    private var scopedForensicsWorkouts: [Workout] {
+        dataManager.workouts.filter { workout in
+            guard workout.exercises.contains(where: { $0.name == exerciseName }) else { return false }
+
+            let gymId = annotationsManager.annotation(for: workout.id)?.gymProfileId
+            switch selectedGymScope {
+            case .all:
+                return true
+            case .unassigned:
+                return gymId == nil
+            case .gym(let targetId):
+                return gymId == targetId
+            }
+        }
     }
 
     private var progressRangeDetailLabel: String? {
@@ -482,6 +501,32 @@ struct ExerciseDetailView: View {
                         }
                     }
 
+                    if !isCardio {
+                        if let progressForensicsReview {
+                            ProgressForensicsSection(
+                                review: progressForensicsReview,
+                                gymNameProvider: { gymId in
+                                    gymProfilesManager.gymName(for: gymId)
+                                }
+                            )
+                        } else if isLoadingProgressForensics {
+                            VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+                                Text("Progress Forensics")
+                                    .font(Theme.Typography.title3)
+                                    .foregroundColor(Theme.Colors.textPrimary)
+
+                                HStack(spacing: Theme.Spacing.sm) {
+                                    ProgressView()
+                                    Text("Building the last two comparable blocks for this lift.")
+                                        .font(Theme.Typography.caption)
+                                        .foregroundColor(Theme.Colors.textSecondary)
+                                }
+                                .padding(Theme.Spacing.lg)
+                                .softCard(elevation: 1)
+                            }
+                        }
+                    }
+
                     PersonalRecordsView(
                         exerciseName: exerciseName,
                         history: scopedHistory
@@ -517,10 +562,12 @@ struct ExerciseDetailView: View {
             }
             Task {
                 await insightsEngine.generateInsights()
+                await refreshProgressForensics()
             }
         }
         .onChange(of: selectedGymScope) { _, _ in
             refreshScopedHistory()
+            Task { await refreshProgressForensics() }
         }
         .onChange(of: availableChartTypes) { _, newValue in
             if !newValue.contains(selectedChart) {
@@ -529,15 +576,20 @@ struct ExerciseDetailView: View {
         }
         .onChange(of: dataManager.workouts) { _, _ in
             refreshScopedHistory()
+            Task { await refreshProgressForensics() }
         }
         .onReceive(annotationsManager.$annotations) { _ in
             refreshScopedHistory()
+            Task { await refreshProgressForensics() }
         }
         .onReceive(metadataManager.objectWillChange) { _ in
             refreshScopedHistory()
         }
         .onReceive(metricManager.objectWillChange) { _ in
             refreshScopedHistory()
+        }
+        .onChange(of: healthManager.authorizationStatus) { _, _ in
+            Task { await refreshProgressForensics() }
         }
         .onChange(of: selectedChart) { _, _ in
             Haptics.selection()
@@ -592,5 +644,48 @@ struct ExerciseDetailView: View {
         case .gym(let id):
             selectedGymScope = .gym(id)
         }
+    }
+
+    private func refreshProgressForensics() async {
+        guard !isCardio else {
+            progressForensicsReview = nil
+            isLoadingProgressForensics = false
+            return
+        }
+
+        let workouts = scopedForensicsWorkouts
+        guard let earliestWorkoutDate = workouts.map(\.date).min() else {
+            progressForensicsReview = nil
+            isLoadingProgressForensics = false
+            return
+        }
+
+        isLoadingProgressForensics = true
+
+        let bodyMassSamples: [BodyRawSample]
+        if healthManager.authorizationStatus == .authorized {
+            let range = DateInterval(start: earliestWorkoutDate, end: Date())
+            do {
+                let samples = try await healthManager.fetchMetricSamples(metric: .bodyMass, range: range)
+                bodyMassSamples = samples.map { sample in
+                    BodyRawSample(
+                        timestamp: sample.timestamp,
+                        value: HealthMetric.bodyMass.displayValue(from: sample.value)
+                    )
+                }
+            } catch {
+                bodyMassSamples = []
+            }
+        } else {
+            bodyMassSamples = []
+        }
+
+        progressForensicsReview = ProgressForensicsEngine.review(
+            for: exerciseName,
+            workouts: workouts,
+            annotations: annotationsManager.annotations,
+            bodyMassSamples: bodyMassSamples
+        )
+        isLoadingProgressForensics = false
     }
 }
