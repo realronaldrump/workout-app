@@ -17,9 +17,12 @@ class HealthKitManager: ObservableObject {
     @Published var syncError: String?
     @Published var healthDataStore: [UUID: WorkoutHealthData] = [:] // keyed by workout ID
     @Published var dailyHealthStore: [Date: DailyHealthData] = [:] // keyed by day start
+    @Published var dailyHealthCoverage: Set<Date> = []
     @Published var isDailySyncing = false
     @Published var dailySyncProgress: Double = 0
     @Published var lastDailySyncDate: Date?
+    @Published var earliestAvailableDailyHealthDate: Date?
+    @Published var isResolvingDailyHealthHistory = false
     @Published var syncedWorkoutsCount: Int = 0
 
     var authorizationTask: Task<Void, Error>?
@@ -33,6 +36,8 @@ class HealthKitManager: ObservableObject {
     let healthDataKey = "syncedHealthData"
     let lastDailySyncKey = "lastDailyHealthSyncDate"
     let dailyHealthDataKey = "dailyHealthDataStore"
+    let dailyHealthCoverageKey = "dailyHealthCoverageStore"
+    let earliestAvailableDailyHealthDateKey = "earliestAvailableDailyHealthDate"
     let preferredSleepSourceKey = "preferredSleepSourceKey"
     let preferredSleepSourceNameKey = "preferredSleepSourceName"
     let pendingWorkoutSleepSummaryRefreshKey = "pendingWorkoutSleepSummaryRefresh"
@@ -169,6 +174,10 @@ class HealthKitManager: ObservableObject {
     /// Access cached health data for a workout
     func getHealthData(for workoutId: UUID) -> WorkoutHealthData? {
         healthDataStore[workoutId]
+    }
+
+    var allTimeDailyHealthStartDate: Date? {
+        earliestAvailableDailyHealthDate ?? dailyHealthStore.keys.min()
     }
 
     var selectedSleepSourceKey: String? {

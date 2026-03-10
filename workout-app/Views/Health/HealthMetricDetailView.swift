@@ -12,7 +12,7 @@ struct HealthMetricDetailView: View {
     @State private var sampleError: String?
 
     private var earliestDate: Date? {
-        healthManager.dailyHealthStore.keys.min()
+        healthManager.allTimeDailyHealthStartDate
     }
 
     private var range: DateInterval {

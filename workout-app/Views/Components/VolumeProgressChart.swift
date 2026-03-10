@@ -64,14 +64,14 @@ struct VolumeProgressChart: View {
                             x: .value("Date", dataPoint.date),
                             y: .value(selectedMetric.rawValue, dataPoint.value)
                         )
-                        .interpolationMethod(.catmullRom)
+                        .interpolationMethod(.linear)
                         .foregroundStyle(Theme.Colors.accent)
 
                         AreaMark(
                             x: .value("Date", dataPoint.date),
                             y: .value(selectedMetric.rawValue, dataPoint.value)
                         )
-                        .interpolationMethod(.catmullRom)
+                        .interpolationMethod(.linear)
                         .foregroundStyle(Theme.Colors.accent.opacity(0.2))
 
                         PointMark(

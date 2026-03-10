@@ -614,6 +614,76 @@ extension HealthKitManager {
         }
     }
 
+    func fetchEarliestQuantitySampleDate(type: HKQuantityTypeIdentifier) async throws -> Date? {
+        let samples = try await fetchQuantitySamples(
+            type: type,
+            from: .distantPast,
+            to: Date(),
+            limit: 1,
+            ascending: true
+        )
+        return samples.first?.startDate
+    }
+
+    func fetchEarliestCategorySampleDate(type: HKCategoryTypeIdentifier) async throws -> Date? {
+        guard let healthStore = healthStore else {
+            throw HealthKitError.notAvailable
+        }
+        guard let categoryType = HKObjectType.categoryType(forIdentifier: type) else {
+            return nil
+        }
+
+        let predicate = HKQuery.predicateForSamples(withStart: .distantPast, end: Date(), options: [])
+        let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
+
+        return try await withCheckedThrowingContinuation { continuation in
+            let query = HKSampleQuery(
+                sampleType: categoryType,
+                predicate: predicate,
+                limit: 1,
+                sortDescriptors: [sortDescriptor]
+            ) { _, samples, error in
+                if let error {
+                    if let auth = Self.authorizationFailure(from: error) {
+                        Task { @MainActor in
+                            self.authorizationStatus = auth.status
+                        }
+                        continuation.resume(throwing: auth.error)
+                        return
+                    }
+                    if Self.isNoDataError(error) {
+                        continuation.resume(returning: nil)
+                        return
+                    }
+                    continuation.resume(throwing: HealthKitError.queryFailed(error.localizedDescription))
+                    return
+                }
+
+                let earliest = (samples as? [HKCategorySample])?.first?.startDate
+                continuation.resume(returning: earliest)
+            }
+            healthStore.execute(query)
+        }
+    }
+
+    func fetchEarliestAvailableDailyHealthDate() async throws -> Date? {
+        var earliestDate: Date?
+
+        for metric in HealthMetric.dailyQuantityMetrics {
+            guard let type = metric.quantityType else { continue }
+            if let sampleDate = try await fetchEarliestQuantitySampleDate(type: type) {
+                earliestDate = min(earliestDate ?? sampleDate, sampleDate)
+            }
+        }
+
+        if let sleepDate = try await fetchEarliestCategorySampleDate(type: .sleepAnalysis) {
+            earliestDate = min(earliestDate ?? sleepDate, sleepDate)
+        }
+
+        guard let earliestDate else { return nil }
+        return Calendar.current.startOfDay(for: earliestDate)
+    }
+
     func fetchSleepSummary(from start: Date, to end: Date) async throws -> SleepSummary? {
         guard let healthStore = healthStore else {
             throw HealthKitError.notAvailable

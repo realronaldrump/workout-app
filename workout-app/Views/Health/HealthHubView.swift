@@ -12,7 +12,7 @@ struct HealthHubView: View {
     @State private var cachedSummaryCards: [HealthSummaryCardModel] = []
 
     private var earliestDate: Date? {
-        healthManager.dailyHealthStore.keys.min()
+        healthManager.allTimeDailyHealthStartDate
     }
 
     private var currentRange: DateInterval {
@@ -23,23 +23,52 @@ struct HealthHubView: View {
         dateRangeContext.rangeLabel(earliest: earliestDate)
     }
 
+    private var isAllTimeRange: Bool {
+        dateRangeContext.selectedRange == .allTime
+    }
+
+    private var timelineSourceDays: [DailyHealthData] {
+        DailyTimelineRangePolicy.displayedDays(
+            from: cachedDailyData,
+            selectedRange: dateRangeContext.selectedRange,
+            range: currentRange
+        )
+    }
+
+    private var timelineUsesRecentWindow: Bool {
+        DailyTimelineRangePolicy.shouldLimitTimeline(
+            selectedRange: dateRangeContext.selectedRange,
+            range: currentRange
+        )
+    }
+
     private var timelinePresentation: TimelinePresentation {
-        let sorted = cachedDailyData.sorted { $0.dayStart > $1.dayStart }
+        let sorted = timelineSourceDays.sorted { $0.dayStart > $1.dayStart }
         return TimelinePresentation(days: sorted, density: timelineDensity)
     }
 
     private var timelineSummaryText: String? {
-        guard timelinePresentation.isSampled else { return nil }
+        var segments: [String] = []
 
-        let cadence = timelinePresentation.samplingStep == 7
-            ? "Showing weekly checkpoints"
-            : "Showing roughly every \(timelinePresentation.samplingStep) days"
-        let hiddenDates = timelinePresentation.hiddenCount == 1 ? "1 date hidden" : "\(timelinePresentation.hiddenCount) dates hidden"
-        return "\(cadence) across \(timelinePresentation.totalCount) days • \(hiddenDates)"
+        if timelineUsesRecentWindow {
+            segments.append("Latest \(DailyTimelineRangePolicy.recentWindowDays) days of daily entries")
+        }
+
+        if timelinePresentation.isSampled {
+            let cadence = timelinePresentation.samplingStep == 7
+                ? "Showing weekly checkpoints"
+                : "Showing roughly every \(timelinePresentation.samplingStep) days"
+            let hiddenDates = timelinePresentation.hiddenCount == 1 ? "1 date hidden" : "\(timelinePresentation.hiddenCount) dates hidden"
+            segments.append("\(cadence) across \(timelinePresentation.totalCount) days")
+            segments.append(hiddenDates)
+        }
+
+        guard !segments.isEmpty else { return nil }
+        return segments.joined(separator: " • ")
     }
 
     private var canShowMoreTimeline: Bool {
-        timelineDensity == .compact && cachedDailyData.count > TimelinePresentation.expandedTargetCount
+        timelineDensity == .compact && timelineSourceDays.count > TimelinePresentation.expandedTargetCount
     }
 
     private var canShowAllTimeline: Bool {
@@ -47,12 +76,29 @@ struct HealthHubView: View {
     }
 
     private var canShowLessTimeline: Bool {
-        timelineDensity != .compact && cachedDailyData.count > TimelinePresentation.compactTargetCount
+        timelineDensity != .compact && timelineSourceDays.count > TimelinePresentation.compactTargetCount
+    }
+
+    private var historyStatusText: String? {
+        guard healthManager.authorizationStatus == .authorized else { return nil }
+        guard isAllTimeRange else { return nil }
+
+        if healthManager.isResolvingDailyHealthHistory && healthManager.allTimeDailyHealthStartDate == nil {
+            return "Checking your earliest Apple Health data so All uses your full history."
+        }
+
+        let totalDays = healthManager.dayCount(in: currentRange)
+        guard totalDays > 0 else { return nil }
+
+        let coveredDays = healthManager.coveredDayCount(in: currentRange)
+        guard coveredDays < totalDays else { return nil }
+
+        return "All time loads in yearly batches. \(coveredDays) of \(totalDays) days have been scanned so far, and overview cards reflect the loaded days."
     }
 
     private var headerSubtitle: String {
         let dayCount = cachedDailyData.count
-        let countLabel = dayCount == 1 ? "1 day" : "\(dayCount) days"
+        let countLabel = dayCount == 1 ? "1 day with data" : "\(dayCount) days with data"
         return "\(rangeLabel) • \(countLabel)"
     }
 
@@ -65,6 +111,10 @@ struct HealthHubView: View {
                     headerSection
 
                     timeRangeSection
+
+                    if let historyStatusText {
+                        historyStatusCard(text: historyStatusText)
+                    }
 
                     if healthManager.authorizationStatus == .unavailable {
                         unavailableCard
@@ -114,6 +164,12 @@ struct HealthHubView: View {
         }
         .onChange(of: healthManager.authorizationStatus) { _, newValue in
             if newValue == .authorized {
+                triggerDailySync(force: false)
+            }
+        }
+        .onChange(of: healthManager.earliestAvailableDailyHealthDate) { _, _ in
+            if isAllTimeRange {
+                refreshCachedContent()
                 triggerDailySync(force: false)
             }
         }
@@ -182,6 +238,15 @@ struct HealthHubView: View {
             .padding(.horizontal, Theme.Spacing.xs)
     }
 
+    private func historyStatusCard(text: String) -> some View {
+        Text(text)
+            .font(Theme.Typography.caption)
+            .foregroundStyle(Theme.Colors.textSecondary)
+            .padding(Theme.Spacing.md)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .softCard(elevation: 1)
+    }
+
     private var summarySection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             Text("Overview")
@@ -235,7 +300,7 @@ struct HealthHubView: View {
                     .foregroundStyle(Theme.Colors.textTertiary)
             }
 
-            VStack(spacing: Theme.Spacing.md) {
+            LazyVStack(spacing: Theme.Spacing.md) {
                 ForEach(timelinePresentation.days) { day in
                     NavigationLink {
                         DailyHealthDetailView(day: day)
@@ -436,10 +501,31 @@ struct HealthHubView: View {
         guard !healthManager.isDailySyncing else { return }
 
         Task {
-            if force {
-                try? await healthManager.syncDailyHealthData(range: currentRange)
+            await healthManager.ensureEarliestAvailableDailyHealthDate()
+
+            let resolvedRange = resolvedCurrentRange()
+
+            if isAllTimeRange {
+                if force {
+                    let refreshRange = DailyTimelineRangePolicy.recentRefreshRange(within: resolvedRange)
+                    try? await healthManager.syncDailyHealthData(range: refreshRange)
+                    await healthManager.ensureDailyHealthData(
+                        range: resolvedRange,
+                        batchSizeDays: DailyTimelineRangePolicy.historyBackfillBatchDays,
+                        direction: .backward
+                    )
+                } else {
+                    await healthManager.ensureDailyHealthData(
+                        range: resolvedRange,
+                        batchSizeDays: DailyTimelineRangePolicy.historyBackfillBatchDays,
+                        maxBatches: 1,
+                        direction: .backward
+                    )
+                }
+            } else if force {
+                try? await healthManager.syncDailyHealthData(range: resolvedRange)
             } else {
-                await healthManager.ensureDailyHealthData(range: currentRange)
+                await healthManager.ensureDailyHealthData(range: resolvedCurrentRange())
             }
         }
     }
@@ -450,6 +536,10 @@ struct HealthHubView: View {
             .sorted { $0.dayStart < $1.dayStart }
         cachedDailyData = filtered
         cachedSummaryCards = buildSummaryCards(from: filtered)
+    }
+
+    private func resolvedCurrentRange() -> DateInterval {
+        dateRangeContext.resolvedRange(earliest: healthManager.allTimeDailyHealthStartDate)
     }
 }
 
@@ -498,6 +588,46 @@ enum TimelineSampling {
     static func approximateStep(totalCount: Int, displayedCount: Int) -> Int {
         guard displayedCount > 1, totalCount > displayedCount else { return 1 }
         return max(1, Int(round(Double(totalCount - 1) / Double(displayedCount - 1))))
+    }
+}
+
+enum DailyTimelineRangePolicy {
+    static let recentWindowDays = 90
+    static let recentRefreshDays = 30
+    static let historyBackfillBatchDays = 365
+    static let longRangeThresholdDays = 366
+
+    static func shouldLimitTimeline(
+        selectedRange: AppTimeRange,
+        range: DateInterval
+    ) -> Bool {
+        selectedRange == .allTime || range.duration > TimeInterval(longRangeThresholdDays * 24 * 60 * 60)
+    }
+
+    static func displayedDays(
+        from days: [DailyHealthData],
+        selectedRange: AppTimeRange,
+        range: DateInterval,
+        calendar: Calendar = .current
+    ) -> [DailyHealthData] {
+        let sortedDays = days.sorted { $0.dayStart < $1.dayStart }
+        guard shouldLimitTimeline(selectedRange: selectedRange, range: range) else {
+            return sortedDays
+        }
+
+        let cutoffReference = calendar.date(byAdding: .day, value: -(recentWindowDays - 1), to: range.end) ?? range.start
+        let cutoff = max(calendar.startOfDay(for: cutoffReference), calendar.startOfDay(for: range.start))
+        return sortedDays.filter { $0.dayStart >= cutoff }
+    }
+
+    static func recentRefreshRange(
+        within range: DateInterval,
+        calendar: Calendar = .current
+    ) -> DateInterval {
+        let refreshStartReference = calendar.date(byAdding: .day, value: -(recentRefreshDays - 1), to: range.end) ?? range.start
+        let refreshStart = max(calendar.startOfDay(for: refreshStartReference), calendar.startOfDay(for: range.start))
+        let refreshEnd = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: range.end) ?? range.end
+        return DateInterval(start: refreshStart, end: refreshEnd)
     }
 }
 

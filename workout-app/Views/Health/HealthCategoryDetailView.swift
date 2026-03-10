@@ -8,7 +8,7 @@ struct HealthCategoryDetailView: View {
     @EnvironmentObject private var dateRangeContext: HealthDateRangeContext
 
     private var earliestDate: Date? {
-        healthManager.dailyHealthStore.keys.min()
+        healthManager.allTimeDailyHealthStartDate
     }
 
     private var range: DateInterval {

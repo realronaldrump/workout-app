@@ -14,6 +14,10 @@ extension HealthKitManager {
         getDocumentsDirectory().appendingPathComponent("daily_health_store.json")
     }
 
+    private var dailyCoverageFileURL: URL {
+        getDocumentsDirectory().appendingPathComponent("daily_health_coverage.json")
+    }
+
     func persistData() {
         let entries = Array(healthDataStore.values)
         let url = dataFileURL
@@ -40,12 +44,27 @@ extension HealthKitManager {
         }
     }
 
+    func persistDailyHealthCoverage() {
+        let coveredDays = Array(dailyHealthCoverage).sorted()
+        let url = dailyCoverageFileURL
+        Task.detached(priority: .utility) {
+            do {
+                let data = try JSONEncoder().encode(coveredDays)
+                try data.write(to: url, options: [.atomic, .completeFileProtection])
+            } catch {
+                print("Failed to persist daily health coverage: \(error)")
+            }
+        }
+    }
+
     func invalidateDailyHealthCache() {
         dailyHealthStore.removeAll()
+        dailyHealthCoverage.removeAll()
         lastDailySyncDate = nil
         dailySyncProgress = 0
         userDefaults.removeObject(forKey: lastDailySyncKey)
         persistDailyHealthData()
+        persistDailyHealthCoverage()
     }
 
     func clearCachedWorkoutSleepSummaries(persist: Bool = true) {
@@ -79,10 +98,12 @@ extension HealthKitManager {
 
     func loadPersistedDailyHealthData() {
         cleanupLegacyUserDefaults()
+        earliestAvailableDailyHealthDate = userDefaults.object(forKey: earliestAvailableDailyHealthDateKey) as? Date
         let storedVersion = userDefaults.integer(forKey: dailyHealthStoreVersionKey)
         if storedVersion < currentDailyHealthStoreVersion {
             // Daily sleep aggregation logic changed; discard old cached daily store to avoid showing inflated sleep.
             dailyHealthStore.removeAll()
+            dailyHealthCoverage.removeAll()
             lastDailySyncDate = nil
             userDefaults.removeObject(forKey: lastDailySyncKey)
 
@@ -90,6 +111,10 @@ extension HealthKitManager {
                 if FileManager.default.fileExists(atPath: dailyDataFileURL.path) {
                     try FileManager.default.removeItem(at: dailyDataFileURL)
                     print("Deleted daily health data store file (version bump)")
+                }
+                if FileManager.default.fileExists(atPath: dailyCoverageFileURL.path) {
+                    try FileManager.default.removeItem(at: dailyCoverageFileURL)
+                    print("Deleted daily health coverage file (version bump)")
                 }
             } catch {
                 print("Failed to delete daily health data file during version bump: \(error)")
@@ -109,6 +134,21 @@ extension HealthKitManager {
             print("Failed to load persisted daily health data: \(error)")
         }
 
+        do {
+            guard FileManager.default.fileExists(atPath: dailyCoverageFileURL.path) else {
+                dailyHealthCoverage = []
+                lastDailySyncDate = userDefaults.object(forKey: lastDailySyncKey) as? Date
+                return
+            }
+            let data = try Data(contentsOf: dailyCoverageFileURL)
+            let coverageArray = try JSONDecoder().decode([Date].self, from: data)
+            dailyHealthCoverage = Set(coverageArray)
+            print("Loaded \(dailyHealthCoverage.count) covered daily health days")
+        } catch {
+            dailyHealthCoverage = []
+            print("Failed to load persisted daily health coverage: \(error)")
+        }
+
         lastDailySyncDate = userDefaults.object(forKey: lastDailySyncKey) as? Date
     }
 
@@ -121,14 +161,17 @@ extension HealthKitManager {
         syncedWorkoutsCount = 0
         syncError = nil
         dailyHealthStore.removeAll()
+        dailyHealthCoverage.removeAll()
         lastDailySyncDate = nil
         dailySyncProgress = 0
         isDailySyncing = false
+        earliestAvailableDailyHealthDate = nil
 
         // Clear persistence
         cleanupLegacyUserDefaults()
         userDefaults.removeObject(forKey: lastSyncKey)
         userDefaults.removeObject(forKey: lastDailySyncKey)
+        userDefaults.removeObject(forKey: earliestAvailableDailyHealthDateKey)
         userDefaults.removeObject(forKey: pendingWorkoutSleepSummaryRefreshKey)
 
         do {
@@ -139,6 +182,10 @@ extension HealthKitManager {
             if FileManager.default.fileExists(atPath: dailyDataFileURL.path) {
                 try FileManager.default.removeItem(at: dailyDataFileURL)
                 print("Deleted daily health data store file")
+            }
+            if FileManager.default.fileExists(atPath: dailyCoverageFileURL.path) {
+                try FileManager.default.removeItem(at: dailyCoverageFileURL)
+                print("Deleted daily health coverage file")
             }
         } catch {
             print("Failed to delete health data file: \(error)")
