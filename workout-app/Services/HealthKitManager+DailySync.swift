@@ -45,9 +45,9 @@ struct DailyHealthCoveragePlanner {
 
         for day in allDays {
             if coveredDays.contains(day) {
-                if let spanStart, let previousDay {
-                    uncoveredSpans.append((start: spanStart, end: previousDay))
-                    self.resetSpan(&spanStart, &previousDay)
+                if let startDay = spanStart, let previousDay {
+                    uncoveredSpans.append((start: startDay, end: previousDay))
+                    spanStart = nil
                 }
             } else if spanStart == nil {
                 spanStart = day
@@ -56,19 +56,19 @@ struct DailyHealthCoveragePlanner {
             previousDay = day
         }
 
-        if let spanStart, let previousDay {
-            uncoveredSpans.append((start: spanStart, end: previousDay))
+        if let startDay = spanStart, let previousDay {
+            uncoveredSpans.append((start: startDay, end: previousDay))
         }
 
-        let chunkedRanges = uncoveredSpans.flatMap { span in
+        let plannedRanges = uncoveredSpans.flatMap { span in
             chunkedRanges(from: span.start, through: span.end, batchSizeDays: batchSizeDays, calendar: calendar)
         }
 
         switch direction {
         case .forward:
-            return chunkedRanges
+            return plannedRanges
         case .backward:
-            return Array(chunkedRanges.reversed())
+            return Array(plannedRanges.reversed())
         }
     }
 
@@ -94,11 +94,6 @@ struct DailyHealthCoveragePlanner {
         }
 
         return intervals
-    }
-
-    private static func resetSpan(_ spanStart: inout Date?, _ previousDay: inout Date?) {
-        spanStart = nil
-        previousDay = nil
     }
 }
 
