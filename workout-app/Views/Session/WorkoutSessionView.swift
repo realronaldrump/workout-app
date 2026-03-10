@@ -64,48 +64,38 @@ struct WorkoutSessionView: View {
                                 muscleSuggestionSection(cachedMuscleSuggestions)
                             }
 
+                            addExerciseButton
+
                             VStack(alignment: .leading, spacing: Theme.Spacing.md) {
                                 Text("Exercises")
                                     .font(Theme.Typography.sectionHeader)
                                     .foregroundColor(Theme.Colors.textPrimary)
                                     .tracking(1.0)
 
-		                                VStack(spacing: Theme.Spacing.md) {
-		                                    ForEach(session.exercises) { exercise in
-		                                        SessionExerciseCard(
-		                                            exercise: exercise,
-		                                            context: exerciseCardContexts[exercise.name],
-		                                            weightUnit: weightUnit,
-		                                            weightIncrement: resolvedWeightIncrement,
+                                if session.exercises.isEmpty {
+                                    ContentUnavailableView(
+                                        "No exercises yet",
+                                        systemImage: "plus.circle",
+                                        description: Text("Add your first exercise to start logging sets.")
+                                    )
+                                    .padding(.top, Theme.Spacing.sm)
+                                } else {
+                                    VStack(spacing: Theme.Spacing.md) {
+                                        ForEach(session.exercises) { exercise in
+                                            SessionExerciseCard(
+                                                exercise: exercise,
+                                                context: exerciseCardContexts[exercise.name],
+                                                weightUnit: weightUnit,
+                                                weightIncrement: resolvedWeightIncrement,
                                                     dataManager: dataManager,
                                                     annotationsManager: annotationsManager,
                                                     gymProfilesManager: gymProfilesManager,
                                                     sessionManager: sessionManager
-		                                        )
-		                                    }
-		                                }
-                            }
-
-                            Button {
-                                showingExercisePicker = true
-                                Haptics.selection()
-                            } label: {
-                                HStack(spacing: Theme.Spacing.md) {
-                                    Image(systemName: "plus.circle.fill")
-                                        .font(Theme.Iconography.action)
-                                        .foregroundStyle(Theme.Colors.accent)
-                                    Text("Add Exercise")
-                                        .font(Theme.Typography.headline)
-                                        .foregroundColor(Theme.Colors.textPrimary)
-                                    Spacer()
-                                    Image(systemName: "chevron.right")
-                                        .font(Theme.Typography.caption)
-                                        .foregroundStyle(Theme.Colors.textTertiary)
+                                            )
+                                        }
+                                    }
                                 }
-                                .padding(Theme.Spacing.lg)
-                                .softCard(elevation: 1)
                             }
-                            .buttonStyle(.plain)
 
                             Button {
                                 showingFinishSheet = true
@@ -215,7 +205,7 @@ struct WorkoutSessionView: View {
                 Image(systemName: "chevron.down")
                     .font(Theme.Typography.bodyStrong)
                     .foregroundStyle(Theme.Colors.textPrimary)
-                    .frame(width: 34, height: 34)
+                    .frame(width: 44, height: 44)
                     .background(
                         Circle()
                             .fill(Theme.Colors.surfaceRaised)
@@ -260,7 +250,7 @@ struct WorkoutSessionView: View {
                 Image(systemName: "trash")
                     .font(Theme.Typography.bodyBold)
                     .foregroundStyle(Theme.Colors.error)
-                    .frame(width: 34, height: 34)
+                    .frame(width: 44, height: 44)
                     .background(
                         Circle()
                             .fill(Theme.Colors.error.opacity(0.06))
@@ -284,6 +274,29 @@ struct WorkoutSessionView: View {
         let inc = weightIncrement
         let isAllowed = allowedWeightIncrements.contains { abs($0 - inc) < 0.0001 }
         return (inc > 0 && isAllowed) ? inc : 2.5
+    }
+
+    private var addExerciseButton: some View {
+        Button {
+            showingExercisePicker = true
+            Haptics.selection()
+        } label: {
+            HStack(spacing: Theme.Spacing.md) {
+                Image(systemName: "plus.circle.fill")
+                    .font(Theme.Iconography.action)
+                    .foregroundStyle(Theme.Colors.accent)
+                Text("Add Exercise")
+                    .font(Theme.Typography.headline)
+                    .foregroundColor(Theme.Colors.textPrimary)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.textTertiary)
+            }
+            .padding(Theme.Spacing.lg)
+            .softCard(elevation: 1)
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Rest Timer Card
@@ -712,6 +725,7 @@ private struct SessionExerciseCard: View {
     let sessionManager: WorkoutSessionManager
 
     @State private var showingHistory = false
+    @State private var showingRemoveExerciseAlert = false
 
     var body: some View {
         let rec = context?.recommendation
@@ -776,7 +790,7 @@ private struct SessionExerciseCard: View {
                         showingHistory = true
                     }
                     Button("Remove Exercise", role: .destructive) {
-                        sessionManager.removeExercise(id: exercise.id)
+                        showingRemoveExerciseAlert = true
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
@@ -838,6 +852,14 @@ private struct SessionExerciseCard: View {
                 gymProfilesManager: gymProfilesManager
             )
         }
+        .alert("Remove Exercise?", isPresented: $showingRemoveExerciseAlert) {
+            Button("Cancel", role: .cancel) {}
+            Button("Remove", role: .destructive) {
+                sessionManager.removeExercise(id: exercise.id)
+            }
+        } message: {
+            Text("This will remove \(exercise.name) and all of its sets from the current session.")
+        }
     }
 
     private func recommendationLine(_ rec: ExerciseRecommendation) -> String {
@@ -890,6 +912,8 @@ private struct SessionSetRow: View {
     @State private var distanceText: String
     @State private var durationText: String
     @State private var commitTask: Task<Void, Never>?
+    @State private var showingDeleteSetAlert = false
+    @State private var completionValidationMessage: String?
     @FocusState private var focusedField: Field?
 
     private enum Field {
@@ -927,8 +951,15 @@ private struct SessionSetRow: View {
                 // Completion toggle
                 Button {
                     commitImmediately()
-                    sessionManager.toggleSetComplete(exerciseId: exerciseId, setId: set.id)
-                    Haptics.selection()
+                    switch sessionManager.toggleSetComplete(exerciseId: exerciseId, setId: set.id) {
+                    case .toggled:
+                        Haptics.selection()
+                    case .invalid(let message):
+                        completionValidationMessage = message
+                        Haptics.notify(.warning)
+                    case .missingSet:
+                        break
+                    }
                 } label: {
                     Image(systemName: set.isCompleted ? "checkmark.circle.fill" : "circle")
                         .font(Theme.Typography.title4)
@@ -977,7 +1008,7 @@ private struct SessionSetRow: View {
                         }
                     }
                     Button("Delete Set", role: .destructive) {
-                        sessionManager.deleteSet(exerciseId: exerciseId, setId: set.id)
+                        showingDeleteSetAlert = true
                     }
                 } label: {
                     Image(systemName: "ellipsis")
@@ -1017,6 +1048,29 @@ private struct SessionSetRow: View {
         .onDisappear {
             commitImmediately()
             commitTask?.cancel()
+        }
+        .alert("Delete Set?", isPresented: $showingDeleteSetAlert) {
+            Button("Cancel", role: .cancel) {}
+            Button("Delete", role: .destructive) {
+                sessionManager.deleteSet(exerciseId: exerciseId, setId: set.id)
+            }
+        } message: {
+            Text("This will remove set #\(set.order) from \(exerciseName).")
+        }
+        .alert(
+            "Finish this set first",
+            isPresented: Binding(
+                get: { completionValidationMessage != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        completionValidationMessage = nil
+                    }
+                }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(completionValidationMessage ?? "")
         }
     }
 

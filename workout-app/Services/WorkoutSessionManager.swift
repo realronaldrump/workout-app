@@ -23,6 +23,12 @@ enum WorkoutSessionError: LocalizedError {
     }
 }
 
+enum SetCompletionToggleResult {
+    case toggled(isCompleted: Bool)
+    case invalid(message: String)
+    case missingSet
+}
+
 struct SetPrefill: Sendable {
     var weight: Double?
     var reps: Int?
@@ -214,12 +220,23 @@ final class WorkoutSessionManager: ObservableObject {
         schedulePersistDraft()
     }
 
-    func toggleSetComplete(exerciseId: UUID, setId: UUID) {
-        guard var session = activeSession else { return }
-        guard let exerciseIndex = session.exercises.firstIndex(where: { $0.id == exerciseId }) else { return }
-        guard let setIndex = session.exercises[exerciseIndex].sets.firstIndex(where: { $0.id == setId }) else { return }
+    @discardableResult
+    func toggleSetComplete(exerciseId: UUID, setId: UUID) -> SetCompletionToggleResult {
+        guard var session = activeSession else { return .missingSet }
+        guard let exerciseIndex = session.exercises.firstIndex(where: { $0.id == exerciseId }) else {
+            return .missingSet
+        }
+        guard let setIndex = session.exercises[exerciseIndex].sets.firstIndex(where: { $0.id == setId }) else {
+            return .missingSet
+        }
 
         var set = session.exercises[exerciseIndex].sets[setIndex]
+        let isCardio = isCardioExercise(session.exercises[exerciseIndex].name)
+
+        if !set.isCompleted, let validationMessage = validationMessageForSetCompletion(set, isCardio: isCardio) {
+            return .invalid(message: validationMessage)
+        }
+
         set.isCompleted.toggle()
         set.completedAt = set.isCompleted ? Date() : nil
         session.exercises[exerciseIndex].sets[setIndex] = set
@@ -232,6 +249,7 @@ final class WorkoutSessionManager: ObservableObject {
         touch(&session)
         activeSession = session
         schedulePersistDraft()
+        return .toggled(isCompleted: set.isCompleted)
     }
 
     func dismissMuscleGroupSuggestion(_ group: MuscleGroup) {
@@ -456,6 +474,23 @@ final class WorkoutSessionManager: ObservableObject {
             updated.append(copy)
         }
         exercise.sets = updated
+    }
+
+    private func validationMessageForSetCompletion(_ set: ActiveSet, isCardio: Bool) -> String? {
+        if isCardio {
+            let reps = max(set.reps ?? 0, 0)
+            let distance = max(set.distance ?? 0, 0)
+            let seconds = max(set.seconds ?? 0, 0)
+            return (reps > 0 || distance > 0 || seconds > 0)
+                ? nil
+                : "Enter at least one cardio metric before marking this set complete."
+        }
+
+        guard let weight = set.weight, let reps = set.reps, weight >= 0, reps > 0 else {
+            return "Enter weight and reps before marking this set complete."
+        }
+
+        return nil
     }
 
     private func normalizedExerciseName(_ name: String) -> String {

@@ -29,9 +29,9 @@ struct ExercisePickerView: View {
                                 }
                             }
 
-                            sectionHeader("All")
+                            sectionHeader(recentExercises.isEmpty ? "All" : "All Others")
                             VStack(spacing: Theme.Spacing.sm) {
-                                ForEach(allExercises, id: \.self) { name in
+                                ForEach(allExercisesExcludingRecent, id: \.self) { name in
                                     exerciseRow(name)
                                 }
                             }
@@ -81,6 +81,11 @@ struct ExercisePickerView: View {
 
         return Array(Set(dataManager.allExerciseNames() + catalogNames))
             .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }
+
+    private var allExercisesExcludingRecent: [String] {
+        let recent = Set(recentExercises)
+        return allExercises.filter { !recent.contains($0) }
     }
 
     private var filteredExercises: [String] {

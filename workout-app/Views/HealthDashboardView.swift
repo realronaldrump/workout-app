@@ -172,8 +172,10 @@ struct HealthDashboardView: View {
                 .foregroundStyle(Theme.Colors.textTertiary)
 
             TimeRangePillPicker(
-                options: HealthTimeRange.allCases.filter { $0 != .custom },
-                selected: $selectedRange
+                selected: $selectedRange,
+                onCustomTap: {
+                    showingCustomRange = true
+                }
             )
         }
     }

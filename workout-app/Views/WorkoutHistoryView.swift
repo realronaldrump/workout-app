@@ -141,72 +141,75 @@ struct WorkoutHistoryRow: View {
     @AppStorage("weightIncrement") private var weightIncrement: Double = 2.5
 
     var body: some View {
-        NavigationLink(destination: WorkoutDetailView(workout: workout)) {
-            HStack(spacing: Theme.Spacing.md) {
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack {
-                        Text(workout.name)
-                            .font(Theme.Typography.bodyBold)
-                            .foregroundStyle(Theme.Colors.textPrimary)
-                            .lineLimit(1)
+        HStack(spacing: Theme.Spacing.md) {
+            NavigationLink(destination: WorkoutDetailView(workout: workout)) {
+                HStack(spacing: Theme.Spacing.md) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Text(workout.name)
+                                .font(Theme.Typography.bodyBold)
+                                .foregroundStyle(Theme.Colors.textPrimary)
+                                .lineLimit(1)
 
-                        Spacer()
+                            Spacer()
 
-                        // Repeat workout button
-                        Button {
-                            Haptics.selection()
-                            repeatThisWorkout()
-                        } label: {
-                            Image(systemName: "arrow.counterclockwise")
-                                .font(Theme.Typography.caption2Bold)
-                                .foregroundColor(Theme.Colors.accent)
-                                .frame(width: 28, height: 28)
-                                .background(Theme.Colors.accentTint)
-                                .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
+                            Text(workout.date.formatted(date: .omitted, time: .shortened))
+                                .font(Theme.Typography.caption)
+                                .foregroundStyle(Theme.Colors.textTertiary)
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Repeat \(workout.name)")
 
-                        Text(workout.date.formatted(date: .omitted, time: .shortened))
-                            .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.Colors.textTertiary)
+                        Text(workout.date.formatted(.dateTime.weekday(.wide)) + ", " + workout.date.formatted(.dateTime.day()))
+                            .font(Theme.Typography.subheadline)
+                            .foregroundStyle(Theme.Colors.textSecondary)
+
+                        GymBadge(text: gymLabel, style: gymBadgeStyle)
+
+                        HStack(spacing: 12) {
+                            metric(workout.duration, systemImage: "clock")
+                            metric("\(workout.exercises.count) exercises", systemImage: "figure.strengthtraining.traditional")
+                            metric(SharedFormatters.volumeWithUnit(workout.totalVolume), systemImage: "scalemass")
+                        }
+                        .font(Theme.Typography.captionBold)
+                        .padding(.top, 4)
+
+                        if let data = healthManager.getHealthData(for: workout.id) {
+                            HealthDataSummaryView(healthData: data)
+                                .padding(.top, Theme.Spacing.xs)
+                        }
                     }
 
-                    Text(workout.date.formatted(.dateTime.weekday(.wide)) + ", " + workout.date.formatted(.dateTime.day()))
-                        .font(Theme.Typography.subheadline)
-                        .foregroundStyle(Theme.Colors.textSecondary)
+                    Spacer()
 
-                    GymBadge(text: gymLabel, style: gymBadgeStyle)
-
-                    HStack(spacing: 12) {
-                        metric(workout.duration, systemImage: "clock")
-                        metric("\(workout.exercises.count) exercises", systemImage: "figure.strengthtraining.traditional")
-                        metric(SharedFormatters.volumeWithUnit(workout.totalVolume), systemImage: "scalemass")
-                    }
-                    .font(Theme.Typography.captionBold)
-                    .padding(.top, 4)
-
-                    if let data = healthManager.getHealthData(for: workout.id) {
-                        HealthDataSummaryView(healthData: data)
-                            .padding(.top, Theme.Spacing.xs)
-                    }
+                    Image(systemName: "chevron.right")
+                        .font(Theme.Typography.captionBold)
+                        .foregroundStyle(Theme.Colors.textTertiary)
                 }
-
-                Image(systemName: "chevron.right")
-                    .font(Theme.Typography.captionBold)
-                    .foregroundStyle(Theme.Colors.textTertiary)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(
+                    "\(workout.name), \(workout.date.formatted(date: .abbreviated, time: .shortened)), "
+                    + "\(workout.duration), \(workout.exercises.count) exercises, "
+                    + "\(SharedFormatters.volumeWithUnit(workout.totalVolume))"
+                )
+                .accessibilityHint("Double tap for workout details")
             }
-            .padding(Theme.Spacing.lg)
-            .softCard(elevation: 1)
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(
-                "\(workout.name), \(workout.date.formatted(date: .abbreviated, time: .shortened)), "
-                + "\(workout.duration), \(workout.exercises.count) exercises, "
-                + "\(SharedFormatters.volumeWithUnit(workout.totalVolume))"
-            )
-            .accessibilityHint("Double tap for workout details")
+            .buttonStyle(PlainButtonStyle())
+
+            Button {
+                Haptics.selection()
+                repeatThisWorkout()
+            } label: {
+                Image(systemName: "arrow.counterclockwise")
+                    .font(Theme.Typography.caption2Bold)
+                    .foregroundColor(Theme.Colors.accent)
+                    .frame(width: 44, height: 44)
+                    .background(Theme.Colors.accentTint)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Repeat \(workout.name)")
         }
-        .buttonStyle(PlainButtonStyle())
+        .padding(Theme.Spacing.lg)
+        .softCard(elevation: 1)
     }
 
     private func metric(_ value: String, systemImage: String) -> some View {

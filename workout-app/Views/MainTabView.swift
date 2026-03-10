@@ -77,7 +77,11 @@ struct MainTabView: View {
             .tag(AppTab.history)
 
             NavigationStack {
-                ProfileView(dataManager: dataManager, iCloudManager: iCloudManager)
+                ProfileView(
+                    dataManager: dataManager,
+                    iCloudManager: iCloudManager,
+                    selectedTab: $selectedTab
+                )
             }
             .tabItem {
                 Label("Profile", systemImage: "person.crop.circle")

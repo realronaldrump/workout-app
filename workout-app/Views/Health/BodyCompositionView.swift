@@ -185,8 +185,10 @@ struct BodyCompositionView: View {
                 .tracking(0.8)
 
             TimeRangePillPicker(
-                options: HealthTimeRange.allCases.filter { $0 != .custom },
-                selected: $selectedRange
+                selected: $selectedRange,
+                onCustomTap: {
+                    showingCustomRange = true
+                }
             )
         }
     }

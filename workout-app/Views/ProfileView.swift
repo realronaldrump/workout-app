@@ -4,10 +4,10 @@ import UIKit
 struct ProfileView: View {
     @ObservedObject var dataManager: WorkoutDataManager
     @ObservedObject var iCloudManager: iCloudDocumentManager
+    @Binding var selectedTab: AppTab
     @EnvironmentObject var healthManager: HealthKitManager
 
     @State private var showingHealthWizard = false
-    @State private var showingHealthDashboard = false
     @State private var showingWorkoutHistory = false
     @State private var showingExerciseList = false
 
@@ -39,9 +39,6 @@ struct ProfileView: View {
                 isPresented: $showingHealthWizard,
                 workouts: dataManager.workouts
             )
-        }
-        .sheet(isPresented: $showingHealthDashboard) {
-            HealthDashboardView()
         }
         .onAppear {
             healthManager.refreshAuthorizationStatus()
@@ -145,24 +142,11 @@ struct ProfileView: View {
                     value: healthManager.authorizationStatus == .authorized ? "On" : "Off"
                 ) {
                     if healthManager.authorizationStatus == .authorized {
-                        showingHealthDashboard = true
+                        selectedTab = .health
                     } else {
                         showingHealthWizard = true
                     }
                 }
-
-                Divider().padding(.leading, 50)
-
-                NavigationLink(destination: BackupFilesView(iCloudManager: iCloudManager)) {
-                    ProfileLinkRow(
-                        icon: "icloud.fill",
-                        color: Theme.Colors.cardio,
-                        title: "Backups",
-                        subtitle: "iCloud",
-                        value: iCloudStatusText
-                    )
-                }
-                .buttonStyle(PlainButtonStyle())
             }
         }
     }
@@ -184,7 +168,13 @@ struct ProfileView: View {
 
                 Divider().padding(.leading, 50)
 
-                NavigationLink(destination: SettingsView(dataManager: dataManager, iCloudManager: iCloudManager)) {
+                NavigationLink(
+                    destination: SettingsView(
+                        dataManager: dataManager,
+                        iCloudManager: iCloudManager,
+                        selectedTab: $selectedTab
+                    )
+                ) {
                     ProfileLinkRow(
                         icon: "gearshape.fill",
                         color: Theme.Colors.textTertiary,
@@ -212,14 +202,6 @@ struct ProfileView: View {
     private var uniqueExercisesCount: Int {
         let names = dataManager.workouts.flatMap { $0.exercises.map(\.name) }
         return Set(names).count
-    }
-
-    private var iCloudStatusText: String {
-        if iCloudManager.isInitializing {
-            return "Checking"
-        }
-
-        return iCloudManager.isUsingLocalFallback ? "Local" : "Connected"
     }
 }
 

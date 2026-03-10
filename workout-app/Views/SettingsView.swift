@@ -3,6 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @ObservedObject var dataManager: WorkoutDataManager
     @ObservedObject var iCloudManager: iCloudDocumentManager
+    @Binding var selectedTab: AppTab
     @EnvironmentObject var healthManager: HealthKitManager
     @EnvironmentObject var logStore: WorkoutLogStore
     @EnvironmentObject var sessionManager: WorkoutSessionManager
@@ -10,7 +11,6 @@ struct SettingsView: View {
 
     @State private var showingImportWizard = false
     @State private var showingHealthWizard = false
-    @State private var showingHealthDashboard = false
     @State private var showingDeleteAlert = false
 
     @AppStorage("weightIncrement") private var weightIncrement: Double = 2.5
@@ -81,26 +81,13 @@ struct SettingsView: View {
                             value: healthManager.authorizationStatus == .authorized ? "On" : "Off"
                         ) {
                             if healthManager.authorizationStatus == .authorized {
-                                showingHealthDashboard = true
+                                selectedTab = .health
                             } else {
                                 showingHealthWizard = true
                             }
                         }
 
                         Divider().padding(.leading, 50)
-
-                        if healthManager.authorizationStatus == .authorized {
-                            SettingsRow(
-                                icon: "chart.xyaxis.line",
-                                color: Theme.Colors.accentSecondary,
-                                title: "Health Insights",
-                                subtitle: "Trends"
-                            ) {
-                                showingHealthDashboard = true
-                            }
-
-                            Divider().padding(.leading, 50)
-                        }
 
                         NavigationLink(destination: BackupFilesView(iCloudManager: iCloudManager)) {
                             SettingsInlineRow(
@@ -314,9 +301,6 @@ struct SettingsView: View {
                 isPresented: $showingHealthWizard,
                 workouts: dataManager.workouts
             )
-        }
-        .sheet(isPresented: $showingHealthDashboard) {
-            HealthDashboardView()
         }
         .alert("Clear All Data", isPresented: $showingDeleteAlert) {
             Button("Cancel", role: .cancel) {}

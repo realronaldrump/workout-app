@@ -130,26 +130,62 @@ struct QuickStartView: View {
                     }
                     .buttonStyle(.plain)
 
-                    Button {
-                        let trimmedName = workoutName.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if sessionManager.activeSession != nil {
+                    if sessionManager.activeSession != nil {
+                        Button {
+                            sessionManager.isPresentingSessionUI = true
+                            Haptics.selection()
+                            dismiss()
+                        } label: {
+                            HStack {
+                                Spacer()
+                                Text("Resume Current Session")
+                                    .font(Theme.Typography.headline)
+                                    .foregroundColor(.white)
+                                Spacer()
+                            }
+                            .padding()
+                            .background(Theme.Colors.accent)
+                            .cornerRadius(Theme.CornerRadius.large)
+                        }
+                        .buttonStyle(.plain)
+
+                        Button {
                             showingReplaceAlert = true
-                            return
+                        } label: {
+                            HStack {
+                                Spacer()
+                                Text("Start New Instead")
+                                    .font(Theme.Typography.subheadlineBold)
+                                    .foregroundColor(Theme.Colors.error)
+                                Spacer()
+                            }
+                            .padding(.vertical, Theme.Spacing.md)
+                            .background(Theme.Colors.error.opacity(0.06))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
+                                    .strokeBorder(Theme.Colors.error.opacity(0.18), lineWidth: 1)
+                            )
+                            .cornerRadius(Theme.CornerRadius.large)
                         }
-                        startNewSession(name: trimmedName)
-                    } label: {
-                        HStack {
-                            Spacer()
-                            Text("Start Session")
-                                .font(Theme.Typography.headline)
-                                .foregroundColor(.white)
-                            Spacer()
+                        .buttonStyle(.plain)
+                    } else {
+                        Button {
+                            let trimmedName = workoutName.trimmingCharacters(in: .whitespacesAndNewlines)
+                            startNewSession(name: trimmedName)
+                        } label: {
+                            HStack {
+                                Spacer()
+                                Text("Start Session")
+                                    .font(Theme.Typography.headline)
+                                    .foregroundColor(.white)
+                                Spacer()
+                            }
+                            .padding()
+                            .background(Theme.Colors.accent)
+                            .cornerRadius(Theme.CornerRadius.large)
                         }
-                        .padding()
-                        .background(Theme.Colors.accent)
-                        .cornerRadius(Theme.CornerRadius.large)
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
                 .padding(Theme.Spacing.xl)
             }

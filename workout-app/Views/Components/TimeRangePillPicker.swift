@@ -6,6 +6,7 @@ struct TimeRangePillPicker<T: Hashable>: View {
     let options: [T]
     @Binding var selected: T
     let label: (T) -> String
+    var isSpecialOption: ((T) -> Bool)? = nil
     var onCustomTap: (() -> Void)? = nil
 
     var body: some View {
@@ -22,7 +23,14 @@ struct TimeRangePillPicker<T: Hashable>: View {
         let isSelected = selected == option
 
         return Button {
-            selected = option
+            if isSpecialOption?(option) == true {
+                onCustomTap?()
+                if onCustomTap == nil {
+                    selected = option
+                }
+            } else {
+                selected = option
+            }
             Haptics.selection()
         } label: {
             Text(label(option))
@@ -58,6 +66,7 @@ extension TimeRangePillPicker where T == AppTimeRange {
         self.options = options
         self._selected = selected
         self.label = { $0.shortLabel }
+        self.isSpecialOption = nil
         self.onCustomTap = onCustomTap
     }
 }
@@ -65,12 +74,14 @@ extension TimeRangePillPicker where T == AppTimeRange {
 extension TimeRangePillPicker where T == HealthTimeRange {
     /// Convenience for `HealthTimeRange` options.
     init(
-        options: [HealthTimeRange] = HealthTimeRange.allCases.filter { $0 != .custom },
-        selected: Binding<HealthTimeRange>
+        options: [HealthTimeRange] = HealthTimeRange.allCases,
+        selected: Binding<HealthTimeRange>,
+        onCustomTap: (() -> Void)? = nil
     ) {
         self.options = options
         self._selected = selected
         self.label = { $0.title }
-        self.onCustomTap = nil
+        self.isSpecialOption = { $0 == .custom }
+        self.onCustomTap = onCustomTap
     }
 }

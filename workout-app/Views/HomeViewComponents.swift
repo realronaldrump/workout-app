@@ -174,58 +174,58 @@ struct HomeWorkoutRow: View {
     @EnvironmentObject var healthManager: HealthKitManager
 
     var body: some View {
-        Button(action: { onTap() }, label: {
-            HStack(spacing: Theme.Spacing.md) {
-                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                    HStack(alignment: .center) {
+        HStack(spacing: Theme.Spacing.md) {
+            Button(action: { onTap() }, label: {
+                HStack(spacing: Theme.Spacing.md) {
+                    VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                         Text(workout.name)
                             .font(Theme.Typography.bodyBold)
                             .foregroundColor(Theme.Colors.textPrimary)
 
-                        Spacer()
+                        Text(workout.date.formatted(date: .abbreviated, time: .shortened))
+                            .font(Theme.Typography.caption)
+                            .foregroundColor(Theme.Colors.textTertiary)
 
-                        Button {
-                            Haptics.selection()
-                            onRepeat()
-                        } label: {
-                            Image(systemName: "arrow.counterclockwise")
-                                .font(Theme.Typography.caption2Bold)
-                                .foregroundColor(Theme.Colors.accent)
-                                .frame(width: 28, height: 28)
-                                .background(Theme.Colors.accent.opacity(0.08))
-                                .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
+                        HStack(spacing: Theme.Spacing.md) {
+                            Label(workout.duration, systemImage: "clock")
+                            Label("\(workout.exercises.count) exercises", systemImage: "figure.strengthtraining.traditional")
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Repeat \(workout.name)")
-                    }
-
-                    Text(workout.date.formatted(date: .abbreviated, time: .shortened))
                         .font(Theme.Typography.caption)
+                        .foregroundColor(Theme.Colors.textSecondary)
+
+                        if let data = healthManager.getHealthData(for: workout.id) {
+                            HealthDataSummaryView(healthData: data)
+                        }
+                    }
+
+                    Spacer()
+
+                    Image(systemName: "chevron.right")
+                        .font(Theme.Typography.caption2Bold)
                         .foregroundColor(Theme.Colors.textTertiary)
-
-                    HStack(spacing: Theme.Spacing.md) {
-                        Label(workout.duration, systemImage: "clock")
-                        Label("\(workout.exercises.count) exercises", systemImage: "figure.strengthtraining.traditional")
-                    }
-                    .font(Theme.Typography.caption)
-                    .foregroundColor(Theme.Colors.textSecondary)
-
-                    if let data = healthManager.getHealthData(for: workout.id) {
-                        HealthDataSummaryView(healthData: data)
-                    }
                 }
+            })
+            .buttonStyle(PlainButtonStyle())
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("\(workout.name), \(workout.date.formatted(date: .abbreviated, time: .shortened))")
+            .accessibilityHint("Double tap for details")
 
-                Image(systemName: "chevron.right")
+            Button {
+                Haptics.selection()
+                onRepeat()
+            } label: {
+                Image(systemName: "arrow.counterclockwise")
                     .font(Theme.Typography.caption2Bold)
-                    .foregroundColor(Theme.Colors.textTertiary)
+                    .foregroundColor(Theme.Colors.accent)
+                    .frame(width: 44, height: 44)
+                    .background(Theme.Colors.accent.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
             }
-            .padding(Theme.Spacing.lg)
-            .softCard(elevation: 1)
-        })
-        .buttonStyle(PlainButtonStyle())
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(workout.name), \(workout.date.formatted(date: .abbreviated, time: .shortened))")
-        .accessibilityHint("Double tap for details, or use the repeat button")
+            .buttonStyle(.plain)
+            .accessibilityLabel("Repeat \(workout.name)")
+        }
+        .padding(Theme.Spacing.lg)
+        .softCard(elevation: 1)
     }
 }
 

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ActiveSessionBar: View {
     @EnvironmentObject private var sessionManager: WorkoutSessionManager
+    @State private var showingDiscardAlert = false
 
     var body: some View {
         if let session = sessionManager.activeSession {
@@ -11,60 +12,67 @@ struct ActiveSessionBar: View {
                 let exerciseCount = session.exercises.count
                 let setCount = session.exercises.reduce(0) { $0 + $1.sets.count }
 
-                HStack(spacing: Theme.Spacing.md) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(session.name)
-                            .font(Theme.Typography.headline)
-                            .foregroundColor(Theme.Colors.textPrimary)
-                            .lineLimit(1)
+                Button {
+                    sessionManager.isPresentingSessionUI = true
+                    Haptics.selection()
+                } label: {
+                    HStack(spacing: Theme.Spacing.md) {
+                        Image(systemName: "bolt.fill")
+                            .font(Theme.Typography.captionBold)
+                            .foregroundStyle(Theme.Colors.accent)
+                            .frame(width: 32, height: 32)
+                            .background(Theme.Colors.accentTint)
+                            .clipShape(Circle())
 
-                        Text("\(elapsedLabel) • \(exerciseCount)x • \(setCount) sets")
-                            .font(Theme.Typography.caption)
-                            .foregroundColor(Theme.Colors.textSecondary)
-                            .lineLimit(1)
-                    }
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(session.name)
+                                .font(Theme.Typography.bodyBold)
+                                .foregroundColor(Theme.Colors.textPrimary)
+                                .lineLimit(1)
 
-                    Spacer()
-
-                    Button {
-                        sessionManager.isPresentingSessionUI = true
-                        Haptics.selection()
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: "bolt.fill")
-                                .font(Theme.Typography.captionBold)
-                            Text("Resume")
-                                .font(Theme.Typography.subheadline)
+                            Text("\(elapsedLabel) • \(exerciseCount) exercises • \(setCount) sets")
+                                .font(Theme.Typography.caption)
+                                .foregroundColor(Theme.Colors.textSecondary)
+                                .lineLimit(1)
                         }
-                        .foregroundColor(.white)
-                        .padding(.horizontal, Theme.Spacing.md)
-                        .padding(.vertical, Theme.Spacing.sm)
-                        .brutalistButtonChrome(
-                            fill: Theme.Colors.accent,
-                            cornerRadius: Theme.CornerRadius.large
-                        )
+
+                        Spacer()
+
+                        Text("Resume")
+                            .font(Theme.Typography.subheadlineStrong)
+                            .foregroundStyle(Theme.Colors.accent)
+
+                        Image(systemName: "chevron.up")
+                            .font(Theme.Typography.captionBold)
+                            .foregroundStyle(Theme.Colors.textTertiary)
                     }
-                    .buttonStyle(.plain)
+                    .padding(.horizontal, Theme.Spacing.lg)
+                    .padding(.vertical, Theme.Spacing.md)
+                    .background(Theme.Colors.cardBackground)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge)
+                            .strokeBorder(Theme.Colors.border.opacity(0.5), lineWidth: 1)
+                    )
+                    .cornerRadius(Theme.CornerRadius.xlarge)
+                    .shadow(color: .black.opacity(Theme.Colors.shadowOpacity * 0.7), radius: 6, y: 3)
                 }
-                .padding(Theme.Spacing.lg)
-                .background(Theme.Colors.cardBackground)
-                .overlay(
-                    RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge)
-                        .strokeBorder(Theme.Colors.border.opacity(0.5), lineWidth: 1)
-                )
-                .cornerRadius(Theme.CornerRadius.xlarge)
-                .shadow(color: .black.opacity(Theme.Colors.shadowOpacity), radius: 8, y: 4)
-                .shadow(color: .black.opacity(Theme.Colors.shadowOpacity * 0.5), radius: 20, y: 8)
+                .buttonStyle(.plain)
                 .contextMenu {
                     Button("Discard Session", role: .destructive) {
-                        Task { await sessionManager.discardDraft() }
+                        showingDiscardAlert = true
                     }
                 }
-                .accessibilityElement(children: .combine)
                 .accessibilityLabel("Active session: \(session.name), \(elapsedLabel) elapsed, \(exerciseCount) exercises, \(setCount) sets")
-                .accessibilityHint("Double tap Resume to continue, or long press for more options")
+                .accessibilityHint("Double tap to resume, or long press for more options")
+            }
+            .alert("Discard Session?", isPresented: $showingDiscardAlert) {
+                Button("Cancel", role: .cancel) {}
+                Button("Discard", role: .destructive) {
+                    Task { await sessionManager.discardDraft() }
+                }
+            } message: {
+                Text("This will permanently delete your in-progress session.")
             }
         }
     }
-
 }

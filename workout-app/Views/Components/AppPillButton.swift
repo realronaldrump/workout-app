@@ -156,7 +156,7 @@ struct AppToolbarButton: View {
                     .foregroundStyle(palette.text)
             }
             .padding(.horizontal, Theme.Spacing.md)
-            .frame(minHeight: 38)
+            .frame(minHeight: 44)
             .toolbarButtonChrome(fill: palette.fill, border: palette.border)
         }
         .buttonStyle(AppInteractionButtonStyle())
@@ -207,7 +207,7 @@ struct AppToolbarIconButton: View {
             Image(systemName: systemImage)
                 .font(Theme.Typography.subheadlineBold)
                 .foregroundStyle(palette.icon)
-                .frame(width: 38, height: 38)
+                .frame(width: 44, height: 44)
                 .toolbarButtonChrome(fill: palette.fill, border: palette.border)
         }
         .buttonStyle(AppInteractionButtonStyle())
