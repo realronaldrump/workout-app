@@ -538,7 +538,7 @@ struct StrongImportWizard: View {
                 Task { @MainActor in
                     importPhase = .parsing
 
-                    let storageSnapshot = iCloudManager.storageSnapshot()
+                    let storageSnapshot = await iCloudManager.initializedStorageSnapshot()
                     let directoryURL = storageSnapshot.url
                     let isUsingLocalFallback = storageSnapshot.isUsingLocalFallback
 
@@ -547,11 +547,27 @@ struct StrongImportWizard: View {
                             // Parse off the main thread to avoid UI hitches on large exports.
                             let sets = try CSVParser.parseStrongWorkoutsCSV(from: fileData)
                             await MainActor.run {
-                                importPhase = .processing
+                                importPhase = .saving
                             }
 
                             // Artificial delay for UX
                             try await Task.sleep(nanoseconds: 1_000_000_000)
+
+                            // Save the original file data before presenting a successful import.
+                            let fileName = "strong_workouts_\(Date().timeIntervalSince1970).csv"
+                            let storageMessage: String
+                            guard let directory = directoryURL else {
+                                throw iCloudError.containerNotAvailable
+                            }
+                            try iCloudDocumentManager.saveWorkoutFile(data: fileData, in: directory, fileName: fileName)
+                            storageMessage = isUsingLocalFallback
+                                ? "Saved on-device only (iCloud unavailable)"
+                                : "Saved to iCloud Drive"
+
+                            await MainActor.run {
+                                storageStatusMessage = storageMessage
+                                importPhase = .processing
+                            }
 
                             let healthSnapshot = await MainActor.run {
                                 Array(healthManager.healthDataStore.values)
@@ -563,26 +579,9 @@ struct StrongImportWizard: View {
                             await MainActor.run {
                                 let stats = dataManager.calculateStats()
                                 importStats = (stats.totalWorkouts, stats.totalExercises)
-                                importPhase = .saving
-                            }
-
-                            // Save the original file data off the main thread.
-                            let fileName = "strong_workouts_\(Date().timeIntervalSince1970).csv"
-                            let storageMessage: String
-                            do {
-                                guard let directory = directoryURL else {
-                                    throw iCloudError.containerNotAvailable
-                                }
-                                try iCloudDocumentManager.saveWorkoutFile(data: fileData, in: directory, fileName: fileName)
-                                storageMessage = isUsingLocalFallback
-                                    ? "Saved on-device (iCloud unavailable)"
-                                    : "Saved to iCloud Drive"
-                            } catch {
-                                storageMessage = "Save failed: \(error.localizedDescription)"
                             }
 
                             await MainActor.run {
-                                storageStatusMessage = storageMessage
                                 importPhase = .complete
                                 importCompletedAt = Date()
 
@@ -596,7 +595,8 @@ struct StrongImportWizard: View {
                             }
                         } catch {
                             await MainActor.run {
-                                importError = error.localizedDescription
+                                storageStatusMessage = nil
+                                importError = "Import failed to save: \(error.localizedDescription)"
                                 isImporting = false
                                 importPhase = .idle
                             }

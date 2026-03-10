@@ -30,11 +30,26 @@ final class iCloudDocumentManager: ObservableObject {
     }
 
     private func initializeContainer() async {
+        let localURL = localDocumentsURL
+
         // Perform iCloud check on background thread to avoid blocking main
         let iCloudURL = await Task.detached(priority: .utility) {
             FileManager.default.url(forUbiquityContainerIdentifier: nil)?
                 .appendingPathComponent("Documents")
         }.value
+
+        if let iCloudURL {
+            await Task.detached(priority: .utility) {
+                do {
+                    try Self.ensureDirectoryExists(at: iCloudURL)
+                    if let localURL {
+                        try Self.migrateWorkoutFiles(from: localURL, to: iCloudURL)
+                    }
+                } catch {
+                    print("Failed to prepare iCloud directory: \(error)")
+                }
+            }.value
+        }
 
         await MainActor.run {
             if let url = iCloudURL {
@@ -95,25 +110,28 @@ final class iCloudDocumentManager: ObservableObject {
     }
 
     func deleteAllWorkoutFiles() async {
-        guard let containerURL = documentsURL else { return }
+        let directories = await storageSearchDirectories()
+        guard !directories.isEmpty else { return }
 
-        await Task.detached(priority: .utility) {
-            do {
-                let files = try FileManager.default.contentsOfDirectory(
-                    at: containerURL,
-                    includingPropertiesForKeys: [.nameKey],
-                    options: .skipsHiddenFiles
-                )
-                for file in files where file.pathExtension == "csv" {
-                    do {
-                        try FileManager.default.removeItem(at: file)
-                        print("Deleted file: \(file.lastPathComponent)")
-                    } catch {
-                        print("Failed to delete file \(file.lastPathComponent): \(error)")
+        await Task.detached(priority: .utility) { [directories] in
+            for containerURL in directories {
+                do {
+                    let files = try FileManager.default.contentsOfDirectory(
+                        at: containerURL,
+                        includingPropertiesForKeys: [.nameKey],
+                        options: .skipsHiddenFiles
+                    )
+                    for file in files where file.pathExtension == "csv" {
+                        do {
+                            try FileManager.default.removeItem(at: file)
+                            print("Deleted file: \(file.lastPathComponent)")
+                        } catch {
+                            print("Failed to delete file \(file.lastPathComponent): \(error)")
+                        }
                     }
+                } catch {
+                    print("Failed to list files for deletion: \(error)")
                 }
-            } catch {
-                print("Failed to list files for deletion: \(error)")
             }
         }.value
 
@@ -128,6 +146,36 @@ final class iCloudDocumentManager: ObservableObject {
     @MainActor
     func storageSnapshot() -> (url: URL?, isUsingLocalFallback: Bool) {
         (documentsURL, isUsingLocalFallback)
+    }
+
+    @MainActor
+    func awaitStorageInitialization() async {
+        while isInitializing {
+            try? await Task.sleep(nanoseconds: 50_000_000)
+        }
+    }
+
+    @MainActor
+    func initializedStorageSnapshot() async -> (url: URL?, isUsingLocalFallback: Bool) {
+        await awaitStorageInitialization()
+        return storageSnapshot()
+    }
+
+    @MainActor
+    func storageSearchDirectories() async -> [URL] {
+        await awaitStorageInitialization()
+
+        var results: [URL] = []
+        var seen = Set<String>()
+
+        for url in [documentsURL, localDocumentsURL].compactMap({ $0 }) {
+            let key = url.standardizedFileURL.path
+            if seen.insert(key).inserted {
+                results.append(url)
+            }
+        }
+
+        return results
     }
 
     nonisolated static func listWorkoutFiles(in directory: URL) -> [URL] {
@@ -152,9 +200,37 @@ final class iCloudDocumentManager: ObservableObject {
     }
 
     nonisolated static func saveWorkoutFile(data: Data, in directory: URL, fileName: String) throws {
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try ensureDirectoryExists(at: directory)
         let fileURL = directory.appendingPathComponent(fileName)
         try data.write(to: fileURL, options: [.atomic, .completeFileProtection])
+    }
+
+    nonisolated static func ensureDirectoryExists(at directory: URL) throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    }
+
+    @discardableResult
+    nonisolated static func migrateWorkoutFiles(from sourceDirectory: URL, to destinationDirectory: URL) throws -> Int {
+        let sourcePath = sourceDirectory.standardizedFileURL.path
+        let destinationPath = destinationDirectory.standardizedFileURL.path
+        guard sourcePath != destinationPath else { return 0 }
+
+        try ensureDirectoryExists(at: destinationDirectory)
+
+        var migratedCount = 0
+        for fileURL in listWorkoutFiles(in: sourceDirectory) {
+            let destinationURL = destinationDirectory.appendingPathComponent(fileURL.lastPathComponent)
+            guard !FileManager.default.fileExists(atPath: destinationURL.path) else { continue }
+
+            do {
+                try FileManager.default.copyItem(at: fileURL, to: destinationURL)
+                migratedCount += 1
+            } catch {
+                print("Failed to migrate file \(fileURL.lastPathComponent): \(error)")
+            }
+        }
+
+        return migratedCount
     }
 }
 

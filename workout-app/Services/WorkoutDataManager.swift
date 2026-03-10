@@ -74,25 +74,15 @@ class WorkoutDataManager: ObservableObject {
         iCloudManager: iCloudDocumentManager,
         healthDataSnapshot: [WorkoutHealthData]
     ) async {
-        let directoryURL = iCloudManager.storageSnapshot().url
+        let searchDirectories = await iCloudManager.storageSearchDirectories()
         isLoading = true
         error = nil
 
-        let setsResult = await Task.detached(priority: .userInitiated) { [directoryURL] in
+        let setsResult = await Task.detached(priority: .userInitiated) { [searchDirectories] in
             do {
-                guard let directoryURL else { return Result<[WorkoutSet], Error>.success([]) }
-
-                let importFiles = iCloudDocumentManager.listStrongImportFiles(in: directoryURL)
-                let files = (importFiles.isEmpty
-                    ? iCloudDocumentManager.listWorkoutFiles(in: directoryURL)
-                    : importFiles)
-                    .sorted { url1, url2 in
-                        let date1 = (try? url1.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? Date.distantPast
-                        let date2 = (try? url2.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? Date.distantPast
-                        return date1 > date2
-                    }
-
-                guard let latestFile = files.first else { return Result<[WorkoutSet], Error>.success([]) }
+                guard let latestFile = Self.latestWorkoutFile(in: searchDirectories) else {
+                    return Result<[WorkoutSet], Error>.success([])
+                }
                 let data = try Data(contentsOf: latestFile)
                 let sets = try CSVParser.parseStrongWorkoutsCSV(from: data)
                 return Result<[WorkoutSet], Error>.success(sets)
@@ -104,6 +94,8 @@ class WorkoutDataManager: ObservableObject {
         switch setsResult {
         case .success(let sets):
             guard !sets.isEmpty else {
+                importedWorkouts = []
+                mergeSources()
                 isLoading = false
                 return
             }
@@ -111,6 +103,32 @@ class WorkoutDataManager: ObservableObject {
         case .failure(let loadError):
             isLoading = false
             error = loadError.localizedDescription
+        }
+    }
+
+    nonisolated static func latestWorkoutFile(in directories: [URL]) -> URL? {
+        for directory in directories {
+            let files = listNewestFirst(iCloudDocumentManager.listStrongImportFiles(in: directory))
+            if let latest = files.first {
+                return latest
+            }
+        }
+
+        for directory in directories {
+            let files = listNewestFirst(iCloudDocumentManager.listWorkoutFiles(in: directory))
+            if let latest = files.first {
+                return latest
+            }
+        }
+
+        return nil
+    }
+
+    nonisolated private static func listNewestFirst(_ files: [URL]) -> [URL] {
+        files.sorted { url1, url2 in
+            let date1 = (try? url1.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? Date.distantPast
+            let date2 = (try? url2.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? Date.distantPast
+            return date1 > date2
         }
     }
 
