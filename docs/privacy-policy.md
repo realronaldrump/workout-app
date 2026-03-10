@@ -1,4 +1,4 @@
-# Privacy Policy for Big Beautiful Workout App
+# Privacy Policy for Davis's Big Beautiful Workout App
 
 Effective date: March 10, 2026
 

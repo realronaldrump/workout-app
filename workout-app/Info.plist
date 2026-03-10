@@ -3,13 +3,13 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleDisplayName</key>
-	<string>Davis Workout</string>
+	<string>Big Beautiful Workout App</string>
 	<key>CFBundleName</key>
-	<string>Davis Workout</string>
+	<string>Big Beautiful Workout App</string>
 	<key>NSHealthShareUsageDescription</key>
-	<string>Davis Workout reads your Apple Health data, such as workouts, sleep, activity, cardio, and recovery metrics, to power workout insights and training history.</string>
+	<string>Davis's Big Beautiful Workout App reads your Apple Health data, such as workouts, sleep, activity, cardio, and recovery metrics, to power workout insights and training history.</string>
 	<key>NSHealthUpdateUsageDescription</key>
-	<string>Davis Workout requests HealthKit update permission because iOS requires it for the workout data access used by the app, but the app does not write health samples.</string>
+	<string>Davis's Big Beautiful Workout App requests HealthKit update permission because iOS requires it for the workout data access used by the app, but the app does not write health samples.</string>
 	<key>NSUbiquitousContainers</key>
 	<dict>
 		<key>iCloud.davis.workout-app</key>
