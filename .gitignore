@@ -5,6 +5,7 @@ output/
 # Environment / secrets
 .env
 .env.*
+.claude/
 
 # macOS
 .DS_Store
