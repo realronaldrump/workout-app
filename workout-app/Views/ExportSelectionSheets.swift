@@ -55,13 +55,14 @@ struct ExportExerciseSelectionSheet: View {
                                         accessibilityLabel: exerciseName,
                                         action: {
                                             toggleExercise(exerciseName)
-                                        }
-                                    ) {
+                                        },
+                                        content: {
                                         Text(exerciseName)
                                             .font(Theme.Typography.body)
                                             .foregroundStyle(Theme.Colors.textPrimary)
                                             .multilineTextAlignment(.leading)
-                                    }
+                                        }
+                                    )
                                 }
                             }
                             .padding(.bottom, Theme.Spacing.md)
@@ -133,11 +134,15 @@ struct ExportWorkoutDateSelectionSheet: View {
                                 ForEach(dateOptions) { option in
                                     ExportSelectableRow(
                                         isSelected: selectedDateIds.contains(option.id),
-                                        accessibilityLabel: "\(option.date.formatted(date: .long, time: .omitted)), \(option.workoutCount) \(option.workoutCount == 1 ? "workout" : "workouts")",
+                                        accessibilityLabel: """
+                                        \(option.date.formatted(date: .long, time: .omitted)), \
+                                        \(option.workoutCount) \
+                                        \(option.workoutCount == 1 ? "workout" : "workouts")
+                                        """,
                                         action: {
                                             toggleDate(option.id)
-                                        }
-                                    ) {
+                                        },
+                                        content: {
                                         VStack(alignment: .leading, spacing: 2) {
                                             Text(option.date.formatted(date: .abbreviated, time: .omitted))
                                                 .font(Theme.Typography.bodyBold)
@@ -146,7 +151,8 @@ struct ExportWorkoutDateSelectionSheet: View {
                                                 .font(Theme.Typography.caption)
                                                 .foregroundStyle(Theme.Colors.textSecondary)
                                         }
-                                    }
+                                        }
+                                    )
                                 }
                             }
                             .padding(.bottom, Theme.Spacing.md)
@@ -230,8 +236,8 @@ struct ExportMuscleGroupSelectionSheet: View {
                                         accessibilityLabel: "\(tag.displayName), \(tag.kind == .builtIn ? "built in" : "custom")",
                                         action: {
                                             toggleTag(tag.id)
-                                        }
-                                    ) {
+                                        },
+                                        content: {
                                         Image(systemName: tag.iconName)
                                             .foregroundStyle(tag.tint)
                                             .font(Theme.Typography.calloutStrong)
@@ -247,7 +253,8 @@ struct ExportMuscleGroupSelectionSheet: View {
                                                 .font(Theme.Typography.caption)
                                                 .foregroundStyle(Theme.Colors.textSecondary)
                                         }
-                                    }
+                                        }
+                                    )
                                 }
                             }
                             .padding(.bottom, Theme.Spacing.md)
@@ -370,8 +377,8 @@ struct ExportHealthMetricSelectionSheet: View {
                                         accessibilityLabel: "\(metric.title), \(metric.category.title)",
                                         action: {
                                             toggleMetric(metric)
-                                        }
-                                    ) {
+                                        },
+                                        content: {
                                         Image(systemName: metric.icon)
                                             .foregroundStyle(metric.chartColor)
                                             .font(Theme.Typography.calloutStrong)
@@ -387,7 +394,8 @@ struct ExportHealthMetricSelectionSheet: View {
                                                 .font(Theme.Typography.caption)
                                                 .foregroundStyle(Theme.Colors.textSecondary)
                                         }
-                                    }
+                                        }
+                                    )
                                 }
                             }
                             .padding(.bottom, Theme.Spacing.md)

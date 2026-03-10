@@ -1030,7 +1030,6 @@ private struct EmptyMetricCard: View {
     }
 }
 
-
 private struct HealthMetricDetailScreen: View {
     let detail: HealthMetricDetail
     let rangeLabel: String

@@ -1,7 +1,7 @@
 import Foundation
 import SwiftUI
 
-// swiftlint:disable type_body_length file_length
+// swiftlint:disable file_length
 
 struct ExportWorkoutsView: View {
     @ObservedObject var dataManager: WorkoutDataManager
@@ -599,7 +599,10 @@ private extension ExportWorkoutsView {
             ),
             statusMessage: healthWorkoutSummaryStatusMessage,
             fileName: healthWorkoutSummaryFileURL?.lastPathComponent,
-            footnote: "Exports the workout-linked Apple Health snapshot for workouts in the current range. Missing workout health entries are synced first when possible.",
+            footnote: """
+            Exports the workout-linked Apple Health snapshot for workouts in the current range. \
+            Missing workout health entries are synced first when possible.
+            """,
             isRunning: isExportingHealthWorkoutSummary,
             isEnabled: healthWorkoutSummaryExportButtonEnabled,
             shareURL: healthWorkoutSummaryFileURL,
