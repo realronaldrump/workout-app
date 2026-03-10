@@ -688,7 +688,7 @@ struct WorkoutHistoryRow: View {
                                 .foregroundStyle(Theme.Colors.textTertiary)
                         }
 
-                        Text(workout.date.formatted(.dateTime.weekday(.wide)) + ", " + workout.date.formatted(.dateTime.day()))
+                        Text(workout.date.formatted(.dateTime.weekday(.wide).month(.wide).day()))
                             .font(Theme.Typography.subheadline)
                             .foregroundStyle(Theme.Colors.textSecondary)
 
