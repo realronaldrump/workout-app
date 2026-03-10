@@ -305,10 +305,8 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "workout-app/Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = "Davis Workout";
-				INFOPLIST_KEY_NSHealthShareUsageDescription = "This app reads your health data (including sleep, activity, cardio, and recovery metrics) to personalize workout insights and progress tracking.";
-				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "This app does not write health data, but this permission is required by iOS.";
-				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
+					INFOPLIST_KEY_NSHealthShareUsageDescription = "This app reads your health data (including sleep, activity, cardio, and recovery metrics) to personalize workout insights and progress tracking.";
+					"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
@@ -364,10 +362,8 @@
 				ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "workout-app/Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = "Davis Workout";
-				INFOPLIST_KEY_NSHealthShareUsageDescription = "This app reads your health data (including sleep, activity, cardio, and recovery metrics) to personalize workout insights and progress tracking.";
-				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "This app does not write health data, but this permission is required by iOS.";
-				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
+					INFOPLIST_KEY_NSHealthShareUsageDescription = "This app reads your health data (including sleep, activity, cardio, and recovery metrics) to personalize workout insights and progress tracking.";
+					"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
