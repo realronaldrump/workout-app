@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Davis Workout Support</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #111111;
+      --panel: #191919;
+      --text: #f3f3f1;
+      --muted: #b8b8b3;
+      --accent: #8ad1ff;
+      --border: #2a2a2a;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at top right, rgba(138, 209, 255, 0.14), transparent 26%),
+        radial-gradient(circle at left, rgba(255, 121, 72, 0.16), transparent 20%),
+        var(--bg);
+      color: var(--text);
+      font-family: "Avenir Next", "Segoe UI", sans-serif;
+      line-height: 1.6;
+    }
+
+    main {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 48px 20px 72px;
+    }
+
+    .panel {
+      background: rgba(25, 25, 25, 0.94);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 32px;
+      box-shadow: 0 20px 48px rgba(0, 0, 0, 0.28);
+    }
+
+    h1, h2 {
+      margin: 0 0 16px;
+      line-height: 1.1;
+    }
+
+    h1 {
+      font-size: clamp(2.4rem, 5vw, 4rem);
+      letter-spacing: -0.04em;
+    }
+
+    h2 {
+      margin-top: 28px;
+      font-size: 1.1rem;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    p, ul {
+      margin: 0 0 16px;
+    }
+
+    ul {
+      padding-left: 20px;
+    }
+
+    .eyebrow {
+      display: inline-block;
+      margin-bottom: 14px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    a {
+      color: var(--accent);
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="panel">
+      <span class="eyebrow">Davis Workout</span>
+      <h1>Support</h1>
+      <p>If you need help with Davis Workout, use the contact information below.</p>
+
+      <h2>Contact</h2>
+      <p><a href="mailto:davis.deaton@verizon.net">davis.deaton@verizon.net</a></p>
+
+      <h2>Common topics</h2>
+      <ul>
+        <li>Health permissions not enabled</li>
+        <li>iCloud backup or import/export not available</li>
+        <li>CSV import issues</li>
+        <li>Gym search or gym tagging questions</li>
+        <li>Workout history or insight discrepancies</li>
+      </ul>
+
+      <h2>Before you contact support</h2>
+      <ul>
+        <li>Confirm the app is updated to the latest version.</li>
+        <li>Confirm Apple Health permissions are enabled if you expect Health-based insights.</li>
+        <li>Confirm iCloud Drive is enabled on your device if you expect iCloud document storage.</li>
+        <li>Include your device model, iOS version, and a short description of the issue.</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

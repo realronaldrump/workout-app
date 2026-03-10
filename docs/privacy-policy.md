@@ -1,6 +1,6 @@
 # Privacy Policy for Big Beautiful Workout App
 
-Effective date: [replace before publishing]
+Effective date: March 10, 2026
 
 Davis's Big Beautiful Workout App is designed to help you log workouts, review progress, and connect your training history with Apple Health data. This policy describes what the app accesses, how that information is used, and where it is stored.
 
@@ -60,4 +60,4 @@ This policy may be updated from time to time. The latest version should be poste
 
 ## Contact
 
-Contact: [replace with your support email or website]
+Contact: davis.deaton@verizon.net
