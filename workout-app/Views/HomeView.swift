@@ -420,7 +420,6 @@ struct HomeView: View {
                     ForEach(buckets) { bucket in
                         WeeklySummaryCarouselCard(
                             bucket: bucket,
-                            showsSwipeHint: buckets.count > 1,
                             onMetricTap: { kind in
                                 selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: kind, scrollTarget: nil)
                             },

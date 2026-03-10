@@ -305,7 +305,7 @@ struct HomeWeekBucket: Identifiable {
         if isSavedBreakWeek {
             return "Saved Break"
         }
-        isCurrentWeek ? "Sessions So Far" : "Sessions"
+        return isCurrentWeek ? "Sessions So Far" : "Sessions"
     }
 
     var emptyMessage: String {
@@ -331,7 +331,6 @@ struct HomeWeekBucket: Identifiable {
 
 struct WeeklySummaryCarouselCard: View {
     let bucket: HomeWeekBucket
-    let showsSwipeHint: Bool
     let onMetricTap: (WorkoutMetricDetailKind) -> Void
     let onWorkoutTap: (Workout) -> Void
 
@@ -427,15 +426,6 @@ struct WeeklySummaryCarouselCard: View {
                 }
             }
 
-            if showsSwipeHint {
-                HStack(spacing: Theme.Spacing.sm) {
-                    Image(systemName: "hand.draw")
-                        .font(Theme.Typography.captionBold)
-                    Text("Swipe to move through earlier weeks.")
-                        .font(Theme.Typography.caption)
-                }
-                .foregroundColor(Theme.Colors.textTertiary)
-            }
         }
         .padding(.vertical, Theme.Spacing.sm)
     }
