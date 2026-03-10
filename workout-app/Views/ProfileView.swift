@@ -5,9 +5,7 @@ struct ProfileView: View {
     @ObservedObject var dataManager: WorkoutDataManager
     @ObservedObject var iCloudManager: iCloudDocumentManager
     @Binding var selectedTab: AppTab
-    @EnvironmentObject var healthManager: HealthKitManager
 
-    @State private var showingHealthWizard = false
     @State private var showingWorkoutHistory = false
     @State private var showingExerciseList = false
 
@@ -21,7 +19,6 @@ struct ProfileView: View {
                 VStack(spacing: Theme.Spacing.xxl) {
                     headerSection
                     personalInfoSection
-                    connectionsSection
                     preferencesSection
                 }
                 .padding()
@@ -33,15 +30,6 @@ struct ProfileView: View {
         }
         .navigationDestination(isPresented: $showingExerciseList) {
             ExerciseListView(dataManager: dataManager)
-        }
-        .sheet(isPresented: $showingHealthWizard) {
-            HealthSyncWizard(
-                isPresented: $showingHealthWizard,
-                workouts: dataManager.workouts
-            )
-        }
-        .onAppear {
-            healthManager.refreshAuthorizationStatus()
         }
     }
 
@@ -129,33 +117,23 @@ struct ProfileView: View {
         }
     }
 
-    private var connectionsSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            SectionLabel(text: "Connections")
-
-            VStack(spacing: 1) {
-                SettingsRow(
-                    icon: "heart.fill",
-                    color: Theme.Colors.error,
-                    title: "Apple Health",
-                    subtitle: healthManager.authorizationStatus == .authorized ? "Connected" : "Health off",
-                    value: healthManager.authorizationStatus == .authorized ? "On" : "Off"
-                ) {
-                    if healthManager.authorizationStatus == .authorized {
-                        selectedTab = .health
-                    } else {
-                        showingHealthWizard = true
-                    }
-                }
-            }
-        }
-    }
-
     private var preferencesSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             SectionLabel(text: "Preferences")
 
             VStack(spacing: 1) {
+                NavigationLink(destination: GymProfilesView()) {
+                    ProfileLinkRow(
+                        icon: "mappin.and.ellipse",
+                        color: Theme.Colors.accent,
+                        title: "Gym Profiles",
+                        subtitle: "Manage saved gyms"
+                    )
+                }
+                .buttonStyle(PlainButtonStyle())
+
+                Divider().padding(.leading, 50)
+
                 NavigationLink(destination: ExerciseTaggingView(dataManager: dataManager)) {
                     ProfileLinkRow(
                         icon: "tag.fill",
@@ -179,7 +157,7 @@ struct ProfileView: View {
                         icon: "gearshape.fill",
                         color: Theme.Colors.textTertiary,
                         title: "Settings",
-                        subtitle: "Sync, units, tags"
+                        subtitle: "Health, sync, units"
                     )
                 }
                 .buttonStyle(PlainButtonStyle())

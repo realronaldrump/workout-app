@@ -6,19 +6,13 @@ import Charts
 struct HealthDashboardView: View {
     @EnvironmentObject var healthManager: HealthKitManager
     @EnvironmentObject var dataManager: WorkoutDataManager
+    @EnvironmentObject private var dateRangeContext: HealthDateRangeContext
     @Environment(\.dismiss) var dismiss
 
-    @State private var selectedRange: HealthTimeRange = .fourWeeks
     @State private var selectedCategory: HealthCategory = .all
     @State private var selectedDetailKind: HealthMetricKind?
     @State private var selectedWorkout: Workout?
     @State private var showingWorkoutsInRange = false
-    @State private var showingCustomRange = false
-    @State private var customRange: DateInterval = {
-        let end = Date()
-        let start = Calendar.current.date(byAdding: .day, value: -30, to: end) ?? end
-        return DateInterval(start: start, end: end)
-    }()
 
     private var allHealthData: [WorkoutHealthData] {
         healthManager.healthDataStore.values.sorted { $0.workoutDate > $1.workoutDate }
@@ -39,11 +33,11 @@ struct HealthDashboardView: View {
     }
 
     private var currentRange: DateInterval {
-        selectedRange.interval(reference: Date(), earliest: earliestDate, custom: customRange)
+        dateRangeContext.resolvedRange(earliest: earliestDate)
     }
 
     private var previousRange: DateInterval? {
-        guard selectedRange != .all else { return nil }
+        guard dateRangeContext.selectedRange != .allTime else { return nil }
         let duration = currentRange.duration
         let end = currentRange.start
         let start = end.addingTimeInterval(-duration)
@@ -69,7 +63,7 @@ struct HealthDashboardView: View {
     }
 
     private var rangeLabel: String {
-        formatRange(currentRange)
+        dateRangeContext.rangeLabel(earliest: earliestDate)
     }
 
     private var headerSubtitle: String {
@@ -114,15 +108,22 @@ struct HealthDashboardView: View {
             .navigationTitle("Health Insights")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
+                ToolbarItem(placement: .topBarLeading) {
                     AppToolbarButton(title: "Done", systemImage: "checkmark", variant: .accent) {
                         dismiss()
                     }
                 }
+                ToolbarItem(placement: .topBarTrailing) {
+                    HealthDateRangeToolbarMenu(earliestDate: earliestDate)
+                }
             }
             .navigationDestination(item: $selectedDetailKind) { kind in
                 if let detail = detailFor(kind) {
-                    HealthMetricDetailScreen(detail: detail, rangeLabel: rangeLabel)
+                    HealthMetricDetailScreen(
+                        detail: detail,
+                        rangeLabel: rangeLabel,
+                        earliestDate: earliestDate
+                    )
                 } else {
                     VStack(alignment: .leading, spacing: Theme.Spacing.md) {
                         Text(kind.title)
@@ -141,11 +142,6 @@ struct HealthDashboardView: View {
             }
             .navigationDestination(isPresented: $showingWorkoutsInRange) {
                 WorkoutsInRangeView(workouts: currentWorkouts, rangeLabel: rangeLabel)
-            }
-            .sheet(isPresented: $showingCustomRange) {
-                CustomRangeSheet(range: $customRange) {
-                    selectedRange = .custom
-                }
             }
         }
     }
@@ -166,18 +162,7 @@ struct HealthDashboardView: View {
     }
 
     private var timeRangeSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text("Time Range")
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Colors.textTertiary)
-
-            TimeRangePillPicker(
-                selected: $selectedRange,
-                onCustomTap: {
-                    showingCustomRange = true
-                }
-            )
-        }
+        HealthDateRangeSection(earliestDate: earliestDate)
     }
 
     private var categorySection: some View {
@@ -249,7 +234,7 @@ struct HealthDashboardView: View {
                     .font(Theme.Typography.title2)
                     .foregroundStyle(Theme.Colors.textPrimary)
                 Spacer()
-                if selectedRange != .all {
+                if dateRangeContext.selectedRange != .allTime {
                     Text("vs previous")
                         .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.Colors.textTertiary)
@@ -707,14 +692,6 @@ struct HealthDashboardView: View {
         )
     }
 
-    private func formatRange(_ interval: DateInterval) -> String {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        let start = formatter.string(from: interval.start)
-        let end = formatter.string(from: interval.end)
-        return "\(start) – \(end)"
-    }
-
     private func formatValue(_ value: Double, unit: String) -> String {
         switch unit {
         case "bpm":
@@ -1053,87 +1030,18 @@ private struct EmptyMetricCard: View {
     }
 }
 
-private struct CustomRangeSheet: View {
-    @Environment(\.dismiss) var dismiss
-    @Binding var range: DateInterval
-    let onApply: () -> Void
-
-    @State private var startDate: Date
-    @State private var endDate: Date
-
-    init(range: Binding<DateInterval>, onApply: @escaping () -> Void) {
-        _range = range
-        self.onApply = onApply
-        _startDate = State(initialValue: range.wrappedValue.start)
-        _endDate = State(initialValue: range.wrappedValue.end)
-    }
-
-    var body: some View {
-        NavigationStack {
-            ZStack {
-                AdaptiveBackground()
-
-                VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-                    DatePicker(
-                        "Start",
-                        selection: $startDate,
-                        in: ...Date(),
-                        displayedComponents: .date
-                    )
-                    .datePickerStyle(.graphical)
-
-                    DatePicker(
-                        "End",
-                        selection: $endDate,
-                        in: startDate...Date(),
-                        displayedComponents: .date
-                    )
-                    .datePickerStyle(.graphical)
-
-                    Button {
-                        let calendar = Calendar.current
-                        let start = calendar.startOfDay(for: startDate)
-                        let end = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: endDate) ?? endDate
-                        range = DateInterval(start: start, end: end)
-                        onApply()
-                        dismiss()
-                    } label: {
-                        Text("Apply Range")
-                            .font(Theme.Typography.headline)
-                            .foregroundStyle(Theme.Colors.textPrimary)
-                            .frame(maxWidth: .infinity)
-                            .padding(Theme.Spacing.md)
-                            .background(Theme.Colors.elevated)
-                            .cornerRadius(Theme.CornerRadius.large)
-                    }
-                    .buttonStyle(.plain)
-
-                    Spacer()
-                }
-                .padding(Theme.Spacing.xl)
-            }
-            .navigationTitle("Custom Range")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    AppToolbarButton(title: "Done", systemImage: "checkmark", variant: .accent) {
-                        dismiss()
-                    }
-                }
-            }
-        }
-    }
-}
 
 private struct HealthMetricDetailScreen: View {
     let detail: HealthMetricDetail
     let rangeLabel: String
+    let earliestDate: Date?
 
     @State private var selectedSeriesLabel: String
 
-    init(detail: HealthMetricDetail, rangeLabel: String) {
+    init(detail: HealthMetricDetail, rangeLabel: String, earliestDate: Date?) {
         self.detail = detail
         self.rangeLabel = rangeLabel
+        self.earliestDate = earliestDate
         _selectedSeriesLabel = State(initialValue: detail.series.first?.label ?? "")
     }
 
@@ -1178,6 +1086,11 @@ private struct HealthMetricDetailScreen: View {
         }
         .navigationTitle(detail.kind.title)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                HealthDateRangeToolbarMenu(earliestDate: earliestDate)
+            }
+        }
     }
 
     private var headerSection: some View {

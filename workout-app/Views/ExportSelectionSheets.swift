@@ -8,6 +8,7 @@ struct ExportWorkoutDateOption: Identifiable, Hashable {
 
 struct ExportExerciseSelectionSheet: View {
     @Environment(\.dismiss) private var dismiss
+
     @Binding var selectedExerciseNames: Set<String>
     let availableExerciseNames: [String]
 
@@ -26,7 +27,7 @@ struct ExportExerciseSelectionSheet: View {
                 VStack(spacing: Theme.Spacing.md) {
                     ExportSelectionSearchField(text: $searchText, placeholder: "Search exercises")
 
-                    selectionToolbar(
+                    ExportSelectionToolbar(
                         selectedCount: selectedExerciseNames.count,
                         totalCount: availableExerciseNames.count,
                         onSelectAll: {
@@ -49,42 +50,18 @@ struct ExportExerciseSelectionSheet: View {
                         ScrollView(showsIndicators: false) {
                             LazyVStack(spacing: Theme.Spacing.sm) {
                                 ForEach(filteredExerciseNames, id: \.self) { exerciseName in
-                                    Button {
-                                        if selectedExerciseNames.contains(exerciseName) {
-                                            selectedExerciseNames.remove(exerciseName)
-                                        } else {
-                                            selectedExerciseNames.insert(exerciseName)
+                                    ExportSelectableRow(
+                                        isSelected: selectedExerciseNames.contains(exerciseName),
+                                        accessibilityLabel: exerciseName,
+                                        action: {
+                                            toggleExercise(exerciseName)
                                         }
-                                        Haptics.selection()
-                                    } label: {
-                                        HStack(spacing: Theme.Spacing.sm) {
-                                            Image(systemName: selectedExerciseNames.contains(exerciseName)
-                                                ? "checkmark.circle.fill"
-                                                : "circle")
-                                                .foregroundStyle(
-                                                    selectedExerciseNames.contains(exerciseName)
-                                                        ? Theme.Colors.accent
-                                                        : Theme.Colors.textTertiary
-                                                )
-                                                .font(Theme.Typography.title4)
-
-                                            Text(exerciseName)
-                                                .font(Theme.Typography.body)
-                                                .foregroundStyle(Theme.Colors.textPrimary)
-                                                .multilineTextAlignment(.leading)
-
-                                            Spacer()
-                                        }
-                                        .padding(.horizontal, Theme.Spacing.md)
-                                        .padding(.vertical, Theme.Spacing.sm)
-                                        .background(Theme.Colors.surface)
-                                        .cornerRadius(Theme.CornerRadius.large)
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
-                                                .strokeBorder(Theme.Colors.border.opacity(0.4), lineWidth: 1)
-                                        )
+                                    ) {
+                                        Text(exerciseName)
+                                            .font(Theme.Typography.body)
+                                            .foregroundStyle(Theme.Colors.textPrimary)
+                                            .multilineTextAlignment(.leading)
                                     }
-                                    .buttonStyle(.plain)
                                 }
                             }
                             .padding(.bottom, Theme.Spacing.md)
@@ -105,40 +82,19 @@ struct ExportExerciseSelectionSheet: View {
         }
     }
 
-    @ViewBuilder
-    private func selectionToolbar(
-        selectedCount: Int,
-        totalCount: Int,
-        onSelectAll: @escaping () -> Void,
-        onClear: @escaping () -> Void
-    ) -> some View {
-        HStack(spacing: Theme.Spacing.md) {
-            Text("\(selectedCount) selected")
-                .font(Theme.Typography.captionBold)
-                .foregroundStyle(Theme.Colors.textSecondary)
-
-            Spacer()
-
-            Button("Select All", action: onSelectAll)
-                .font(Theme.Typography.captionBold)
-                .foregroundStyle(totalCount == 0 ? Theme.Colors.textTertiary : Theme.Colors.accent)
-                .disabled(totalCount == 0)
-                .buttonStyle(.plain)
-
-            Button("Clear", action: onClear)
-                .font(Theme.Typography.captionBold)
-                .foregroundStyle(selectedCount == 0 ? Theme.Colors.textTertiary : Theme.Colors.textSecondary)
-                .disabled(selectedCount == 0)
-                .buttonStyle(.plain)
+    private func toggleExercise(_ exerciseName: String) {
+        if selectedExerciseNames.contains(exerciseName) {
+            selectedExerciseNames.remove(exerciseName)
+        } else {
+            selectedExerciseNames.insert(exerciseName)
         }
-        .padding(.horizontal, Theme.Spacing.md)
-        .padding(.vertical, Theme.Spacing.sm)
-        .softCard(elevation: 1)
+        Haptics.selection()
     }
 }
 
 struct ExportWorkoutDateSelectionSheet: View {
     @Environment(\.dismiss) private var dismiss
+
     @Binding var selectedDateIds: Set<String>
     let dateOptions: [ExportWorkoutDateOption]
 
@@ -152,34 +108,18 @@ struct ExportWorkoutDateSelectionSheet: View {
                 AdaptiveBackground()
 
                 VStack(spacing: Theme.Spacing.md) {
-                    HStack(spacing: Theme.Spacing.md) {
-                        Text("\(selectedCount) selected")
-                            .font(Theme.Typography.captionBold)
-                            .foregroundStyle(Theme.Colors.textSecondary)
-
-                        Spacer()
-
-                        Button("Select All") {
+                    ExportSelectionToolbar(
+                        selectedCount: selectedCount,
+                        totalCount: dateOptions.count,
+                        onSelectAll: {
                             selectedDateIds = Set(dateOptions.map(\.id))
                             Haptics.selection()
-                        }
-                        .font(Theme.Typography.captionBold)
-                        .foregroundStyle(dateOptions.isEmpty ? Theme.Colors.textTertiary : Theme.Colors.accent)
-                        .disabled(dateOptions.isEmpty)
-                        .buttonStyle(.plain)
-
-                        Button("Clear") {
+                        },
+                        onClear: {
                             selectedDateIds.removeAll()
                             Haptics.selection()
                         }
-                        .font(Theme.Typography.captionBold)
-                        .foregroundStyle(selectedCount == 0 ? Theme.Colors.textTertiary : Theme.Colors.textSecondary)
-                        .disabled(selectedCount == 0)
-                        .buttonStyle(.plain)
-                    }
-                    .padding(.horizontal, Theme.Spacing.md)
-                    .padding(.vertical, Theme.Spacing.sm)
-                    .softCard(elevation: 1)
+                    )
 
                     if dateOptions.isEmpty {
                         ContentUnavailableView(
@@ -191,46 +131,22 @@ struct ExportWorkoutDateSelectionSheet: View {
                         ScrollView(showsIndicators: false) {
                             LazyVStack(spacing: Theme.Spacing.sm) {
                                 ForEach(dateOptions) { option in
-                                    Button {
-                                        if selectedDateIds.contains(option.id) {
-                                            selectedDateIds.remove(option.id)
-                                        } else {
-                                            selectedDateIds.insert(option.id)
+                                    ExportSelectableRow(
+                                        isSelected: selectedDateIds.contains(option.id),
+                                        accessibilityLabel: "\(option.date.formatted(date: .long, time: .omitted)), \(option.workoutCount) \(option.workoutCount == 1 ? "workout" : "workouts")",
+                                        action: {
+                                            toggleDate(option.id)
                                         }
-                                        Haptics.selection()
-                                    } label: {
-                                        HStack(spacing: Theme.Spacing.sm) {
-                                            Image(systemName: selectedDateIds.contains(option.id)
-                                                ? "checkmark.circle.fill"
-                                                : "circle")
-                                                .foregroundStyle(
-                                                    selectedDateIds.contains(option.id)
-                                                        ? Theme.Colors.accent
-                                                        : Theme.Colors.textTertiary
-                                                )
-                                                .font(Theme.Typography.title4)
-
-                                            VStack(alignment: .leading, spacing: 2) {
-                                                Text(option.date.formatted(date: .abbreviated, time: .omitted))
-                                                    .font(Theme.Typography.bodyBold)
-                                                    .foregroundStyle(Theme.Colors.textPrimary)
-                                                Text(option.workoutCount == 1 ? "1 workout" : "\(option.workoutCount) workouts")
-                                                    .font(Theme.Typography.caption)
-                                                    .foregroundStyle(Theme.Colors.textSecondary)
-                                            }
-
-                                            Spacer()
+                                    ) {
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(option.date.formatted(date: .abbreviated, time: .omitted))
+                                                .font(Theme.Typography.bodyBold)
+                                                .foregroundStyle(Theme.Colors.textPrimary)
+                                            Text(option.workoutCount == 1 ? "1 workout" : "\(option.workoutCount) workouts")
+                                                .font(Theme.Typography.caption)
+                                                .foregroundStyle(Theme.Colors.textSecondary)
                                         }
-                                        .padding(.horizontal, Theme.Spacing.md)
-                                        .padding(.vertical, Theme.Spacing.sm)
-                                        .background(Theme.Colors.surface)
-                                        .cornerRadius(Theme.CornerRadius.large)
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
-                                                .strokeBorder(Theme.Colors.border.opacity(0.4), lineWidth: 1)
-                                        )
                                     }
-                                    .buttonStyle(.plain)
                                 }
                             }
                             .padding(.bottom, Theme.Spacing.md)
@@ -250,10 +166,20 @@ struct ExportWorkoutDateSelectionSheet: View {
             }
         }
     }
+
+    private func toggleDate(_ id: String) {
+        if selectedDateIds.contains(id) {
+            selectedDateIds.remove(id)
+        } else {
+            selectedDateIds.insert(id)
+        }
+        Haptics.selection()
+    }
 }
 
 struct ExportMuscleGroupSelectionSheet: View {
     @Environment(\.dismiss) private var dismiss
+
     @Binding var selectedTagIds: Set<String>
     let availableTags: [MuscleTag]
 
@@ -276,34 +202,18 @@ struct ExportMuscleGroupSelectionSheet: View {
                 VStack(spacing: Theme.Spacing.md) {
                     ExportSelectionSearchField(text: $searchText, placeholder: "Search muscle groups")
 
-                    HStack(spacing: Theme.Spacing.md) {
-                        Text("\(selectedCount) selected")
-                            .font(Theme.Typography.captionBold)
-                            .foregroundStyle(Theme.Colors.textSecondary)
-
-                        Spacer()
-
-                        Button("Select All") {
+                    ExportSelectionToolbar(
+                        selectedCount: selectedCount,
+                        totalCount: availableTags.count,
+                        onSelectAll: {
                             selectedTagIds = Set(availableTags.map(\.id))
                             Haptics.selection()
-                        }
-                        .font(Theme.Typography.captionBold)
-                        .foregroundStyle(availableTags.isEmpty ? Theme.Colors.textTertiary : Theme.Colors.accent)
-                        .disabled(availableTags.isEmpty)
-                        .buttonStyle(.plain)
-
-                        Button("Clear") {
+                        },
+                        onClear: {
                             selectedTagIds.removeAll()
                             Haptics.selection()
                         }
-                        .font(Theme.Typography.captionBold)
-                        .foregroundStyle(selectedCount == 0 ? Theme.Colors.textTertiary : Theme.Colors.textSecondary)
-                        .disabled(selectedCount == 0)
-                        .buttonStyle(.plain)
-                    }
-                    .padding(.horizontal, Theme.Spacing.md)
-                    .padding(.vertical, Theme.Spacing.sm)
-                    .softCard(elevation: 1)
+                    )
 
                     if filteredTags.isEmpty {
                         ContentUnavailableView(
@@ -315,53 +225,29 @@ struct ExportMuscleGroupSelectionSheet: View {
                         ScrollView(showsIndicators: false) {
                             LazyVStack(spacing: Theme.Spacing.sm) {
                                 ForEach(filteredTags, id: \.id) { tag in
-                                    Button {
-                                        if selectedTagIds.contains(tag.id) {
-                                            selectedTagIds.remove(tag.id)
-                                        } else {
-                                            selectedTagIds.insert(tag.id)
+                                    ExportSelectableRow(
+                                        isSelected: selectedTagIds.contains(tag.id),
+                                        accessibilityLabel: "\(tag.displayName), \(tag.kind == .builtIn ? "built in" : "custom")",
+                                        action: {
+                                            toggleTag(tag.id)
                                         }
-                                        Haptics.selection()
-                                    } label: {
-                                        HStack(spacing: Theme.Spacing.sm) {
-                                            Image(systemName: selectedTagIds.contains(tag.id)
-                                                ? "checkmark.circle.fill"
-                                                : "circle")
-                                                .foregroundStyle(
-                                                    selectedTagIds.contains(tag.id)
-                                                        ? Theme.Colors.accent
-                                                        : Theme.Colors.textTertiary
-                                                )
-                                                .font(Theme.Typography.title4)
+                                    ) {
+                                        Image(systemName: tag.iconName)
+                                            .foregroundStyle(tag.tint)
+                                            .font(Theme.Typography.calloutStrong)
+                                            .frame(width: 22, height: 22)
+                                            .background(tag.tint.opacity(0.12))
+                                            .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
 
-                                            Image(systemName: tag.iconName)
-                                                .foregroundStyle(tag.tint)
-                                                .font(Theme.Typography.calloutStrong)
-                                                .frame(width: 22, height: 22)
-                                                .background(tag.tint.opacity(0.12))
-                                                .cornerRadius(Theme.CornerRadius.small)
-
-                                            VStack(alignment: .leading, spacing: 2) {
-                                                Text(tag.displayName)
-                                                    .font(Theme.Typography.bodyBold)
-                                                    .foregroundStyle(Theme.Colors.textPrimary)
-                                                Text(tag.kind == .builtIn ? "Built-in" : "Custom")
-                                                    .font(Theme.Typography.caption)
-                                                    .foregroundStyle(Theme.Colors.textSecondary)
-                                            }
-
-                                            Spacer()
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(tag.displayName)
+                                                .font(Theme.Typography.bodyBold)
+                                                .foregroundStyle(Theme.Colors.textPrimary)
+                                            Text(tag.kind == .builtIn ? "Built-in" : "Custom")
+                                                .font(Theme.Typography.caption)
+                                                .foregroundStyle(Theme.Colors.textSecondary)
                                         }
-                                        .padding(.horizontal, Theme.Spacing.md)
-                                        .padding(.vertical, Theme.Spacing.sm)
-                                        .background(Theme.Colors.surface)
-                                        .cornerRadius(Theme.CornerRadius.large)
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
-                                                .strokeBorder(Theme.Colors.border.opacity(0.4), lineWidth: 1)
-                                        )
                                     }
-                                    .buttonStyle(.plain)
                                 }
                             }
                             .padding(.bottom, Theme.Spacing.md)
@@ -380,6 +266,15 @@ struct ExportMuscleGroupSelectionSheet: View {
                 }
             }
         }
+    }
+
+    private func toggleTag(_ id: String) {
+        if selectedTagIds.contains(id) {
+            selectedTagIds.remove(id)
+        } else {
+            selectedTagIds.insert(id)
+        }
+        Haptics.selection()
     }
 }
 
@@ -415,5 +310,110 @@ private struct ExportSelectionSearchField: View {
         .padding(.horizontal, Theme.Spacing.lg)
         .padding(.vertical, Theme.Spacing.md)
         .glassBackground(cornerRadius: Theme.CornerRadius.xlarge, elevation: 1)
+    }
+}
+
+struct ExportHealthMetricSelectionSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let title: String
+    @Binding var selectedMetrics: Set<HealthMetric>
+    let availableMetrics: [HealthMetric]
+
+    @State private var searchText = ""
+
+    private var filteredMetrics: [HealthMetric] {
+        guard !searchText.isEmpty else { return availableMetrics }
+        return availableMetrics.filter { metric in
+            metric.title.localizedCaseInsensitiveContains(searchText) ||
+            metric.category.title.localizedCaseInsensitiveContains(searchText)
+        }
+    }
+
+    private var selectedCount: Int {
+        selectedMetrics.intersection(Set(availableMetrics)).count
+    }
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                AdaptiveBackground()
+
+                VStack(spacing: Theme.Spacing.md) {
+                    ExportSelectionSearchField(text: $searchText, placeholder: "Search metrics")
+
+                    ExportSelectionToolbar(
+                        selectedCount: selectedCount,
+                        totalCount: availableMetrics.count,
+                        onSelectAll: {
+                            selectedMetrics = Set(availableMetrics)
+                            Haptics.selection()
+                        },
+                        onClear: {
+                            selectedMetrics.removeAll()
+                            Haptics.selection()
+                        }
+                    )
+
+                    if filteredMetrics.isEmpty {
+                        ContentUnavailableView(
+                            "No metrics",
+                            systemImage: "heart.text.square",
+                            description: Text("Try a different search term.")
+                        )
+                    } else {
+                        ScrollView(showsIndicators: false) {
+                            LazyVStack(spacing: Theme.Spacing.sm) {
+                                ForEach(filteredMetrics) { metric in
+                                    ExportSelectableRow(
+                                        isSelected: selectedMetrics.contains(metric),
+                                        accessibilityLabel: "\(metric.title), \(metric.category.title)",
+                                        action: {
+                                            toggleMetric(metric)
+                                        }
+                                    ) {
+                                        Image(systemName: metric.icon)
+                                            .foregroundStyle(metric.chartColor)
+                                            .font(Theme.Typography.calloutStrong)
+                                            .frame(width: 22, height: 22)
+                                            .background(metric.chartColor.opacity(0.12))
+                                            .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
+
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(metric.title)
+                                                .font(Theme.Typography.bodyBold)
+                                                .foregroundStyle(Theme.Colors.textPrimary)
+                                            Text("\(metric.category.title) • \(metric.displayUnit)")
+                                                .font(Theme.Typography.caption)
+                                                .foregroundStyle(Theme.Colors.textSecondary)
+                                        }
+                                    }
+                                }
+                            }
+                            .padding(.bottom, Theme.Spacing.md)
+                        }
+                    }
+                }
+                .padding(Theme.Spacing.xl)
+            }
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    AppToolbarButton(title: "Done", systemImage: "checkmark", variant: .accent) {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+
+    private func toggleMetric(_ metric: HealthMetric) {
+        if selectedMetrics.contains(metric) {
+            selectedMetrics.remove(metric)
+        } else {
+            selectedMetrics.insert(metric)
+        }
+        Haptics.selection()
     }
 }

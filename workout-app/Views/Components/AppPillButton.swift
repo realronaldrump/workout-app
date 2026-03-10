@@ -113,29 +113,21 @@ struct AppToolbarButton: View {
         switch variant {
         case .accent:
             return AppToolbarButtonPalette(
-                fill: Theme.Colors.accentTint.blended(with: Theme.Colors.surface, amount: 0.2),
-                border: Theme.Colors.accent.opacity(0.22),
                 text: Theme.Colors.accent,
                 icon: Theme.Colors.accent
             )
         case .danger:
             return AppToolbarButtonPalette(
-                fill: Theme.Colors.error.opacity(0.08).blended(with: Theme.Colors.surface, amount: 0.14),
-                border: Theme.Colors.error.opacity(0.18),
                 text: Theme.Colors.error,
                 icon: Theme.Colors.error
             )
         case .subtle:
             return AppToolbarButtonPalette(
-                fill: Theme.Colors.surface.blended(with: Theme.Colors.background, amount: 0.34),
-                border: Theme.Colors.border.opacity(0.9),
                 text: Theme.Colors.textSecondary,
                 icon: Theme.Colors.textSecondary
             )
         case .neutral:
             return AppToolbarButtonPalette(
-                fill: Theme.Colors.surface.blended(with: Theme.Colors.background, amount: 0.2),
-                border: Theme.Colors.border.opacity(0.88),
                 text: Theme.Colors.textPrimary,
                 icon: Theme.Colors.accent
             )
@@ -144,22 +136,44 @@ struct AppToolbarButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 7) {
-                if let systemImage {
-                    Image(systemName: systemImage)
-                        .font(Theme.Typography.captionBold)
-                        .foregroundStyle(palette.icon)
-                }
+            labelContent
+                .padding(.horizontal, Theme.Spacing.xs)
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(AppInteractionButtonStyle())
+        .accessibilityLabel(title)
+    }
 
+    @ViewBuilder
+    private var labelContent: some View {
+        if let systemImage {
+            ViewThatFits(in: .horizontal) {
+                toolbarLabel(systemImage: systemImage, showsTitle: true)
+                toolbarLabel(systemImage: systemImage, showsTitle: false)
+            }
+        } else {
+            Text(title)
+                .font(Theme.Typography.subheadlineStrong)
+                .foregroundStyle(palette.text)
+                .lineLimit(1)
+        }
+    }
+
+    private func toolbarLabel(systemImage: String, showsTitle: Bool) -> some View {
+        HStack(spacing: 7) {
+            Image(systemName: systemImage)
+                .font(Theme.Typography.captionBold)
+                .foregroundStyle(palette.icon)
+
+            if showsTitle {
                 Text(title)
                     .font(Theme.Typography.subheadlineStrong)
                     .foregroundStyle(palette.text)
+                    .lineLimit(1)
             }
-            .padding(.horizontal, Theme.Spacing.md)
-            .frame(minHeight: 44)
-            .toolbarButtonChrome(fill: palette.fill, border: palette.border)
         }
-        .buttonStyle(AppInteractionButtonStyle())
+        .fixedSize(horizontal: true, vertical: false)
     }
 }
 
@@ -173,29 +187,21 @@ struct AppToolbarIconButton: View {
         switch variant {
         case .accent:
             return AppToolbarButtonPalette(
-                fill: Theme.Colors.accentTint.blended(with: Theme.Colors.surface, amount: 0.2),
-                border: Theme.Colors.accent.opacity(0.22),
                 text: Theme.Colors.accent,
                 icon: Theme.Colors.accent
             )
         case .danger:
             return AppToolbarButtonPalette(
-                fill: Theme.Colors.error.opacity(0.08).blended(with: Theme.Colors.surface, amount: 0.14),
-                border: Theme.Colors.error.opacity(0.18),
                 text: Theme.Colors.error,
                 icon: Theme.Colors.error
             )
         case .subtle:
             return AppToolbarButtonPalette(
-                fill: Theme.Colors.surface.blended(with: Theme.Colors.background, amount: 0.34),
-                border: Theme.Colors.border.opacity(0.9),
                 text: Theme.Colors.textSecondary,
                 icon: Theme.Colors.textSecondary
             )
         case .neutral:
             return AppToolbarButtonPalette(
-                fill: Theme.Colors.surface.blended(with: Theme.Colors.background, amount: 0.2),
-                border: Theme.Colors.border.opacity(0.88),
                 text: Theme.Colors.textPrimary,
                 icon: Theme.Colors.accent
             )
@@ -208,7 +214,7 @@ struct AppToolbarIconButton: View {
                 .font(Theme.Typography.subheadlineBold)
                 .foregroundStyle(palette.icon)
                 .frame(width: 44, height: 44)
-                .toolbarButtonChrome(fill: palette.fill, border: palette.border)
+                .contentShape(Rectangle())
         }
         .buttonStyle(AppInteractionButtonStyle())
         .accessibilityLabel(accessibilityLabel)
@@ -216,8 +222,6 @@ struct AppToolbarIconButton: View {
 }
 
 private struct AppToolbarButtonPalette {
-    let fill: Color
-    let border: Color
     let text: Color
     let icon: Color
 }

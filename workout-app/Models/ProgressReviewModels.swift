@@ -111,7 +111,7 @@ struct ExerciseTrainingBlock: Identifiable, Hashable {
     let outcome: ExerciseBlockOutcome
 }
 
-struct ExerciseForensicsFinding: Identifiable, Hashable {
+struct ExerciseReviewFinding: Identifiable, Hashable {
     let id: String
     let title: String
     let message: String
@@ -129,10 +129,10 @@ struct ExerciseBlockComparison: Hashable {
     let supportingEvidence: [String]
 }
 
-struct ExerciseForensicsReview: Hashable {
+struct ExerciseProgressReview: Hashable {
     let exerciseName: String
     let latestComparableBlocks: [ExerciseTrainingBlock]
     let comparison: ExerciseBlockComparison?
-    let findings: [ExerciseForensicsFinding]
+    let findings: [ExerciseReviewFinding]
     let hasBodyweightContext: Bool
 }

@@ -3,10 +3,21 @@ import Charts
 
 struct HealthCategoryDetailView: View {
     let category: HealthHubCategory
-    let range: DateInterval
-    let rangeLabel: String
 
     @EnvironmentObject var healthManager: HealthKitManager
+    @EnvironmentObject private var dateRangeContext: HealthDateRangeContext
+
+    private var earliestDate: Date? {
+        healthManager.dailyHealthStore.keys.min()
+    }
+
+    private var range: DateInterval {
+        dateRangeContext.resolvedRange(earliest: earliestDate)
+    }
+
+    private var rangeLabel: String {
+        dateRangeContext.rangeLabel(earliest: earliestDate)
+    }
 
     private var dailyData: [DailyHealthData] {
         healthManager.dailyHealthStore.values
@@ -31,7 +42,7 @@ struct HealthCategoryDetailView: View {
                     } else {
                         ForEach(metrics) { metric in
                             NavigationLink {
-                                HealthMetricDetailView(metric: metric, range: range, rangeLabel: rangeLabel)
+                                HealthMetricDetailView(metric: metric)
                             } label: {
                                 HealthMetricRow(metric: metric, points: metricPoints(for: metric), latestValue: latestValue(for: metric))
                             }
@@ -45,6 +56,11 @@ struct HealthCategoryDetailView: View {
         }
         .navigationTitle(category.title)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                HealthDateRangeToolbarMenu(earliestDate: earliestDate)
+            }
+        }
     }
 
     private var headerSection: some View {

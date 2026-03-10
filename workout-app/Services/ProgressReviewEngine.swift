@@ -1,6 +1,6 @@
 import Foundation
 
-enum ProgressForensicsEngine {
+enum ProgressReviewEngine {
     private static let minimumSessionsPerExercise = 6
     private static let minimumSessionsPerBlock = 3
     private static let maximumGapDays = 21
@@ -10,7 +10,7 @@ enum ProgressForensicsEngine {
         workouts: [Workout],
         annotations: [UUID: WorkoutAnnotation],
         bodyMassSamples: [BodyRawSample]
-    ) -> ExerciseForensicsReview? {
+    ) -> ExerciseProgressReview? {
         let sessions = buildSessions(for: exerciseName, workouts: workouts, annotations: annotations)
         guard sessions.count >= minimumSessionsPerExercise else { return nil }
 
@@ -23,7 +23,7 @@ enum ProgressForensicsEngine {
         let comparison = compare(previous: latestPair[0], current: latestPair[1], exerciseName: exerciseName)
         let findings = findings(for: latestPair[0], current: latestPair[1], comparison: comparison)
 
-        return ExerciseForensicsReview(
+        return ExerciseProgressReview(
             exerciseName: exerciseName,
             latestComparableBlocks: latestPair.map(\.block),
             comparison: comparison,
@@ -213,10 +213,10 @@ enum ProgressForensicsEngine {
                 currentBlockId: current.block.id,
                 outcomeStatus: .notComparable,
                 primaryMetricKind: .notComparable,
-                primaryObservedMetric: "Rep lane changed",
+                primaryObservedMetric: "Rep range changed",
                 delta: 0,
                 deltaLabel: "Not comparable",
-                summary: "\(exerciseName) changed rep lanes, so the last two blocks are not directly comparable.",
+                summary: "\(exerciseName) changed rep ranges, so the last two blocks are not directly comparable.",
                 supportingEvidence: supportingEvidence(previous: previous, current: current).prefix(3).map { $0.0 }
             )
         }
@@ -271,27 +271,27 @@ enum ProgressForensicsEngine {
             currentBlockId: current.block.id,
             outcomeStatus: status(for: volumeDelta),
             primaryMetricKind: .laneVolume,
-            primaryObservedMetric: "Lane volume in \(lane.label)",
-            delta: volumeDelta,
-            deltaLabel: signedVolumeLabel(volumeDelta),
-            summary: summary(
-                exerciseName: exerciseName,
-                lane: lane,
-                status: status(for: volumeDelta),
-                metricDescription: "lane volume moved \(signedVolumeLabel(volumeDelta).lowercased())"
-            ),
-            supportingEvidence: supportingEvidence(previous: previous, current: current).prefix(3).map { $0.0 }
-        )
+                primaryObservedMetric: "Rep range volume in \(lane.label)",
+                delta: volumeDelta,
+                deltaLabel: signedVolumeLabel(volumeDelta),
+                summary: summary(
+                    exerciseName: exerciseName,
+                    lane: lane,
+                    status: status(for: volumeDelta),
+                    metricDescription: "rep range volume moved \(signedVolumeLabel(volumeDelta).lowercased())"
+                ),
+                supportingEvidence: supportingEvidence(previous: previous, current: current).prefix(3).map { $0.0 }
+            )
     }
 
     private static func findings(
         for previous: DerivedBlock,
         current: DerivedBlock,
         comparison: ExerciseBlockComparison
-    ) -> [ExerciseForensicsFinding] {
+    ) -> [ExerciseReviewFinding] {
         let candidates = supportingEvidence(previous: previous, current: current)
         return Array(candidates.prefix(4).map { item in
-            ExerciseForensicsFinding(id: item.0, title: item.1, message: item.2)
+            ExerciseReviewFinding(id: item.0, title: item.1, message: item.2)
         })
     }
 
@@ -329,8 +329,8 @@ enum ProgressForensicsEngine {
 
         let previousVolume = previous.block.outcome.laneVolume
         let currentVolume = current.block.outcome.laneVolume
-        let volumeMessage = "Volume in the \(current.block.dominantRepLane.label) lane moved from \(SharedFormatters.volumeWithUnit(previousVolume)) to \(SharedFormatters.volumeWithUnit(currentVolume)) during this stretch."
-        evidence.append((3, "volume", "Lane Volume", volumeMessage))
+        let volumeMessage = "Volume in the \(current.block.dominantRepLane.label) rep range moved from \(SharedFormatters.volumeWithUnit(previousVolume)) to \(SharedFormatters.volumeWithUnit(currentVolume)) during this stretch."
+        evidence.append((3, "volume", "Rep Range Volume", volumeMessage))
 
         if previous.block.commonGymId != current.block.commonGymId {
             let previousGym = gymContextLabel(for: previous.block)
@@ -369,11 +369,11 @@ enum ProgressForensicsEngine {
     ) -> String {
         switch status {
         case .improved:
-            return "\(exerciseName) improved in the \(lane.label) lane, and \(metricDescription)."
+            return "\(exerciseName) improved in the \(lane.label) rep range, and \(metricDescription)."
         case .flat:
-            return "\(exerciseName) held flat in the \(lane.label) lane, and \(metricDescription)."
+            return "\(exerciseName) held flat in the \(lane.label) rep range, and \(metricDescription)."
         case .regressed:
-            return "\(exerciseName) regressed in the \(lane.label) lane, and \(metricDescription)."
+            return "\(exerciseName) regressed in the \(lane.label) rep range, and \(metricDescription)."
         case .notComparable:
             return "\(exerciseName) changed patterns enough that the last two blocks are not directly comparable."
         }

@@ -7,6 +7,17 @@ struct ResolvedWorkoutLocation {
     let source: WorkoutLocationSource
 }
 
+private struct SleepSourceDescriptor {
+    let key: String
+    let name: String
+    let bundleIdentifier: String?
+}
+
+private struct SleepSourceSelection {
+    let key: String
+    let mode: SleepSourceSelectionMode
+}
+
 extension HealthKitManager {
     func fetchHeartRateSamples(from start: Date, to end: Date) async throws -> [HeartRateSample] {
         let unit = HKUnit(from: "count/min")
@@ -136,6 +147,52 @@ extension HealthKitManager {
                 }
 
                 continuation.resume(returning: samples as? [HKWorkout] ?? [])
+            }
+            healthStore.execute(query)
+        }
+    }
+
+    func fetchAvailableSleepSources() async throws -> [SleepSourceOption] {
+        guard let healthStore = healthStore else {
+            throw HealthKitError.notAvailable
+        }
+        guard let sleepType = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) else {
+            return []
+        }
+
+        return try await withCheckedThrowingContinuation { continuation in
+            let query = HKSourceQuery(sampleType: sleepType, samplePredicate: nil) { _, sources, error in
+                if let error {
+                    if let auth = Self.authorizationFailure(from: error) {
+                        Task { @MainActor in
+                            self.authorizationStatus = auth.status
+                        }
+                        continuation.resume(throwing: auth.error)
+                        return
+                    }
+                    if Self.isNoDataError(error) {
+                        continuation.resume(returning: [])
+                        return
+                    }
+                    continuation.resume(throwing: HealthKitError.queryFailed(error.localizedDescription))
+                    return
+                }
+
+                let options: [SleepSourceOption] = (sources ?? [])
+                    .map { source in
+                        let descriptor = Self.sleepSourceDescriptor(
+                            name: source.name,
+                            bundleIdentifier: source.bundleIdentifier
+                        )
+                        return SleepSourceOption(
+                            key: descriptor.key,
+                            name: descriptor.name,
+                            bundleIdentifier: descriptor.bundleIdentifier
+                        )
+                    }
+                    .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+
+                continuation.resume(returning: options)
             }
             healthStore.execute(query)
         }
@@ -567,6 +624,8 @@ extension HealthKitManager {
 
         let predicate = HKQuery.predicateForSamples(withStart: start, end: end, options: [])
         let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
+        let preferredKey = selectedSleepSourceKey
+        let preferredName = selectedSleepSourceName
 
         return try await withCheckedThrowingContinuation { continuation in
             let query = HKSampleQuery(
@@ -597,11 +656,8 @@ extension HealthKitManager {
                     return
                 }
 
-                var stageIntervals: [SleepStage: [DateInterval]] = [:]
-                var asleepIntervals: [DateInterval] = []
-                var inBedIntervals: [DateInterval] = []
-                var startTime: Date?
-                var endTime: Date?
+                var intervalsBySource: [String: [SleepStage: [DateInterval]]] = [:]
+                var sourceByKey: [String: SleepSourceDescriptor] = [:]
 
                 for sample in sleepSamples {
                     let rawInterval = DateInterval(start: sample.startDate, end: sample.endDate)
@@ -609,51 +665,31 @@ extension HealthKitManager {
                         continue
                     }
 
-                    if let existingStart = startTime {
-                        startTime = min(existingStart, interval.start)
-                    } else {
-                        startTime = interval.start
-                    }
-
-                    if let existingEnd = endTime {
-                        endTime = max(existingEnd, interval.end)
-                    } else {
-                        endTime = interval.end
-                    }
-
                     let stage = Self.mapSleepStage(sample.value)
-                    stageIntervals[stage, default: []].append(interval)
-
-                    switch stage {
-                    case .inBed:
-                        inBedIntervals.append(interval)
-                    case .core, .deep, .rem:
-                        asleepIntervals.append(interval)
-                    default:
-                        break
-                    }
+                    let descriptor = Self.sleepSourceDescriptor(
+                        name: sample.sourceRevision.source.name,
+                        bundleIdentifier: sample.sourceRevision.source.bundleIdentifier
+                    )
+                    sourceByKey[descriptor.key] = descriptor
+                    intervalsBySource[descriptor.key, default: [:]][stage, default: []].append(interval)
                 }
 
-                guard let summaryStart = startTime, let summaryEnd = endTime else {
+                guard let selection = Self.chooseSleepSource(
+                    from: intervalsBySource,
+                    preferredKey: preferredKey,
+                    minimumSleepDuration: 15 * 60
+                ), let stageMap = intervalsBySource[selection.key] else {
                     continuation.resume(returning: nil)
                     return
                 }
 
-                var stageDurations: [SleepStage: TimeInterval] = [:]
-                for (stage, intervals) in stageIntervals {
-                    let merged = Self.mergeIntervals(intervals)
-                    stageDurations[stage] = merged.reduce(0) { $0 + $1.duration }
-                }
-
-                let totalSleep = Self.mergeIntervals(asleepIntervals).reduce(0) { $0 + $1.duration }
-                let inBed = Self.mergeIntervals(inBedIntervals).reduce(0) { $0 + $1.duration }
-
-                let summary = SleepSummary(
-                    totalSleep: totalSleep,
-                    inBed: inBed,
-                    stageDurations: stageDurations,
-                    start: summaryStart,
-                    end: summaryEnd
+                let summary = Self.buildSleepSummary(
+                    from: stageMap,
+                    descriptor: sourceByKey[selection.key],
+                    shiftedBy: 0,
+                    selectionMode: selection.mode,
+                    preferredSourceName: preferredName,
+                    preferredSourceKey: preferredKey
                 )
 
                 continuation.resume(returning: summary)
@@ -749,6 +785,8 @@ extension HealthKitManager {
         let queryStart = start.addingTimeInterval(-shiftSeconds)
         let predicate = HKQuery.predicateForSamples(withStart: queryStart, end: end, options: [])
         let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
+        let preferredKey = selectedSleepSourceKey
+        let preferredName = selectedSleepSourceName
 
         return try await withCheckedThrowingContinuation { continuation in
             let query = HKSampleQuery(
@@ -788,11 +826,7 @@ extension HealthKitManager {
 
                 // dayStart -> sourceBundleId -> stage -> [shifted intervals]
                 var intervalsByDay: [Date: [String: [SleepStage: [DateInterval]]]] = [:]
-                var sourceNameByKey: [String: String] = [:]
-
-                func unionDuration(_ intervals: [DateInterval]) -> TimeInterval {
-                    Self.mergeIntervals(intervals).reduce(0) { $0 + $1.duration }
-                }
+                var sourceByKey: [String: SleepSourceDescriptor] = [:]
 
                 func addShiftedInterval(_ interval: DateInterval, toDay day: Date, sourceKey: String, stage: SleepStage) {
                     intervalsByDay[day, default: [:]][sourceKey, default: [:]][stage, default: []].append(interval)
@@ -830,19 +864,15 @@ extension HealthKitManager {
                     }
 
                     let stage = Self.mapSleepStage(sample.value)
-                    let sourceKey = sample.sourceRevision.source.bundleIdentifier
-                    let sourceName = sample.sourceRevision.source.name
-                    if !sourceKey.isEmpty, sourceNameByKey[sourceKey] == nil {
-                        sourceNameByKey[sourceKey] = sourceName
-                    }
+                    let descriptor = Self.sleepSourceDescriptor(
+                        name: sample.sourceRevision.source.name,
+                        bundleIdentifier: sample.sourceRevision.source.bundleIdentifier
+                    )
+                    sourceByKey[descriptor.key] = descriptor
 
                     for (dayKey, part) in splitByShiftedDay(shifted) {
                         guard dayKey >= startDay && dayKey <= endDay else { continue }
-                        let key = sourceKey.isEmpty ? sourceName : sourceKey
-                        if sourceNameByKey[key] == nil {
-                            sourceNameByKey[key] = sourceName
-                        }
-                        addShiftedInterval(part, toDay: dayKey, sourceKey: key, stage: stage)
+                        addShiftedInterval(part, toDay: dayKey, sourceKey: descriptor.key, stage: stage)
                     }
                 }
 
@@ -850,95 +880,24 @@ extension HealthKitManager {
                 let minMeaningfulSleep = 15.0 * 60.0
 
                 for (dayKey, sources) in intervalsByDay {
-                    // Pick the single best source for this day to avoid multi-source double counting.
-                    var bestSourceKey: String?
-                    var bestAsleep: TimeInterval = -1
-                    var bestStageScore: Int = -1
-                    var bestInBed: TimeInterval = -1
-
-                    for (sourceKey, stageMap) in sources {
-                        let coreIntervals = stageMap[.core] ?? []
-                        let deepIntervals = stageMap[.deep] ?? []
-                        let remIntervals = stageMap[.rem] ?? []
-                        let inBedIntervals = stageMap[.inBed] ?? []
-
-                        let asleepMerged = Self.mergeIntervals(coreIntervals + deepIntervals + remIntervals)
-                        let asleepDuration = asleepMerged.reduce(0) { $0 + $1.duration }
-                        let inBedDuration = unionDuration(inBedIntervals)
-
-                        let stageScore = [
-                            unionDuration(deepIntervals) > 0 ? 1 : 0,
-                            unionDuration(remIntervals) > 0 ? 1 : 0,
-                            unionDuration(coreIntervals) > 0 ? 1 : 0
-                        ].reduce(0, +)
-
-                        func isBetter() -> Bool {
-                            if asleepDuration != bestAsleep { return asleepDuration > bestAsleep }
-                            if stageScore != bestStageScore { return stageScore > bestStageScore }
-                            if inBedDuration != bestInBed { return inBedDuration > bestInBed }
-                            // Stable tie-break to avoid flapping.
-                            if let bestSourceKey { return sourceKey < bestSourceKey }
-                            return true
-                        }
-
-                        if bestSourceKey == nil || isBetter() {
-                            bestSourceKey = sourceKey
-                            bestAsleep = asleepDuration
-                            bestStageScore = stageScore
-                            bestInBed = inBedDuration
-                        }
+                    guard let selection = Self.chooseSleepSource(
+                        from: sources,
+                        preferredKey: preferredKey,
+                        minimumSleepDuration: minMeaningfulSleep
+                    ) else {
+                        continue
                     }
-
-                    guard let chosenKey = bestSourceKey else { continue }
-                    guard bestAsleep >= minMeaningfulSleep else { continue }
-
-                    guard let stageMap = sources[chosenKey] else { continue }
-
-                    var stageDurations: [SleepStage: TimeInterval] = [:]
-                    var earliestShifted: Date?
-                    var latestShifted: Date?
-
-                    for (stage, intervals) in stageMap {
-                        let merged = Self.mergeIntervals(intervals)
-                        let duration = merged.reduce(0) { $0 + $1.duration }
-                        stageDurations[stage] = duration
-
-                        for interval in merged {
-                            if let existing = earliestShifted {
-                                earliestShifted = min(existing, interval.start)
-                            } else {
-                                earliestShifted = interval.start
-                            }
-
-                            if let existing = latestShifted {
-                                latestShifted = max(existing, interval.end)
-                            } else {
-                                latestShifted = interval.end
-                            }
-                        }
+                    guard let stageMap = sources[selection.key] else { continue }
+                    if let summary = Self.buildSleepSummary(
+                        from: stageMap,
+                        descriptor: sourceByKey[selection.key],
+                        shiftedBy: shiftSeconds,
+                        selectionMode: selection.mode,
+                        preferredSourceName: preferredName,
+                        preferredSourceKey: preferredKey
+                    ) {
+                        summaries[dayKey] = summary
                     }
-
-                    let coreIntervals = stageMap[.core] ?? []
-                    let deepIntervals = stageMap[.deep] ?? []
-                    let remIntervals = stageMap[.rem] ?? []
-                    let inBedIntervals = stageMap[.inBed] ?? []
-
-                    let totalSleep = unionDuration(coreIntervals + deepIntervals + remIntervals)
-                    let inBed = unionDuration(inBedIntervals)
-
-                    let summaryStart = (earliestShifted ?? dayKey).addingTimeInterval(-shiftSeconds)
-                    let summaryEnd = (latestShifted ?? dayKey).addingTimeInterval(-shiftSeconds)
-
-                    let summary = SleepSummary(
-                        totalSleep: totalSleep,
-                        inBed: inBed,
-                        stageDurations: stageDurations,
-                        start: summaryStart,
-                        end: summaryEnd,
-                        primarySourceName: sourceNameByKey[chosenKey],
-                        primarySourceBundleIdentifier: chosenKey
-                    )
-                    summaries[dayKey] = summary
                 }
 
                 continuation.resume(returning: summaries)
@@ -974,6 +933,136 @@ extension HealthKitManager {
         }
 
         return merged
+    }
+
+    nonisolated static func normalizedSleepSourceKey(_ key: String?) -> String? {
+        guard let trimmed = key?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else {
+            return nil
+        }
+        return trimmed
+    }
+
+    private nonisolated static func sleepSourceDescriptor(name: String, bundleIdentifier: String?) -> SleepSourceDescriptor {
+        let normalizedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedBundleIdentifier = normalizedSleepSourceKey(bundleIdentifier)
+        let key = normalizedBundleIdentifier ?? (normalizedName.isEmpty ? "unknown.sleep.source" : normalizedName)
+        let displayName = normalizedName.isEmpty ? key : normalizedName
+        return SleepSourceDescriptor(key: key, name: displayName, bundleIdentifier: normalizedBundleIdentifier)
+    }
+
+    private nonisolated static func sleepDuration(for stageMap: [SleepStage: [DateInterval]]) -> TimeInterval {
+        let asleepIntervals = (stageMap[.core] ?? []) + (stageMap[.deep] ?? []) + (stageMap[.rem] ?? [])
+        return mergeIntervals(asleepIntervals).reduce(0) { $0 + $1.duration }
+    }
+
+    private nonisolated static func inBedDuration(for stageMap: [SleepStage: [DateInterval]]) -> TimeInterval {
+        mergeIntervals(stageMap[.inBed] ?? []).reduce(0) { $0 + $1.duration }
+    }
+
+    private nonisolated static func stageScore(for stageMap: [SleepStage: [DateInterval]]) -> Int {
+        [
+            mergeIntervals(stageMap[.deep] ?? []).isEmpty ? 0 : 1,
+            mergeIntervals(stageMap[.rem] ?? []).isEmpty ? 0 : 1,
+            mergeIntervals(stageMap[.core] ?? []).isEmpty ? 0 : 1
+        ].reduce(0, +)
+    }
+
+    private nonisolated static func chooseSleepSource(
+        from sources: [String: [SleepStage: [DateInterval]]],
+        preferredKey: String?,
+        minimumSleepDuration: TimeInterval
+    ) -> SleepSourceSelection? {
+        if let preferredKey {
+            if let preferredStages = sources[preferredKey],
+               sleepDuration(for: preferredStages) >= minimumSleepDuration {
+                return SleepSourceSelection(key: preferredKey, mode: .preferred)
+            }
+
+            var fallbackSources = sources
+            fallbackSources.removeValue(forKey: preferredKey)
+            guard let fallbackKey = bestSleepSourceKey(from: fallbackSources, minimumSleepDuration: minimumSleepDuration) else {
+                return nil
+            }
+            return SleepSourceSelection(key: fallbackKey, mode: .fallback)
+        }
+
+        guard let bestKey = bestSleepSourceKey(from: sources, minimumSleepDuration: minimumSleepDuration) else {
+            return nil
+        }
+        return SleepSourceSelection(key: bestKey, mode: .automatic)
+    }
+
+    private nonisolated static func bestSleepSourceKey(
+        from sources: [String: [SleepStage: [DateInterval]]],
+        minimumSleepDuration: TimeInterval
+    ) -> String? {
+        var bestSourceKey: String?
+        var bestAsleep: TimeInterval = -1
+        var bestStageScore: Int = -1
+        var bestInBed: TimeInterval = -1
+
+        for (sourceKey, stageMap) in sources {
+            let asleepDuration = sleepDuration(for: stageMap)
+            let currentStageScore = stageScore(for: stageMap)
+            let currentInBed = inBedDuration(for: stageMap)
+
+            func isBetter() -> Bool {
+                if asleepDuration != bestAsleep { return asleepDuration > bestAsleep }
+                if currentStageScore != bestStageScore { return currentStageScore > bestStageScore }
+                if currentInBed != bestInBed { return currentInBed > bestInBed }
+                if let bestSourceKey { return sourceKey < bestSourceKey }
+                return true
+            }
+
+            if bestSourceKey == nil || isBetter() {
+                bestSourceKey = sourceKey
+                bestAsleep = asleepDuration
+                bestStageScore = currentStageScore
+                bestInBed = currentInBed
+            }
+        }
+
+        guard bestAsleep >= minimumSleepDuration else { return nil }
+        return bestSourceKey
+    }
+
+    private nonisolated static func buildSleepSummary(
+        from stageMap: [SleepStage: [DateInterval]],
+        descriptor: SleepSourceDescriptor?,
+        shiftedBy shiftSeconds: TimeInterval,
+        selectionMode: SleepSourceSelectionMode,
+        preferredSourceName: String?,
+        preferredSourceKey: String?
+    ) -> SleepSummary? {
+        var stageDurations: [SleepStage: TimeInterval] = [:]
+        var earliest: Date?
+        var latest: Date?
+
+        for (stage, intervals) in stageMap {
+            let merged = mergeIntervals(intervals)
+            let duration = merged.reduce(0) { $0 + $1.duration }
+            stageDurations[stage] = duration
+
+            for interval in merged {
+                earliest = min(earliest ?? interval.start, interval.start)
+                latest = max(latest ?? interval.end, interval.end)
+            }
+        }
+
+        guard let summaryStart = earliest, let summaryEnd = latest else { return nil }
+
+        return SleepSummary(
+            totalSleep: sleepDuration(for: stageMap),
+            inBed: inBedDuration(for: stageMap),
+            stageDurations: stageDurations,
+            start: summaryStart.addingTimeInterval(-shiftSeconds),
+            end: summaryEnd.addingTimeInterval(-shiftSeconds),
+            primarySourceName: descriptor?.name,
+            primarySourceBundleIdentifier: descriptor?.bundleIdentifier,
+            sourceSelectionMode: selectionMode,
+            preferredSourceName: preferredSourceName,
+            preferredSourceBundleIdentifier: preferredSourceKey
+        )
     }
 
     private nonisolated static func mapSleepStage(_ value: Int) -> SleepStage {

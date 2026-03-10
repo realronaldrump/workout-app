@@ -32,6 +32,10 @@ struct Exercise: Identifiable, Hashable {
         sets.reduce(0) { $0 + ($1.weight * Double($1.reps)) }
     }
 
+    nonisolated var hasVolume: Bool {
+        totalVolume > 0
+    }
+
     var averageReps: Double {
         guard !sets.isEmpty else { return 0 }
         return Double(sets.reduce(0) { $0 + $1.reps }) / Double(sets.count)
@@ -74,6 +78,18 @@ struct Workout: Identifiable, Hashable {
 
     nonisolated var totalVolume: Double {
         exercises.reduce(0) { $0 + $1.totalVolume }
+    }
+
+    nonisolated var hasVolume: Bool {
+        totalVolume > 0
+    }
+
+    nonisolated var volumeExercises: [Exercise] {
+        exercises.filter(\.hasVolume)
+    }
+
+    nonisolated var volumeExerciseCount: Int {
+        volumeExercises.count
     }
 
     nonisolated var totalSets: Int {

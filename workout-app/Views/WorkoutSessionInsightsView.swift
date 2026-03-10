@@ -21,7 +21,10 @@ struct WorkoutSessionInsightsView: View {
 
     private var exerciseVolumes: [ExerciseVolumePoint] {
         workout.exercises
-            .map { ExerciseVolumePoint(name: $0.name, volume: $0.totalVolume) }
+            .compactMap { exercise in
+                guard exercise.hasVolume else { return nil }
+                return ExerciseVolumePoint(name: exercise.name, volume: exercise.totalVolume)
+            }
             .sorted { $0.volume > $1.volume }
             .prefix(12)
             .reversed()
@@ -163,10 +166,15 @@ struct WorkoutSessionInsightsView: View {
                 .font(Theme.Typography.title3)
                 .foregroundStyle(Theme.Colors.textPrimary)
 
-            let sorted = workout.exercises
-                .map { (name: $0.name, volume: $0.totalVolume) }
-                .sorted { $0.volume > $1.volume }
-                .prefix(8)
+            let sorted = Array(
+                workout.exercises
+                    .compactMap { exercise -> (name: String, volume: Double)? in
+                        guard exercise.hasVolume else { return nil }
+                        return (name: exercise.name, volume: exercise.totalVolume)
+                    }
+                    .sorted { $0.volume > $1.volume }
+                    .prefix(8)
+            )
 
             if sorted.isEmpty {
                 EmptyStateCard(title: "No exercises", message: "This workout has no exercises.")

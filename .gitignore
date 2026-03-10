@@ -38,3 +38,5 @@ workout-app/build.log
 .swiftlint-deadcode*.log
 .swiftlint-xcodebuild*.log
 .swiftlint-deadcode-snippets.txt
+com.apple.DeveloperTools/26.3-17C519/Xcode/26.3-17C519/Xcode/CachedSpecifications-xcodebuild
+com.apple.DeveloperTools/26.3-17C519/Xcode/26.3-17C519/Xcode/PlugInCache-xcodebuild.xcplugincache

@@ -3,13 +3,19 @@ import SwiftUI
 struct HealthCustomRangeSheet: View {
     @Environment(\.dismiss) var dismiss
     @Binding var range: DateInterval
+    let earliestSelectableDate: Date?
     let onApply: () -> Void
 
     @State private var startDate: Date
     @State private var endDate: Date
 
-    init(range: Binding<DateInterval>, onApply: @escaping () -> Void) {
+    init(
+        range: Binding<DateInterval>,
+        earliestSelectableDate: Date? = nil,
+        onApply: @escaping () -> Void
+    ) {
         _range = range
+        self.earliestSelectableDate = earliestSelectableDate
         self.onApply = onApply
         _startDate = State(initialValue: range.wrappedValue.start)
         _endDate = State(initialValue: range.wrappedValue.end)
@@ -24,7 +30,7 @@ struct HealthCustomRangeSheet: View {
                     DatePicker(
                         "Start",
                         selection: $startDate,
-                        in: ...Date(),
+                        in: (earliestSelectableDate ?? Date.distantPast)...Date(),
                         displayedComponents: .date
                     )
                     .datePickerStyle(.graphical)

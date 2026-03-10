@@ -23,9 +23,9 @@ struct ExerciseDetailView: View {
     @State private var scopedHistory: [(date: Date, sets: [WorkoutSet])] = []
     @State private var cachedCardioConfig: ResolvedCardioMetricConfiguration?
     @State private var availableChartTypes: [ChartType] = [.weight, .volume, .oneRepMax, .reps]
-    @State private var progressForensicsReview: ExerciseForensicsReview?
-    @State private var isLoadingProgressForensics = false
-    @State private var progressForensicsTask: Task<Void, Never>?
+    @State private var progressReview: ExerciseProgressReview?
+    @State private var isLoadingProgressReview = false
+    @State private var progressReviewTask: Task<Void, Never>?
 
     enum ChartType: String, CaseIterable, Hashable {
         case weight = "Max Weight"
@@ -144,7 +144,7 @@ struct ExerciseDetailView: View {
         return scopedHistory.filter { $0.date >= bounds.start && $0.date <= bounds.end }
     }
 
-    private var scopedForensicsWorkouts: [Workout] {
+    private var scopedProgressReviewWorkouts: [Workout] {
         dataManager.workouts.filter { workout in
             guard workout.exercises.contains(where: { $0.name == exerciseName }) else { return false }
 
@@ -496,22 +496,22 @@ struct ExerciseDetailView: View {
                     }
 
                     if !isCardio {
-                        if let progressForensicsReview {
-                            ProgressForensicsSection(
-                                review: progressForensicsReview,
+                        if let progressReview {
+                            ProgressReviewSection(
+                                review: progressReview,
                                 gymNameProvider: { gymId in
                                     gymProfilesManager.gymName(for: gymId)
                                 }
                             )
-                        } else if isLoadingProgressForensics {
+                        } else if isLoadingProgressReview {
                             VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-                                Text("Progress Forensics")
+                                Text("Progress Review")
                                     .font(Theme.Typography.title3)
                                     .foregroundColor(Theme.Colors.textPrimary)
 
                                 HStack(spacing: Theme.Spacing.sm) {
                                     ProgressView()
-                                    Text("Building the last two comparable blocks for this lift.")
+                                    Text("Comparing the last two blocks for this lift.")
                                         .font(Theme.Typography.caption)
                                         .foregroundColor(Theme.Colors.textSecondary)
                                 }
@@ -554,11 +554,11 @@ struct ExerciseDetailView: View {
             if !availableChartTypes.contains(selectedChart) {
                 selectedChart = availableChartTypes.first ?? (isCardio ? .duration : .weight)
             }
-            scheduleProgressForensicsRefresh()
+            scheduleProgressReviewRefresh()
         }
         .onChange(of: selectedGymScope) { _, _ in
             refreshScopedHistory()
-            scheduleProgressForensicsRefresh()
+            scheduleProgressReviewRefresh()
         }
         .onChange(of: availableChartTypes) { _, newValue in
             if !newValue.contains(selectedChart) {
@@ -567,11 +567,11 @@ struct ExerciseDetailView: View {
         }
         .onChange(of: dataManager.workouts) { _, _ in
             refreshScopedHistory()
-            scheduleProgressForensicsRefresh()
+            scheduleProgressReviewRefresh()
         }
         .onReceive(annotationsManager.$annotations) { _ in
             refreshScopedHistory()
-            scheduleProgressForensicsRefresh()
+            scheduleProgressReviewRefresh()
         }
         .onReceive(metadataManager.objectWillChange) { _ in
             refreshScopedHistory()
@@ -580,13 +580,13 @@ struct ExerciseDetailView: View {
             refreshScopedHistory()
         }
         .onChange(of: healthManager.authorizationStatus) { _, _ in
-            scheduleProgressForensicsRefresh()
+            scheduleProgressReviewRefresh()
         }
         .onChange(of: selectedChart) { _, _ in
             Haptics.selection()
         }
         .onDisappear {
-            progressForensicsTask?.cancel()
+            progressReviewTask?.cancel()
         }
     }
 
@@ -640,21 +640,21 @@ struct ExerciseDetailView: View {
         }
     }
 
-    private func refreshProgressForensics() async {
+    private func refreshProgressReview() async {
         guard !isCardio else {
-            progressForensicsReview = nil
-            isLoadingProgressForensics = false
+            progressReview = nil
+            isLoadingProgressReview = false
             return
         }
 
-        let workouts = scopedForensicsWorkouts
+        let workouts = scopedProgressReviewWorkouts
         guard let earliestWorkoutDate = workouts.map(\.date).min() else {
-            progressForensicsReview = nil
-            isLoadingProgressForensics = false
+            progressReview = nil
+            isLoadingProgressReview = false
             return
         }
 
-        isLoadingProgressForensics = true
+        isLoadingProgressReview = true
 
         let bodyMassSamples: [BodyRawSample]
         if healthManager.authorizationStatus == .authorized {
@@ -674,21 +674,21 @@ struct ExerciseDetailView: View {
             bodyMassSamples = []
         }
 
-        progressForensicsReview = ProgressForensicsEngine.review(
+        progressReview = ProgressReviewEngine.review(
             for: exerciseName,
             workouts: workouts,
             annotations: annotationsManager.annotations,
             bodyMassSamples: bodyMassSamples
         )
-        isLoadingProgressForensics = false
+        isLoadingProgressReview = false
     }
 
-    private func scheduleProgressForensicsRefresh(debounceNs: UInt64 = 200_000_000) {
-        progressForensicsTask?.cancel()
-        progressForensicsTask = Task {
+    private func scheduleProgressReviewRefresh(debounceNs: UInt64 = 200_000_000) {
+        progressReviewTask?.cancel()
+        progressReviewTask = Task {
             try? await Task.sleep(nanoseconds: debounceNs)
             guard !Task.isCancelled else { return }
-            await refreshProgressForensics()
+            await refreshProgressReview()
         }
     }
 }

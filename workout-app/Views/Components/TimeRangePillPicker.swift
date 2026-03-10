@@ -21,6 +21,7 @@ struct TimeRangePillPicker<T: Hashable>: View {
 
     private func pillButton(for option: T) -> some View {
         let isSelected = selected == option
+        let title = label(option)
 
         return Button {
             if isSpecialOption?(option) == true {
@@ -33,11 +34,12 @@ struct TimeRangePillPicker<T: Hashable>: View {
             }
             Haptics.selection()
         } label: {
-            Text(label(option))
+            Text(title)
                 .font(Theme.Typography.captionBold)
                 .foregroundColor(isSelected ? .white : Theme.Colors.textSecondary)
                 .padding(.horizontal, Theme.Spacing.md)
                 .padding(.vertical, Theme.Spacing.sm)
+                .frame(minHeight: 44)
                 .background(
                     RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge)
                         .fill(isSelected ? Theme.Colors.accent : Color.clear)
@@ -51,6 +53,11 @@ struct TimeRangePillPicker<T: Hashable>: View {
                 )
         }
         .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
+        .accessibilityHint("Double-tap to change the time range")
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 }
 
@@ -66,7 +73,7 @@ extension TimeRangePillPicker where T == AppTimeRange {
         self.options = options
         self._selected = selected
         self.label = { $0.shortLabel }
-        self.isSpecialOption = nil
+        self.isSpecialOption = { $0 == .custom }
         self.onCustomTap = onCustomTap
     }
 }

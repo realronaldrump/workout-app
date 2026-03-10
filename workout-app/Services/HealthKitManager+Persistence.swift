@@ -40,6 +40,28 @@ extension HealthKitManager {
         }
     }
 
+    func invalidateDailyHealthCache() {
+        dailyHealthStore.removeAll()
+        lastDailySyncDate = nil
+        dailySyncProgress = 0
+        userDefaults.removeObject(forKey: lastDailySyncKey)
+        persistDailyHealthData()
+    }
+
+    func clearCachedWorkoutSleepSummaries(persist: Bool = true) {
+        var updatedStore: [UUID: WorkoutHealthData] = [:]
+
+        for (workoutID, var healthData) in healthDataStore {
+            healthData.sleepSummary = nil
+            updatedStore[workoutID] = healthData
+        }
+
+        healthDataStore = updatedStore
+        if persist {
+            persistData()
+        }
+    }
+
     func loadPersistedData() {
         cleanupLegacyUserDefaults()
         do {
@@ -107,6 +129,7 @@ extension HealthKitManager {
         cleanupLegacyUserDefaults()
         userDefaults.removeObject(forKey: lastSyncKey)
         userDefaults.removeObject(forKey: lastDailySyncKey)
+        userDefaults.removeObject(forKey: pendingWorkoutSleepSummaryRefreshKey)
 
         do {
             if FileManager.default.fileExists(atPath: dataFileURL.path) {

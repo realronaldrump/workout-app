@@ -3,42 +3,51 @@ import SwiftUI
 struct HealthHubView: View {
     @EnvironmentObject var healthManager: HealthKitManager
     @EnvironmentObject var dataManager: WorkoutDataManager
+    @EnvironmentObject private var dateRangeContext: HealthDateRangeContext
 
-    @State private var selectedRange: HealthTimeRange = .fourWeeks
-    @State private var showingCustomRange = false
     @State private var showingHealthWizard = false
-    @State private var showAllDays = false
+    @State private var timelineDensity: TimelineDensity = .compact
     @State private var selectedMetric: HealthMetric?
     @State private var cachedDailyData: [DailyHealthData] = []
     @State private var cachedSummaryCards: [HealthSummaryCardModel] = []
-    @State private var customRange: DateInterval = {
-        let end = Date()
-        let start = Calendar.current.date(byAdding: .day, value: -28, to: end) ?? end
-        return DateInterval(start: start, end: end)
-    }()
 
     private var earliestDate: Date? {
         healthManager.dailyHealthStore.keys.min()
     }
 
     private var currentRange: DateInterval {
-        let rawRange = selectedRange.interval(reference: Date(), earliest: earliestDate, custom: customRange)
-        let calendar = Calendar.current
-        let start = calendar.startOfDay(for: rawRange.start)
-        let end = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: rawRange.end) ?? rawRange.end
-        return DateInterval(start: start, end: min(end, Date()))
+        dateRangeContext.resolvedRange(earliest: earliestDate)
     }
 
     private var rangeLabel: String {
-        formatRange(currentRange)
+        dateRangeContext.rangeLabel(earliest: earliestDate)
     }
 
-    private var timelineDays: [DailyHealthData] {
+    private var timelinePresentation: TimelinePresentation {
         let sorted = cachedDailyData.sorted { $0.dayStart > $1.dayStart }
-        if showAllDays {
-            return sorted
-        }
-        return Array(sorted.prefix(14))
+        return TimelinePresentation(days: sorted, density: timelineDensity)
+    }
+
+    private var timelineSummaryText: String? {
+        guard timelinePresentation.isSampled else { return nil }
+
+        let cadence = timelinePresentation.samplingStep == 7
+            ? "Showing weekly checkpoints"
+            : "Showing roughly every \(timelinePresentation.samplingStep) days"
+        let hiddenDates = timelinePresentation.hiddenCount == 1 ? "1 date hidden" : "\(timelinePresentation.hiddenCount) dates hidden"
+        return "\(cadence) across \(timelinePresentation.totalCount) days • \(hiddenDates)"
+    }
+
+    private var canShowMoreTimeline: Bool {
+        timelineDensity == .compact && cachedDailyData.count > TimelinePresentation.expandedTargetCount
+    }
+
+    private var canShowAllTimeline: Bool {
+        timelineDensity != .all && timelinePresentation.isSampled
+    }
+
+    private var canShowLessTimeline: Bool {
+        timelineDensity != .compact && cachedDailyData.count > TimelinePresentation.compactTargetCount
     }
 
     private var headerSubtitle: String {
@@ -62,13 +71,14 @@ struct HealthHubView: View {
                     } else if healthManager.authorizationStatus != .authorized {
                         accessCard
                     } else {
+                        categorySection
+
                         if cachedDailyData.isEmpty {
                             emptyState
                         } else {
                             summarySection
                             dailyTimelineSection
                         }
-                        categorySection
                     }
                 }
                 .padding(.vertical, Theme.Spacing.xxl)
@@ -77,12 +87,7 @@ struct HealthHubView: View {
         }
         .navigationBarHidden(true)
         .navigationDestination(item: $selectedMetric) { metric in
-            HealthMetricDetailView(metric: metric, range: currentRange, rangeLabel: rangeLabel)
-        }
-        .sheet(isPresented: $showingCustomRange) {
-            HealthCustomRangeSheet(range: $customRange) {
-                selectedRange = .custom
-            }
+            HealthMetricDetailView(metric: metric)
         }
         .sheet(isPresented: $showingHealthWizard) {
             HealthSyncWizard(
@@ -95,12 +100,14 @@ struct HealthHubView: View {
             refreshCachedContent()
             triggerDailySync(force: false)
         }
-        .onChange(of: selectedRange) { _, _ in
+        .onChange(of: dateRangeContext.selectedRange) { _, _ in
+            timelineDensity = .compact
             refreshCachedContent()
             triggerDailySync(force: false)
         }
-        .onChange(of: customRange) { _, _ in
-            if selectedRange == .custom {
+        .onChange(of: dateRangeContext.customRange) { _, _ in
+            if dateRangeContext.selectedRange == .custom {
+                timelineDensity = .compact
                 refreshCachedContent()
                 triggerDailySync(force: false)
             }
@@ -171,21 +178,8 @@ struct HealthHubView: View {
     }
 
     private var timeRangeSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text("Time Range")
-                .font(Theme.Typography.metricLabel)
-                .foregroundStyle(Theme.Colors.textTertiary)
-                .textCase(.uppercase)
-                .tracking(0.8)
-
-            TimeRangePillPicker(
-                selected: $selectedRange,
-                onCustomTap: {
-                    showingCustomRange = true
-                }
-            )
+        HealthDateRangeSection(earliestDate: earliestDate)
             .padding(.horizontal, Theme.Spacing.xs)
-        }
     }
 
     private var summarySection: some View {
@@ -222,10 +216,10 @@ struct HealthHubView: View {
 
                 Spacer()
 
-                if cachedDailyData.count > 14 {
-                    Button(showAllDays ? "Show Less" : "Show All") {
+                if canShowLessTimeline {
+                    Button("Show Less") {
                         withAnimation(Theme.Animation.smooth) {
-                            showAllDays.toggle()
+                            timelineDensity = .compact
                         }
                     }
                     .font(Theme.Typography.metricLabel)
@@ -235,8 +229,14 @@ struct HealthHubView: View {
                 }
             }
 
+            if let timelineSummaryText {
+                Text(timelineSummaryText)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.textTertiary)
+            }
+
             VStack(spacing: Theme.Spacing.md) {
-                ForEach(timelineDays) { day in
+                ForEach(timelinePresentation.days) { day in
                     NavigationLink {
                         DailyHealthDetailView(day: day)
                     } label: {
@@ -244,6 +244,30 @@ struct HealthHubView: View {
                     }
                     .buttonStyle(.plain)
                 }
+            }
+
+            if canShowMoreTimeline || canShowAllTimeline {
+                HStack(spacing: Theme.Spacing.md) {
+                    if canShowMoreTimeline {
+                        Button("Show More") {
+                            withAnimation(Theme.Animation.smooth) {
+                                timelineDensity = .expanded
+                            }
+                        }
+                    }
+
+                    if canShowAllTimeline {
+                        Button("Show All") {
+                            withAnimation(Theme.Animation.smooth) {
+                                timelineDensity = .all
+                            }
+                        }
+                    }
+                }
+                .font(Theme.Typography.metricLabel)
+                .foregroundStyle(Theme.Colors.accent)
+                .textCase(.uppercase)
+                .tracking(0.8)
             }
         }
     }
@@ -263,7 +287,7 @@ struct HealthHubView: View {
                         } else if category == .body {
                             BodyCompositionView()
                         } else {
-                            HealthCategoryDetailView(category: category, range: currentRange, rangeLabel: rangeLabel)
+                            HealthCategoryDetailView(category: category)
                         }
                     } label: {
                         HealthCategoryCard(category: category)
@@ -403,12 +427,6 @@ struct HealthHubView: View {
         return values.reduce(0, +) / Double(values.count)
     }
 
-    private func formatRange(_ range: DateInterval) -> String {
-        let start = HealthHubFormatters.mediumDate.string(from: range.start)
-        let end = HealthHubFormatters.mediumDate.string(from: range.end)
-        return "\(start) – \(end)"
-    }
-
     private func formatSyncDate(_ date: Date) -> String {
         HealthHubFormatters.mediumDateTime.string(from: date)
     }
@@ -443,6 +461,96 @@ private struct HealthSummaryCardModel: Identifiable {
     let unit: String
     let icon: String
     let tint: Color
+}
+
+private enum TimelineDensity {
+    case compact
+    case expanded
+    case all
+}
+
+enum TimelineSampling {
+    static func sampledIndices(totalCount: Int, targetCount: Int) -> [Int] {
+        guard totalCount > 0 else { return [] }
+        guard targetCount > 1, totalCount > targetCount else {
+            return Array(0..<totalCount)
+        }
+
+        let desiredCount = min(totalCount, targetCount)
+        var indices: [Int] = []
+        indices.reserveCapacity(desiredCount)
+
+        for sampleIndex in 0..<desiredCount {
+            let progress = Double(sampleIndex) / Double(desiredCount - 1)
+            let resolvedIndex = Int((progress * Double(totalCount - 1)).rounded())
+            if indices.last != resolvedIndex {
+                indices.append(resolvedIndex)
+            }
+        }
+
+        if indices.last != totalCount - 1 {
+            indices.append(totalCount - 1)
+        }
+
+        return indices
+    }
+
+    static func approximateStep(totalCount: Int, displayedCount: Int) -> Int {
+        guard displayedCount > 1, totalCount > displayedCount else { return 1 }
+        return max(1, Int(round(Double(totalCount - 1) / Double(displayedCount - 1))))
+    }
+}
+
+private struct TimelinePresentation {
+    static let compactTargetCount = 12
+    static let expandedTargetCount = 28
+
+    let days: [DailyHealthData]
+    let totalCount: Int
+    let samplingStep: Int
+
+    var isSampled: Bool {
+        samplingStep > 1
+    }
+
+    var hiddenCount: Int {
+        max(totalCount - days.count, 0)
+    }
+
+    init(days allDays: [DailyHealthData], density: TimelineDensity) {
+        totalCount = allDays.count
+
+        switch density {
+        case .compact:
+            let sampled = Self.sample(allDays, targetCount: Self.compactTargetCount)
+            days = sampled.days
+            samplingStep = sampled.step
+        case .expanded:
+            let sampled = Self.sample(allDays, targetCount: Self.expandedTargetCount)
+            days = sampled.days
+            samplingStep = sampled.step
+        case .all:
+            days = allDays
+            samplingStep = 1
+        }
+    }
+
+    private static func sample(_ days: [DailyHealthData], targetCount: Int) -> (days: [DailyHealthData], step: Int) {
+        guard days.count > targetCount, targetCount > 1 else {
+            return (days, 1)
+        }
+
+        let sampledIndices = TimelineSampling.sampledIndices(
+            totalCount: days.count,
+            targetCount: targetCount
+        )
+        let sampledDays = sampledIndices.map { days[$0] }
+        let samplingStep = TimelineSampling.approximateStep(
+            totalCount: days.count,
+            displayedCount: sampledDays.count
+        )
+        return (sampledDays, samplingStep)
+    }
 }
 
 private struct HealthSummaryCard: View {

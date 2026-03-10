@@ -42,7 +42,7 @@ struct ExerciseProgressChart: View {
     }
 
     private var chartData: [ChartPoint] {
-        history.map { session in
+        history.compactMap { session in
             let value: Double
             switch chartType {
             case .weight:
@@ -63,6 +63,9 @@ struct ExerciseProgressChart: View {
                 value = session.sets.reduce(0) { $0 + $1.seconds }
             case .count:
                 value = Double(session.sets.reduce(0) { $0 + $1.reps })
+            }
+            if chartType == .volume, value <= 0 {
+                return nil
             }
             return ChartPoint(date: session.date, value: value)
         }

@@ -14,6 +14,7 @@ struct ExerciseBreakdownView: View {
             let totalVolume = exercises.reduce(0) { $0 + $1.totalVolume }
             return (name: name, volume: totalVolume, frequency: exercises.count)
         }
+        .filter { $0.volume > 0 }
         .sorted { $0.volume > $1.volume }
         .prefix(10)
         .reversed()

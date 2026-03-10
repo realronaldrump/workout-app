@@ -408,29 +408,6 @@ struct BrutalistButtonChrome: ViewModifier {
     }
 }
 
-struct ToolbarButtonChrome: ViewModifier {
-    var fill: Color = Theme.Colors.surface
-    var border: Color = Theme.Colors.border
-
-    func body(content: Content) -> some View {
-        content
-            .background(
-                Capsule(style: .continuous)
-                    .fill(fill)
-            )
-            .overlay(
-                Capsule(style: .continuous)
-                    .strokeBorder(border.opacity(0.9), lineWidth: 1)
-            )
-            .shadow(
-                color: Color.black.opacity(0.035),
-                radius: 10,
-                x: 0,
-                y: 4
-            )
-    }
-}
-
 /// Default interaction style for app controls.
 /// Provides consistent pressed/disabled feedback with smooth spring animation.
 struct AppInteractionButtonStyle: ButtonStyle {
@@ -509,18 +486,6 @@ extension View {
                 cornerRadius: cornerRadius,
                 borderWidth: borderWidth,
                 shadowOffset: shadowOffset
-            )
-        )
-    }
-
-    func toolbarButtonChrome(
-        fill: Color = Theme.Colors.surface,
-        border: Color = Theme.Colors.border
-    ) -> some View {
-        modifier(
-            ToolbarButtonChrome(
-                fill: fill,
-                border: border
             )
         )
     }

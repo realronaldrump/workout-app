@@ -1,5 +1,25 @@
 import SwiftUI
 
+struct SleepSourceAttributionView: View {
+    let summary: SleepSummary
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            if let sourceName = summary.primarySourceName, !sourceName.isEmpty {
+                Text("Source: \(sourceName)")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.textTertiary)
+            }
+
+            if let statusText = summary.sourceStatusText {
+                Text(statusText)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(summary.usedFallbackSource ? Theme.Colors.textSecondary : Theme.Colors.textTertiary)
+            }
+        }
+    }
+}
+
 /// Displays health data synced from Apple Health for a workout
 struct HealthDataView: View {
     let healthData: WorkoutHealthData
@@ -324,6 +344,8 @@ struct HealthDataView: View {
             }
 
             SleepStageStrip(summary: summary)
+
+            SleepSourceAttributionView(summary: summary)
         }
         .padding(Theme.Spacing.lg)
         .softCard(elevation: 2)

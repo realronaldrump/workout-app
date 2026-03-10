@@ -2,15 +2,26 @@ import SwiftUI
 
 struct HealthMetricDetailView: View {
     let metric: HealthMetric
-    let range: DateInterval
-    let rangeLabel: String
 
     @EnvironmentObject var healthManager: HealthKitManager
+    @EnvironmentObject private var dateRangeContext: HealthDateRangeContext
 
     @State private var showRawSamples = false
     @State private var rawSamples: [HealthMetricSample] = []
     @State private var isLoadingSamples = false
     @State private var sampleError: String?
+
+    private var earliestDate: Date? {
+        healthManager.dailyHealthStore.keys.min()
+    }
+
+    private var range: DateInterval {
+        dateRangeContext.resolvedRange(earliest: earliestDate)
+    }
+
+    private var rangeLabel: String {
+        dateRangeContext.rangeLabel(earliest: earliestDate)
+    }
 
     private var dailyData: [DailyHealthData] {
         healthManager.dailyHealthStore.values
@@ -97,10 +108,21 @@ struct HealthMetricDetailView: View {
         }
         .navigationTitle(metric.title)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                HealthDateRangeToolbarMenu(earliestDate: earliestDate)
+            }
+        }
         .onChange(of: showRawSamples) { _, newValue in
             if newValue {
                 loadRawSamples()
             }
+        }
+        .onChange(of: dateRangeContext.selectedRange) { _, _ in
+            refreshRawSamplesIfNeeded()
+        }
+        .onChange(of: dateRangeContext.customRange) { _, _ in
+            refreshRawSamplesIfNeeded()
         }
     }
 
@@ -191,6 +213,7 @@ struct HealthMetricDetailView: View {
         let summaries = dailyData.compactMap { $0.sleepSummary }
         let count = Double(summaries.count)
         let stageAverages = averageSleepStages(summaries: summaries)
+        let fallbackCount = summaries.filter(\.usedFallbackSource).count
 
         return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             Text("Sleep Stages")
@@ -215,6 +238,15 @@ struct HealthMetricDetailView: View {
                         }
                     }
                 }
+            }
+
+            if fallbackCount > 0 {
+                Text(
+                    "\(fallbackCount) night\(fallbackCount == 1 ? "" : "s") used a fallback sleep source " +
+                    "because the preferred source had no usable sleep data."
+                )
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.textSecondary)
             }
         }
         .padding(Theme.Spacing.lg)
@@ -307,6 +339,11 @@ struct HealthMetricDetailView: View {
             }
             isLoadingSamples = false
         }
+    }
+
+    private func refreshRawSamplesIfNeeded() {
+        guard showRawSamples else { return }
+        loadRawSamples()
     }
 }
 

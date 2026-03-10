@@ -3,6 +3,90 @@ import Foundation
 import HealthKit
 
 extension HealthKitManager {
+    func applySleepSourcePreference(
+        key: String?,
+        name: String?,
+        workouts: [Workout]
+    ) async {
+        let normalizedKey = Self.normalizedSleepSourceKey(key)
+        let normalizedName = name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let currentKey = selectedSleepSourceKey
+        let currentName = userDefaults.string(forKey: preferredSleepSourceNameKey) ?? ""
+
+        guard currentKey != normalizedKey || currentName != normalizedName else { return }
+
+        if let normalizedKey {
+            userDefaults.set(normalizedKey, forKey: preferredSleepSourceKey)
+        } else {
+            userDefaults.removeObject(forKey: preferredSleepSourceKey)
+        }
+
+        if normalizedName.isEmpty {
+            userDefaults.removeObject(forKey: preferredSleepSourceNameKey)
+        } else {
+            userDefaults.set(normalizedName, forKey: preferredSleepSourceNameKey)
+        }
+
+        invalidateDailyHealthCache()
+        userDefaults.set(true, forKey: pendingWorkoutSleepSummaryRefreshKey)
+        await refreshPendingWorkoutSleepSummariesIfNeeded(workouts: workouts)
+    }
+
+    func refreshPendingWorkoutSleepSummariesIfNeeded(workouts: [Workout]) async {
+        guard hasPendingWorkoutSleepSummaryRefresh else { return }
+        guard authorizationStatus == .authorized, healthStore != nil else { return }
+        guard !healthDataStore.isEmpty else {
+            userDefaults.removeObject(forKey: pendingWorkoutSleepSummaryRefreshKey)
+            return
+        }
+
+        let workoutsByID = Dictionary(uniqueKeysWithValues: workouts.map { ($0.id, $0) })
+        let matchingWorkoutIDs = Set(workoutsByID.keys).intersection(healthDataStore.keys)
+        guard !matchingWorkoutIDs.isEmpty else { return }
+
+        var updatedStore = healthDataStore
+        var refreshedAny = false
+        var hadFailure = false
+
+        for workoutID in matchingWorkoutIDs {
+            guard let workout = workoutsByID[workoutID],
+                  var healthData = updatedStore[workoutID] else {
+                continue
+            }
+
+            let sleepRange = sleepSummaryWindow(for: workout)
+
+            do {
+                healthData.sleepSummary = try await fetchSleepSummary(
+                    from: sleepRange.start,
+                    to: sleepRange.end
+                )
+                updatedStore[workoutID] = healthData
+                refreshedAny = true
+            } catch {
+                print("Failed to refresh sleep summary for \(workoutID): \(error)")
+                hadFailure = true
+            }
+        }
+
+        if refreshedAny {
+            healthDataStore = updatedStore
+            persistData()
+        }
+
+        if !hadFailure {
+            userDefaults.removeObject(forKey: pendingWorkoutSleepSummaryRefreshKey)
+        }
+    }
+
+    private func sleepSummaryWindow(for workout: Workout) -> (start: Date, end: Date) {
+        let (startTime, _) = calculateWorkoutWindow(workout)
+        let dayStart = Calendar.current.startOfDay(for: workout.date)
+        let sleepWindowEnd = startTime
+        let sleepWindowStart = Calendar.current.date(byAdding: .hour, value: -24, to: sleepWindowEnd) ?? dayStart
+        return (sleepWindowStart, sleepWindowEnd)
+    }
+
     /// Sync health data for a single workout
     func syncHealthDataForWorkout(_ workout: Workout, persist: Bool = true) async throws -> WorkoutHealthData {
         guard healthStore != nil else {
@@ -120,9 +204,11 @@ extension HealthKitManager {
         )
 
         // Fetch sleep summary (night before workout)
-        let sleepWindowEnd = startTime
-        let sleepWindowStart = Calendar.current.date(byAdding: .hour, value: -24, to: sleepWindowEnd) ?? dayStart
-        healthData.sleepSummary = try await fetchSleepSummary(from: sleepWindowStart, to: sleepWindowEnd)
+        let sleepWindow = sleepSummaryWindow(for: workout)
+        healthData.sleepSummary = try await fetchSleepSummary(
+            from: sleepWindow.start,
+            to: sleepWindow.end
+        )
 
         // Daily activity totals
         healthData.dailyActiveEnergy = try await fetchQuantitySum(

@@ -41,22 +41,36 @@ extension HealthKitManager {
     }
 
     /// Requests read access for Workout Route samples (location series attached to workouts).
-    /// Kept separate from `allReadTypes` so declining route permission doesn’t break the rest of Health sync.
+    /// Kept as a targeted entry point for callers that need to repair or retry route access independently.
     func requestWorkoutRouteAuthorization() async throws {
-        guard let healthStore = healthStore else {
-            throw HealthKitError.notAvailable
+        if let authorizationTask {
+            try await authorizationTask.value
         }
 
-        do {
-            // HealthKit requires workout read authorization alongside workout-route authorization.
-            // Requesting only route can raise NSInvalidArgumentException at runtime.
-            let routeReadTypes: Set<HKObjectType> = [
-                HKObjectType.workoutType(),
-                HKSeriesType.workoutRoute()
-            ]
-            try await healthStore.requestAuthorization(toShare: [], read: routeReadTypes)
-        } catch {
-            throw HealthKitError.authorizationFailed(error.localizedDescription)
+        if let workoutRouteAuthorizationTask {
+            return try await workoutRouteAuthorizationTask.value
         }
+
+        let task = Task { @MainActor in
+            guard let healthStore = healthStore else {
+                throw HealthKitError.notAvailable
+            }
+
+            do {
+                // HealthKit requires workout read authorization alongside workout-route authorization.
+                // Requesting only route can raise NSInvalidArgumentException at runtime.
+                let routeReadTypes: Set<HKObjectType> = [
+                    HKObjectType.workoutType(),
+                    HKSeriesType.workoutRoute()
+                ]
+                try await healthStore.requestAuthorization(toShare: [], read: routeReadTypes)
+            } catch {
+                throw HealthKitError.authorizationFailed(error.localizedDescription)
+            }
+        }
+
+        workoutRouteAuthorizationTask = task
+        defer { workoutRouteAuthorizationTask = nil }
+        try await task.value
     }
 }

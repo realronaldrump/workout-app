@@ -141,11 +141,7 @@ struct DailyHealthDetailView: View {
                 }
             }
 
-            if let sourceName = summary.primarySourceName, !sourceName.isEmpty {
-                Text("Source: \(sourceName)")
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textTertiary)
-            }
+            SleepSourceAttributionView(summary: summary)
         }
         .padding(Theme.Spacing.lg)
         .softCard(elevation: 1)

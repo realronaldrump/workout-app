@@ -13,7 +13,7 @@ struct AutoGymTaggingReport: Identifiable {
 
 struct AutoGymTaggingItem: Identifiable {
     enum Status: Hashable {
-        case assigned(gymName: String, distanceMeters: Int)
+        case assigned(detail: String)
         case skipped(reason: String)
     }
 
@@ -22,12 +22,12 @@ struct AutoGymTaggingItem: Identifiable {
     let workoutDate: Date
     let status: Status
 
-    static func assigned(workout: Workout, gymName: String, distanceMeters: Int) -> AutoGymTaggingItem {
+    static func assigned(workout: Workout, detail: String) -> AutoGymTaggingItem {
         AutoGymTaggingItem(
             id: workout.id,
             workoutName: workout.name,
             workoutDate: workout.date,
-            status: .assigned(gymName: gymName, distanceMeters: distanceMeters)
+            status: .assigned(detail: detail)
         )
     }
 
@@ -192,8 +192,8 @@ struct AutoGymTaggingReportView: View {
 
     private func detailText(for status: AutoGymTaggingItem.Status) -> String {
         switch status {
-        case .assigned(let gymName, let distanceMeters):
-            return "Tagged: \(gymName) (\(distanceMeters)m)"
+        case .assigned(let detail):
+            return detail
         case .skipped(let reason):
             return reason
         }

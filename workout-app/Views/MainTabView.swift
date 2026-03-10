@@ -15,7 +15,9 @@ struct MainTabView: View {
     @StateObject private var intentionalBreaksManager: IntentionalBreaksManager
     @StateObject private var gymProfilesManager: GymProfilesManager
     @StateObject private var insightsEngine: InsightsEngine
+    @StateObject private var healthDateRangeContext = HealthDateRangeContext()
     @StateObject private var variantEngine = WorkoutVariantEngine()
+    @StateObject private var similarityEngine = WorkoutSimilarityEngine()
     @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
     @State private var showingOnboarding = false
     @State private var pendingOnboarding = false
@@ -23,6 +25,7 @@ struct MainTabView: View {
     @State private var showSplash = true
     @State private var insightsRefreshTask: Task<Void, Never>?
     @State private var variantAnalysisTask: Task<Void, Never>?
+    @State private var sleepSummaryRefreshTask: Task<Void, Never>?
     @EnvironmentObject private var sessionManager: WorkoutSessionManager
     @EnvironmentObject private var healthManager: HealthKitManager
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -97,7 +100,9 @@ struct MainTabView: View {
         .environmentObject(intentionalBreaksManager)
         .environmentObject(gymProfilesManager)
         .environmentObject(insightsEngine)
+        .environmentObject(healthDateRangeContext)
         .environmentObject(variantEngine)
+        .environmentObject(similarityEngine)
         .tint(Theme.Colors.accent)
         .overlay {
             if showSplash {
@@ -112,11 +117,17 @@ struct MainTabView: View {
             refreshOnboardingState()
             bootstrapStoresIfNeeded()
             scheduleVariantAnalysis()
+            schedulePendingSleepSummaryRefresh()
         }
         .onChange(of: dataManager.workouts) { _, _ in
             refreshOnboardingState()
             scheduleInsightsRefresh()
             scheduleVariantAnalysis()
+            schedulePendingSleepSummaryRefresh()
+        }
+        .onChange(of: healthManager.authorizationStatus) { _, newValue in
+            guard newValue == .authorized else { return }
+            schedulePendingSleepSummaryRefresh()
         }
         .onReceive(annotationsManager.$annotations) { _ in
             scheduleVariantAnalysis()
@@ -158,6 +169,7 @@ struct MainTabView: View {
                 .environmentObject(gymProfilesManager)
                 .environmentObject(insightsEngine)
                 .environmentObject(variantEngine)
+                .environmentObject(similarityEngine)
         }
     }
 
@@ -229,6 +241,18 @@ struct MainTabView: View {
             try? await Task.sleep(nanoseconds: debounceNs)
             guard !Task.isCancelled else { return }
             await triggerVariantAnalysis()
+            await similarityEngine.analyze(workouts: dataManager.workouts)
+        }
+    }
+
+    private func schedulePendingSleepSummaryRefresh(debounceNs: UInt64 = 250_000_000) {
+        sleepSummaryRefreshTask?.cancel()
+        sleepSummaryRefreshTask = Task {
+            try? await Task.sleep(nanoseconds: debounceNs)
+            guard !Task.isCancelled else { return }
+            await healthManager.refreshPendingWorkoutSleepSummariesIfNeeded(
+                workouts: dataManager.workouts
+            )
         }
     }
 }

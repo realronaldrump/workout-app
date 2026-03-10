@@ -1,7 +1,7 @@
 import SwiftUI
 
-struct ProgressForensicsSection: View {
-    let review: ExerciseForensicsReview
+struct ProgressReviewSection: View {
+    let review: ExerciseProgressReview
     let gymNameProvider: (UUID?) -> String?
 
     private var comparison: ExerciseBlockComparison? {
@@ -12,11 +12,11 @@ struct ProgressForensicsSection: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                    Text("Progress Forensics")
+                    Text("Progress Review")
                         .font(Theme.Typography.title3)
                         .foregroundStyle(Theme.Colors.textPrimary)
 
-                    Text("Compare your last two training blocks for this lift without collapsing everything into a score.")
+                    Text("Compare your last two training blocks for this lift.")
                         .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.Colors.textSecondary)
                 }
@@ -24,7 +24,7 @@ struct ProgressForensicsSection: View {
                 Spacer()
 
                 NavigationLink {
-                    ProgressForensicsReviewView(review: review, gymNameProvider: gymNameProvider)
+                    ProgressReviewView(review: review, gymNameProvider: gymNameProvider)
                 } label: {
                     Text("View Full Review")
                         .font(Theme.Typography.captionBold)
@@ -124,7 +124,7 @@ struct ProgressForensicsSection: View {
     }
 
     @ViewBuilder
-    private func findingRow(_ finding: ExerciseForensicsFinding) -> some View {
+    private func findingRow(_ finding: ExerciseReviewFinding) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(finding.title)
                 .font(Theme.Typography.captionBold)
@@ -213,8 +213,8 @@ struct ProgressForensicsSection: View {
     }
 }
 
-struct ProgressForensicsReviewView: View {
-    let review: ExerciseForensicsReview
+struct ProgressReviewView: View {
+    let review: ExerciseProgressReview
     let gymNameProvider: (UUID?) -> String?
 
     var body: some View {
@@ -239,7 +239,7 @@ struct ProgressForensicsReviewView: View {
                 .padding(.horizontal, Theme.Spacing.lg)
             }
         }
-        .navigationTitle("Progress Forensics")
+        .navigationTitle("Progress Review")
         .navigationBarTitleDisplayMode(.inline)
     }
 
@@ -250,7 +250,7 @@ struct ProgressForensicsReviewView: View {
                 .foregroundStyle(Theme.Colors.textPrimary)
                 .tracking(1.2)
 
-            Text("This review compares the last two blocks for the same lift using actual sets, rep lanes, and session context.")
+            Text("This review compares the last two blocks for the same lift using actual sets, rep ranges, and session context.")
                 .font(Theme.Typography.microcopy)
                 .foregroundStyle(Theme.Colors.textSecondary)
         }

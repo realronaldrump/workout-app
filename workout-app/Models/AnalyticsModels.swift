@@ -98,6 +98,12 @@ struct StreakRun: Identifiable, Hashable {
     }
 }
 
+enum SleepSourceSelectionMode: String, Codable {
+    case automatic
+    case preferred
+    case fallback
+}
+
 struct SleepSummary: Codable {
     var totalSleep: TimeInterval
     var inBed: TimeInterval
@@ -107,10 +113,41 @@ struct SleepSummary: Codable {
     // Populated for daily summaries when we select a single source to avoid multi-source double counting.
     var primarySourceName: String?
     var primarySourceBundleIdentifier: String?
+    var sourceSelectionMode: SleepSourceSelectionMode?
+    var preferredSourceName: String?
+    var preferredSourceBundleIdentifier: String?
 
     var totalHours: Double {
         totalSleep / 3600
     }
+
+    var usedFallbackSource: Bool {
+        sourceSelectionMode == .fallback
+    }
+
+    var sourceStatusText: String? {
+        switch sourceSelectionMode {
+        case .automatic:
+            return "Best available Apple Health source selected for this night."
+        case .preferred:
+            return "Your preferred sleep source supplied this night."
+        case .fallback:
+            if let preferredSourceName, let primarySourceName, preferredSourceName != primarySourceName {
+                return "\(preferredSourceName) had no usable sleep data for this night, so \(primarySourceName) was used instead."
+            }
+            return "Your preferred sleep source had no usable data for this night, so a fallback source was used."
+        case .none:
+            return nil
+        }
+    }
+}
+
+struct SleepSourceOption: Identifiable, Hashable {
+    let key: String
+    let name: String
+    let bundleIdentifier: String?
+
+    var id: String { key }
 }
 
 enum SleepStage: String, Codable, CaseIterable {

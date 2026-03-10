@@ -162,11 +162,7 @@ struct ExerciseListView: View {
                     .tracking(0.8)
             }
             .padding(.horizontal, Theme.Spacing.md)
-            .frame(minHeight: 38)
-            .toolbarButtonChrome(
-                fill: Theme.Colors.surface.blended(with: Theme.Colors.background, amount: 0.2),
-                border: Theme.Colors.border.opacity(0.88)
-            )
+            .frame(minHeight: 44)
         }
         .buttonStyle(.plain)
     }

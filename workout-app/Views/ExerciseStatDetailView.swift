@@ -17,11 +17,15 @@ struct ExerciseStatDetailView: View {
         history
             .sorted { $0.date < $1.date }
             .enumerated()
-            .map { index, session in
-                SessionPoint(
+            .compactMap { index, session in
+                let pointValue = value(for: session.sets)
+                if kind == .maxVolume, pointValue <= 0 {
+                    return nil
+                }
+                return SessionPoint(
                     id: index,
                     date: session.date,
-                    value: value(for: session.sets),
+                    value: pointValue,
                     sets: session.sets
                 )
             }

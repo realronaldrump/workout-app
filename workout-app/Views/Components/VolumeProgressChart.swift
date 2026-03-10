@@ -169,13 +169,18 @@ struct VolumeProgressChart: View {
 
         switch selectedMetric {
         case .totalVolume:
-            return sortedWorkouts.map { (date: $0.date, value: $0.totalVolume) }
+            return sortedWorkouts.compactMap { workout in
+                guard workout.hasVolume else { return nil }
+                return (date: workout.date, value: workout.totalVolume)
+            }
         case .totalSets:
             return sortedWorkouts.map { (date: $0.date, value: Double($0.totalSets)) }
         case .avgVolume:
-            return sortedWorkouts.map {
-                let avgVolume = $0.exercises.isEmpty ? 0 : $0.totalVolume / Double($0.exercises.count)
-                return (date: $0.date, value: avgVolume)
+            return sortedWorkouts.compactMap { workout in
+                guard workout.volumeExerciseCount > 0 else { return nil }
+                let avgVolume = workout.totalVolume / Double(workout.volumeExerciseCount)
+                guard avgVolume > 0 else { return nil }
+                return (date: workout.date, value: avgVolume)
             }
         }
     }

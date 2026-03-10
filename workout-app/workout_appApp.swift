@@ -19,7 +19,9 @@ struct WorkoutApp: App {
             "intentionalRestDays": 1,
             "sessionsPerWeekGoal": 4,
             "weightUnit": "lbs",
-            "weightIncrement": 2.5
+            "weightIncrement": 2.5,
+            "preferredSleepSourceKey": "",
+            "preferredSleepSourceName": ""
         ])
 
         FontRegistrar.registerFontsIfNeeded()

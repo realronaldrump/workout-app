@@ -22,6 +22,9 @@ class HealthKitManager: ObservableObject {
     @Published var lastDailySyncDate: Date?
     @Published var syncedWorkoutsCount: Int = 0
 
+    var authorizationTask: Task<Void, Error>?
+    var workoutRouteAuthorizationTask: Task<Void, Error>?
+
     // MARK: - Internal Properties (Used Across Multi-File Extensions)
 
     let healthStore: HKHealthStore?
@@ -30,8 +33,11 @@ class HealthKitManager: ObservableObject {
     let healthDataKey = "syncedHealthData"
     let lastDailySyncKey = "lastDailyHealthSyncDate"
     let dailyHealthDataKey = "dailyHealthDataStore"
+    let preferredSleepSourceKey = "preferredSleepSourceKey"
+    let preferredSleepSourceNameKey = "preferredSleepSourceName"
+    let pendingWorkoutSleepSummaryRefreshKey = "pendingWorkoutSleepSummaryRefresh"
     let dailyHealthStoreVersionKey = "dailyHealthStoreVersion"
-    let currentDailyHealthStoreVersion = 2
+    let currentDailyHealthStoreVersion = 3
 
     // MARK: - Health Data Types to Read
 
@@ -114,6 +120,7 @@ class HealthKitManager: ObservableObject {
 
         // Workout Type
         types.insert(HKObjectType.workoutType())
+        types.insert(HKSeriesType.workoutRoute())
 
         // Activity Summary
         types.insert(HKObjectType.activitySummaryType())
@@ -152,20 +159,49 @@ class HealthKitManager: ObservableObject {
         healthDataStore[workoutId]
     }
 
+    var selectedSleepSourceKey: String? {
+        Self.normalizedSleepSourceKey(userDefaults.string(forKey: preferredSleepSourceKey))
+    }
+
+    var selectedSleepSourceName: String? {
+        let trimmed = userDefaults.string(forKey: preferredSleepSourceNameKey)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let trimmed, !trimmed.isEmpty else { return nil }
+        return trimmed
+    }
+
+    var hasPendingWorkoutSleepSummaryRefresh: Bool {
+        userDefaults.bool(forKey: pendingWorkoutSleepSummaryRefreshKey)
+    }
+
     /// Request authorization to read health data
     func requestAuthorization() async throws {
-        guard let healthStore = healthStore else {
-            authorizationStatus = .unavailable
-            throw HealthKitError.notAvailable
+        if authorizationStatus == .authorized {
+            return
         }
 
-        do {
-            try await healthStore.requestAuthorization(toShare: [], read: allReadTypes)
-            // Await status update so callers can safely continue without a race.
-            await checkAuthorizationStatusAsync()
-        } catch {
-            authorizationStatus = .denied
-            throw HealthKitError.authorizationFailed(error.localizedDescription)
+        if let authorizationTask {
+            return try await authorizationTask.value
         }
+
+        let task = Task { @MainActor in
+            guard let healthStore = healthStore else {
+                authorizationStatus = .unavailable
+                throw HealthKitError.notAvailable
+            }
+
+            do {
+                try await healthStore.requestAuthorization(toShare: [], read: allReadTypes)
+                // Await status update so callers can safely continue without a race.
+                await checkAuthorizationStatusAsync()
+            } catch {
+                authorizationStatus = .denied
+                throw HealthKitError.authorizationFailed(error.localizedDescription)
+            }
+        }
+
+        authorizationTask = task
+        defer { authorizationTask = nil }
+        try await task.value
     }
 }

@@ -609,7 +609,7 @@ struct MetricDetailView: View {
                 HStack(spacing: Theme.Spacing.sm) {
                     VolumeSessionChip(
                         title: "All",
-                        value: "\(workouts.count)",
+                        value: "\(volumeWorkouts.count)",
                         isSelected: selectedVolumeWorkoutId == nil,
                         onTap: {
                             withAnimation(Theme.Animation.spring) {
@@ -644,15 +644,19 @@ struct MetricDetailView: View {
                 .font(Theme.Typography.title3)
                 .foregroundColor(Theme.Colors.textPrimary)
 
-            ForEach(volumeListWorkouts.prefix(10)) { workout in
-                NavigationLink(destination: WorkoutDetailView(workout: workout)) {
-                    MetricWorkoutRow(
-                        workout: workout,
-                        subtitle: "\(SharedFormatters.volumeCompact(workout.totalVolume)) volume | \(timeOfDayLabel(for: workout.date))",
-                        highlight: selectedVolumeWorkoutId == workout.id
-                    )
+            if volumeListWorkouts.isEmpty {
+                EmptyStateTile(message: "No sessions with chartable volume yet.")
+            } else {
+                ForEach(volumeListWorkouts.prefix(10)) { workout in
+                    NavigationLink(destination: WorkoutDetailView(workout: workout)) {
+                        MetricWorkoutRow(
+                            workout: workout,
+                            subtitle: "\(SharedFormatters.volumeCompact(workout.totalVolume)) volume | \(timeOfDayLabel(for: workout.date))",
+                            highlight: selectedVolumeWorkoutId == workout.id
+                        )
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
         }
         .padding(Theme.Spacing.md)
@@ -660,10 +664,11 @@ struct MetricDetailView: View {
     }
 
     private var topExercisesByVolumeCard: some View {
-        let exerciseTotals = Dictionary(grouping: workouts.flatMap { $0.exercises }, by: { $0.name })
+        let exerciseTotals = Dictionary(grouping: volumeWorkouts.flatMap(\.volumeExercises), by: { $0.name })
             .map { name, exercises in
                 (name: name, volume: exercises.reduce(0) { $0 + $1.totalVolume })
             }
+            .filter { $0.volume > 0 }
             .sorted { $0.volume > $1.volume }
 
         return VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
@@ -1088,7 +1093,7 @@ struct MetricDetailView: View {
     }
 
     private var volumePoints: [VolumePoint] {
-        sortedWorkouts
+        volumeWorkouts
             .sorted { $0.date < $1.date }
             .map { workout in
                 VolumePoint(id: workout.id, date: workout.date, value: workout.totalVolume)
@@ -1096,15 +1101,19 @@ struct MetricDetailView: View {
     }
 
     private var topVolumeWorkouts: [Workout] {
-        sortedWorkouts.sorted { $0.totalVolume > $1.totalVolume }.prefix(6).map { $0 }
+        volumeWorkouts.sorted { $0.totalVolume > $1.totalVolume }.prefix(6).map { $0 }
     }
 
     private var volumeListWorkouts: [Workout] {
         if let selectedVolumeWorkoutId,
-           let focused = sortedWorkouts.first(where: { $0.id == selectedVolumeWorkoutId }) {
-            return [focused] + sortedWorkouts.filter { $0.id != selectedVolumeWorkoutId }
+           let focused = volumeWorkouts.first(where: { $0.id == selectedVolumeWorkoutId }) {
+            return [focused] + volumeWorkouts.filter { $0.id != selectedVolumeWorkoutId }
         }
-        return sortedWorkouts
+        return volumeWorkouts
+    }
+
+    private var volumeWorkouts: [Workout] {
+        sortedWorkouts.filter(\.hasVolume)
     }
 
     private func timeOfDayLabel(for date: Date) -> String {
@@ -1139,7 +1148,7 @@ struct MetricDetailView: View {
         }
 
         if let selectedVolumeWorkoutId,
-           !sortedWorkouts.contains(where: { $0.id == selectedVolumeWorkoutId }) {
+           !volumeWorkouts.contains(where: { $0.id == selectedVolumeWorkoutId }) {
             self.selectedVolumeWorkoutId = nil
         }
 

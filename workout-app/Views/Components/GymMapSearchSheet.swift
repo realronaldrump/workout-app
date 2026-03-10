@@ -12,6 +12,7 @@ struct GymMapPlace: Identifiable {
     var isSavedGym: Bool { gymProfileId != nil }
 
     init(
+        id: String? = nil,
         name: String,
         address: String?,
         coordinate: CLLocationCoordinate2D,
@@ -23,12 +24,52 @@ struct GymMapPlace: Identifiable {
         self.coordinate = coordinate
         self.gymProfileId = gymProfileId
         self.usageCount = usageCount
-        if let gymProfileId {
+        if let id {
+            self.id = id
+        } else if let gymProfileId {
             self.id = "profile:\(gymProfileId.uuidString)"
         } else {
             let normalizedName = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             self.id = "\(normalizedName)|\(coordinate.latitude)|\(coordinate.longitude)"
         }
+    }
+}
+
+private struct MapLongPressGesture: UIGestureRecognizerRepresentable {
+    let minimumDuration: TimeInterval
+    let maximumDistance: CGFloat
+    let onLongPress: (CGPoint) -> Void
+
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        func gestureRecognizer(
+            _ gestureRecognizer: UIGestureRecognizer,
+            shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+        ) -> Bool {
+            true
+        }
+    }
+
+    func makeCoordinator(converter: CoordinateSpaceConverter) -> Coordinator {
+        Coordinator()
+    }
+
+    func makeUIGestureRecognizer(context: Context) -> UILongPressGestureRecognizer {
+        let recognizer = UILongPressGestureRecognizer()
+        recognizer.minimumPressDuration = minimumDuration
+        recognizer.allowableMovement = maximumDistance
+        recognizer.cancelsTouchesInView = false
+        recognizer.delegate = context.coordinator
+        return recognizer
+    }
+
+    func updateUIGestureRecognizer(_ recognizer: UILongPressGestureRecognizer, context: Context) {
+        recognizer.minimumPressDuration = minimumDuration
+        recognizer.allowableMovement = maximumDistance
+    }
+
+    func handleUIGestureRecognizerAction(_ recognizer: UILongPressGestureRecognizer, context: Context) {
+        guard recognizer.state == .began else { return }
+        onLongPress(context.converter.location(in: .local))
     }
 }
 
@@ -51,6 +92,8 @@ struct GymMapSearchSheet: View {
     @State private var searchError: String?
     @State private var didRunInitialSearch = false
     @State private var isShowingAllResults = false
+    @State private var manualSelection: GymMapPlace?
+    @State private var manualSelectionRevision = 0
 
     // Fallback to CONUS center when we don't have workout/gym coordinates yet.
     private static let fallbackCenter = CLLocationCoordinate2D(latitude: 39.8283, longitude: -98.5795)
@@ -142,6 +185,10 @@ struct GymMapSearchSheet: View {
             if seen.insert(place.id).inserted {
                 merged.append(place)
             }
+        }
+
+        if let manualSelection, seen.insert(manualSelection.id).inserted {
+            merged.append(manualSelection)
         }
 
         return merged
@@ -271,37 +318,45 @@ struct GymMapSearchSheet: View {
                 .font(Theme.Typography.captionBold)
                 .foregroundStyle(Theme.Colors.textSecondary)
 
-            Map(position: $cameraPosition) {
-                if let startLocation {
-                    Annotation("Workout Start", coordinate: startLocation) {
-                        ZStack {
-                            Circle()
-                                .fill(Theme.Colors.accentSecondary)
-                                .frame(width: 22, height: 22)
-                            Image(systemName: "figure.strengthtraining.traditional")
-                                .font(Theme.Typography.microLabel)
-                                .foregroundStyle(.white)
+            MapReader { proxy in
+                Map(position: $cameraPosition) {
+                    if let startLocation {
+                        Annotation("Workout Start", coordinate: startLocation) {
+                            ZStack {
+                                Circle()
+                                    .fill(Theme.Colors.accentSecondary)
+                                    .frame(width: 22, height: 22)
+                                Image(systemName: "figure.strengthtraining.traditional")
+                                    .font(Theme.Typography.microLabel)
+                                    .foregroundStyle(.white)
+                            }
                         }
                     }
-                }
 
-                ForEach(combinedResults) { result in
-                    Annotation(result.name, coordinate: result.coordinate) {
-                        ZStack {
-                            Circle()
-                                .fill(selectedPlaceId == result.id ? Theme.Colors.accent : Theme.Colors.textSecondary)
-                                .frame(width: 22, height: 22)
-                            Image(systemName: "mappin")
-                                .font(Theme.Typography.caption2Bold)
-                                .foregroundStyle(.white)
+                    ForEach(combinedResults) { result in
+                        Annotation(result.name, coordinate: result.coordinate) {
+                            ZStack {
+                                Circle()
+                                    .fill(selectedPlaceId == result.id ? Theme.Colors.accent : Theme.Colors.textSecondary)
+                                    .frame(width: 22, height: 22)
+                                Image(systemName: "mappin")
+                                    .font(Theme.Typography.caption2Bold)
+                                    .foregroundStyle(.white)
+                            }
                         }
                     }
                 }
-            }
-            .frame(minHeight: 240, maxHeight: 300)
-            .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous))
-            .onMapCameraChange(frequency: .continuous) { context in
-                visibleRegion = context.region
+                .frame(minHeight: 240, maxHeight: 300)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous))
+                .contentShape(Rectangle())
+                .gesture(
+                    MapLongPressGesture(minimumDuration: 0.6, maximumDistance: 18) { point in
+                        handleLongPress(at: point, proxy: proxy)
+                    }
+                )
+                .onMapCameraChange(frequency: .continuous) { context in
+                    visibleRegion = context.region
+                }
             }
         }
         .padding(Theme.Spacing.lg)
@@ -468,6 +523,54 @@ struct GymMapSearchSheet: View {
         }
     }
 
+    private func handleLongPress(at point: CGPoint, proxy: MapProxy) {
+        guard let coordinate = proxy.convert(point, from: .local),
+              CLLocationCoordinate2DIsValid(coordinate) else {
+            return
+        }
+
+        if let matchedGym = matchingSavedGym(for: coordinate, name: "", address: nil) {
+            let usageCount = usageCountByGymId[matchedGym.id] ?? 0
+            manualSelection = GymMapPlace(
+                id: "profile:\(matchedGym.id.uuidString)",
+                name: matchedGym.name,
+                address: matchedGym.address,
+                coordinate: coordinate,
+                gymProfileId: matchedGym.id,
+                usageCount: usageCount
+            )
+            selectedPlaceId = "profile:\(matchedGym.id.uuidString)"
+            return
+        }
+
+        let manualSelectionId = manualSelectionIdentifier(for: coordinate)
+        manualSelection = GymMapPlace(
+            id: manualSelectionId,
+            name: "Custom Location",
+            address: formattedCoordinateLabel(for: coordinate),
+            coordinate: coordinate
+        )
+        selectedPlaceId = manualSelectionId
+        manualSelectionRevision += 1
+        let revision = manualSelectionRevision
+
+        Task {
+            let resolved = await reverseGeocodeManualSelection(for: coordinate)
+            guard revision == manualSelectionRevision else { return }
+            await MainActor.run {
+                guard selectedPlaceId == manualSelectionId || manualSelection?.id == manualSelectionId else {
+                    return
+                }
+                manualSelection = GymMapPlace(
+                    id: manualSelectionId,
+                    name: resolved.name,
+                    address: resolved.address,
+                    coordinate: coordinate
+                )
+            }
+        }
+    }
+
     private func searchGyms(query: String, region: MKCoordinateRegion) async throws -> [GymMapPlace] {
         let filtered = try await performSearch(query: query, region: region, filterToFitnessCenters: true)
         if !filtered.isEmpty {
@@ -554,5 +657,34 @@ struct GymMapSearchSheet: View {
         let lhsLocation = CLLocation(latitude: lhs.latitude, longitude: lhs.longitude)
         let rhsLocation = CLLocation(latitude: rhs.latitude, longitude: rhs.longitude)
         return lhsLocation.distance(from: rhsLocation)
+    }
+
+    private func manualSelectionIdentifier(for coordinate: CLLocationCoordinate2D) -> String {
+        "manual:\(coordinate.latitude)|\(coordinate.longitude)"
+    }
+
+    private func formattedCoordinateLabel(for coordinate: CLLocationCoordinate2D) -> String {
+        let latitude = String(format: "%.5f", coordinate.latitude)
+        let longitude = String(format: "%.5f", coordinate.longitude)
+        return "\(latitude), \(longitude)"
+    }
+
+    private func reverseGeocodeManualSelection(
+        for coordinate: CLLocationCoordinate2D
+    ) async -> (name: String, address: String?) {
+        let location = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+        let fallbackAddress = formattedCoordinateLabel(for: coordinate)
+
+        guard let request = MKReverseGeocodingRequest(location: location),
+              let mapItem = try? await request.mapItems.first else {
+            return ("Custom Location", fallbackAddress)
+        }
+
+        let resolvedAddress = formatAddress(for: mapItem) ?? fallbackAddress
+        let resolvedName = mapItem.name?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let resolvedName, !resolvedName.isEmpty {
+            return (resolvedName, resolvedAddress)
+        }
+        return ("Custom Location", resolvedAddress)
     }
 }

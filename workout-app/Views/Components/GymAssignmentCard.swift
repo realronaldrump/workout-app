@@ -34,41 +34,99 @@ struct GymAssignmentCard: View {
         return isDeletedGym ? .deleted : .unassigned
     }
 
-    private var helperText: String {
+    private var statusTint: Color {
+        switch badgeStyle {
+        case .assigned:
+            return Theme.Colors.accent
+        case .unassigned:
+            return Theme.Colors.textTertiary
+        case .deleted:
+            return Theme.Colors.warning
+        }
+    }
+
+    private var statusIcon: String {
+        switch badgeStyle {
+        case .assigned:
+            return "mappin.circle.fill"
+        case .unassigned:
+            return "mappin.slash.circle.fill"
+        case .deleted:
+            return "exclamationmark.triangle.fill"
+        }
+    }
+
+    private var statusTitle: String {
+        if currentGymName != nil {
+            return "Assigned gym"
+        }
+        return isDeletedGym ? "Gym needs reassignment" : "No gym assigned"
+    }
+
+    private var statusDetail: String {
         if isDeletedGym {
-            return "This gym was deleted. Reassign to keep history scoped."
+            return "The original gym was removed. Pick a current location."
         }
         if currentGymName == nil {
-            return "Assign a gym to keep progress clean across locations."
+            return "Set one if you want this workout grouped by location."
         }
-        return "Tagged for location-specific tracking."
+        return "Included in this location's workout history."
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            HStack {
-                Text("Gym")
-                    .font(Theme.Typography.title3)
-                    .foregroundColor(Theme.Colors.textPrimary)
+            Text("Gym")
+                .font(Theme.Typography.title3)
+                .foregroundColor(Theme.Colors.textPrimary)
 
-                Spacer()
+            Button {
+                showingGymPicker = true
+            } label: {
+                HStack(spacing: Theme.Spacing.md) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
+                            .fill(statusTint.opacity(0.12))
+                            .frame(width: 48, height: 48)
 
-                Button {
-                    showingGymPicker = true
-                } label: {
-                    HStack(spacing: 6) {
+                        Image(systemName: statusIcon)
+                            .font(Theme.Iconography.title3Strong)
+                            .foregroundStyle(statusTint)
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(statusTitle)
+                            .font(Theme.Typography.headline)
+                            .foregroundColor(Theme.Colors.textPrimary)
+
+                        Text(statusDetail)
+                            .font(Theme.Typography.caption)
+                            .foregroundColor(
+                                isDeletedGym ? Theme.Colors.warning : Theme.Colors.textSecondary
+                            )
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    Spacer(minLength: Theme.Spacing.sm)
+
+                    VStack(alignment: .trailing, spacing: Theme.Spacing.xs) {
                         GymBadge(text: selectionLabel, style: badgeStyle)
                         Image(systemName: "chevron.down")
-                            .font(Theme.Typography.caption)
+                            .font(Theme.Iconography.mediumStrong)
                             .foregroundColor(Theme.Colors.textTertiary)
                     }
                 }
-                .buttonStyle(.plain)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(Theme.Spacing.lg)
+                .background(
+                    RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge)
+                        .fill(Theme.Colors.surfaceRaised)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge)
+                        .strokeBorder(statusTint.opacity(0.18), lineWidth: 1)
+                )
             }
-
-            Text(helperText)
-                .font(Theme.Typography.caption)
-                .foregroundColor(isDeletedGym ? Theme.Colors.warning : Theme.Colors.textSecondary)
+            .buttonStyle(.plain)
         }
         .padding(Theme.Spacing.lg)
         .softCard(elevation: 2)

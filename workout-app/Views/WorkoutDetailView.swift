@@ -7,6 +7,7 @@ struct WorkoutDetailView: View {
     @EnvironmentObject var annotationsManager: WorkoutAnnotationsManager
     @EnvironmentObject var gymProfilesManager: GymProfilesManager
     @EnvironmentObject var variantEngine: WorkoutVariantEngine
+    @EnvironmentObject var similarityEngine: WorkoutSimilarityEngine
     // Removed local healthData state to use source of truth
     @State private var showingSyncError = false
     @State private var syncErrorMessage = ""
@@ -16,6 +17,7 @@ struct WorkoutDetailView: View {
     @State private var showingSessionInsights = false
     @State private var showingWorkoutHealthInsights = false
     @State private var showingEdit = false
+    @State private var selectedSimilarityComparison: WorkoutSimilarityComparisonSelection?
     @Environment(\.dismiss) private var dismiss
 
     private var resolvedWorkout: Workout {
@@ -24,6 +26,10 @@ struct WorkoutDetailView: View {
 
     private var isLoggedWorkout: Bool {
         dataManager.loggedWorkoutIds.contains(workout.id)
+    }
+
+    private var similarityReview: WorkoutSimilarityReview? {
+        similarityEngine.review(for: resolvedWorkout.id)
     }
 
     private func workoutDateTimeToolbarText(for date: Date) -> String {
@@ -98,6 +104,15 @@ struct WorkoutDetailView: View {
                         variantReviewSection(review: review)
                     }
 
+                    if let similarityReview {
+                        WorkoutSimilaritySection(review: similarityReview) { match in
+                            selectedSimilarityComparison = WorkoutSimilarityComparisonSelection(
+                                selectedWorkoutId: workout.id,
+                                priorWorkoutId: match.priorWorkoutId
+                            )
+                        }
+                    }
+
                     // Health Data Section
                     if healthManager.isHealthKitAvailable() {
                         healthDataSection
@@ -157,6 +172,9 @@ struct WorkoutDetailView: View {
         }
         .navigationDestination(isPresented: $showingWorkoutHealthInsights) {
             WorkoutHealthInsightsView(workout: workout)
+        }
+        .navigationDestination(item: $selectedSimilarityComparison) { selection in
+            WorkoutSimilarityCompareView(selection: selection)
         }
     }
 

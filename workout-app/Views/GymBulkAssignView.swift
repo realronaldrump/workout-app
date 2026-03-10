@@ -17,6 +17,13 @@ private struct GymDistanceMatch {
     let distanceMeters: Double
 }
 
+private struct GymNameMatch {
+    let gymId: UUID
+    let gymName: String
+    let score: Int
+    let distanceMeters: Double?
+}
+
 private struct AutoTaggingQueryWindow {
     let start: Date
     let end: Date
@@ -644,18 +651,21 @@ struct GymBulkAssignView: View {
     ) async {
         let cached = healthManager.getHealthData(for: workout.id)
         if let cachedLocation = cachedWorkoutLocation(from: cached) {
-            applyLocationAssignment(cachedLocation, to: workout, runtime: &runtime)
+            applyResolvedAssignment(for: workout, location: cachedLocation, runtime: &runtime)
             return
         }
 
         let appleWorkout = resolveAppleWorkout(for: workout, cachedHealthData: cached, runtime: runtime)
         if appleWorkout == nil,
            let historicalLocation = historicalCachedLocation(for: workout, appleWorkout: nil, runtime: runtime) {
-            applyLocationAssignment(historicalLocation, to: workout, runtime: &runtime)
+            applyResolvedAssignment(for: workout, location: historicalLocation, runtime: &runtime)
             return
         }
 
         guard let appleWorkout else {
+            if applyWorkoutNameAssignmentIfPossible(for: workout, location: nil, runtime: &runtime) {
+                return
+            }
             runtime.skippedNoMatchingWorkout += 1
             runtime.items.append(.skipped(workout: workout, reason: "No matching Apple workout near this timestamp"))
             queueFallbackCandidate(for: workout, location: nil, runtime: &runtime)
@@ -663,6 +673,9 @@ struct GymBulkAssignView: View {
         }
 
         guard let startLocation = await fetchWorkoutLocation(for: workout, appleWorkout: appleWorkout, runtime: &runtime) else {
+            if applyWorkoutNameAssignmentIfPossible(for: workout, location: nil, runtime: &runtime) {
+                return
+            }
             runtime.skippedNoRoute += 1
             let reason = runtime.routePermissionDenied
                 ? "No workout location available (route permission unavailable)"
@@ -672,7 +685,7 @@ struct GymBulkAssignView: View {
             return
         }
 
-        applyLocationAssignment(startLocation, to: workout, runtime: &runtime)
+        applyResolvedAssignment(for: workout, location: startLocation, runtime: &runtime)
     }
 
     private func cachedWorkoutLocation(from cachedHealthData: WorkoutHealthData?) -> CLLocation? {
@@ -792,11 +805,15 @@ struct GymBulkAssignView: View {
         return sorted.first?.location
     }
 
-    private func applyLocationAssignment(
-        _ location: CLLocation,
-        to workout: Workout,
+    private func applyResolvedAssignment(
+        for workout: Workout,
+        location: CLLocation,
         runtime: inout AutoTaggingRuntime
     ) {
+        if applyWorkoutNameAssignmentIfPossible(for: workout, location: location, runtime: &runtime) {
+            return
+        }
+
         guard !runtime.gymCoordinates.isEmpty else {
             runtime.skippedGymsMissingLocation += 1
             runtime.items.append(.skipped(workout: workout, reason: "Gyms missing addresses/coordinates"))
@@ -834,10 +851,28 @@ struct GymBulkAssignView: View {
         runtime.items.append(
             .assigned(
                 workout: workout,
-                gymName: match.gymName,
-                distanceMeters: Int(match.distanceMeters.rounded())
+                detail: "Tagged by location: \(match.gymName) (\(Int(match.distanceMeters.rounded()))m)"
             )
         )
+    }
+
+    private func applyWorkoutNameAssignmentIfPossible(
+        for workout: Workout,
+        location: CLLocation?,
+        runtime: inout AutoTaggingRuntime
+    ) -> Bool {
+        guard let match = inferredGymFromWorkoutName(workout.name, location: location, runtime: runtime) else {
+            return false
+        }
+
+        runtime.assignments[workout.id] = match.gymId
+        runtime.items.append(
+            .assigned(
+                workout: workout,
+                detail: "Tagged from workout name: \(match.gymName)"
+            )
+        )
+        return true
     }
 
     private func queueFallbackCandidate(
@@ -920,6 +955,134 @@ struct GymBulkAssignView: View {
 
         let secondBest = candidates[1]
         return (secondBest.distanceMeters - best.distanceMeters) >= 125 ? best : nil
+    }
+
+    private func inferredGymFromWorkoutName(
+        _ workoutName: String,
+        location: CLLocation?,
+        runtime: AutoTaggingRuntime
+    ) -> GymNameMatch? {
+        let normalizedWorkoutName = normalizedGymLookupText(workoutName)
+        let workoutTokens = meaningfulGymLookupTokens(from: workoutName)
+        guard !normalizedWorkoutName.isEmpty, !workoutTokens.isEmpty else { return nil }
+
+        let matches = gymProfilesManager.gyms.compactMap { gym -> GymNameMatch? in
+            let normalizedGymName = normalizedGymLookupText(gym.name)
+            let normalizedAddress = normalizedGymLookupText(gym.address ?? "")
+            let gymNameTokens = meaningfulGymLookupTokens(from: gym.name)
+            let addressTokens = meaningfulGymLookupTokens(from: gym.address ?? "")
+
+            let matchedNameTokens = workoutTokens.intersection(gymNameTokens)
+            let matchedAddressTokens = workoutTokens.intersection(addressTokens)
+            let namePhraseMatch = !normalizedGymName.isEmpty && normalizedWorkoutName.contains(normalizedGymName)
+            let addressPhraseMatch = !normalizedAddress.isEmpty && normalizedWorkoutName.contains(normalizedAddress)
+
+            let hasMeaningfulMatch =
+                namePhraseMatch ||
+                addressPhraseMatch ||
+                matchedNameTokens.count >= max(1, min(gymNameTokens.count, 2)) ||
+                (!matchedNameTokens.isEmpty && !matchedAddressTokens.isEmpty)
+
+            guard hasMeaningfulMatch else { return nil }
+
+            var score = matchedNameTokens.count * 14 + matchedAddressTokens.count * 10
+            if namePhraseMatch {
+                score += 40
+            }
+            if addressPhraseMatch {
+                score += 25
+            }
+            if !gymNameTokens.isEmpty && matchedNameTokens.count == gymNameTokens.count {
+                score += 12
+            }
+
+            var distanceMeters: Double?
+            if let location, let latitude = gym.latitude, let longitude = gym.longitude {
+                let gymLocation = CLLocation(latitude: latitude, longitude: longitude)
+                let distance = location.distance(from: gymLocation)
+                distanceMeters = distance
+
+                if distance <= runtime.maxDistanceMeters {
+                    score += 20
+                } else if distance <= runtime.relaxedMaxDistanceMeters {
+                    score += 12
+                } else if distance <= runtime.relaxedMaxDistanceMeters * 2 {
+                    score += 4
+                } else {
+                    score -= 30
+                }
+            }
+
+            return GymNameMatch(
+                gymId: gym.id,
+                gymName: gym.name,
+                score: score,
+                distanceMeters: distanceMeters
+            )
+        }
+        .sorted { lhs, rhs in
+            if lhs.score != rhs.score {
+                return lhs.score > rhs.score
+            }
+
+            switch (lhs.distanceMeters, rhs.distanceMeters) {
+            case let (left?, right?):
+                return left < right
+            case (_?, nil):
+                return true
+            case (nil, _?):
+                return false
+            default:
+                return lhs.gymName.localizedCaseInsensitiveCompare(rhs.gymName) == .orderedAscending
+            }
+        }
+
+        guard let best = matches.first, best.score >= 28 else { return nil }
+        if let distance = best.distanceMeters,
+           location != nil,
+           distance > runtime.relaxedMaxDistanceMeters * 2,
+           best.score < 60 {
+            return nil
+        }
+
+        guard matches.count > 1 else { return best }
+
+        let secondBest = matches[1]
+        if best.score - secondBest.score >= 12 {
+            return best
+        }
+
+        if let bestDistance = best.distanceMeters,
+           let secondDistance = secondBest.distanceMeters,
+           secondDistance - bestDistance >= 125 {
+            return best
+        }
+
+        return nil
+    }
+
+    private func normalizedGymLookupText(_ value: String) -> String {
+        value
+            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+            .lowercased()
+            .replacingOccurrences(of: "[^a-z0-9]+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+    }
+
+    private func meaningfulGymLookupTokens(from value: String) -> Set<String> {
+        let ignoredTokens: Set<String> = [
+            "am", "and", "at", "club", "day", "evening", "for", "gym", "in", "lift",
+            "morning", "night", "of", "pm", "session", "the", "training", "workout"
+        ]
+
+        let normalized = normalizedGymLookupText(value)
+        let tokens = normalized.split(separator: " ").map(String.init)
+        return Set(
+            tokens.filter { token in
+                token.count >= 2 && !ignoredTokens.contains(token)
+            }
+        )
     }
 
     private func toggleSelection(for id: UUID) {

@@ -4,18 +4,11 @@ import SwiftUI
 struct BodyCompositionView: View {
     @EnvironmentObject private var healthManager: HealthKitManager
     @EnvironmentObject private var dataManager: WorkoutDataManager
+    @EnvironmentObject private var dateRangeContext: HealthDateRangeContext
 
     @StateObject private var model = BodyCompositionViewModel()
 
-    @State private var selectedRange: HealthTimeRange = .fourWeeks
-    @State private var showingCustomRange = false
     @State private var showingHealthWizard = false
-    @State private var customRange: DateInterval = {
-        let end = Date()
-        let start = Calendar.current.date(byAdding: .day, value: -28, to: end) ?? end
-        return DateInterval(start: start, end: end)
-    }()
-
     @State private var metricKind: BodyCompositionMetricKind = .weight
     @State private var selectedTab: Tab = .overview
     @State private var reportGranularity: ReportGranularity = .weekly
@@ -48,15 +41,11 @@ struct BodyCompositionView: View {
     }
 
     private var displayRange: DateInterval {
-        let raw = selectedRange.interval(reference: Date(), earliest: earliestDateForAll, custom: customRange)
-        let calendar = Calendar.current
-        let start = calendar.startOfDay(for: raw.start)
-        let end = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: raw.end) ?? raw.end
-        return DateInterval(start: start, end: min(end, Date()))
+        dateRangeContext.resolvedRange(earliest: earliestDateForAll)
     }
 
     private var rangeLabel: String {
-        formatRange(displayRange)
+        dateRangeContext.rangeLabel(earliest: earliestDateForAll)
     }
 
     private var measurementNoun: String {
@@ -85,9 +74,9 @@ struct BodyCompositionView: View {
         }
         .navigationTitle("Body Composition")
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(isPresented: $showingCustomRange) {
-            HealthCustomRangeSheet(range: $customRange) {
-                selectedRange = .custom
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                HealthDateRangeToolbarMenu(earliestDate: earliestDateForAll)
             }
         }
         .sheet(isPresented: $showingHealthWizard) {
@@ -97,11 +86,11 @@ struct BodyCompositionView: View {
             healthManager.refreshAuthorizationStatus()
             refreshData()
         }
-        .onChange(of: selectedRange) { _, _ in
+        .onChange(of: dateRangeContext.selectedRange) { _, _ in
             refreshData()
         }
-        .onChange(of: customRange) { _, _ in
-            if selectedRange == .custom {
+        .onChange(of: dateRangeContext.customRange) { _, _ in
+            if dateRangeContext.selectedRange == .custom {
                 refreshData()
             }
         }
@@ -113,7 +102,7 @@ struct BodyCompositionView: View {
             model.recomputeReports(granularity: newValue)
         }
         .onChange(of: model.earliestSampleDate) { _, _ in
-            if selectedRange == .all {
+            if dateRangeContext.selectedRange == .allTime {
                 refreshData()
             }
         }
@@ -177,20 +166,7 @@ struct BodyCompositionView: View {
     }
 
     private var timeRangeSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text("Time Range")
-                .font(Theme.Typography.metricLabel)
-                .foregroundStyle(Theme.Colors.textTertiary)
-                .textCase(.uppercase)
-                .tracking(0.8)
-
-            TimeRangePillPicker(
-                selected: $selectedRange,
-                onCustomTap: {
-                    showingCustomRange = true
-                }
-            )
-        }
+        HealthDateRangeSection(earliestDate: earliestDateForAll)
     }
 
     private var metricSection: some View {
@@ -724,14 +700,6 @@ struct BodyCompositionView: View {
             displayRange: displayRange,
             reportGranularity: reportGranularity
         )
-    }
-
-    private func formatRange(_ interval: DateInterval) -> String {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        let start = formatter.string(from: interval.start)
-        let end = formatter.string(from: interval.end)
-        return "\(start) – \(end)"
     }
 
     private func formatValue(_ value: Double) -> String {

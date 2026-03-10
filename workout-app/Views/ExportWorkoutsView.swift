@@ -7,17 +7,17 @@ struct ExportWorkoutsView: View {
     @ObservedObject var dataManager: WorkoutDataManager
     @ObservedObject var iCloudManager: iCloudDocumentManager
     @ObservedObject private var exerciseMetadataManager = ExerciseMetadataManager.shared
+    @EnvironmentObject private var healthManager: HealthKitManager
 
     private let weightUnit = "lbs"
+    private let maxContentWidth: CGFloat = 820
 
     @State private var selectedRange: ExportTimeRange = .all
-    @State private var customStartDate: Date = Date()
-    @State private var customEndDate: Date = Date()
-    @State private var showingCustomRangeSheet = false
-    @State private var showingExerciseHistoryPicker = false
-    @State private var showingWorkoutDatePicker = false
-    @State private var showingMuscleGroupPicker = false
+    @State private var customStartDate = Date()
+    @State private var customEndDate = Date()
     @State private var didInitializeCustomRange = false
+    @State private var isFilteredExportsExpanded = false
+    @State private var activeSheet: ExportSheet?
 
     @State private var isExportingWorkouts = false
     @State private var workoutExportStatusMessage: String?
@@ -44,47 +44,63 @@ struct ExportWorkoutsView: View {
     @State private var muscleGroupExportFileURL: URL?
 
     @State private var exportErrorMessage: String?
-    @State private var showingErrorAlert = false
+    @State private var shareItem: ExportShareItem?
 
-    @State private var showingShareSheet = false
-    @State private var shareFileURL: URL?
+    @State private var selectedHealthSummaryMetrics: Set<HealthMetric> = Set(HealthMetric.allCases)
+    @State private var selectedHealthSampleMetrics: Set<HealthMetric> = Set(HealthMetric.allCases.filter(\.supportsSamples))
+    @State private var includeHealthWorkoutLocations = false
+
+    @State private var isExportingHealthDailySummary = false
+    @State private var healthDailySummaryStatusMessage: String?
+    @State private var healthDailySummaryFileURL: URL?
+
+    @State private var isExportingHealthWorkoutSummary = false
+    @State private var healthWorkoutSummaryStatusMessage: String?
+    @State private var healthWorkoutSummaryFileURL: URL?
+
+    @State private var isExportingHealthMetricSamples = false
+    @State private var healthMetricSamplesStatusMessage: String?
+    @State private var healthMetricSamplesFileURL: URL?
 
     var body: some View {
         ZStack {
             AdaptiveBackground()
 
-            ScrollView {
-                VStack(spacing: Theme.Spacing.xl) {
+            ScrollView(showsIndicators: false) {
+                LazyVStack(alignment: .leading, spacing: Theme.Spacing.xxl) {
                     header
 
                     if dataManager.workouts.isEmpty {
-                        ContentUnavailableView(
-                            "No Workouts",
-                            systemImage: "square.and.arrow.up",
-                            description: Text("Import workouts before exporting.")
-                        )
-                        .padding(.top, Theme.Spacing.xl)
+                        emptyState
                     } else {
-                        rangeCard
-                        summaryCard
-                        workoutExportCard
-                        exerciseExportCard
-                        exerciseHistoryExportCard
-                        muscleGroupExportCard
-                        workoutDatesExportCard
+                        overviewSection
+                        quickExportsSection
+                        appleHealthSection
+                        filteredExportsSection
                     }
                 }
-                .padding()
+                .padding(.vertical, Theme.Spacing.xxl)
+                .padding(.horizontal, Theme.Spacing.lg)
+                .frame(maxWidth: maxContentWidth, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .center)
             }
         }
         .navigationTitle("Export")
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(isPresented: $showingShareSheet) {
-            if let url = shareFileURL {
-                ShareSheet(items: [url])
-            }
+        .sheet(item: $activeSheet) { sheet in
+            sheetView(for: sheet)
         }
-        .alert("Export Failed", isPresented: $showingErrorAlert) {
+        .sheet(item: $shareItem) { item in
+            ShareSheet(items: [item.url])
+        }
+        .alert("Export Failed", isPresented: Binding(
+            get: { exportErrorMessage != nil },
+            set: { newValue in
+                if !newValue {
+                    exportErrorMessage = nil
+                }
+            }
+        )) {
             Button("OK", role: .cancel) {}
         } message: {
             Text(exportErrorMessage ?? "Unknown error")
@@ -111,60 +127,119 @@ struct ExportWorkoutsView: View {
             clearExportState()
             pruneSelections()
         }
-        .sheet(isPresented: $showingCustomRangeSheet) {
-            ExportCustomRangeSheet(
-                startDate: $customStartDate,
-                endDate: $customEndDate,
-                latestSelectableDate: latestSelectableDate
-            )
-        }
-        .sheet(isPresented: $showingExerciseHistoryPicker) {
-            ExportExerciseSelectionSheet(
-                selectedExerciseNames: $selectedExerciseNames,
-                availableExerciseNames: availableExerciseNames
-            )
-        }
-        .sheet(isPresented: $showingWorkoutDatePicker) {
-            ExportWorkoutDateSelectionSheet(
-                selectedDateIds: $selectedWorkoutDateIds,
-                dateOptions: workoutDateOptions
-            )
-        }
-        .sheet(isPresented: $showingMuscleGroupPicker) {
-            ExportMuscleGroupSelectionSheet(
-                selectedTagIds: $selectedMuscleTagIds,
-                availableTags: availableMuscleTags
-            )
+    }
+}
+
+// MARK: - Layout
+
+private extension ExportWorkoutsView {
+    var header: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            HStack(alignment: .center, spacing: Theme.Spacing.md) {
+                Image(systemName: "square.and.arrow.up")
+                    .font(Theme.Iconography.display)
+                    .foregroundStyle(.white)
+                    .padding()
+                    .background(
+                        Circle()
+                            .fill(Theme.warmGradient)
+                    )
+                    .shadow(color: Theme.Colors.accentSecondary.opacity(0.25), radius: 12, y: 4)
+                    .shadow(color: Theme.Colors.accentSecondary.opacity(0.10), radius: 24, y: 8)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Export Workouts")
+                        .font(Theme.Typography.screenTitle)
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                        .tracking(1.5)
+
+                    Text("Create CSV backups for your full history or just the slices you need.")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                }
+            }
         }
     }
 
-    private var header: some View {
-        VStack(spacing: Theme.Spacing.sm) {
-            Image(systemName: "square.and.arrow.up")
-                .font(Theme.Iconography.display)
-                .foregroundStyle(.white)
-                .padding()
-                .background(
-                    Circle()
-                        .fill(Theme.warmGradient)
-                )
-                .shadow(color: Theme.Colors.accentSecondary.opacity(0.25), radius: 12, y: 4)
-                .shadow(color: Theme.Colors.accentSecondary.opacity(0.10), radius: 24, y: 8)
-
-            Text("Export Workouts")
-                .font(Theme.Typography.screenTitle)
-                .foregroundStyle(Theme.Colors.textPrimary)
-                .tracking(1.5)
-
-            Text("Create a CSV backup you can share or store.")
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Colors.textSecondary)
-        }
+    var emptyState: some View {
+        ContentUnavailableView(
+            "No Workouts",
+            systemImage: "square.and.arrow.up",
+            description: Text("Import workouts before exporting.")
+        )
         .frame(maxWidth: .infinity)
-        .padding(.vertical, Theme.Spacing.lg)
+        .padding(.top, Theme.Spacing.xl)
     }
 
-    private var rangeCard: some View {
+    var overviewSection: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            ExportSectionHeader(
+                eyebrow: "Shared Range",
+                title: "Export Scope",
+                subtitle: "Choose the time window that every export starts from."
+            )
+
+            rangeCard
+            summaryCard
+        }
+    }
+
+    var quickExportsSection: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            ExportSectionHeader(
+                eyebrow: "Workout Exports",
+                title: "Quick Exports",
+                subtitle: "Use these when you want the broadest backup or a clean exercise inventory."
+            )
+
+            workoutExportCard
+            exerciseExportCard
+        }
+    }
+
+    var appleHealthSection: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            ExportSectionHeader(
+                eyebrow: "Health Exports",
+                title: "Apple Health",
+                subtitle: "Export daily summaries, workout-linked health data, or raw Health samples to CSV."
+            )
+
+            if !healthManager.isHealthKitAvailable() {
+                healthUnavailableCard
+            } else if healthManager.authorizationStatus != .authorized {
+                healthAccessCard
+            } else {
+                healthDailySummaryCard
+                healthWorkoutSummaryCard
+                healthMetricSamplesCard
+            }
+        }
+    }
+
+    var filteredExportsSection: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            ExportSectionHeader(
+                eyebrow: "Targeted Exports",
+                title: "Filtered Workout Exports",
+                subtitle: "Targeted workout CSVs for specific exercises, muscle groups, or dates."
+            )
+
+            CollapsibleSection(
+                title: "Filtered Exports",
+                subtitle: "Targeted CSVs for specific exercises, muscle groups, or workout dates.",
+                isExpanded: $isFilteredExportsExpanded
+            ) {
+                VStack(spacing: Theme.Spacing.md) {
+                    exerciseHistoryExportCard
+                    muscleGroupExportCard
+                    workoutDatesExportCard
+                }
+            }
+        }
+    }
+
+    var rangeCard: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             HStack {
                 Image(systemName: "calendar.badge.clock")
@@ -175,7 +250,23 @@ struct ExportWorkoutsView: View {
                 Spacer()
             }
 
-            timeRangePicker
+            Text("Preset")
+                .font(Theme.Typography.metricLabel)
+                .foregroundStyle(Theme.Colors.textTertiary)
+                .textCase(.uppercase)
+                .tracking(0.8)
+
+            TimeRangePillPicker(
+                options: ExportTimeRange.allCases,
+                selected: $selectedRange,
+                label: { $0.title },
+                isSpecialOption: { $0 == .custom },
+                onCustomTap: {
+                    openSheet(.customRange)
+                }
+            )
+            .accessibilityLabel("Export time range")
+            .accessibilityValue(rangeAccessibilityValue)
 
             rangeDetails
         }
@@ -183,55 +274,22 @@ struct ExportWorkoutsView: View {
         .softCard(elevation: 2)
     }
 
-    private var timeRangePicker: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text("Preset")
-                .font(Theme.Typography.metricLabel)
-                .foregroundStyle(Theme.Colors.textTertiary)
-                .textCase(.uppercase)
-                .tracking(0.8)
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: Theme.Spacing.sm) {
-                    ForEach(ExportTimeRange.allCases) { range in
-                        let isSelected = selectedRange == range
-                        Button {
-                            if range == .custom {
-                                selectedRange = .custom
-                                showingCustomRangeSheet = true
-                            } else {
-                                selectedRange = range
-                            }
-                            Haptics.selection()
-                        } label: {
-                            Text(range.title)
-                                .font(Theme.Typography.metricLabel)
-                                .textCase(.uppercase)
-                                .tracking(0.8)
-                                .foregroundStyle(isSelected ? .white : Theme.Colors.textSecondary)
-                                .padding(.horizontal, Theme.Spacing.md)
-                                .padding(.vertical, Theme.Spacing.sm)
-                                .frame(minHeight: 44)
-                                .background(
-                                    RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                                        .fill(isSelected ? Theme.Colors.accent : Color.clear)
-                                )
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                                        .strokeBorder(Theme.Colors.border, lineWidth: 2)
-                                )
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-        }
-    }
-
-    private var rangeDetails: some View {
+    var rangeDetails: some View {
         let range = effectiveDayRange
 
         return VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            HStack {
+                Text("Current range")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+
+                Spacer()
+
+                Text(selectedRange.accessibilityTitle)
+                    .font(Theme.Typography.captionBold)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+            }
+
             HStack {
                 Text("Start")
                     .font(Theme.Typography.caption)
@@ -253,25 +311,23 @@ struct ExportWorkoutsView: View {
             }
 
             if selectedRange == .custom {
-                Button {
-                    showingCustomRangeSheet = true
-                    Haptics.selection()
-                } label: {
-                    Text("Edit Custom Range")
-                        .font(Theme.Typography.captionBold)
-                        .foregroundStyle(Theme.Colors.textPrimary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, Theme.Spacing.sm)
-                        .background(Theme.Colors.elevated)
-                        .cornerRadius(Theme.CornerRadius.large)
+                Button("Edit Custom Range") {
+                    openSheet(.customRange)
                 }
+                .font(Theme.Typography.captionBold)
+                .foregroundStyle(Theme.Colors.textPrimary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, Theme.Spacing.sm)
+                .background(Theme.Colors.elevated)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large))
                 .buttonStyle(.plain)
+                .accessibilityHint("Adjust the custom export dates")
             }
         }
         .padding(.top, Theme.Spacing.xs)
     }
 
-    private var summaryCard: some View {
+    var summaryCard: some View {
         let workouts = workoutsInSelection
         let totalSets = workouts.reduce(0) { $0 + $1.totalSets }
         let totalExercises = Set(workouts.flatMap { $0.exercises.map(\.name) }).count
@@ -286,185 +342,176 @@ struct ExportWorkoutsView: View {
                 Spacer()
             }
 
-            summaryRow(title: "Workouts", value: "\(workouts.count)")
-            summaryRow(title: "Exercises", value: "\(totalExercises)")
-            summaryRow(title: "Sets", value: "\(totalSets)")
-        }
-        .padding(Theme.Spacing.lg)
-        .softCard(elevation: 2)
-    }
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: Theme.Spacing.md) {
+                    ExportSummaryMetricTile(title: "Workouts", value: "\(workouts.count)")
+                    ExportSummaryMetricTile(title: "Exercises", value: "\(totalExercises)")
+                    ExportSummaryMetricTile(title: "Sets", value: "\(totalSets)")
+                }
 
-    private func summaryRow(title: String, value: String) -> some View {
-        HStack {
-            Text(title)
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Colors.textSecondary)
-            Spacer()
-            Text(value)
-                .font(Theme.Typography.captionBold)
-                .foregroundStyle(Theme.Colors.textPrimary)
-        }
-    }
-
-    private var workoutExportCard: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            HStack {
-                Image(systemName: "square.and.arrow.up.on.square")
-                    .foregroundStyle(Theme.Colors.accentSecondary)
-                Text("Export Workouts")
-                    .font(Theme.Typography.headline)
-                    .foregroundStyle(Theme.Colors.textPrimary)
-                Spacer()
-            }
-
-            if let message = workoutExportStatusMessage {
-                Text(message)
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textSecondary)
-            }
-
-            if let url = workoutExportFileURL {
-                Text(url.lastPathComponent)
-                    .font(Theme.Typography.captionBold)
-                    .foregroundStyle(Theme.Colors.textPrimary)
-                    .lineLimit(1)
-            }
-
-            HStack(spacing: Theme.Spacing.md) {
-                Button(action: startWorkoutExport) {
-                    HStack(spacing: Theme.Spacing.sm) {
-                        if isExportingWorkouts {
-                            ProgressView()
-                                .tint(.white)
-                        } else {
-                            Image(systemName: "arrow.up.doc.fill")
-                        }
-                        Text(isExportingWorkouts ? "Exporting" : "Export CSV")
+                VStack(spacing: Theme.Spacing.sm) {
+                    ExportSummaryMetricTile(title: "Workouts", value: "\(workouts.count)")
+                    HStack(spacing: Theme.Spacing.md) {
+                        ExportSummaryMetricTile(title: "Exercises", value: "\(totalExercises)")
+                        ExportSummaryMetricTile(title: "Sets", value: "\(totalSets)")
                     }
-                    .font(Theme.Typography.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(workoutExportButtonEnabled ? Theme.Colors.accent : Theme.Colors.surface)
-                    .foregroundColor(workoutExportButtonEnabled ? .white : Theme.Colors.textTertiary)
-                    .cornerRadius(Theme.CornerRadius.large)
-                }
-                .buttonStyle(.plain)
-                .disabled(!workoutExportButtonEnabled)
-
-                if let url = workoutExportFileURL {
-                    Button(
-                        action: {
-                            shareFileURL = url
-                            showingShareSheet = true
-                        },
-                        label: {
-                            Image(systemName: "square.and.arrow.up")
-                                .font(Theme.Typography.headline)
-                                .frame(width: 48, height: 48)
-                                .background(Theme.Colors.cardBackground)
-                                .foregroundStyle(Theme.Colors.textPrimary)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
-                                        .strokeBorder(Theme.Colors.border, lineWidth: 2)
-                                )
-                                .cornerRadius(Theme.CornerRadius.large)
-                        }
-                    )
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Share")
                 }
             }
-
-            Text("Exports a compact CSV (workout/exercise info shown once). Includes muscle tags; only adds Distance/Seconds if present.")
-                .font(Theme.Typography.microcopy)
-                .foregroundStyle(Theme.Colors.textTertiary)
         }
         .padding(Theme.Spacing.lg)
         .softCard(elevation: 2)
     }
 
-    private var workoutExportButtonEnabled: Bool {
-        if isExportingWorkouts { return false }
-        return !workoutsInSelection.isEmpty
+    var workoutExportCard: some View {
+        ExportActionCard(
+            descriptor: ExportCardDescriptor(
+                title: "Export Workouts",
+                subtitle: "A full CSV of every workout in the selected time range.",
+                systemImage: "square.and.arrow.up.on.square"
+            ),
+            statusMessage: workoutExportStatusMessage,
+            fileName: workoutExportFileURL?.lastPathComponent,
+            footnote: "Exports a compact CSV with workout and exercise details shown once per session. Muscle tags are included when available.",
+            isRunning: isExportingWorkouts,
+            isEnabled: workoutExportButtonEnabled,
+            shareURL: workoutExportFileURL,
+            onAction: startWorkoutExport,
+            onShare: presentShare
+        )
     }
 
-    private var exerciseExportCard: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            HStack {
-                Image(systemName: "list.bullet.rectangle.portrait")
-                    .foregroundStyle(Theme.Colors.accentSecondary)
-                Text("Export Exercises")
-                    .font(Theme.Typography.headline)
-                    .foregroundStyle(Theme.Colors.textPrimary)
-                Spacer()
-            }
-
+    var exerciseExportCard: some View {
+        ExportActionCard(
+            descriptor: ExportCardDescriptor(
+                title: "Export Exercises",
+                subtitle: "A deduplicated list of exercises used in the current time range.",
+                systemImage: "list.bullet.rectangle.portrait"
+            ),
+            statusMessage: exerciseExportStatusMessage,
+            fileName: exerciseExportFileURL?.lastPathComponent,
+            footnote: "Exports a unique list of exercises within the selected time range. Tags come from your exercise tagging settings.",
+            isRunning: isExportingExercises,
+            isEnabled: exerciseExportButtonEnabled,
+            shareURL: exerciseExportFileURL,
+            onAction: startExerciseExport,
+            onShare: presentShare
+        ) {
             Toggle(isOn: $includeExerciseTags) {
                 Text("Include tags")
                     .font(Theme.Typography.captionBold)
                     .foregroundStyle(Theme.Colors.textPrimary)
             }
             .tint(Theme.Colors.accent)
+            .accessibilityHint("Controls whether exercise tag columns are included in the CSV")
+        }
+    }
 
-            if let message = exerciseExportStatusMessage {
-                Text(message)
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textSecondary)
-            }
+    var exerciseHistoryExportCard: some View {
+        ExportActionCard(
+            descriptor: ExportCardDescriptor(
+                title: "Export Exercise History",
+                subtitle: "Set-level history for only the exercises you choose.",
+                systemImage: "chart.line.uptrend.xyaxis"
+            ),
+            statusMessage: exerciseHistoryExportStatusMessage,
+            fileName: exerciseHistoryExportFileURL?.lastPathComponent,
+            footnote: "Exports full set-level history, but only for the exercises you choose.",
+            isRunning: isExportingExerciseHistory,
+            isEnabled: exerciseHistoryExportButtonEnabled,
+            shareURL: exerciseHistoryExportFileURL,
+            onAction: startExerciseHistoryExport,
+            onShare: presentShare
+        ) {
+            ExportSelectionButton(
+                title: "Exercises",
+                summary: selectedExerciseNamesInRange.isEmpty ? "Choose exercises" : "\(selectedExerciseNamesInRange.count) selected",
+                previewText: selectedExercisePreviewText,
+                action: {
+                    isFilteredExportsExpanded = true
+                    openSheet(.exerciseHistory)
+                }
+            )
+        }
+    }
 
-            if let url = exerciseExportFileURL {
-                Text(url.lastPathComponent)
-                    .font(Theme.Typography.captionBold)
-                    .foregroundStyle(Theme.Colors.textPrimary)
-                    .lineLimit(1)
-            }
+    var muscleGroupExportCard: some View {
+        ExportActionCard(
+            descriptor: ExportCardDescriptor(
+                title: "Export by Muscle Group",
+                subtitle: "Only workouts containing exercises tagged to the groups you select.",
+                systemImage: "figure.strengthtraining.functional"
+            ),
+            statusMessage: muscleGroupExportStatusMessage,
+            fileName: muscleGroupExportFileURL?.lastPathComponent,
+            footnote: "Choose one or more muscle groups to export workouts that include those tagged exercises.",
+            isRunning: isExportingMuscleGroups,
+            isEnabled: muscleGroupExportButtonEnabled,
+            shareURL: muscleGroupExportFileURL,
+            onAction: startMuscleGroupExport,
+            onShare: presentShare
+        ) {
+            ExportSelectionButton(
+                title: "Muscle groups",
+                summary: selectedMuscleTagIdsInRange.isEmpty ? "Choose muscle groups" : "\(selectedMuscleTagIdsInRange.count) selected",
+                previewText: selectedMuscleTagPreviewText,
+                action: {
+                    isFilteredExportsExpanded = true
+                    openSheet(.muscleGroups)
+                }
+            )
+        }
+    }
 
+    var workoutDatesExportCard: some View {
+        ExportActionCard(
+            descriptor: ExportCardDescriptor(
+                title: "Export Workout Dates",
+                subtitle: "Only the workout sessions that happened on specific days.",
+                systemImage: "calendar.badge.plus"
+            ),
+            statusMessage: workoutDatesExportStatusMessage,
+            fileName: workoutDatesExportFileURL?.lastPathComponent,
+            footnote: "Choose one or more dates to export only those workout sessions.",
+            isRunning: isExportingWorkoutDates,
+            isEnabled: workoutDatesExportButtonEnabled,
+            shareURL: workoutDatesExportFileURL,
+            onAction: startWorkoutDatesExport,
+            onShare: presentShare
+        ) {
+            ExportSelectionButton(
+                title: "Workout dates",
+                summary: selectedWorkoutDateIdsInRange.isEmpty ? "Choose dates" : "\(selectedWorkoutDateIdsInRange.count) selected",
+                previewText: selectedWorkoutDatePreviewText,
+                action: {
+                    isFilteredExportsExpanded = true
+                    openSheet(.workoutDates)
+                }
+            )
+        }
+    }
+
+    var healthUnavailableCard: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             HStack(spacing: Theme.Spacing.md) {
-                Button(action: startExerciseExport) {
-                    HStack(spacing: Theme.Spacing.sm) {
-                        if isExportingExercises {
-                            ProgressView()
-                                .tint(.white)
-                        } else {
-                            Image(systemName: "arrow.up.doc.fill")
-                        }
-                        Text(isExportingExercises ? "Exporting" : "Export CSV")
-                    }
-                    .font(Theme.Typography.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(exerciseExportButtonEnabled ? Theme.Colors.accent : Theme.Colors.surface)
-                    .foregroundColor(exerciseExportButtonEnabled ? .white : Theme.Colors.textTertiary)
-                    .cornerRadius(Theme.CornerRadius.large)
-                }
-                .buttonStyle(.plain)
-                .disabled(!exerciseExportButtonEnabled)
+                Image(systemName: "heart.slash.fill")
+                    .font(Theme.Typography.title4)
+                    .foregroundStyle(Theme.Colors.textTertiary)
+                    .frame(width: 34, height: 34)
+                    .background(Theme.Colors.surface)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large))
 
-                if let url = exerciseExportFileURL {
-                    Button(
-                        action: {
-                            shareFileURL = url
-                            showingShareSheet = true
-                        },
-                        label: {
-                            Image(systemName: "square.and.arrow.up")
-                                .font(Theme.Typography.headline)
-                                .frame(width: 48, height: 48)
-                                .background(Theme.Colors.cardBackground)
-                                .foregroundStyle(Theme.Colors.textPrimary)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
-                                        .strokeBorder(Theme.Colors.border, lineWidth: 2)
-                                )
-                                .cornerRadius(Theme.CornerRadius.large)
-                        }
-                    )
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Share")
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Apple Health Unavailable")
+                        .font(Theme.Typography.headline)
+                        .foregroundStyle(Theme.Colors.textPrimary)
+
+                    Text("Health exports require HealthKit access on a supported device.")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Colors.textSecondary)
                 }
             }
 
-            Text("Exports a unique list of exercises within the selected time range. Tags come from your exercise tagging settings.")
+            Text("Daily health summaries, raw metric samples, and workout-linked health exports will appear here when Apple Health is available.")
                 .font(Theme.Typography.microcopy)
                 .foregroundStyle(Theme.Colors.textTertiary)
         }
@@ -472,29 +519,240 @@ struct ExportWorkoutsView: View {
         .softCard(elevation: 2)
     }
 
-    private var exerciseExportButtonEnabled: Bool {
-        if isExportingExercises { return false }
-        return !workoutsInSelection.isEmpty
+    var healthAccessCard: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            HStack(spacing: Theme.Spacing.md) {
+                Image(systemName: "heart.text.square.fill")
+                    .font(Theme.Typography.title4)
+                    .foregroundStyle(Theme.Colors.error)
+                    .frame(width: 34, height: 34)
+                    .background(Theme.Colors.error.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Connect Apple Health")
+                        .font(Theme.Typography.headline)
+                        .foregroundStyle(Theme.Colors.textPrimary)
+
+                    Text("Grant read access before exporting daily summaries, raw metric samples, or workout-linked health data.")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                }
+            }
+
+            if healthManager.authorizationStatus == .denied {
+                Text("Health access is currently denied. Re-enable it in the system Health permissions, then come back here to export.")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+            }
+
+            Button(action: requestHealthAuthorization) {
+                Text(healthManager.authorizationStatus == .denied ? "Try Health Authorization Again" : "Connect Apple Health")
+                    .font(Theme.Typography.headline)
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(Theme.Spacing.md)
+                    .background(Theme.Colors.error)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large))
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(Theme.Spacing.lg)
+        .softCard(elevation: 2)
     }
 
-    private var availableExerciseNames: [String] {
-        let names = Set(workoutsInSelection.flatMap { $0.exercises.map(\.name) })
-        return names.sorted { lhs, rhs in
-            let insensitive = lhs.localizedCaseInsensitiveCompare(rhs)
-            if insensitive != .orderedSame { return insensitive == .orderedAscending }
-            return lhs.localizedCompare(rhs) == .orderedAscending
+    var healthDailySummaryCard: some View {
+        ExportActionCard(
+            descriptor: ExportCardDescriptor(
+                title: "Export Daily Health Summary",
+                subtitle: "One row per day across the current range, using your Apple Health aggregates.",
+                systemImage: "calendar.badge.heart",
+                iconTint: Theme.Colors.error
+            ),
+            statusMessage: healthDailySummaryStatusMessage,
+            fileName: healthDailySummaryFileURL?.lastPathComponent,
+            footnote: "Refreshes the selected range from Apple Health before exporting. Choose which daily metrics to include, including sleep.",
+            isRunning: isExportingHealthDailySummary,
+            isEnabled: healthDailySummaryExportButtonEnabled,
+            shareURL: healthDailySummaryFileURL,
+            onAction: startHealthDailySummaryExport,
+            onShare: presentShare
+        ) {
+            ExportSelectionButton(
+                title: "Daily metrics",
+                summary: selectedHealthSummaryMetrics.isEmpty ? "Choose metrics" : "\(selectedHealthSummaryMetrics.count) selected",
+                previewText: selectedHealthSummaryPreviewText,
+                action: {
+                    openSheet(.healthDailyMetrics)
+                }
+            )
         }
     }
 
-    private var selectedExerciseNamesInRange: Set<String> {
+    var healthWorkoutSummaryCard: some View {
+        ExportActionCard(
+            descriptor: ExportCardDescriptor(
+                title: "Export Workout Health Summary",
+                subtitle: "One row per workout, including synced Apple Health stats around each session.",
+                systemImage: "heart.circle.fill",
+                iconTint: Theme.Colors.error
+            ),
+            statusMessage: healthWorkoutSummaryStatusMessage,
+            fileName: healthWorkoutSummaryFileURL?.lastPathComponent,
+            footnote: "Exports the workout-linked Apple Health snapshot for workouts in the current range. Missing workout health entries are synced first when possible.",
+            isRunning: isExportingHealthWorkoutSummary,
+            isEnabled: healthWorkoutSummaryExportButtonEnabled,
+            shareURL: healthWorkoutSummaryFileURL,
+            onAction: startHealthWorkoutSummaryExport,
+            onShare: presentShare
+        ) {
+            Toggle(isOn: $includeHealthWorkoutLocations) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Include location data")
+                        .font(Theme.Typography.captionBold)
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                    Text("Adds workout and route coordinates to the CSV.")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                }
+            }
+            .tint(Theme.Colors.accent)
+        }
+    }
+
+    var healthMetricSamplesCard: some View {
+        ExportActionCard(
+            descriptor: ExportCardDescriptor(
+                title: "Export Health Metric Samples",
+                subtitle: "Timestamped raw samples for selected Apple Health metrics.",
+                systemImage: "waveform.path.ecg",
+                iconTint: Theme.Colors.error
+            ),
+            statusMessage: healthMetricSamplesStatusMessage,
+            fileName: healthMetricSamplesFileURL?.lastPathComponent,
+            footnote: "Exports raw Health samples in timestamp order. Only metrics that support sample-level export are available here.",
+            isRunning: isExportingHealthMetricSamples,
+            isEnabled: healthMetricSamplesExportButtonEnabled,
+            shareURL: healthMetricSamplesFileURL,
+            onAction: startHealthMetricSamplesExport,
+            onShare: presentShare
+        ) {
+            ExportSelectionButton(
+                title: "Sample metrics",
+                summary: selectedHealthSampleMetrics.isEmpty ? "Choose metrics" : "\(selectedHealthSampleMetrics.count) selected",
+                previewText: selectedHealthSamplePreviewText,
+                action: {
+                    openSheet(.healthSampleMetrics)
+                }
+            )
+        }
+    }
+
+    @ViewBuilder
+    func sheetView(for sheet: ExportSheet) -> some View {
+        switch sheet {
+        case .customRange:
+            ExportCustomRangeSheet(
+                startDate: customStartDate,
+                endDate: customEndDate,
+                earliestSelectableDate: earliestSelectableDate,
+                latestSelectableDate: latestSelectableDate
+            ) { start, end in
+                customStartDate = start
+                customEndDate = end
+                selectedRange = .custom
+            }
+        case .exerciseHistory:
+            ExportExerciseSelectionSheet(
+                selectedExerciseNames: $selectedExerciseNames,
+                availableExerciseNames: availableExerciseNames
+            )
+        case .workoutDates:
+            ExportWorkoutDateSelectionSheet(
+                selectedDateIds: $selectedWorkoutDateIds,
+                dateOptions: workoutDateOptions
+            )
+        case .muscleGroups:
+            ExportMuscleGroupSelectionSheet(
+                selectedTagIds: $selectedMuscleTagIds,
+                availableTags: availableMuscleTags
+            )
+        case .healthDailyMetrics:
+            ExportHealthMetricSelectionSheet(
+                title: "Daily Health Metrics",
+                selectedMetrics: $selectedHealthSummaryMetrics,
+                availableMetrics: availableHealthSummaryMetrics
+            )
+        case .healthSampleMetrics:
+            ExportHealthMetricSelectionSheet(
+                title: "Raw Sample Metrics",
+                selectedMetrics: $selectedHealthSampleMetrics,
+                availableMetrics: availableHealthSampleMetrics
+            )
+        }
+    }
+}
+
+// MARK: - Derived State
+
+private extension ExportWorkoutsView {
+    var workoutExportButtonEnabled: Bool {
+        !isExportingWorkouts && !workoutsInSelection.isEmpty
+    }
+
+    var exerciseExportButtonEnabled: Bool {
+        !isExportingExercises && !workoutsInSelection.isEmpty
+    }
+
+    var exerciseHistoryExportButtonEnabled: Bool {
+        !isExportingExerciseHistory && !selectedExerciseNamesInRange.isEmpty
+    }
+
+    var muscleGroupExportButtonEnabled: Bool {
+        !isExportingMuscleGroups && !selectedMuscleTagIdsInRange.isEmpty
+    }
+
+    var workoutDatesExportButtonEnabled: Bool {
+        !isExportingWorkoutDates && !selectedWorkoutDateIdsInRange.isEmpty
+    }
+
+    var healthDailySummaryExportButtonEnabled: Bool {
+        !isExportingHealthDailySummary && !selectedHealthSummaryMetrics.isEmpty
+    }
+
+    var healthWorkoutSummaryExportButtonEnabled: Bool {
+        !isExportingHealthWorkoutSummary && !workoutsInSelection.isEmpty
+    }
+
+    var healthMetricSamplesExportButtonEnabled: Bool {
+        !isExportingHealthMetricSamples && !selectedHealthSampleMetrics.isEmpty
+    }
+
+    var availableHealthSummaryMetrics: [HealthMetric] {
+        HealthMetric.allCases.sorted(by: healthMetricAscending)
+    }
+
+    var availableHealthSampleMetrics: [HealthMetric] {
+        HealthMetric.allCases
+            .filter(\.supportsSamples)
+            .sorted(by: healthMetricAscending)
+    }
+
+    var availableExerciseNames: [String] {
+        let names = Set(workoutsInSelection.flatMap { $0.exercises.map(\.name) })
+        return names.sorted(by: localizedAscending)
+    }
+
+    var selectedExerciseNamesInRange: Set<String> {
         selectedExerciseNames.intersection(Set(availableExerciseNames))
     }
 
-    private var workoutDateOptions: [ExportWorkoutDateOption] {
+    var workoutDateOptions: [ExportWorkoutDateOption] {
         let calendar = Calendar.current
         let grouped = Dictionary(grouping: workoutsInSelection) { workout in
             calendar.startOfDay(for: workout.date)
         }
+
         return grouped.keys.sorted(by: >).compactMap { day in
             guard let workouts = grouped[day] else { return nil }
             return ExportWorkoutDateOption(
@@ -505,13 +763,14 @@ struct ExportWorkoutsView: View {
         }
     }
 
-    private var selectedWorkoutDateIdsInRange: Set<String> {
+    var selectedWorkoutDateIdsInRange: Set<String> {
         selectedWorkoutDateIds.intersection(Set(workoutDateOptions.map(\.id)))
     }
 
-    private var availableMuscleTags: [MuscleTag] {
+    var availableMuscleTags: [MuscleTag] {
         let exerciseNames = Set(workoutsInSelection.flatMap { $0.exercises.map(\.name) })
         var uniqueTags: [String: MuscleTag] = [:]
+
         for exerciseName in exerciseNames {
             for tag in exerciseMetadataManager.resolvedTags(for: exerciseName) {
                 uniqueTags[tag.id] = tag
@@ -536,346 +795,54 @@ struct ExportWorkoutsView: View {
                 break
             }
 
-            let insensitive = lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName)
-            if insensitive != .orderedSame { return insensitive == .orderedAscending }
-            return lhs.displayName.localizedCompare(rhs.displayName) == .orderedAscending
+            return localizedAscending(lhs.displayName, rhs.displayName)
         }
     }
 
-    private var selectedMuscleTagIdsInRange: Set<String> {
+    var selectedMuscleTagIdsInRange: Set<String> {
         selectedMuscleTagIds.intersection(Set(availableMuscleTags.map(\.id)))
     }
 
-    private var exerciseHistoryExportCard: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            HStack {
-                Image(systemName: "chart.line.uptrend.xyaxis")
-                    .foregroundStyle(Theme.Colors.accentSecondary)
-                Text("Export Exercise History")
-                    .font(Theme.Typography.headline)
-                    .foregroundStyle(Theme.Colors.textPrimary)
-                Spacer()
-            }
-
-            Button {
-                showingExerciseHistoryPicker = true
-                Haptics.selection()
-            } label: {
-                HStack {
-                    Text(selectedExerciseNamesInRange.isEmpty ? "Select Exercises" : "\(selectedExerciseNamesInRange.count) selected")
-                        .font(Theme.Typography.captionBold)
-                        .foregroundStyle(Theme.Colors.textPrimary)
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(Theme.Typography.captionStrong)
-                        .foregroundStyle(Theme.Colors.textTertiary)
-                }
-                .padding(Theme.Spacing.md)
-                .background(Theme.Colors.elevated)
-                .cornerRadius(Theme.CornerRadius.large)
-                .overlay(
-                    RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
-                        .strokeBorder(Theme.Colors.border, lineWidth: 2)
-                )
-            }
-            .buttonStyle(.plain)
-
-            if !selectedExerciseNamesInRange.isEmpty {
-                Text(selectedExercisePreviewText)
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textSecondary)
-                    .lineLimit(2)
-            }
-
-            if let message = exerciseHistoryExportStatusMessage {
-                Text(message)
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textSecondary)
-            }
-
-            if let url = exerciseHistoryExportFileURL {
-                Text(url.lastPathComponent)
-                    .font(Theme.Typography.captionBold)
-                    .foregroundStyle(Theme.Colors.textPrimary)
-                    .lineLimit(1)
-            }
-
-            HStack(spacing: Theme.Spacing.md) {
-                Button(action: startExerciseHistoryExport) {
-                    HStack(spacing: Theme.Spacing.sm) {
-                        if isExportingExerciseHistory {
-                            ProgressView()
-                                .tint(.white)
-                        } else {
-                            Image(systemName: "arrow.up.doc.fill")
-                        }
-                        Text(isExportingExerciseHistory ? "Exporting" : "Export CSV")
-                    }
-                    .font(Theme.Typography.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(exerciseHistoryExportButtonEnabled ? Theme.Colors.accent : Theme.Colors.surface)
-                    .foregroundColor(exerciseHistoryExportButtonEnabled ? .white : Theme.Colors.textTertiary)
-                    .cornerRadius(Theme.CornerRadius.large)
-                }
-                .buttonStyle(.plain)
-                .disabled(!exerciseHistoryExportButtonEnabled)
-
-                if let url = exerciseHistoryExportFileURL {
-                    shareButton(for: url)
-                }
-            }
-
-            Text("Exports full set-level history, but only for the exercises you choose.")
-                .font(Theme.Typography.microcopy)
-                .foregroundStyle(Theme.Colors.textTertiary)
-        }
-        .padding(Theme.Spacing.lg)
-        .softCard(elevation: 2)
+    var selectedExercisePreviewText: String? {
+        previewText(for: Array(selectedExerciseNamesInRange), itemMap: nil)
     }
 
-    private var exerciseHistoryExportButtonEnabled: Bool {
-        if isExportingExerciseHistory { return false }
-        return !selectedExerciseNamesInRange.isEmpty
+    var selectedMuscleTagPreviewText: String? {
+        let selectedTagMap = Dictionary(uniqueKeysWithValues: availableMuscleTags.map { ($0.id, $0.displayName) })
+        let names = Array(selectedMuscleTagIdsInRange.compactMap { selectedTagMap[$0] })
+        return previewText(for: names, itemMap: nil)
     }
 
-    private var muscleGroupExportCard: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            HStack {
-                Image(systemName: "figure.strengthtraining.functional")
-                    .foregroundStyle(Theme.Colors.accentSecondary)
-                Text("Export by Muscle Group")
-                    .font(Theme.Typography.headline)
-                    .foregroundStyle(Theme.Colors.textPrimary)
-                Spacer()
-            }
-
-            Button {
-                showingMuscleGroupPicker = true
-                Haptics.selection()
-            } label: {
-                HStack {
-                    Text(selectedMuscleTagIdsInRange.isEmpty ? "Select Muscle Groups" : "\(selectedMuscleTagIdsInRange.count) selected")
-                        .font(Theme.Typography.captionBold)
-                        .foregroundStyle(Theme.Colors.textPrimary)
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(Theme.Typography.captionStrong)
-                        .foregroundStyle(Theme.Colors.textTertiary)
-                }
-                .padding(Theme.Spacing.md)
-                .background(Theme.Colors.elevated)
-                .cornerRadius(Theme.CornerRadius.large)
-                .overlay(
-                    RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
-                        .strokeBorder(Theme.Colors.border, lineWidth: 2)
-                )
-            }
-            .buttonStyle(.plain)
-
-            if !selectedMuscleTagIdsInRange.isEmpty {
-                Text(selectedMuscleTagPreviewText)
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textSecondary)
-                    .lineLimit(2)
-            }
-
-            if let message = muscleGroupExportStatusMessage {
-                Text(message)
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textSecondary)
-            }
-
-            if let url = muscleGroupExportFileURL {
-                Text(url.lastPathComponent)
-                    .font(Theme.Typography.captionBold)
-                    .foregroundStyle(Theme.Colors.textPrimary)
-                    .lineLimit(1)
-            }
-
-            HStack(spacing: Theme.Spacing.md) {
-                Button(action: startMuscleGroupExport) {
-                    HStack(spacing: Theme.Spacing.sm) {
-                        if isExportingMuscleGroups {
-                            ProgressView()
-                                .tint(.white)
-                        } else {
-                            Image(systemName: "arrow.up.doc.fill")
-                        }
-                        Text(isExportingMuscleGroups ? "Exporting" : "Export CSV")
-                    }
-                    .font(Theme.Typography.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(muscleGroupExportButtonEnabled ? Theme.Colors.accent : Theme.Colors.surface)
-                    .foregroundColor(muscleGroupExportButtonEnabled ? .white : Theme.Colors.textTertiary)
-                    .cornerRadius(Theme.CornerRadius.large)
-                }
-                .buttonStyle(.plain)
-                .disabled(!muscleGroupExportButtonEnabled)
-
-                if let url = muscleGroupExportFileURL {
-                    shareButton(for: url)
-                }
-            }
-
-            Text("Choose one or more muscle groups to export workouts that include those tagged exercises.")
-                .font(Theme.Typography.microcopy)
-                .foregroundStyle(Theme.Colors.textTertiary)
-        }
-        .padding(Theme.Spacing.lg)
-        .softCard(elevation: 2)
+    var selectedWorkoutDatePreviewText: String? {
+        let selectedDateMap = Dictionary(uniqueKeysWithValues: workoutDateOptions.map { ($0.id, formatDay($0.date)) })
+        let labels = Array(selectedWorkoutDateIdsInRange.compactMap { selectedDateMap[$0] })
+        return previewText(for: labels, itemMap: nil)
     }
 
-    private var muscleGroupExportButtonEnabled: Bool {
-        if isExportingMuscleGroups { return false }
-        return !selectedMuscleTagIdsInRange.isEmpty
-    }
-
-    private var workoutDatesExportCard: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            HStack {
-                Image(systemName: "calendar.badge.plus")
-                    .foregroundStyle(Theme.Colors.accentSecondary)
-                Text("Export Workout Dates")
-                    .font(Theme.Typography.headline)
-                    .foregroundStyle(Theme.Colors.textPrimary)
-                Spacer()
-            }
-
-            Button {
-                showingWorkoutDatePicker = true
-                Haptics.selection()
-            } label: {
-                HStack {
-                    Text(selectedWorkoutDateIdsInRange.isEmpty ? "Select Dates" : "\(selectedWorkoutDateIdsInRange.count) selected")
-                        .font(Theme.Typography.captionBold)
-                        .foregroundStyle(Theme.Colors.textPrimary)
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(Theme.Typography.captionStrong)
-                        .foregroundStyle(Theme.Colors.textTertiary)
-                }
-                .padding(Theme.Spacing.md)
-                .background(Theme.Colors.elevated)
-                .cornerRadius(Theme.CornerRadius.large)
-                .overlay(
-                    RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
-                        .strokeBorder(Theme.Colors.border, lineWidth: 2)
-                )
-            }
-            .buttonStyle(.plain)
-
-            if let message = workoutDatesExportStatusMessage {
-                Text(message)
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textSecondary)
-            }
-
-            if let url = workoutDatesExportFileURL {
-                Text(url.lastPathComponent)
-                    .font(Theme.Typography.captionBold)
-                    .foregroundStyle(Theme.Colors.textPrimary)
-                    .lineLimit(1)
-            }
-
-            HStack(spacing: Theme.Spacing.md) {
-                Button(action: startWorkoutDatesExport) {
-                    HStack(spacing: Theme.Spacing.sm) {
-                        if isExportingWorkoutDates {
-                            ProgressView()
-                                .tint(.white)
-                        } else {
-                            Image(systemName: "arrow.up.doc.fill")
-                        }
-                        Text(isExportingWorkoutDates ? "Exporting" : "Export CSV")
-                    }
-                    .font(Theme.Typography.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(workoutDatesExportButtonEnabled ? Theme.Colors.accent : Theme.Colors.surface)
-                    .foregroundColor(workoutDatesExportButtonEnabled ? .white : Theme.Colors.textTertiary)
-                    .cornerRadius(Theme.CornerRadius.large)
-                }
-                .buttonStyle(.plain)
-                .disabled(!workoutDatesExportButtonEnabled)
-
-                if let url = workoutDatesExportFileURL {
-                    shareButton(for: url)
-                }
-            }
-
-            Text("Choose one or more dates to export only those workout sessions.")
-                .font(Theme.Typography.microcopy)
-                .foregroundStyle(Theme.Colors.textTertiary)
-        }
-        .padding(Theme.Spacing.lg)
-        .softCard(elevation: 2)
-    }
-
-    private var workoutDatesExportButtonEnabled: Bool {
-        if isExportingWorkoutDates { return false }
-        return !selectedWorkoutDateIdsInRange.isEmpty
-    }
-
-    private var selectedExercisePreviewText: String {
-        let sorted = selectedExerciseNamesInRange.sorted { lhs, rhs in
-            let insensitive = lhs.localizedCaseInsensitiveCompare(rhs)
-            if insensitive != .orderedSame { return insensitive == .orderedAscending }
-            return lhs.localizedCompare(rhs) == .orderedAscending
-        }
-        if sorted.count <= 3 {
-            return sorted.joined(separator: ", ")
-        }
-        let prefix = sorted.prefix(3).joined(separator: ", ")
-        return "\(prefix), +\(sorted.count - 3) more"
-    }
-
-    private var selectedMuscleTagPreviewText: String {
-        let selectedTagMap = Dictionary(uniqueKeysWithValues: availableMuscleTags.map { ($0.id, $0) })
-        let names = selectedMuscleTagIdsInRange.compactMap { selectedTagMap[$0]?.displayName }
-        let sorted = names.sorted { lhs, rhs in
-            let insensitive = lhs.localizedCaseInsensitiveCompare(rhs)
-            if insensitive != .orderedSame { return insensitive == .orderedAscending }
-            return lhs.localizedCompare(rhs) == .orderedAscending
-        }
-
-        if sorted.count <= 3 {
-            return sorted.joined(separator: ", ")
-        }
-        let prefix = sorted.prefix(3).joined(separator: ", ")
-        return "\(prefix), +\(sorted.count - 3) more"
-    }
-
-    private func shareButton(for url: URL) -> some View {
-        Button(
-            action: {
-                shareFileURL = url
-                showingShareSheet = true
-            },
-            label: {
-                Image(systemName: "square.and.arrow.up")
-                    .font(Theme.Typography.headline)
-                    .frame(width: 48, height: 48)
-                    .background(Theme.Colors.cardBackground)
-                    .foregroundStyle(Theme.Colors.textPrimary)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
-                            .strokeBorder(Theme.Colors.border, lineWidth: 2)
-                    )
-                    .cornerRadius(Theme.CornerRadius.large)
-            }
+    var selectedHealthSummaryPreviewText: String? {
+        previewText(
+            for: sortedHealthMetrics(selectedHealthSummaryMetrics).map(\.title),
+            itemMap: nil
         )
-        .buttonStyle(.plain)
-        .accessibilityLabel("Share")
     }
 
-    private var workoutsInSelection: [Workout] {
+    var selectedHealthSamplePreviewText: String? {
+        previewText(
+            for: sortedHealthMetrics(selectedHealthSampleMetrics).map(\.title),
+            itemMap: nil
+        )
+    }
+
+    var workoutsInSelection: [Workout] {
         guard !dataManager.workouts.isEmpty else { return [] }
 
         let range = effectiveDayRange
         let calendar = Calendar.current
-        let endExclusive = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: range.endInclusive)) ?? range.endInclusive
+        let endExclusive = calendar.date(
+            byAdding: .day,
+            value: 1,
+            to: calendar.startOfDay(for: range.endInclusive)
+        ) ?? range.endInclusive
 
         let baseWorkouts: [Workout]
         if selectedRange == .lastWorkout {
@@ -889,9 +856,8 @@ struct ExportWorkoutsView: View {
         }
     }
 
-    private var effectiveDayRange: (start: Date, endInclusive: Date) {
+    var effectiveDayRange: (start: Date, endInclusive: Date) {
         let calendar = Calendar.current
-
         let fallbackDay = calendar.startOfDay(for: Date())
         let earliest = dataManager.workouts.map(\.date).min().map { calendar.startOfDay(for: $0) }
         let latest = dataManager.workouts.map(\.date).max().map { calendar.startOfDay(for: $0) }
@@ -917,51 +883,288 @@ struct ExportWorkoutsView: View {
             let start = calendar.date(byAdding: .year, value: -1, to: referenceDay) ?? referenceDay
             return (calendar.startOfDay(for: start), referenceDay)
         case .all:
-            let start = earliest ?? referenceDay
-            let end = latest ?? referenceDay
-            return (start, end)
+            return (earliest ?? referenceDay, latest ?? referenceDay)
         case .custom:
             let start = calendar.startOfDay(for: customStartDate)
             let end = calendar.startOfDay(for: customEndDate)
-            if start <= end {
-                return (start, end)
-            }
-            return (end, start)
+            return start <= end ? (start, end) : (end, start)
         }
     }
 
-    private var latestSelectableDate: Date {
+    var earliestSelectableDate: Date? {
+        dataManager.workouts.map(\.date).min().map { Calendar.current.startOfDay(for: $0) }
+    }
+
+    var latestSelectableDate: Date {
         let latestWorkoutDate = dataManager.workouts.map(\.date).max()
         return max(Date(), latestWorkoutDate ?? Date())
     }
 
-    private func initializeDefaultRangesIfNeeded() {
-        guard !didInitializeCustomRange else { return }
-        guard !dataManager.workouts.isEmpty else { return }
-
-        let calendar = Calendar.current
-        guard let earliest = dataManager.workouts.map(\.date).min(),
-              let latest = dataManager.workouts.map(\.date).max() else {
-            return
-        }
-
-        // Seed the custom range with the full dataset so custom starts from a useful default.
-        customStartDate = calendar.startOfDay(for: earliest)
-        customEndDate = calendar.startOfDay(for: latest)
-        didInitializeCustomRange = true
+    var rangeAccessibilityValue: String {
+        let range = effectiveDayRange
+        return "\(selectedRange.accessibilityTitle), \(formatDay(range.start)) to \(formatDay(range.endInclusive))"
     }
 
-    private func formatDay(_ date: Date) -> String {
-        date.formatted(date: .abbreviated, time: .omitted)
+    var healthExportDateInterval: DateInterval {
+        let calendar = Calendar.current
+        let range = effectiveDayRange
+        let start = calendar.startOfDay(for: range.start)
+        let end = calendar.date(
+            bySettingHour: 23,
+            minute: 59,
+            second: 59,
+            of: range.endInclusive
+        ) ?? range.endInclusive
+        return DateInterval(start: start, end: end)
+    }
+}
+
+// MARK: - Actions
+
+private extension ExportWorkoutsView {
+    func openSheet(_ sheet: ExportSheet) {
+        activeSheet = sheet
+        Haptics.selection()
+    }
+
+    func presentShare(_ url: URL) {
+        shareItem = ExportShareItem(url: url)
+    }
+
+    func showError(_ error: Error) {
+        exportErrorMessage = error.localizedDescription
+        Haptics.notify(.error)
     }
 
     @MainActor
-    private func startWorkoutExport() {
+    func requestHealthAuthorization() {
+        Task {
+            do {
+                try await ensureHealthAuthorization()
+                Haptics.notify(.success)
+            } catch {
+                await MainActor.run {
+                    showError(error)
+                }
+            }
+        }
+    }
+
+    @MainActor
+    func startHealthDailySummaryExport() {
+        guard healthDailySummaryExportButtonEnabled else { return }
+
+        healthDailySummaryStatusMessage = nil
+        healthDailySummaryFileURL = nil
+        isExportingHealthDailySummary = true
+
+        let metrics = sortedHealthMetrics(selectedHealthSummaryMetrics)
+        let range = effectiveDayRange
+        let healthRange = healthExportDateInterval
+
+        Task {
+            do {
+                try await ensureHealthAuthorization()
+                try await healthManager.syncDailyHealthData(range: healthRange)
+
+                let entries = Array(healthManager.dailyHealthStore.values)
+                let storageSnapshot = iCloudManager.storageSnapshot()
+
+                Task.detached(priority: .userInitiated) {
+                    do {
+                        guard let directory = storageSnapshot.url else {
+                            throw iCloudError.containerNotAvailable
+                        }
+
+                        let data = try HealthCSVExporter.exportDailySummaryCSV(
+                            entries: entries,
+                            metrics: metrics,
+                            startDate: range.start,
+                            endDateInclusive: range.endInclusive
+                        )
+
+                        let fileName = try HealthCSVExporter.makeDailySummaryExportFileName(
+                            startDate: range.start,
+                            endDateInclusive: range.endInclusive,
+                            metricCount: metrics.count
+                        )
+
+                        try iCloudDocumentManager.saveWorkoutFile(data: data, in: directory, fileName: fileName)
+                        let fileURL = directory.appendingPathComponent(fileName)
+
+                        await MainActor.run {
+                            healthDailySummaryFileURL = fileURL
+                            healthDailySummaryStatusMessage = storageSnapshot.isUsingLocalFallback
+                                ? "Saved on-device (iCloud unavailable)"
+                                : "Saved to iCloud Drive"
+                            isExportingHealthDailySummary = false
+                            presentShare(fileURL)
+                            Haptics.notify(.success)
+                        }
+                    } catch {
+                        await MainActor.run {
+                            isExportingHealthDailySummary = false
+                            showError(error)
+                        }
+                    }
+                }
+            } catch {
+                isExportingHealthDailySummary = false
+                showError(error)
+            }
+        }
+    }
+
+    @MainActor
+    func startHealthWorkoutSummaryExport() {
+        guard healthWorkoutSummaryExportButtonEnabled else { return }
+
+        healthWorkoutSummaryStatusMessage = nil
+        healthWorkoutSummaryFileURL = nil
+        isExportingHealthWorkoutSummary = true
+
+        let workoutsSnapshot = workoutsInSelection
+        let includeLocations = includeHealthWorkoutLocations
+        let range = effectiveDayRange
+
+        Task {
+            do {
+                try await ensureHealthAuthorization()
+
+                let missingWorkouts = workoutsSnapshot.filter { healthManager.getHealthData(for: $0.id) == nil }
+                if !missingWorkouts.isEmpty {
+                    _ = try await healthManager.syncAllWorkouts(missingWorkouts)
+                }
+
+                let healthDataByWorkoutID = Dictionary(
+                    uniqueKeysWithValues: workoutsSnapshot.compactMap { workout in
+                        healthManager.getHealthData(for: workout.id).map { (workout.id, $0) }
+                    }
+                )
+
+                let storageSnapshot = iCloudManager.storageSnapshot()
+
+                Task.detached(priority: .userInitiated) {
+                    do {
+                        guard let directory = storageSnapshot.url else {
+                            throw iCloudError.containerNotAvailable
+                        }
+
+                        let data = try HealthCSVExporter.exportWorkoutHealthSummaryCSV(
+                            workouts: workoutsSnapshot,
+                            healthDataByWorkoutID: healthDataByWorkoutID,
+                            startDate: range.start,
+                            endDateInclusive: range.endInclusive,
+                            includeLocationData: includeLocations
+                        )
+
+                        let fileName = try HealthCSVExporter.makeWorkoutHealthSummaryExportFileName(
+                            startDate: range.start,
+                            endDateInclusive: range.endInclusive
+                        )
+
+                        try iCloudDocumentManager.saveWorkoutFile(data: data, in: directory, fileName: fileName)
+                        let fileURL = directory.appendingPathComponent(fileName)
+
+                        await MainActor.run {
+                            healthWorkoutSummaryFileURL = fileURL
+                            healthWorkoutSummaryStatusMessage = storageSnapshot.isUsingLocalFallback
+                                ? "Saved on-device (iCloud unavailable)"
+                                : "Saved to iCloud Drive"
+                            isExportingHealthWorkoutSummary = false
+                            presentShare(fileURL)
+                            Haptics.notify(.success)
+                        }
+                    } catch {
+                        await MainActor.run {
+                            isExportingHealthWorkoutSummary = false
+                            showError(error)
+                        }
+                    }
+                }
+            } catch {
+                isExportingHealthWorkoutSummary = false
+                showError(error)
+            }
+        }
+    }
+
+    @MainActor
+    func startHealthMetricSamplesExport() {
+        guard healthMetricSamplesExportButtonEnabled else { return }
+
+        healthMetricSamplesStatusMessage = nil
+        healthMetricSamplesFileURL = nil
+        isExportingHealthMetricSamples = true
+
+        let metrics = sortedHealthMetrics(selectedHealthSampleMetrics)
+        let range = effectiveDayRange
+        let healthRange = healthExportDateInterval
+
+        Task {
+            do {
+                try await ensureHealthAuthorization()
+
+                var samplesByMetric: [HealthMetric: [HealthMetricSample]] = [:]
+                for metric in metrics {
+                    let samples = try await healthManager.fetchMetricSamples(metric: metric, range: healthRange)
+                    if !samples.isEmpty {
+                        samplesByMetric[metric] = samples
+                    }
+                }
+
+                let storageSnapshot = iCloudManager.storageSnapshot()
+
+                Task.detached(priority: .userInitiated) {
+                    do {
+                        guard let directory = storageSnapshot.url else {
+                            throw iCloudError.containerNotAvailable
+                        }
+
+                        let data = try HealthCSVExporter.exportMetricSamplesCSV(
+                            samplesByMetric: samplesByMetric,
+                            startDate: range.start,
+                            endDateInclusive: range.endInclusive
+                        )
+
+                        let fileName = try HealthCSVExporter.makeMetricSamplesExportFileName(
+                            startDate: range.start,
+                            endDateInclusive: range.endInclusive,
+                            metricCount: metrics.count
+                        )
+
+                        try iCloudDocumentManager.saveWorkoutFile(data: data, in: directory, fileName: fileName)
+                        let fileURL = directory.appendingPathComponent(fileName)
+
+                        await MainActor.run {
+                            healthMetricSamplesFileURL = fileURL
+                            healthMetricSamplesStatusMessage = storageSnapshot.isUsingLocalFallback
+                                ? "Saved on-device (iCloud unavailable)"
+                                : "Saved to iCloud Drive"
+                            isExportingHealthMetricSamples = false
+                            presentShare(fileURL)
+                            Haptics.notify(.success)
+                        }
+                    } catch {
+                        await MainActor.run {
+                            isExportingHealthMetricSamples = false
+                            showError(error)
+                        }
+                    }
+                }
+            } catch {
+                isExportingHealthMetricSamples = false
+                showError(error)
+            }
+        }
+    }
+
+    @MainActor
+    func startWorkoutExport() {
         guard workoutExportButtonEnabled else { return }
 
         workoutExportStatusMessage = nil
         workoutExportFileURL = nil
-
         isExportingWorkouts = true
 
         let range = effectiveDayRange
@@ -975,14 +1178,7 @@ struct ExportWorkoutsView: View {
             workoutsSnapshot = dataManager.workouts
         }
 
-        let exerciseNames = Set(workoutsSnapshot.flatMap { $0.exercises.map(\.name) })
-        var exerciseTagsByName: [String: String] = [:]
-        for name in exerciseNames {
-            let tags = exerciseMetadataManager.resolvedTags(for: name)
-            guard !tags.isEmpty else { continue }
-            exerciseTagsByName[name] = tags.map(\.displayName).joined(separator: "; ")
-        }
-
+        let exerciseTagsByName = exerciseTagsByName(for: workoutsSnapshot)
         let storageSnapshot = iCloudManager.storageSnapshot()
         let unit = weightUnit
 
@@ -1013,29 +1209,25 @@ struct ExportWorkoutsView: View {
                     workoutExportStatusMessage = storageSnapshot.isUsingLocalFallback
                         ? "Saved on-device (iCloud unavailable)"
                         : "Saved to iCloud Drive"
-                    shareFileURL = fileURL
                     isExportingWorkouts = false
-                    showingShareSheet = true
+                    presentShare(fileURL)
                     Haptics.notify(.success)
                 }
             } catch {
                 await MainActor.run {
-                    exportErrorMessage = error.localizedDescription
-                    showingErrorAlert = true
                     isExportingWorkouts = false
-                    Haptics.notify(.error)
+                    showError(error)
                 }
             }
         }
     }
 
     @MainActor
-    private func startExerciseExport() {
+    func startExerciseExport() {
         guard exerciseExportButtonEnabled else { return }
 
         exerciseExportStatusMessage = nil
         exerciseExportFileURL = nil
-
         isExportingExercises = true
 
         let range = effectiveDayRange
@@ -1093,29 +1285,25 @@ struct ExportWorkoutsView: View {
                     exerciseExportStatusMessage = storageSnapshot.isUsingLocalFallback
                         ? "Saved on-device (iCloud unavailable)"
                         : "Saved to iCloud Drive"
-                    shareFileURL = fileURL
                     isExportingExercises = false
-                    showingShareSheet = true
+                    presentShare(fileURL)
                     Haptics.notify(.success)
                 }
             } catch {
                 await MainActor.run {
-                    exportErrorMessage = error.localizedDescription
-                    showingErrorAlert = true
                     isExportingExercises = false
-                    Haptics.notify(.error)
+                    showError(error)
                 }
             }
         }
     }
 
     @MainActor
-    private func startExerciseHistoryExport() {
+    func startExerciseHistoryExport() {
         guard exerciseHistoryExportButtonEnabled else { return }
 
         exerciseHistoryExportStatusMessage = nil
         exerciseHistoryExportFileURL = nil
-
         isExportingExerciseHistory = true
 
         let selectedNames = selectedExerciseNamesInRange
@@ -1133,9 +1321,7 @@ struct ExportWorkoutsView: View {
 
         guard let bounds = dayBounds(for: workoutsSnapshot) else {
             isExportingExerciseHistory = false
-            exportErrorMessage = WorkoutExportError.noWorkoutsInRange.localizedDescription
-            showingErrorAlert = true
-            Haptics.notify(.error)
+            showError(WorkoutExportError.noWorkoutsInRange)
             return
         }
 
@@ -1172,29 +1358,26 @@ struct ExportWorkoutsView: View {
                     exerciseHistoryExportStatusMessage = storageSnapshot.isUsingLocalFallback
                         ? "Saved on-device (iCloud unavailable)"
                         : "Saved to iCloud Drive"
-                    shareFileURL = fileURL
                     isExportingExerciseHistory = false
-                    showingShareSheet = true
+                    isFilteredExportsExpanded = true
+                    presentShare(fileURL)
                     Haptics.notify(.success)
                 }
             } catch {
                 await MainActor.run {
-                    exportErrorMessage = error.localizedDescription
-                    showingErrorAlert = true
                     isExportingExerciseHistory = false
-                    Haptics.notify(.error)
+                    showError(error)
                 }
             }
         }
     }
 
     @MainActor
-    private func startMuscleGroupExport() {
+    func startMuscleGroupExport() {
         guard muscleGroupExportButtonEnabled else { return }
 
         muscleGroupExportStatusMessage = nil
         muscleGroupExportFileURL = nil
-
         isExportingMuscleGroups = true
 
         let selectedTagIds = selectedMuscleTagIdsInRange
@@ -1216,9 +1399,7 @@ struct ExportWorkoutsView: View {
 
         guard let bounds = dayBounds(for: workoutsSnapshot) else {
             isExportingMuscleGroups = false
-            exportErrorMessage = WorkoutExportError.noWorkoutsInRange.localizedDescription
-            showingErrorAlert = true
-            Haptics.notify(.error)
+            showError(WorkoutExportError.noWorkoutsInRange)
             return
         }
 
@@ -1255,29 +1436,26 @@ struct ExportWorkoutsView: View {
                     muscleGroupExportStatusMessage = storageSnapshot.isUsingLocalFallback
                         ? "Saved on-device (iCloud unavailable)"
                         : "Saved to iCloud Drive"
-                    shareFileURL = fileURL
                     isExportingMuscleGroups = false
-                    showingShareSheet = true
+                    isFilteredExportsExpanded = true
+                    presentShare(fileURL)
                     Haptics.notify(.success)
                 }
             } catch {
                 await MainActor.run {
-                    exportErrorMessage = error.localizedDescription
-                    showingErrorAlert = true
                     isExportingMuscleGroups = false
-                    Haptics.notify(.error)
+                    showError(error)
                 }
             }
         }
     }
 
     @MainActor
-    private func startWorkoutDatesExport() {
+    func startWorkoutDatesExport() {
         guard workoutDatesExportButtonEnabled else { return }
 
         workoutDatesExportStatusMessage = nil
         workoutDatesExportFileURL = nil
-
         isExportingWorkoutDates = true
 
         let selectedIds = selectedWorkoutDateIdsInRange
@@ -1287,9 +1465,7 @@ struct ExportWorkoutsView: View {
 
         guard let bounds = dayBounds(for: workoutsSnapshot) else {
             isExportingWorkoutDates = false
-            exportErrorMessage = WorkoutExportError.noWorkoutsInRange.localizedDescription
-            showingErrorAlert = true
-            Haptics.notify(.error)
+            showError(WorkoutExportError.noWorkoutsInRange)
             return
         }
 
@@ -1326,29 +1502,123 @@ struct ExportWorkoutsView: View {
                     workoutDatesExportStatusMessage = storageSnapshot.isUsingLocalFallback
                         ? "Saved on-device (iCloud unavailable)"
                         : "Saved to iCloud Drive"
-                    shareFileURL = fileURL
                     isExportingWorkoutDates = false
-                    showingShareSheet = true
+                    isFilteredExportsExpanded = true
+                    presentShare(fileURL)
                     Haptics.notify(.success)
                 }
             } catch {
                 await MainActor.run {
-                    exportErrorMessage = error.localizedDescription
-                    showingErrorAlert = true
                     isExportingWorkoutDates = false
-                    Haptics.notify(.error)
+                    showError(error)
                 }
             }
         }
     }
+}
 
-    private func pruneSelections() {
+// MARK: - Helpers
+
+private extension ExportWorkoutsView {
+    func initializeDefaultRangesIfNeeded() {
+        guard !didInitializeCustomRange else { return }
+        guard !dataManager.workouts.isEmpty else { return }
+
+        let calendar = Calendar.current
+        guard let earliest = dataManager.workouts.map(\.date).min(),
+              let latest = dataManager.workouts.map(\.date).max() else {
+            return
+        }
+
+        customStartDate = calendar.startOfDay(for: earliest)
+        customEndDate = calendar.startOfDay(for: latest)
+        didInitializeCustomRange = true
+    }
+
+    func pruneSelections() {
         selectedExerciseNames = selectedExerciseNames.intersection(Set(availableExerciseNames))
         selectedWorkoutDateIds = selectedWorkoutDateIds.intersection(Set(workoutDateOptions.map(\.id)))
         selectedMuscleTagIds = selectedMuscleTagIds.intersection(Set(availableMuscleTags.map(\.id)))
     }
 
-    private func dayIdentifier(for date: Date) -> String {
+    func clearExportState() {
+        workoutExportStatusMessage = nil
+        workoutExportFileURL = nil
+        exerciseExportStatusMessage = nil
+        exerciseExportFileURL = nil
+        exerciseHistoryExportStatusMessage = nil
+        exerciseHistoryExportFileURL = nil
+        workoutDatesExportStatusMessage = nil
+        workoutDatesExportFileURL = nil
+        muscleGroupExportStatusMessage = nil
+        muscleGroupExportFileURL = nil
+        healthDailySummaryStatusMessage = nil
+        healthDailySummaryFileURL = nil
+        healthWorkoutSummaryStatusMessage = nil
+        healthWorkoutSummaryFileURL = nil
+        healthMetricSamplesStatusMessage = nil
+        healthMetricSamplesFileURL = nil
+    }
+
+    func previewText(for items: [String], itemMap: [String: String]?) -> String? {
+        let resolvedItems: [String]
+        if let itemMap {
+            resolvedItems = items.compactMap { itemMap[$0] }
+        } else {
+            resolvedItems = items
+        }
+
+        let sorted = resolvedItems.sorted(by: localizedAscending)
+        guard !sorted.isEmpty else { return nil }
+
+        if sorted.count <= 3 {
+            return sorted.joined(separator: ", ")
+        }
+
+        let prefix = sorted.prefix(3).joined(separator: ", ")
+        return "\(prefix), +\(sorted.count - 3) more"
+    }
+
+    func localizedAscending(_ lhs: String, _ rhs: String) -> Bool {
+        let insensitive = lhs.localizedCaseInsensitiveCompare(rhs)
+        if insensitive != .orderedSame {
+            return insensitive == .orderedAscending
+        }
+        return lhs.localizedCompare(rhs) == .orderedAscending
+    }
+
+    func healthMetricAscending(_ lhs: HealthMetric, _ rhs: HealthMetric) -> Bool {
+        let categoryComparison = lhs.category.title.localizedCaseInsensitiveCompare(rhs.category.title)
+        if categoryComparison != .orderedSame {
+            return categoryComparison == .orderedAscending
+        }
+        let titleComparison = lhs.title.localizedCaseInsensitiveCompare(rhs.title)
+        if titleComparison != .orderedSame {
+            return titleComparison == .orderedAscending
+        }
+        return lhs.rawValue < rhs.rawValue
+    }
+
+    func sortedHealthMetrics(_ metrics: Set<HealthMetric>) -> [HealthMetric] {
+        metrics.sorted(by: healthMetricAscending)
+    }
+
+    @MainActor
+    func ensureHealthAuthorization() async throws {
+        guard healthManager.isHealthKitAvailable() else {
+            throw HealthKitError.notAvailable
+        }
+
+        if healthManager.authorizationStatus != .authorized {
+            try await healthManager.requestAuthorization()
+        }
+
+        guard healthManager.authorizationStatus == .authorized else {
+            throw HealthKitError.authorizationFailed("Health access is not authorized.")
+        }
+    }
+
+    func dayIdentifier(for date: Date) -> String {
         let calendar = Calendar.current
         let components = calendar.dateComponents([.year, .month, .day], from: calendar.startOfDay(for: date))
         let year = components.year ?? 0
@@ -1357,7 +1627,7 @@ struct ExportWorkoutsView: View {
         return String(format: "%04d-%02d-%02d", year, month, day)
     }
 
-    private func dayBounds(for workouts: [Workout]) -> (start: Date, endInclusive: Date)? {
+    func dayBounds(for workouts: [Workout]) -> (start: Date, endInclusive: Date)? {
         let calendar = Calendar.current
         guard let earliest = workouts.map(\.date).min(),
               let latest = workouts.map(\.date).max() else {
@@ -1369,33 +1639,25 @@ struct ExportWorkoutsView: View {
         )
     }
 
-    private func exerciseTagsByName(for workouts: [Workout]) -> [String: String] {
+    func exerciseTagsByName(for workouts: [Workout]) -> [String: String] {
         let exerciseNames = Set(workouts.flatMap { $0.exercises.map(\.name) })
         var mapping: [String: String] = [:]
+
         for name in exerciseNames {
             let tags = exerciseMetadataManager.resolvedTags(for: name)
             guard !tags.isEmpty else { continue }
             mapping[name] = tags.map(\.displayName).joined(separator: "; ")
         }
+
         return mapping
     }
 
-    @MainActor
-    private func clearExportState() {
-        workoutExportStatusMessage = nil
-        workoutExportFileURL = nil
-        exerciseExportStatusMessage = nil
-        exerciseExportFileURL = nil
-        exerciseHistoryExportStatusMessage = nil
-        exerciseHistoryExportFileURL = nil
-        workoutDatesExportStatusMessage = nil
-        workoutDatesExportFileURL = nil
-        muscleGroupExportStatusMessage = nil
-        muscleGroupExportFileURL = nil
+    func formatDay(_ date: Date) -> String {
+        date.formatted(date: .abbreviated, time: .omitted)
     }
 }
 
-private enum ExportTimeRange: String, CaseIterable, Identifiable {
+private enum ExportTimeRange: String, CaseIterable, Hashable, Identifiable {
     case lastWorkout = "Last"
     case week = "1w"
     case fourWeeks = "4w"
@@ -1406,26 +1668,69 @@ private enum ExportTimeRange: String, CaseIterable, Identifiable {
     case custom = "Custom"
 
     var id: String { rawValue }
-
     var title: String { rawValue }
+
+    var accessibilityTitle: String {
+        switch self {
+        case .lastWorkout:
+            return "Last workout"
+        case .week:
+            return "One week"
+        case .fourWeeks:
+            return "Four weeks"
+        case .twelveWeeks:
+            return "Twelve weeks"
+        case .sixMonths:
+            return "Six months"
+        case .year:
+            return "One year"
+        case .all:
+            return "All time"
+        case .custom:
+            return "Custom range"
+        }
+    }
+}
+
+private enum ExportSheet: String, Identifiable {
+    case customRange
+    case exerciseHistory
+    case workoutDates
+    case muscleGroups
+    case healthDailyMetrics
+    case healthSampleMetrics
+
+    var id: String { rawValue }
+}
+
+private struct ExportShareItem: Identifiable {
+    let url: URL
+
+    var id: String { url.path }
 }
 
 private struct ExportCustomRangeSheet: View {
     @Environment(\.dismiss) private var dismiss
-    @Binding var startDate: Date
-    @Binding var endDate: Date
+
+    let earliestSelectableDate: Date?
     let latestSelectableDate: Date
+    let onApply: (Date, Date) -> Void
 
     @State private var draftStartDate: Date
     @State private var draftEndDate: Date
 
-    init(startDate: Binding<Date>, endDate: Binding<Date>, latestSelectableDate: Date) {
-        _startDate = startDate
-        _endDate = endDate
+    init(
+        startDate: Date,
+        endDate: Date,
+        earliestSelectableDate: Date?,
+        latestSelectableDate: Date,
+        onApply: @escaping (Date, Date) -> Void
+    ) {
+        self.earliestSelectableDate = earliestSelectableDate
         self.latestSelectableDate = latestSelectableDate
-
-        _draftStartDate = State(initialValue: startDate.wrappedValue)
-        _draftEndDate = State(initialValue: endDate.wrappedValue)
+        self.onApply = onApply
+        _draftStartDate = State(initialValue: startDate)
+        _draftEndDate = State(initialValue: endDate)
     }
 
     var body: some View {
@@ -1433,78 +1738,79 @@ private struct ExportCustomRangeSheet: View {
             ZStack {
                 AdaptiveBackground()
 
-                ScrollView {
+                ScrollView(showsIndicators: false) {
                     VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-                        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                            Text("Start")
-                                .font(Theme.Typography.metricLabel)
-                                .foregroundStyle(Theme.Colors.textTertiary)
-                                .textCase(.uppercase)
-                                .tracking(0.8)
+                        dateCard(
+                            title: "Start",
+                            selection: $draftStartDate,
+                            range: (earliestSelectableDate ?? Date.distantPast)...latestSelectableDate
+                        )
 
-                            DatePicker(
-                                "Start",
-                                selection: $draftStartDate,
-                                in: ...latestSelectableDate,
-                                displayedComponents: .date
-                            )
-                            .datePickerStyle(.graphical)
-                            .labelsHidden()
-                            .tint(Theme.Colors.accent)
-                        }
-                        .padding(Theme.Spacing.lg)
-                        .softCard(elevation: 2)
+                        dateCard(
+                            title: "End",
+                            selection: $draftEndDate,
+                            range: draftStartDate...latestSelectableDate
+                        )
 
-                        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                            Text("End")
-                                .font(Theme.Typography.metricLabel)
-                                .foregroundStyle(Theme.Colors.textTertiary)
-                                .textCase(.uppercase)
-                                .tracking(0.8)
-
-                            DatePicker(
-                                "End",
-                                selection: $draftEndDate,
-                                in: draftStartDate...latestSelectableDate,
-                                displayedComponents: .date
-                            )
-                            .datePickerStyle(.graphical)
-                            .labelsHidden()
-                            .tint(Theme.Colors.accent)
-                        }
-                        .padding(Theme.Spacing.lg)
-                        .softCard(elevation: 2)
-
-                        Button {
-                            let calendar = Calendar.current
-                            startDate = calendar.startOfDay(for: draftStartDate)
-                            endDate = calendar.startOfDay(for: draftEndDate)
-                            Haptics.selection()
-                            dismiss()
-                        } label: {
+                        Button(action: applyRange) {
                             Text("Apply Range")
                                 .font(Theme.Typography.headline)
                                 .foregroundStyle(Theme.Colors.textPrimary)
                                 .frame(maxWidth: .infinity)
                                 .padding(Theme.Spacing.md)
                                 .background(Theme.Colors.elevated)
-                                .cornerRadius(Theme.CornerRadius.large)
+                                .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large))
                         }
                         .buttonStyle(.plain)
                     }
+                    .padding(Theme.Spacing.xl)
                 }
-                .padding(Theme.Spacing.xl)
             }
             .navigationTitle("Custom Range")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    AppToolbarButton(title: "Done", systemImage: "checkmark", variant: .accent) {
+                ToolbarItem(placement: .cancellationAction) {
+                    AppToolbarButton(title: "Cancel", systemImage: "xmark", variant: .subtle) {
                         dismiss()
                     }
                 }
             }
         }
+    }
+
+    private func dateCard(
+        title: String,
+        selection: Binding<Date>,
+        range: ClosedRange<Date>
+    ) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            Text(title)
+                .font(Theme.Typography.metricLabel)
+                .foregroundStyle(Theme.Colors.textTertiary)
+                .textCase(.uppercase)
+                .tracking(0.8)
+
+            DatePicker(
+                title,
+                selection: selection,
+                in: range,
+                displayedComponents: .date
+            )
+            .datePickerStyle(.graphical)
+            .labelsHidden()
+            .tint(Theme.Colors.accent)
+        }
+        .padding(Theme.Spacing.lg)
+        .softCard(elevation: 2)
+    }
+
+    private func applyRange() {
+        let calendar = Calendar.current
+        let start = calendar.startOfDay(for: draftStartDate)
+        let end = calendar.startOfDay(for: draftEndDate)
+        onApply(start, end)
+        Haptics.selection()
+        dismiss()
     }
 }
 
