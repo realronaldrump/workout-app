@@ -267,7 +267,7 @@ struct HomeWeekBucket: Identifiable {
     var title: String {
         switch weekOffset {
         case 0:
-            return "This Week"
+            return "Week View"
         case 1:
             return "Last Week"
         default:

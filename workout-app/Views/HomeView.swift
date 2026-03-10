@@ -393,7 +393,7 @@ struct HomeView: View {
 
         return VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             HStack(alignment: .firstTextBaseline) {
-                Text("This Week")
+                Text("Week View")
                     .font(Theme.Typography.sectionHeader)
                     .foregroundColor(Theme.Colors.textPrimary)
                     .tracking(1.0)
