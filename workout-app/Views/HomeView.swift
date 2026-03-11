@@ -440,7 +440,7 @@ struct HomeView: View {
 
                 if buckets.count > 1 {
                     HStack(spacing: 8) {
-                        ForEach(buckets) { bucket in
+                        ForEach(visibleWeekIndicatorBuckets(from: buckets)) { bucket in
                             Capsule()
                                 .fill(isSelectedWeekBucket(bucket) ? Theme.Colors.accent : Theme.Colors.border.opacity(0.5))
                                 .frame(width: isSelectedWeekBucket(bucket) ? 20 : 8, height: 8)
@@ -959,5 +959,19 @@ struct HomeView: View {
         let visibleSessionCount = min(bucket.workouts.count, 3)
         let baseHeight: CGFloat = bucket.workouts.isEmpty ? 188 : 188 + (CGFloat(visibleSessionCount) * 76)
         return min(baseHeight, 416)
+    }
+
+    private func visibleWeekIndicatorBuckets(from buckets: [HomeWeekBucket]) -> [HomeWeekBucket] {
+        let maxVisibleIndicators = 7
+        guard buckets.count > maxVisibleIndicators else {
+            return buckets
+        }
+
+        let selectedIndex = buckets.firstIndex(where: { isSelectedWeekBucket($0) }) ?? 0
+        let halfWindow = maxVisibleIndicators / 2
+        let lowerBound = max(0, min(selectedIndex - halfWindow, buckets.count - maxVisibleIndicators))
+        let upperBound = min(lowerBound + maxVisibleIndicators, buckets.count)
+
+        return Array(buckets[lowerBound..<upperBound])
     }
 }

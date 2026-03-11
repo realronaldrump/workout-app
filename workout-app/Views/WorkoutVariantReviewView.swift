@@ -67,7 +67,7 @@ struct WorkoutVariantReviewView: View {
                 .foregroundStyle(Theme.Colors.textPrimary)
                 .tracking(1.5)
 
-            Text("This shows what usually changes when you do the same workout in a different way.")
+            Text("This shows what usually changes when you repeat a similar exercise mix in a different way.")
                 .font(Theme.Typography.microcopy)
                 .foregroundStyle(Theme.Colors.textSecondary)
         }
@@ -129,7 +129,7 @@ struct WorkoutVariantReviewView: View {
                 .font(Theme.Typography.title3)
                 .foregroundStyle(Theme.Colors.textPrimary)
 
-            Text("This feature appears once the app can compare multiple versions of the same workout name across your history.")
+            Text("This feature appears once the app can compare multiple sessions with a similar exercise structure across your history.")
                 .font(Theme.Typography.body)
                 .foregroundStyle(Theme.Colors.textSecondary)
         }

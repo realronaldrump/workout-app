@@ -60,14 +60,19 @@ private enum WorkoutVariantAnalyzer {
         gymNames: [UUID: String]
     ) -> WorkoutVariantLibrary {
         let snapshots = workouts.map { snapshot(for: $0, annotations: annotations, gymNames: gymNames) }
-        let groups = Dictionary(grouping: snapshots) { $0.workout.name }
+        let groups = Dictionary(grouping: snapshots) { $0.comparisonGroupKey }
 
         var reviewsByWorkoutId: [UUID: WorkoutVariantWorkoutReview] = [:]
         var patterns: [WorkoutVariantPattern] = []
 
-        for (workoutName, groupedSnapshots) in groups {
+        for groupedSnapshots in groups.values {
             guard groupedSnapshots.count >= minimumWorkoutGroupCount else { continue }
-            guard let context = buildContext(workoutName: workoutName, snapshots: groupedSnapshots) else { continue }
+            guard let context = buildContext(
+                groupLabel: groupedSnapshots.first?.comparisonGroupLabel ?? "Workout Structure",
+                snapshots: groupedSnapshots
+            ) else {
+                continue
+            }
 
             for snapshot in groupedSnapshots {
                 if let review = buildReview(for: snapshot, context: context) {
@@ -95,6 +100,8 @@ private enum WorkoutVariantAnalyzer {
 
     private struct Snapshot {
         let workout: Workout
+        let comparisonGroupKey: String
+        let comparisonGroupLabel: String
         let gymId: UUID?
         let gymLabel: String
         let durationMinutes: Double
@@ -153,7 +160,7 @@ private enum WorkoutVariantAnalyzer {
     }
 
     private struct GroupContext {
-        let workoutName: String
+        let groupLabel: String
         let snapshots: [Snapshot]
         let anchorExerciseName: String?
         let baselineFirstExercise: String?
@@ -165,7 +172,7 @@ private enum WorkoutVariantAnalyzer {
         let baselineExerciseCountBand: ExerciseCountBand
     }
 
-    private nonisolated static func buildContext(workoutName: String, snapshots: [Snapshot]) -> GroupContext? {
+    private nonisolated static func buildContext(groupLabel: String, snapshots: [Snapshot]) -> GroupContext? {
         guard !snapshots.isEmpty else { return nil }
 
         let baselineFirstExercise = mode(snapshots.compactMap(\.firstExerciseName))
@@ -182,7 +189,7 @@ private enum WorkoutVariantAnalyzer {
         let anchorExerciseName = baselineFirstExercise ?? mostCommonExerciseName(in: snapshots)
 
         return GroupContext(
-            workoutName: workoutName,
+            groupLabel: groupLabel,
             snapshots: snapshots,
             anchorExerciseName: anchorExerciseName,
             baselineFirstExercise: baselineFirstExercise,
@@ -228,7 +235,7 @@ private enum WorkoutVariantAnalyzer {
             }
         }
 
-        let gymIds = Set(context.snapshots.map(\.gymId))
+        let gymIds = Set(context.snapshots.compactMap(\.gymId))
         for gymId in gymIds where gymId != context.baselineGymId {
             if let insight = gymInsight(currentValue: gymId, context: context) {
                 candidates.append(insight)
@@ -244,8 +251,8 @@ private enum WorkoutVariantAnalyzer {
         }
 
         return WorkoutVariantPattern(
-            id: "\(context.workoutName)-\(strongest.id)",
-            workoutName: context.workoutName,
+            id: "\(context.groupLabel)-\(strongest.id)",
+            groupLabel: context.groupLabel,
             representativeWorkout: representative.workout,
             variantLabel: strongest.variantLabel,
             baselineLabel: strongest.baselineLabel,
@@ -292,8 +299,9 @@ private enum WorkoutVariantAnalyzer {
             fingerprintParts.append(insight.variantLabel)
         }
 
-        if snapshot.gymId != context.baselineGymId,
-           let insight = gymInsight(currentValue: snapshot.gymId, context: context) {
+        if let snapshotGymId = snapshot.gymId,
+           snapshotGymId != context.baselineGymId,
+           let insight = gymInsight(currentValue: snapshotGymId, context: context) {
             differences.append(insight)
             fingerprintParts.append(insight.variantLabel)
         }
@@ -314,7 +322,7 @@ private enum WorkoutVariantAnalyzer {
         return WorkoutVariantWorkoutReview(
             id: snapshot.workout.id,
             workout: snapshot.workout,
-            workoutName: context.workoutName,
+            groupLabel: context.groupLabel,
             variantLabel: variantLabel,
             summary: summary,
             peerSampleSize: context.snapshots.count,
@@ -433,16 +441,18 @@ private enum WorkoutVariantAnalyzer {
     }
 
     private nonisolated static func gymInsight(
-        currentValue: UUID?,
+        currentValue: UUID,
         context: GroupContext
     ) -> WorkoutVariantDifferenceInsight? {
-        let baseline = context.baselineGymId
-        guard currentValue != baseline else { return nil }
+        guard let baseline = context.baselineGymId,
+              currentValue != baseline else {
+            return nil
+        }
 
         let variantGroup = context.snapshots.filter { $0.gymId == currentValue }
         let baselineGroup = context.snapshots.filter { $0.gymId == baseline }
-        let variantLabel = variantGroup.first?.gymLabel ?? "Unassigned"
-        let baselineLabel = baselineGroup.first?.gymLabel ?? "Unassigned"
+        let variantLabel = variantGroup.first?.gymLabel ?? "Deleted gym"
+        let baselineLabel = baselineGroup.first?.gymLabel ?? "Deleted gym"
 
         return buildInsight(
             kind: .gym,
@@ -649,6 +659,9 @@ private enum WorkoutVariantAnalyzer {
         annotations: [UUID: WorkoutAnnotation],
         gymNames: [UUID: String]
     ) -> Snapshot {
+        let canonicalExercises = canonicalExercises(for: workout)
+        let comparisonGroupKey = canonicalExercises.map(\.normalizedName).sorted().joined(separator: "|")
+        let comparisonGroupLabel = structureLabel(for: canonicalExercises.map(\.displayName))
         let gymId = annotations[workout.id]?.gymProfileId
         let gymLabel: String
         if let gymId {
@@ -670,6 +683,8 @@ private enum WorkoutVariantAnalyzer {
 
         return Snapshot(
             workout: workout,
+            comparisonGroupKey: comparisonGroupKey,
+            comparisonGroupLabel: comparisonGroupLabel,
             gymId: gymId,
             gymLabel: gymLabel,
             durationMinutes: Double(workout.estimatedDurationMinutes()),
@@ -680,6 +695,53 @@ private enum WorkoutVariantAnalyzer {
             exerciseNames: Set(workout.exercises.map(\.name)),
             exerciseEstimatedMaxes: exerciseEstimatedMaxes
         )
+    }
+
+    private struct CanonicalExercise {
+        let displayName: String
+        let normalizedName: String
+    }
+
+    private nonisolated static func canonicalExercises(for workout: Workout) -> [CanonicalExercise] {
+        var seen = Set<String>()
+        var result: [CanonicalExercise] = []
+
+        for exercise in workout.exercises {
+            let normalizedName = normalizedExerciseName(exercise.name)
+            guard !normalizedName.isEmpty, seen.insert(normalizedName).inserted else { continue }
+
+            let trimmed = exercise.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            let displayName = trimmed.isEmpty ? exercise.name : trimmed
+            result.append(
+                CanonicalExercise(
+                    displayName: displayName,
+                    normalizedName: normalizedName
+                )
+            )
+        }
+
+        return result.sorted { lhs, rhs in
+            lhs.normalizedName < rhs.normalizedName
+        }
+    }
+
+    private nonisolated static func structureLabel(for exerciseNames: [String]) -> String {
+        switch exerciseNames.count {
+        case 0:
+            return "No exercises logged"
+        case 1:
+            return exerciseNames[0]
+        case 2:
+            return "\(exerciseNames[0]) + \(exerciseNames[1])"
+        case 3:
+            return "\(exerciseNames[0]) + \(exerciseNames[1]) + \(exerciseNames[2])"
+        default:
+            return "\(exerciseNames[0]) + \(exerciseNames[1]) + \(exerciseNames.count - 2) more"
+        }
+    }
+
+    private nonisolated static func normalizedExerciseName(_ name: String) -> String {
+        name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 
     private nonisolated static func timeBucket(for date: Date) -> TimeBucket {

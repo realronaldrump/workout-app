@@ -1,5 +1,7 @@
 # App Store Submission Prep
 
+For repeat TestFlight uploads from the current working setup, use `docs/testflight-upload-runbook.md` first.
+
 Status as of March 9, 2026:
 
 - Unsigned Release build succeeds locally.

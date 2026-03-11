@@ -332,7 +332,9 @@ enum ProgressReviewEngine {
         let volumeMessage = "Volume in the \(current.block.dominantRepLane.label) rep range moved from \(SharedFormatters.volumeWithUnit(previousVolume)) to \(SharedFormatters.volumeWithUnit(currentVolume)) during this stretch."
         evidence.append((3, "volume", "Rep Range Volume", volumeMessage))
 
-        if previous.block.commonGymId != current.block.commonGymId {
+        if let previousGymId = previous.block.commonGymId,
+           let currentGymId = current.block.commonGymId,
+           previousGymId != currentGymId {
             let previousGym = gymContextLabel(for: previous.block)
             let currentGym = gymContextLabel(for: current.block)
             let gymMessage = "The dominant location context changed from \(previousGym) to \(currentGym) in this block."

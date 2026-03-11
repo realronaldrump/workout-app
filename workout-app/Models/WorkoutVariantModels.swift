@@ -139,7 +139,7 @@ struct WorkoutVariantDifferenceInsight: Identifiable, Hashable {
 struct WorkoutVariantWorkoutReview: Identifiable, Hashable {
     let id: UUID
     let workout: Workout
-    let workoutName: String
+    let groupLabel: String
     let variantLabel: String
     let summary: String
     let peerSampleSize: Int
@@ -149,7 +149,7 @@ struct WorkoutVariantWorkoutReview: Identifiable, Hashable {
 
 struct WorkoutVariantPattern: Identifiable, Hashable {
     let id: String
-    let workoutName: String
+    let groupLabel: String
     let representativeWorkout: Workout
     let variantLabel: String
     let baselineLabel: String

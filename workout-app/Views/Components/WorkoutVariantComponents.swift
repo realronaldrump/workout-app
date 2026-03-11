@@ -40,7 +40,7 @@ struct WorkoutVariantSummaryCard: View {
                 }
             }
 
-            Text("Seen \(review.exactVariantSampleSize) times across \(review.peerSampleSize) logged \(review.workoutName.lowercased()) sessions")
+            Text("Seen \(review.exactVariantSampleSize) times across \(review.peerSampleSize) matching sessions")
                 .font(Theme.Typography.microcopy)
                 .foregroundStyle(Theme.Colors.textTertiary)
         }
@@ -57,7 +57,7 @@ struct WorkoutVariantPatternCard: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             HStack(alignment: .top, spacing: Theme.Spacing.sm) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(pattern.workoutName)
+                    Text(pattern.groupLabel)
                         .font(Theme.Typography.title3)
                         .foregroundStyle(Theme.Colors.textPrimary)
                     Text(patternLead(for: pattern))
