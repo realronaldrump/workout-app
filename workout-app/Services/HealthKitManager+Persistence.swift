@@ -1,5 +1,15 @@
 import Foundation
 
+struct HealthCacheClearResult {
+    let removedWorkoutEntries: Int
+    let removedDailyEntries: Int
+    let removedCoveredDays: Int
+
+    var removedAnything: Bool {
+        removedWorkoutEntries > 0 || removedDailyEntries > 0 || removedCoveredDays > 0
+    }
+}
+
 extension HealthKitManager {
     private func getDocumentsDirectory() -> URL {
         let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
@@ -55,6 +65,73 @@ extension HealthKitManager {
                 print("Failed to persist daily health coverage: \(error)")
             }
         }
+    }
+
+    func clearCachedHealthData(
+        in range: DateInterval? = nil,
+        includeWorkoutData: Bool = true,
+        includeDailyData: Bool = true
+    ) -> HealthCacheClearResult {
+        var removedWorkoutEntries = 0
+        var removedDailyEntries = 0
+        var removedCoveredDays = 0
+
+        if includeWorkoutData {
+            if let range {
+                let workoutIDsToRemove = healthDataStore.compactMap { workoutID, healthData in
+                    range.contains(healthData.workoutDate) ? workoutID : nil
+                }
+                removedWorkoutEntries = workoutIDsToRemove.count
+                workoutIDsToRemove.forEach { healthDataStore.removeValue(forKey: $0) }
+            } else {
+                removedWorkoutEntries = healthDataStore.count
+                healthDataStore.removeAll()
+            }
+
+            if removedWorkoutEntries > 0 {
+                lastSyncDate = nil
+                syncProgress = 0
+                syncedWorkoutsCount = 0
+                userDefaults.removeObject(forKey: lastSyncKey)
+                persistData()
+            }
+        }
+
+        if includeDailyData {
+            var didMutateDailyCache = false
+
+            if let range {
+                let matchingDailyKeys = dailyHealthStore.keys.filter { range.contains($0) }
+                removedDailyEntries = matchingDailyKeys.count
+                matchingDailyKeys.forEach { dailyHealthStore.removeValue(forKey: $0) }
+
+                let coveredDaysToRemove = dailyHealthCoverage.filter { range.contains($0) }
+                removedCoveredDays = coveredDaysToRemove.count
+                coveredDaysToRemove.forEach { dailyHealthCoverage.remove($0) }
+
+                didMutateDailyCache = !matchingDailyKeys.isEmpty || !coveredDaysToRemove.isEmpty
+            } else {
+                removedDailyEntries = dailyHealthStore.count
+                removedCoveredDays = dailyHealthCoverage.count
+                dailyHealthStore.removeAll()
+                dailyHealthCoverage.removeAll()
+                didMutateDailyCache = removedDailyEntries > 0 || removedCoveredDays > 0
+            }
+
+            if didMutateDailyCache {
+                lastDailySyncDate = nil
+                dailySyncProgress = 0
+                userDefaults.removeObject(forKey: lastDailySyncKey)
+                persistDailyHealthData()
+                persistDailyHealthCoverage()
+            }
+        }
+
+        return HealthCacheClearResult(
+            removedWorkoutEntries: removedWorkoutEntries,
+            removedDailyEntries: removedDailyEntries,
+            removedCoveredDays: removedCoveredDays
+        )
     }
 
     func invalidateDailyHealthCache() {

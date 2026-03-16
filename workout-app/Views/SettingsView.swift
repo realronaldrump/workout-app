@@ -133,6 +133,18 @@ struct SettingsView: View {
 
                         Divider().padding(.leading, 50)
 
+                        NavigationLink(destination: HealthCacheManagementView(workouts: dataManager.workouts)) {
+                            SettingsInlineRow(
+                                icon: "externaldrive.badge.minus",
+                                color: Theme.Colors.warning,
+                                title: "Health Cache",
+                                subtitle: healthCacheSubtitle
+                            )
+                        }
+                        .buttonStyle(PlainButtonStyle())
+
+                        Divider().padding(.leading, 50)
+
                         NavigationLink(destination: SleepSourceSettingsView(workouts: dataManager.workouts)) {
                             SettingsInlineRow(
                                 icon: "moon.zzz.fill",
@@ -447,6 +459,17 @@ struct SettingsView: View {
         }
 
         return "Backfill daily Health history"
+    }
+
+    private var healthCacheSubtitle: String {
+        let workoutCount = healthManager.healthDataStore.count
+        let dailyCount = healthManager.dailyHealthStore.count
+
+        guard workoutCount > 0 || dailyCount > 0 else {
+            return "Delete or rebuild cached Apple Health data"
+        }
+
+        return "\(workoutCount) workout · \(dailyCount) daily cached"
     }
 
     private var healthPermissionsSubtitle: String {
