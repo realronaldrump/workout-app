@@ -121,24 +121,12 @@ struct SettingsView: View {
 
                         Divider().padding(.leading, 50)
 
-                        NavigationLink(destination: HealthHistorySyncView(workouts: dataManager.workouts)) {
+                        NavigationLink(destination: HealthDataSettingsView(workouts: dataManager.workouts)) {
                             SettingsInlineRow(
                                 icon: "clock.arrow.trianglehead.counterclockwise.rotate.90",
                                 color: Theme.Colors.error,
-                                title: "Health History Sync",
-                                subtitle: healthHistorySubtitle
-                            )
-                        }
-                        .buttonStyle(PlainButtonStyle())
-
-                        Divider().padding(.leading, 50)
-
-                        NavigationLink(destination: HealthCacheManagementView(workouts: dataManager.workouts)) {
-                            SettingsInlineRow(
-                                icon: "externaldrive.badge.minus",
-                                color: Theme.Colors.warning,
-                                title: "Health Cache",
-                                subtitle: healthCacheSubtitle
+                                title: "Health Data",
+                                subtitle: healthDataSubtitle
                             )
                         }
                         .buttonStyle(PlainButtonStyle())
@@ -449,24 +437,20 @@ struct SettingsView: View {
         return "\(preferredSleepSourceName) preferred, fallback enabled"
     }
 
-    private var healthHistorySubtitle: String {
-        guard healthManager.authorizationStatus == .authorized else {
-            return "Connect Health to backfill older history"
-        }
-
-        if let earliest = healthManager.dailyHealthStore.keys.min() {
-            return "Cached from \(SettingsDateFormatters.mediumDate.string(from: earliest))"
-        }
-
-        return "Backfill daily Health history"
-    }
-
-    private var healthCacheSubtitle: String {
+    private var healthDataSubtitle: String {
         let workoutCount = healthManager.healthDataStore.count
         let dailyCount = healthManager.dailyHealthStore.count
 
+        guard healthManager.authorizationStatus == .authorized else {
+            return "Connect Health to sync & manage data"
+        }
+
         guard workoutCount > 0 || dailyCount > 0 else {
-            return "Delete or rebuild cached Apple Health data"
+            return "Sync history & manage cached data"
+        }
+
+        if let earliest = healthManager.dailyHealthStore.keys.min() {
+            return "\(workoutCount) workout · \(dailyCount) daily · from \(SettingsDateFormatters.mediumDate.string(from: earliest))"
         }
 
         return "\(workoutCount) workout · \(dailyCount) daily cached"

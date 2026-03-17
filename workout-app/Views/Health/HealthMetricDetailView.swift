@@ -6,11 +6,6 @@ struct HealthMetricDetailView: View {
     @EnvironmentObject var healthManager: HealthKitManager
     @EnvironmentObject private var dateRangeContext: HealthDateRangeContext
 
-    @State private var showRawSamples = false
-    @State private var rawSamples: [HealthMetricSample] = []
-    @State private var isLoadingSamples = false
-    @State private var sampleError: String?
-
     private var earliestDate: Date? {
         healthManager.dailyHealthStore.keys.min()
     }
@@ -97,10 +92,6 @@ struct HealthMetricDetailView: View {
                     if metric == .sleep {
                         sleepBreakdownSection
                     }
-
-                    if metric.supportsSamples {
-                        rawSamplesSection
-                    }
                 }
                 .padding(.vertical, Theme.Spacing.xxl)
                 .padding(.horizontal, Theme.Spacing.lg)
@@ -112,17 +103,6 @@ struct HealthMetricDetailView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 HealthDateRangeToolbarMenu(earliestDate: earliestDate)
             }
-        }
-        .onChange(of: showRawSamples) { _, newValue in
-            if newValue {
-                loadRawSamples()
-            }
-        }
-        .onChange(of: dateRangeContext.selectedRange) { _, _ in
-            refreshRawSamplesIfNeeded()
-        }
-        .onChange(of: dateRangeContext.customRange) { _, _ in
-            refreshRawSamplesIfNeeded()
         }
     }
 
@@ -253,52 +233,6 @@ struct HealthMetricDetailView: View {
         .softCard(elevation: 1)
     }
 
-    private var rawSamplesSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Toggle(isOn: $showRawSamples) {
-                Text("Show Raw Samples")
-                    .font(Theme.Typography.subheadline)
-                    .foregroundStyle(Theme.Colors.textPrimary)
-            }
-            .toggleStyle(SwitchToggleStyle(tint: Theme.Colors.accent))
-
-            if showRawSamples {
-                if isLoadingSamples {
-                    ProgressView()
-                        .tint(Theme.Colors.accent)
-                } else if let sampleError {
-                    Text(sampleError)
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                } else if rawSamples.isEmpty {
-                    Text("No raw samples available.")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                } else {
-                    let samplePoints = rawSamples.map {
-                        HealthTrendPoint(
-                            date: $0.timestamp,
-                            value: metric.displayValue(from: $0.value),
-                            label: metric.title
-                        )
-                    }
-
-                    InteractiveTimeSeriesChart(
-                        points: samplePoints,
-                        color: metric.chartColor,
-                        areaFill: false,
-                        height: 180,
-                        fullDomain: range.start...range.end,
-                        valueText: { tooltipValueText(displayValue: $0) },
-                        dateText: { $0.formatted(date: .abbreviated, time: .shortened) }
-                    )
-                }
-            }
-        }
-        .padding(Theme.Spacing.lg)
-        .softCard(elevation: 1)
-    }
-
     private func tooltipValueText(displayValue: Double) -> String {
         let formatted = metric.formatDisplay(displayValue)
         switch metric.displayUnit {
@@ -323,27 +257,6 @@ struct HealthMetricDetailView: View {
 
         let count = Double(summaries.count)
         return totals.mapValues { ($0 / count) / 3600 }
-    }
-
-    private func loadRawSamples() {
-        guard metric.supportsSamples else { return }
-
-        isLoadingSamples = true
-        sampleError = nil
-
-        Task {
-            do {
-                rawSamples = try await healthManager.fetchMetricSamples(metric: metric, range: range)
-            } catch {
-                sampleError = error.localizedDescription
-            }
-            isLoadingSamples = false
-        }
-    }
-
-    private func refreshRawSamplesIfNeeded() {
-        guard showRawSamples else { return }
-        loadRawSamples()
     }
 }
 

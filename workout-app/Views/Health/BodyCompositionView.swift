@@ -3,12 +3,10 @@ import SwiftUI
 
 struct BodyCompositionView: View {
     @EnvironmentObject private var healthManager: HealthKitManager
-    @EnvironmentObject private var dataManager: WorkoutDataManager
     @EnvironmentObject private var dateRangeContext: HealthDateRangeContext
 
     @StateObject private var model = BodyCompositionViewModel()
 
-    @State private var showingHealthWizard = false
     @State private var metricKind: BodyCompositionMetricKind = .weight
     @State private var selectedTab: Tab = .overview
     @State private var reportGranularity: ReportGranularity = .weekly
@@ -79,9 +77,6 @@ struct BodyCompositionView: View {
                 HealthDateRangeToolbarMenu(earliestDate: earliestDateForAll)
             }
         }
-        .sheet(isPresented: $showingHealthWizard) {
-            HealthSyncWizard(isPresented: $showingHealthWizard, workouts: dataManager.workouts)
-        }
         .onAppear {
             healthManager.refreshAuthorizationStatus()
             refreshData()
@@ -111,50 +106,22 @@ struct BodyCompositionView: View {
                 refreshData()
             }
         }
+        .onReceive(healthManager.$dailyHealthStore) { _ in
+            refreshData()
+        }
     }
 
     private var headerSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            HStack(alignment: .center) {
-                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                    Text("Body Composition")
-                        .font(Theme.Typography.screenTitle)
-                        .foregroundStyle(Theme.Colors.textPrimary)
-                        .tracking(1.5)
+            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                Text("Body Composition")
+                    .font(Theme.Typography.screenTitle)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                    .tracking(1.5)
 
-                    Text("\(rangeLabel) • \(model.sampleCountInDisplayRange) \(measurementNoun)")
-                        .font(Theme.Typography.body)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                }
-
-                Spacer()
-
-                Button {
-                    refreshData(force: true)
-                } label: {
-                    Group {
-                        if model.isLoading {
-                            ProgressView()
-                                .tint(Theme.Colors.accent)
-                        } else {
-                            Image(systemName: "arrow.clockwise")
-                                .font(Theme.Typography.bodyStrong)
-                                .foregroundStyle(Theme.Colors.textPrimary)
-                        }
-                    }
-                    .frame(width: 44, height: 44)
-                    .background(
-                        Circle()
-                            .fill(Theme.Colors.surfaceRaised)
-                    )
-                    .overlay(
-                        Circle()
-                            .strokeBorder(Theme.Colors.border.opacity(0.5), lineWidth: 1)
-                    )
-                }
-                .buttonStyle(.plain)
-                .disabled(healthManager.authorizationStatus != .authorized || model.isLoading)
-                .accessibilityLabel("Refresh body composition data")
+                Text("\(rangeLabel) • \(model.sampleCountInDisplayRange) \(measurementNoun)")
+                    .font(Theme.Typography.body)
+                    .foregroundStyle(Theme.Colors.textSecondary)
             }
 
             if let lastUpdated = model.lastUpdatedAt {
@@ -612,22 +579,9 @@ struct BodyCompositionView: View {
                 .font(Theme.Typography.title3)
                 .foregroundStyle(Theme.Colors.textPrimary)
 
-            Text("Allow access to view your weigh-ins, trends, and forecasts.")
+            Text("Use Settings to connect and sync Apple Health before viewing your weigh-ins, trends, and forecasts here.")
                 .font(Theme.Typography.body)
                 .foregroundStyle(Theme.Colors.textSecondary)
-
-            Button {
-                showingHealthWizard = true
-            } label: {
-                Text("Connect Health")
-                    .font(Theme.Typography.headline)
-                    .foregroundStyle(Theme.Colors.textPrimary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, Theme.Spacing.sm)
-                    .background(Theme.Colors.elevated)
-                    .cornerRadius(Theme.CornerRadius.large)
-            }
-            .buttonStyle(.plain)
         }
         .padding(Theme.Spacing.xl)
         .softCard(elevation: 1)
@@ -666,22 +620,9 @@ struct BodyCompositionView: View {
                 .font(Theme.Typography.title3)
                 .foregroundStyle(Theme.Colors.textPrimary)
 
-            Text("Try a longer time range or sync Apple Health.")
+            Text("Try a longer time range or use Settings to sync more Apple Health data.")
                 .font(Theme.Typography.body)
                 .foregroundStyle(Theme.Colors.textSecondary)
-
-            Button {
-                refreshData(force: true)
-            } label: {
-                Text("Refresh")
-                    .font(Theme.Typography.headline)
-                    .foregroundStyle(Theme.Colors.textPrimary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, Theme.Spacing.sm)
-                    .background(Theme.Colors.elevated)
-                    .cornerRadius(Theme.CornerRadius.large)
-            }
-            .buttonStyle(.plain)
         }
         .padding(Theme.Spacing.xl)
         .softCard(elevation: 1)
@@ -689,13 +630,13 @@ struct BodyCompositionView: View {
 
     // MARK: - Helpers
 
-    private func refreshData(force: Bool = false) {
+    private func refreshData() {
         guard healthManager.authorizationStatus == .authorized else {
             return
         }
 
         model.load(
-            healthManager: healthManager,
+            dailyEntries: Array(healthManager.dailyHealthStore.values),
             metricKind: metricKind,
             displayRange: displayRange,
             reportGranularity: reportGranularity

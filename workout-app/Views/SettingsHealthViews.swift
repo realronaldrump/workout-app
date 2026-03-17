@@ -1,330 +1,6 @@
 import SwiftUI
 
-struct HealthHistorySyncView: View {
-    @EnvironmentObject private var healthManager: HealthKitManager
-
-    let workouts: [Workout]
-
-    @State private var showingCustomRange = false
-    @State private var customRange: DateInterval = {
-        let end = Date()
-        let start = Calendar.current.date(byAdding: .year, value: -2, to: end) ?? end
-        return DateInterval(start: start, end: end)
-    }()
-    @State private var isAuthorizing = false
-    @State private var errorMessage: String?
-    @State private var syncNote: String?
-
-    private static let allHistoryStart: Date = {
-        Calendar.current.date(from: DateComponents(year: 1970, month: 1, day: 1)) ?? Date(timeIntervalSince1970: 0)
-    }()
-
-    private var earliestWorkoutDate: Date? {
-        workouts.map(\.date).min()
-    }
-
-    private var earliestCachedDate: Date? {
-        healthManager.dailyHealthStore.keys.min()
-    }
-
-    private var syncEndDate: Date {
-        let now = Date()
-        return Calendar.current.date(bySettingHour: 23, minute: 59, second: 59, of: now) ?? now
-    }
-
-    private var statusLine: String {
-        if healthManager.isDailySyncing {
-            return "Syncing \(Int(healthManager.dailySyncProgress * 100))%"
-        }
-
-        if let syncNote {
-            return syncNote
-        }
-
-        if let lastDailySyncDate = healthManager.lastDailySyncDate {
-            return "Last synced \(SettingsDateFormatters.mediumDateTime.string(from: lastDailySyncDate))"
-        }
-
-        return "No manual history backfill yet"
-    }
-
-    private var coverageLine: String {
-        if let earliestCachedDate {
-            return "Daily cache starts \(SettingsDateFormatters.mediumDate.string(from: earliestCachedDate))"
-        }
-
-        return "Daily history cache is empty"
-    }
-
-    var body: some View {
-        ZStack {
-            AdaptiveBackground()
-
-            ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
-                    VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                        Text("Health History Sync")
-                            .font(Theme.Typography.screenTitle)
-                            .foregroundStyle(Theme.Colors.textPrimary)
-
-                        Text("Backfill older daily Apple Health history without rerunning onboarding. Workout-linked Health sync remains separate.")
-                            .font(Theme.Typography.body)
-                            .foregroundStyle(Theme.Colors.textSecondary)
-                    }
-
-                    VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-                        Text("STATUS")
-                            .font(Theme.Typography.metricLabel)
-                            .foregroundStyle(Theme.Colors.textTertiary)
-                            .tracking(1.2)
-
-                        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                            Text(statusLine)
-                                .font(Theme.Typography.bodyBold)
-                                .foregroundStyle(Theme.Colors.textPrimary)
-
-                            Text(coverageLine)
-                                .font(Theme.Typography.caption)
-                                .foregroundStyle(Theme.Colors.textSecondary)
-
-                            if let earliestWorkoutDate {
-                                Text("First workout in app: \(SettingsDateFormatters.mediumDate.string(from: earliestWorkoutDate))")
-                                    .font(Theme.Typography.caption)
-                                    .foregroundStyle(Theme.Colors.textSecondary)
-                            }
-
-                            if healthManager.isDailySyncing {
-                                ProgressView(value: healthManager.dailySyncProgress)
-                                    .tint(Theme.Colors.error)
-                            }
-                        }
-                        .padding()
-                        .softCard(elevation: 1)
-                    }
-
-                    if healthManager.authorizationStatus != .authorized {
-                        unauthorizedCard
-                    } else {
-                        presetSection
-
-                        if let errorMessage {
-                            Text(errorMessage)
-                                .font(Theme.Typography.caption)
-                                .foregroundStyle(Theme.Colors.error)
-                        }
-                    }
-                }
-                .padding(Theme.Spacing.lg)
-            }
-        }
-        .navigationTitle("Health History")
-        .navigationBarTitleDisplayMode(.inline)
-        .sheet(isPresented: $showingCustomRange) {
-            HealthCustomRangeSheet(range: $customRange) {
-                Task {
-                    await syncDailyHistory(range: boundedRange(customRange), label: "Custom range")
-                }
-            }
-        }
-        .onAppear {
-            healthManager.refreshAuthorizationStatus()
-        }
-    }
-
-    private var unauthorizedCard: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Apple Health access is required before this screen can backfill older history.")
-                .font(Theme.Typography.body)
-                .foregroundStyle(Theme.Colors.textSecondary)
-
-            Button {
-                Task {
-                    await requestAuthorization()
-                }
-            } label: {
-                HStack {
-                    if isAuthorizing {
-                        ProgressView()
-                            .tint(.white)
-                    }
-
-                    Text("Connect Apple Health")
-                        .font(Theme.Typography.headline)
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                }
-                .padding(.vertical, Theme.Spacing.md)
-                .brutalistButtonChrome(
-                    fill: Theme.Colors.accent,
-                    cornerRadius: Theme.CornerRadius.large
-                )
-            }
-            .buttonStyle(.plain)
-            .disabled(isAuthorizing)
-        }
-        .padding()
-        .softCard(elevation: 1)
-    }
-
-    private var presetSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("BACKFILL RANGE")
-                .font(Theme.Typography.metricLabel)
-                .foregroundStyle(Theme.Colors.textTertiary)
-                .tracking(1.2)
-
-            VStack(spacing: Theme.Spacing.sm) {
-                syncOptionRow(
-                    title: "Last 2 Years",
-                    subtitle: "Good catch-up if onboarding only grabbed 12 months"
-                ) {
-                    await syncDailyHistory(
-                        range: relativeRange(yearsBack: 2),
-                        label: "Last 2 years"
-                    )
-                }
-
-                if let earliestWorkoutDate {
-                    syncOptionRow(
-                        title: "Since First Workout",
-                        subtitle: "Backfill from your earliest logged workout on \(SettingsDateFormatters.mediumDate.string(from: earliestWorkoutDate))"
-                    ) {
-                        await syncDailyHistory(
-                            range: DateInterval(
-                                start: Calendar.current.startOfDay(for: earliestWorkoutDate),
-                                end: syncEndDate
-                            ),
-                            label: "Since first workout"
-                        )
-                    }
-                }
-
-                syncOptionRow(
-                    title: "All Available Health Data",
-                    subtitle: "Large sync. Reads daily Health history from the earliest supported date through today."
-                ) {
-                    await syncDailyHistory(
-                        range: DateInterval(start: Self.allHistoryStart, end: syncEndDate),
-                        label: "All available history"
-                    )
-                }
-
-                Button {
-                    errorMessage = nil
-                    syncNote = nil
-                    showingCustomRange = true
-                } label: {
-                    HStack(spacing: Theme.Spacing.sm) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Custom Range")
-                                .font(Theme.Typography.body)
-                                .foregroundStyle(Theme.Colors.textPrimary)
-
-                            Text("Pick exact start and end dates for a targeted backfill")
-                                .font(Theme.Typography.caption)
-                                .foregroundStyle(Theme.Colors.textSecondary)
-                        }
-
-                        Spacer()
-
-                        Image(systemName: "calendar")
-                            .font(Theme.Typography.captionBold)
-                            .foregroundStyle(Theme.Colors.textTertiary)
-                    }
-                    .padding()
-                    .softCard(elevation: 1)
-                }
-                .buttonStyle(.plain)
-                .disabled(healthManager.isDailySyncing)
-                .opacity(healthManager.isDailySyncing ? 0.7 : 1)
-            }
-        }
-    }
-
-    private func syncOptionRow(
-        title: String,
-        subtitle: String,
-        action: @escaping () async -> Void
-    ) -> some View {
-        Button {
-            Task {
-                await action()
-            }
-        } label: {
-            HStack(spacing: Theme.Spacing.sm) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title)
-                        .font(Theme.Typography.body)
-                        .foregroundStyle(Theme.Colors.textPrimary)
-
-                    Text(subtitle)
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                        .lineLimit(3)
-                }
-
-                Spacer()
-
-                if healthManager.isDailySyncing {
-                    ProgressView()
-                        .tint(Theme.Colors.error)
-                } else {
-                    Image(systemName: "arrow.clockwise")
-                        .font(Theme.Typography.captionBold)
-                        .foregroundStyle(Theme.Colors.textTertiary)
-                }
-            }
-            .padding()
-            .softCard(elevation: 1)
-        }
-        .buttonStyle(.plain)
-        .disabled(healthManager.isDailySyncing)
-        .opacity(healthManager.isDailySyncing ? 0.7 : 1)
-    }
-
-    private func requestAuthorization() async {
-        guard !isAuthorizing else { return }
-        isAuthorizing = true
-        defer { isAuthorizing = false }
-
-        do {
-            try await healthManager.requestAuthorization()
-            errorMessage = nil
-            syncNote = "Apple Health connected"
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-    }
-
-    private func syncDailyHistory(range: DateInterval, label: String) async {
-        guard healthManager.authorizationStatus == .authorized else {
-            errorMessage = "Apple Health access is required before syncing older history."
-            return
-        }
-        guard !healthManager.isDailySyncing else { return }
-
-        errorMessage = nil
-        syncNote = "\(label) sync started"
-
-        do {
-            try await healthManager.syncDailyHealthData(range: range)
-            syncNote = "\(label) synced"
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-    }
-
-    private func relativeRange(yearsBack: Int) -> DateInterval {
-        let start = Calendar.current.date(byAdding: .year, value: -yearsBack, to: Date()) ?? Date()
-        return DateInterval(start: Calendar.current.startOfDay(for: start), end: syncEndDate)
-    }
-
-    private func boundedRange(_ range: DateInterval) -> DateInterval {
-        let start = Calendar.current.startOfDay(for: range.start)
-        let end = min(range.end, syncEndDate)
-        return DateInterval(start: start, end: end)
-    }
-}
+// MARK: - Unified Health Data Settings
 
 private enum HealthCacheAction: String, Identifiable {
     case clearWorkoutRange
@@ -333,28 +9,50 @@ private enum HealthCacheAction: String, Identifiable {
     case clearWorkoutAll
     case clearDailyAll
     case clearAndResyncRange
+    case clearAndResyncAll
 
     var id: String { rawValue }
 }
 
-struct HealthCacheManagementView: View {
+struct HealthDataSettingsView: View {
     @EnvironmentObject private var healthManager: HealthKitManager
-
     let workouts: [Workout]
 
-    @State private var selectedRange: DateInterval = {
+    // Sync state
+    @State private var showingSyncCustomRange = false
+    @State private var syncCustomRange: DateInterval = {
+        let end = Date()
+        let start = Calendar.current.date(byAdding: .year, value: -2, to: end) ?? end
+        return DateInterval(start: start, end: end)
+    }()
+    @State private var isAuthorizing = false
+    @State private var syncNote: String?
+
+    // Cache state
+    @State private var cacheRange: DateInterval = {
         let now = Date()
         let start = Calendar.current.date(byAdding: .year, value: -1, to: now) ?? now
         return DateInterval(start: start, end: now)
     }()
-    @State private var showingCustomRange = false
+    @State private var showingCacheCustomRange = false
     @State private var pendingAction: HealthCacheAction?
     @State private var isWorking = false
     @State private var statusMessage: String?
     @State private var errorMessage: String?
+    @State private var showAdvancedCache = false
+
+    // MARK: - Computed Properties
+
+    private static let allHistoryStart: Date = {
+        Calendar.current.date(from: DateComponents(year: 1970, month: 1, day: 1)) ?? Date(timeIntervalSince1970: 0)
+    }()
 
     private var isBusy: Bool {
         isWorking || healthManager.isSyncing || healthManager.isDailySyncing
+    }
+
+    private var earliestWorkoutDate: Date? {
+        workouts.map(\.date).min()
     }
 
     private var cachedWorkoutDates: [Date] {
@@ -370,12 +68,12 @@ struct HealthCacheManagementView: View {
         return Calendar.current.date(bySettingHour: 23, minute: 59, second: 59, of: now) ?? now
     }
 
-    private var boundedRange: DateInterval {
+    private var boundedCacheRange: DateInterval {
         let calendar = Calendar.current
-        let requestedStart = calendar.startOfDay(for: selectedRange.start)
+        let requestedStart = calendar.startOfDay(for: cacheRange.start)
         let earliest = earliestCachedDate.map { calendar.startOfDay(for: $0) } ?? requestedStart
         let start = max(requestedStart, earliest)
-        let end = min(selectedRange.end, syncEndDate)
+        let end = min(cacheRange.end, syncEndDate)
         if start >= end {
             let fallbackEnd = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: start) ?? start
             return DateInterval(start: start, end: fallbackEnd)
@@ -383,37 +81,19 @@ struct HealthCacheManagementView: View {
         return DateInterval(start: start, end: end)
     }
 
+    private var workoutsInRange: [Workout] {
+        workouts.filter { boundedCacheRange.contains($0.date) }
+    }
+
     private var cachedWorkoutEntriesInRange: Int {
-        healthManager.healthDataStore.values.filter { boundedRange.contains($0.workoutDate) }.count
+        healthManager.healthDataStore.values.filter { boundedCacheRange.contains($0.workoutDate) }.count
     }
 
     private var cachedDailyEntriesInRange: Int {
-        healthManager.dailyHealthStore.values.filter { boundedRange.contains($0.dayStart) }.count
+        healthManager.dailyHealthStore.values.filter { boundedCacheRange.contains($0.dayStart) }.count
     }
 
-    private var coveredDaysInRange: Int {
-        healthManager.dailyHealthCoverage.filter { boundedRange.contains($0) }.count
-    }
-
-    private var workoutsInRange: [Workout] {
-        workouts.filter { boundedRange.contains($0.date) }
-    }
-
-    private var workoutCacheSubtitle: String {
-        let count = healthManager.healthDataStore.count
-        if count == 0 {
-            return "No workout-linked Health cache"
-        }
-        return "\(count) workout health record\(count == 1 ? "" : "s") cached"
-    }
-
-    private var dailyCacheSubtitle: String {
-        let count = healthManager.dailyHealthStore.count
-        if count == 0 {
-            return "No daily Health history cache"
-        }
-        return "\(count) day\(count == 1 ? "" : "s") with Health data cached"
-    }
+    // MARK: - Body
 
     var body: some View {
         ZStack {
@@ -421,44 +101,29 @@ struct HealthCacheManagementView: View {
 
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
-                    VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                        Text("Health Cache")
-                            .font(Theme.Typography.screenTitle)
-                            .foregroundStyle(Theme.Colors.textPrimary)
-
-                        Text("Delete only this app's cached Apple Health data, then re-sync a smaller window if needed. Your workouts and Apple Health itself stay untouched.")
-                            .font(Theme.Typography.body)
-                            .foregroundStyle(Theme.Colors.textSecondary)
-                    }
-
-                    statusSection
-                    rangeSection
-                    actionSection
-
-                    if let statusMessage {
-                        Text(statusMessage)
-                            .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.Colors.success)
-                            .padding()
-                            .softCard(elevation: 1)
-                    }
-
-                    if let errorMessage {
-                        Text(errorMessage)
-                            .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.Colors.error)
-                            .padding()
-                            .softCard(elevation: 1)
-                    }
+                    overviewSection
+                    syncSection
+                    manageSection
+                    feedbackSection
                 }
                 .padding(Theme.Spacing.lg)
             }
         }
-        .navigationTitle("Health Cache")
+        .navigationTitle("Health Data")
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(isPresented: $showingCustomRange) {
+        .sheet(isPresented: $showingSyncCustomRange) {
+            HealthCustomRangeSheet(range: $syncCustomRange) {
+                Task {
+                    await syncDailyHistory(
+                        range: boundedSyncRange(syncCustomRange),
+                        label: "Custom range"
+                    )
+                }
+            }
+        }
+        .sheet(isPresented: $showingCacheCustomRange) {
             HealthCustomRangeSheet(
-                range: $selectedRange,
+                range: $cacheRange,
                 earliestSelectableDate: earliestCachedDate
             ) {
                 errorMessage = nil
@@ -469,332 +134,618 @@ struct HealthCacheManagementView: View {
             confirmationTitle,
             isPresented: Binding(
                 get: { pendingAction != nil },
-                set: { newValue in
-                    if !newValue {
-                        pendingAction = nil
-                    }
-                }
+                set: { if !$0 { pendingAction = nil } }
             ),
             titleVisibility: .visible
         ) {
             if let pendingAction {
-                Button(confirmationButtonTitle(for: pendingAction), role: .destructive) {
-                    Task {
-                        await performAction(pendingAction)
-                    }
+                Button(confirmationButtonLabel(for: pendingAction), role: .destructive) {
+                    Task { await performAction(pendingAction) }
                 }
             }
-
-            Button("Cancel", role: .cancel) {
-                pendingAction = nil
-            }
+            Button("Cancel", role: .cancel) { pendingAction = nil }
         } message: {
             Text(confirmationMessage)
         }
+        .onAppear {
+            healthManager.refreshAuthorizationStatus()
+        }
     }
 
-    private var statusSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("CACHE STATUS")
-                .font(Theme.Typography.metricLabel)
-                .foregroundStyle(Theme.Colors.textTertiary)
-                .tracking(1.2)
+    // MARK: - Overview
 
-            LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: 140), spacing: Theme.Spacing.sm)],
-                spacing: Theme.Spacing.sm
-            ) {
-                cacheMetricCard(
-                    title: "Workout Cache",
+    private var overviewSection: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            HStack(spacing: Theme.Spacing.sm) {
+                statusIcon
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(overviewHeadline)
+                        .font(Theme.Typography.bodyBold)
+                        .foregroundStyle(Theme.Colors.textPrimary)
+
+                    Text(overviewDetail)
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                }
+                Spacer()
+            }
+
+            if isBusy {
+                ProgressView(
+                    value: healthManager.isDailySyncing
+                        ? healthManager.dailySyncProgress
+                        : healthManager.syncProgress
+                )
+                .tint(Theme.Colors.accent)
+            }
+
+            HStack(spacing: Theme.Spacing.sm) {
+                overviewPill(
+                    label: "Workouts",
                     value: "\(healthManager.healthDataStore.count)",
-                    detail: workoutCacheSubtitle,
                     tint: Theme.Colors.error
                 )
-
-                cacheMetricCard(
-                    title: "Daily Entries",
+                overviewPill(
+                    label: "Daily",
                     value: "\(healthManager.dailyHealthStore.count)",
-                    detail: dailyCacheSubtitle,
                     tint: Theme.Colors.accent
                 )
-
-                cacheMetricCard(
-                    title: "Covered Days",
+                overviewPill(
+                    label: "Days",
                     value: "\(healthManager.dailyHealthCoverage.count)",
-                    detail: healthManager.dailyHealthCoverage.isEmpty ? "Missing days will be re-fetched" : "Scanned daily history days",
                     tint: Theme.Colors.accentSecondary
                 )
             }
+        }
+        .padding(Theme.Spacing.lg)
+        .softCard(elevation: 1)
+    }
 
-            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                if let earliestCachedDate {
-                    Text("Earliest cached Health date: \(SettingsDateFormatters.mediumDate.string(from: earliestCachedDate))")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                } else {
-                    Text("No Health cache on device right now.")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                }
-
-                if isBusy {
-                    ProgressView(value: healthManager.isDailySyncing ? healthManager.dailySyncProgress : healthManager.syncProgress)
-                        .tint(Theme.Colors.error)
-                }
-            }
-            .padding()
-            .softCard(elevation: 1)
+    @ViewBuilder
+    private var statusIcon: some View {
+        if isBusy {
+            ProgressView()
+                .frame(width: 36, height: 36)
+        } else {
+            Image(systemName: healthManager.authorizationStatus == .authorized ? "heart.fill" : "heart.slash")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 36, height: 36)
+                .background(healthManager.authorizationStatus == .authorized ? Theme.Colors.success : Theme.Colors.textTertiary)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
         }
     }
 
-    private var rangeSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("TARGET RANGE")
-                .font(Theme.Typography.metricLabel)
+    private var overviewHeadline: String {
+        if healthManager.isDailySyncing {
+            return "Syncing… \(Int(healthManager.dailySyncProgress * 100))%"
+        }
+        if healthManager.isSyncing {
+            return "Syncing workouts… \(Int(healthManager.syncProgress * 100))%"
+        }
+        if let syncNote { return syncNote }
+        if healthManager.authorizationStatus != .authorized {
+            return "Apple Health not connected"
+        }
+        if let date = healthManager.lastDailySyncDate {
+            return "Last synced \(SettingsDateFormatters.mediumDateTime.string(from: date))"
+        }
+        return "Connected — no history synced yet"
+    }
+
+    private var overviewDetail: String {
+        if let earliest = earliestCachedDate {
+            return "Health data cached from \(SettingsDateFormatters.mediumDate.string(from: earliest))"
+        }
+        return "No cached health data on this device"
+    }
+
+    private func overviewPill(label: String, value: String, tint: Color) -> some View {
+        VStack(spacing: 2) {
+            Text(value)
+                .font(Theme.Typography.bodyBold)
+                .foregroundStyle(tint)
+            Text(label)
+                .font(Theme.Typography.caption)
                 .foregroundStyle(Theme.Colors.textTertiary)
-                .tracking(1.2)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, Theme.Spacing.sm)
+        .background(tint.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.medium))
+    }
 
-            LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: 140), spacing: Theme.Spacing.sm)],
-                spacing: Theme.Spacing.sm
-            ) {
-                rangeButton(title: "Last 90 Days") {
-                    selectedRange = relativeRange(daysBack: 90)
-                }
+    // MARK: - Sync Section
 
-                rangeButton(title: "Last Year") {
-                    selectedRange = relativeRange(yearsBack: 1)
-                }
+    private var syncSection: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            sectionHeader("Sync History", icon: "clock.arrow.trianglehead.counterclockwise.rotate.90")
 
-                rangeButton(title: "All Cached") {
-                    selectedRange = allCachedRange()
-                }
-
-                rangeButton(title: "Custom") {
-                    showingCustomRange = true
-                }
-            }
-
-            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                Text(rangeSummaryLine)
-                    .font(Theme.Typography.bodyBold)
-                    .foregroundStyle(Theme.Colors.textPrimary)
-
-                Text("This range currently includes \(cachedWorkoutEntriesInRange) workout health record\(cachedWorkoutEntriesInRange == 1 ? "" : "s"), \(cachedDailyEntriesInRange) daily entry\(cachedDailyEntriesInRange == 1 ? "" : "ies"), and \(coveredDaysInRange) scanned day\(coveredDaysInRange == 1 ? "" : "s").")
+            if healthManager.authorizationStatus != .authorized {
+                unauthorizedCard
+            } else {
+                Text("Download older health data from Apple Health.")
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Colors.textSecondary)
 
-                if !workoutsInRange.isEmpty {
-                    Text("\(workoutsInRange.count) workout\(workoutsInRange.count == 1 ? "" : "s") in the app fall inside this range and can be re-synced.")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                }
-            }
-            .padding()
-            .softCard(elevation: 1)
-        }
-    }
+                FlowLayout(spacing: Theme.Spacing.sm) {
+                    syncPill("Last 2 Years") {
+                        await syncDailyHistory(range: relativeSyncRange(yearsBack: 2), label: "Last 2 years")
+                    }
 
-    private var actionSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("ACTIONS")
-                .font(Theme.Typography.metricLabel)
-                .foregroundStyle(Theme.Colors.textTertiary)
-                .tracking(1.2)
+                    if let date = earliestWorkoutDate {
+                        syncPill("Since First Workout") {
+                            await syncDailyHistory(
+                                range: DateInterval(start: Calendar.current.startOfDay(for: date), end: syncEndDate),
+                                label: "Since first workout"
+                            )
+                        }
+                    }
 
-            VStack(spacing: Theme.Spacing.sm) {
-                actionRow(
-                    title: "Clear Workout Cache In Range",
-                    subtitle: "Deletes workout-linked Health payloads only for the selected range.",
-                    tint: Theme.Colors.error,
-                    systemImage: "heart.slash"
-                ) {
-                    pendingAction = .clearWorkoutRange
-                }
+                    syncPill("All Available") {
+                        await syncDailyHistory(
+                            range: DateInterval(start: Self.allHistoryStart, end: syncEndDate),
+                            label: "All available history"
+                        )
+                    }
 
-                actionRow(
-                    title: "Clear Daily History In Range",
-                    subtitle: "Deletes cached daily Health entries and scanned coverage days for the selected range.",
-                    tint: Theme.Colors.accent,
-                    systemImage: "calendar.badge.minus"
-                ) {
-                    pendingAction = .clearDailyRange
-                }
-
-                actionRow(
-                    title: "Clear Both Caches In Range",
-                    subtitle: "Best when you want to shrink the cache before a more targeted sync.",
-                    tint: Theme.Colors.warning,
-                    systemImage: "trash"
-                ) {
-                    pendingAction = .clearBothRange
-                }
-
-                actionRow(
-                    title: "Clear Then Re-Sync Range",
-                    subtitle: healthManager.authorizationStatus == .authorized
-                        ? "Rebuilds workout-linked Health data and daily history only for the selected range."
-                        : "Clears now. Re-sync requires Apple Health access first.",
-                    tint: Theme.Colors.success,
-                    systemImage: "arrow.clockwise"
-                ) {
-                    pendingAction = .clearAndResyncRange
-                }
-
-                actionRow(
-                    title: "Clear All Workout Cache",
-                    subtitle: "Keeps workouts, tags, and logs. Deletes all workout-linked Health sync data.",
-                    tint: Theme.Colors.error,
-                    systemImage: "figure.run.circle"
-                ) {
-                    pendingAction = .clearWorkoutAll
-                }
-
-                actionRow(
-                    title: "Clear All Daily History",
-                    subtitle: "Deletes all cached daily Health history and coverage tracking.",
-                    tint: Theme.Colors.accentSecondary,
-                    systemImage: "calendar.circle"
-                ) {
-                    pendingAction = .clearDailyAll
+                    Button {
+                        errorMessage = nil
+                        syncNote = nil
+                        showingSyncCustomRange = true
+                    } label: {
+                        Label("Custom", systemImage: "calendar")
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Colors.accent)
+                            .padding(.horizontal, Theme.Spacing.md)
+                            .padding(.vertical, Theme.Spacing.sm)
+                            .background(Theme.Colors.accent.opacity(0.08))
+                            .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isBusy)
+                    .opacity(isBusy ? 0.5 : 1)
                 }
             }
         }
     }
 
-    private var confirmationTitle: String {
-        guard let pendingAction else { return "Confirm Action" }
-        return confirmationButtonTitle(for: pendingAction)
-    }
-
-    private var confirmationMessage: String {
-        guard let pendingAction else { return "" }
-
-        switch pendingAction {
-        case .clearWorkoutRange:
-            return "Remove workout-linked Health cache between \(formattedDate(boundedRange.start)) and \(formattedDate(boundedRange.end))."
-        case .clearDailyRange:
-            return "Remove daily Health entries and scanned coverage for the selected range so that range can be re-fetched later."
-        case .clearBothRange:
-            return "Remove both workout-linked and daily Health cache for the selected range. Workouts and Apple Health data will remain in place."
-        case .clearWorkoutAll:
-            return "Delete every cached workout-linked Health record from this app."
-        case .clearDailyAll:
-            return "Delete every cached daily Health entry and every scanned daily-history marker from this app."
-        case .clearAndResyncRange:
-            return "Delete both caches for the selected range, then sync that range again. This can take a while for ranges with many workouts."
-        }
-    }
-
-    private func cacheMetricCard(
-        title: String,
-        value: String,
-        detail: String,
-        tint: Color
-    ) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            Text(title)
-                .font(Theme.Typography.metricLabel)
-                .foregroundStyle(Theme.Colors.textTertiary)
-                .tracking(1.0)
-
-            Text(value)
-                .font(Theme.Typography.metric)
-                .foregroundStyle(tint)
-
-            Text(detail)
+    private var unauthorizedCard: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            Text("Connect Apple Health to sync your history.")
                 .font(Theme.Typography.caption)
                 .foregroundStyle(Theme.Colors.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
+
+            Button {
+                Task { await requestAuthorization() }
+            } label: {
+                HStack {
+                    if isAuthorizing { ProgressView().tint(.white) }
+                    Text("Connect Apple Health")
+                        .font(Theme.Typography.headline)
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                }
+                .padding(.vertical, Theme.Spacing.md)
+                .brutalistButtonChrome(fill: Theme.Colors.accent, cornerRadius: Theme.CornerRadius.large)
+            }
+            .buttonStyle(.plain)
+            .disabled(isAuthorizing)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
         .softCard(elevation: 1)
     }
 
-    private func rangeButton(title: String, action: @escaping () -> Void) -> some View {
+    private func syncPill(_ title: String, action: @escaping () async -> Void) -> some View {
+        Button {
+            Task { await action() }
+        } label: {
+            HStack(spacing: 4) {
+                Text(title).font(Theme.Typography.caption)
+                if isBusy {
+                    ProgressView().controlSize(.mini)
+                } else {
+                    Image(systemName: "arrow.down.circle")
+                        .font(.system(size: 11, weight: .medium))
+                }
+            }
+            .foregroundStyle(Theme.Colors.textPrimary)
+            .padding(.horizontal, Theme.Spacing.md)
+            .padding(.vertical, Theme.Spacing.sm)
+            .background(Theme.Colors.surface)
+            .clipShape(Capsule())
+            .shadow(color: .black.opacity(0.04), radius: 2, y: 1)
+        }
+        .buttonStyle(.plain)
+        .disabled(isBusy)
+        .opacity(isBusy ? 0.5 : 1)
+    }
+
+    // MARK: - Manage Section
+
+    private var manageSection: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            sectionHeader("Manage Data", icon: "externaldrive.badge.minus")
+
+            Text("Your workouts and Apple Health stay untouched — this only affects cached data in the app.")
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.Colors.textSecondary)
+
+            // Primary actions
+            primaryActionButton(
+                title: "Refresh All Health Data",
+                subtitle: healthManager.authorizationStatus == .authorized
+                    ? "Clear and re-download everything"
+                    : "Connect Apple Health first to re-download",
+                icon: "arrow.clockwise",
+                tint: Theme.Colors.accent
+            ) {
+                pendingAction = .clearAndResyncAll
+            }
+
+            primaryActionButton(
+                title: "Clear All Cached Data",
+                subtitle: "Remove all health data stored in the app",
+                icon: "trash",
+                tint: Theme.Colors.error
+            ) {
+                pendingAction = .clearBothRange
+                cacheRange = allCachedRange()
+            }
+
+            // Advanced toggle
+            advancedSection
+        }
+    }
+
+    private var advancedSection: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    showAdvancedCache.toggle()
+                }
+            } label: {
+                HStack(spacing: Theme.Spacing.sm) {
+                    Text("Advanced Options")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                    Spacer()
+                    Image(systemName: showAdvancedCache ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(Theme.Colors.textTertiary)
+                }
+                .padding(.vertical, Theme.Spacing.xs)
+            }
+            .buttonStyle(.plain)
+
+            if showAdvancedCache {
+                VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+                    // Range picker
+                    Text("Select a date range, then choose an action.")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+
+                    FlowLayout(spacing: Theme.Spacing.sm) {
+                        rangePill("Last 90 Days") { cacheRange = relativeCacheRange(daysBack: 90) }
+                        rangePill("Last Year") { cacheRange = relativeCacheRange(yearsBack: 1) }
+                        rangePill("All Cached") { cacheRange = allCachedRange() }
+
+                        Button {
+                            showingCacheCustomRange = true
+                        } label: {
+                            Label("Custom", systemImage: "calendar")
+                                .font(Theme.Typography.caption)
+                                .foregroundStyle(Theme.Colors.accent)
+                                .padding(.horizontal, Theme.Spacing.md)
+                                .padding(.vertical, Theme.Spacing.sm)
+                                .background(Theme.Colors.accent.opacity(0.08))
+                                .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(isBusy)
+                        .opacity(isBusy ? 0.5 : 1)
+                    }
+
+                    // Range summary
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("\(formattedDate(boundedCacheRange.start)) → \(formattedDate(boundedCacheRange.end))")
+                            .font(Theme.Typography.bodyBold)
+                            .foregroundStyle(Theme.Colors.textPrimary)
+
+                        Text("\(cachedWorkoutEntriesInRange) workout record\(cachedWorkoutEntriesInRange == 1 ? "" : "s"), \(cachedDailyEntriesInRange) daily entr\(cachedDailyEntriesInRange == 1 ? "y" : "ies") in range")
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Colors.textSecondary)
+                    }
+                    .padding(Theme.Spacing.md)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .softCard(elevation: 1)
+
+                    // Granular actions
+                    VStack(spacing: Theme.Spacing.sm) {
+                        advancedActionRow(
+                            title: "Clear workout data in range",
+                            icon: "heart.slash",
+                            tint: Theme.Colors.error
+                        ) { pendingAction = .clearWorkoutRange }
+
+                        advancedActionRow(
+                            title: "Clear daily data in range",
+                            icon: "calendar.badge.minus",
+                            tint: Theme.Colors.accent
+                        ) { pendingAction = .clearDailyRange }
+
+                        advancedActionRow(
+                            title: "Clear & re-sync range",
+                            icon: "arrow.clockwise",
+                            tint: Theme.Colors.success
+                        ) { pendingAction = .clearAndResyncRange }
+
+                        advancedActionRow(
+                            title: "Clear all workout data",
+                            icon: "figure.run.circle",
+                            tint: Theme.Colors.error
+                        ) { pendingAction = .clearWorkoutAll }
+
+                        advancedActionRow(
+                            title: "Clear all daily history",
+                            icon: "calendar.circle",
+                            tint: Theme.Colors.accentSecondary
+                        ) { pendingAction = .clearDailyAll }
+                    }
+                }
+                .padding(Theme.Spacing.md)
+                .softCard(elevation: 1)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+    }
+
+    // MARK: - Feedback
+
+    @ViewBuilder
+    private var feedbackSection: some View {
+        if let statusMessage {
+            HStack(spacing: Theme.Spacing.sm) {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(Theme.Colors.success)
+                Text(statusMessage)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+            }
+            .padding(Theme.Spacing.md)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .softCard(elevation: 1)
+        }
+
+        if let errorMessage {
+            HStack(spacing: Theme.Spacing.sm) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(Theme.Colors.error)
+                Text(errorMessage)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+            }
+            .padding(Theme.Spacing.md)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .softCard(elevation: 1)
+        }
+    }
+
+    // MARK: - Reusable Components
+
+    private func sectionHeader(_ title: String, icon: String) -> some View {
+        HStack(spacing: Theme.Spacing.sm) {
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(Theme.Colors.accent)
+            Text(title)
+                .font(Theme.Typography.bodyBold)
+                .foregroundStyle(Theme.Colors.textPrimary)
+        }
+    }
+
+    private func primaryActionButton(
+        title: String,
+        subtitle: String,
+        icon: String,
+        tint: Color,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: Theme.Spacing.sm) {
+                Image(systemName: icon)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 32, height: 32)
+                    .background(tint)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(Theme.Typography.body)
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                    Text(subtitle)
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Theme.Colors.textTertiary)
+            }
+            .padding(Theme.Spacing.md)
+            .softCard(elevation: 1)
+        }
+        .buttonStyle(.plain)
+        .disabled(isBusy)
+        .opacity(isBusy ? 0.6 : 1)
+    }
+
+    private func advancedActionRow(
+        title: String,
+        icon: String,
+        tint: Color,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: Theme.Spacing.sm) {
+                Image(systemName: icon)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(tint)
+                    .frame(width: 24, height: 24)
+
+                Text(title)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(Theme.Colors.textTertiary)
+            }
+            .padding(.vertical, Theme.Spacing.sm)
+        }
+        .buttonStyle(.plain)
+        .disabled(isBusy)
+        .opacity(isBusy ? 0.5 : 1)
+    }
+
+    private func rangePill(_ title: String, action: @escaping () -> Void) -> some View {
         Button {
             errorMessage = nil
             statusMessage = nil
             action()
         } label: {
             Text(title)
-                .font(Theme.Typography.body)
+                .font(Theme.Typography.caption)
                 .foregroundStyle(Theme.Colors.textPrimary)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, Theme.Spacing.md)
-                .softCard(elevation: 1)
+                .padding(.horizontal, Theme.Spacing.md)
+                .padding(.vertical, Theme.Spacing.sm)
+                .background(Theme.Colors.surface)
+                .clipShape(Capsule())
+                .shadow(color: .black.opacity(0.04), radius: 2, y: 1)
         }
         .buttonStyle(.plain)
         .disabled(isBusy)
-        .opacity(isBusy ? 0.7 : 1)
+        .opacity(isBusy ? 0.5 : 1)
     }
 
-    private func actionRow(
-        title: String,
-        subtitle: String,
-        tint: Color,
-        systemImage: String,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            HStack(spacing: Theme.Spacing.sm) {
-                Image(systemName: systemImage)
-                    .font(Theme.Typography.subheadlineStrong)
-                    .foregroundStyle(.white)
-                    .frame(width: 32, height: 32)
-                    .background(tint)
-                    .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
+    // MARK: - Sync Logic
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title)
-                        .font(Theme.Typography.body)
-                        .foregroundStyle(Theme.Colors.textPrimary)
-
-                    Text(subtitle)
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Spacer()
-
-                Image(systemName: "chevron.right")
-                    .font(Theme.Typography.captionBold)
-                    .foregroundStyle(Theme.Colors.textTertiary)
-            }
-            .padding()
-            .softCard(elevation: 1)
+    private func requestAuthorization() async {
+        guard !isAuthorizing else { return }
+        isAuthorizing = true
+        defer { isAuthorizing = false }
+        do {
+            try await healthManager.requestAuthorization()
+            errorMessage = nil
+            syncNote = "Apple Health connected"
+        } catch {
+            errorMessage = error.localizedDescription
         }
-        .buttonStyle(.plain)
-        .disabled(isBusy)
-        .opacity(isBusy ? 0.7 : 1)
     }
 
-    private var rangeSummaryLine: String {
-        "Selected range: \(formattedDate(boundedRange.start)) to \(formattedDate(boundedRange.end))"
+    private func syncDailyHistory(range: DateInterval, label: String) async {
+        guard healthManager.authorizationStatus == .authorized else {
+            errorMessage = "Connect Apple Health before syncing history."
+            return
+        }
+        guard !healthManager.isDailySyncing else { return }
+
+        errorMessage = nil
+        statusMessage = nil
+        syncNote = "\(label) sync started…"
+
+        do {
+            try await healthManager.syncDailyHealthData(range: range)
+            syncNote = nil
+            statusMessage = "\(label) synced successfully."
+        } catch {
+            syncNote = nil
+            errorMessage = error.localizedDescription
+        }
     }
 
-    private func confirmationButtonTitle(for action: HealthCacheAction) -> String {
-        switch action {
+    private func relativeSyncRange(yearsBack: Int) -> DateInterval {
+        let start = Calendar.current.date(byAdding: .year, value: -yearsBack, to: Date()) ?? Date()
+        return DateInterval(start: Calendar.current.startOfDay(for: start), end: syncEndDate)
+    }
+
+    private func boundedSyncRange(_ range: DateInterval) -> DateInterval {
+        let start = Calendar.current.startOfDay(for: range.start)
+        let end = min(range.end, syncEndDate)
+        return DateInterval(start: start, end: end)
+    }
+
+    // MARK: - Cache Logic
+
+    private func relativeCacheRange(daysBack: Int? = nil, yearsBack: Int? = nil) -> DateInterval {
+        let calendar = Calendar.current
+        let now = Date()
+        let start: Date
+        if let daysBack {
+            start = calendar.date(byAdding: .day, value: -daysBack, to: now) ?? now
+        } else if let yearsBack {
+            start = calendar.date(byAdding: .year, value: -yearsBack, to: now) ?? now
+        } else {
+            start = now
+        }
+        return DateInterval(start: calendar.startOfDay(for: start), end: syncEndDate)
+    }
+
+    private func allCachedRange() -> DateInterval {
+        guard let earliestCachedDate else { return relativeCacheRange(yearsBack: 1) }
+        return DateInterval(start: Calendar.current.startOfDay(for: earliestCachedDate), end: syncEndDate)
+    }
+
+    private func formattedDate(_ date: Date) -> String {
+        SettingsDateFormatters.mediumDate.string(from: date)
+    }
+
+    // MARK: - Confirmation Dialogs
+
+    private var confirmationTitle: String {
+        guard let pendingAction else { return "Confirm" }
+        return confirmationButtonLabel(for: pendingAction)
+    }
+
+    private var confirmationMessage: String {
+        guard let pendingAction else { return "" }
+        switch pendingAction {
         case .clearWorkoutRange:
-            return "Clear Workout Cache"
+            return "Remove workout health data between \(formattedDate(boundedCacheRange.start)) and \(formattedDate(boundedCacheRange.end)). Your workouts themselves stay."
         case .clearDailyRange:
-            return "Clear Daily History"
+            return "Remove daily health entries for the selected range. They'll be re-downloaded next time you sync."
         case .clearBothRange:
-            return "Clear Both Caches"
+            return "Remove all cached health data for the selected range. Your workouts and Apple Health data are untouched."
         case .clearWorkoutAll:
-            return "Clear All Workout Cache"
+            return "Remove all cached workout health data from this app. Your workouts themselves stay."
         case .clearDailyAll:
-            return "Clear All Daily History"
+            return "Remove all cached daily health history from this app."
         case .clearAndResyncRange:
-            return "Clear And Re-Sync"
+            return "Clear and re-download health data for the selected range. This may take a moment."
+        case .clearAndResyncAll:
+            return "Clear all cached health data and re-download everything. This may take a few minutes."
         }
     }
+
+    private func confirmationButtonLabel(for action: HealthCacheAction) -> String {
+        switch action {
+        case .clearWorkoutRange: return "Clear Workout Data"
+        case .clearDailyRange: return "Clear Daily Data"
+        case .clearBothRange: return "Clear All Data"
+        case .clearWorkoutAll: return "Clear All Workout Data"
+        case .clearDailyAll: return "Clear All Daily Data"
+        case .clearAndResyncRange: return "Clear & Re-Sync"
+        case .clearAndResyncAll: return "Refresh Everything"
+        }
+    }
+
+    // MARK: - Perform Actions
 
     private func performAction(_ action: HealthCacheAction) async {
         guard !isBusy else { return }
-
         pendingAction = nil
         errorMessage = nil
         statusMessage = nil
@@ -805,7 +756,7 @@ struct HealthCacheManagementView: View {
             switch action {
             case .clearWorkoutRange:
                 let result = healthManager.clearCachedHealthData(
-                    in: boundedRange,
+                    in: boundedCacheRange,
                     includeWorkoutData: true,
                     includeDailyData: false
                 )
@@ -813,14 +764,14 @@ struct HealthCacheManagementView: View {
 
             case .clearDailyRange:
                 let result = healthManager.clearCachedHealthData(
-                    in: boundedRange,
+                    in: boundedCacheRange,
                     includeWorkoutData: false,
                     includeDailyData: true
                 )
                 statusMessage = dailyResultMessage(from: result, scope: "selected range")
 
             case .clearBothRange:
-                let result = healthManager.clearCachedHealthData(in: boundedRange)
+                let result = healthManager.clearCachedHealthData(in: boundedCacheRange)
                 statusMessage = combinedResultMessage(from: result, scope: "selected range")
 
             case .clearWorkoutAll:
@@ -838,76 +789,105 @@ struct HealthCacheManagementView: View {
                 statusMessage = dailyResultMessage(from: result, scope: "all cached daily history")
 
             case .clearAndResyncRange:
-                let cleared = healthManager.clearCachedHealthData(in: boundedRange)
-
+                let cleared = healthManager.clearCachedHealthData(in: boundedCacheRange)
                 guard healthManager.authorizationStatus == .authorized else {
-                    statusMessage = combinedResultMessage(from: cleared, scope: "selected range") + " Apple Health access is still required before re-syncing."
+                    statusMessage = combinedResultMessage(from: cleared, scope: "selected range") + " Connect Apple Health to re-sync."
                     return
                 }
+                let toSync = workoutsInRange
+                if !toSync.isEmpty { _ = try await healthManager.syncAllWorkouts(toSync) }
+                try await healthManager.syncDailyHealthData(range: boundedCacheRange)
+                let count = toSync.count
+                let days = healthManager.dayCount(in: boundedCacheRange)
+                statusMessage = "Re-synced \(count) workout\(count == 1 ? "" : "s") and \(days) day\(days == 1 ? "" : "s")."
 
-                let workoutsToSync = workoutsInRange
-                if !workoutsToSync.isEmpty {
-                    _ = try await healthManager.syncAllWorkouts(workoutsToSync)
+            case .clearAndResyncAll:
+                _ = healthManager.clearCachedHealthData()
+                guard healthManager.authorizationStatus == .authorized else {
+                    statusMessage = "All cached data cleared. Connect Apple Health to re-sync."
+                    return
                 }
-                try await healthManager.syncDailyHealthData(range: boundedRange)
-
-                let syncedWorkoutCount = workoutsToSync.count
-                let syncedDayCount = healthManager.dayCount(in: boundedRange)
-                statusMessage = "Re-synced \(syncedWorkoutCount) workout\(syncedWorkoutCount == 1 ? "" : "s") and refreshed \(syncedDayCount) day\(syncedDayCount == 1 ? "" : "s") of daily Health history."
+                if !workouts.isEmpty { _ = try await healthManager.syncAllWorkouts(workouts) }
+                let fullRange = DateInterval(start: Self.allHistoryStart, end: syncEndDate)
+                try await healthManager.syncDailyHealthData(range: fullRange)
+                statusMessage = "All health data refreshed."
             }
         } catch {
             errorMessage = error.localizedDescription
         }
     }
 
+    // MARK: - Result Messages
+
     private func workoutResultMessage(from result: HealthCacheClearResult, scope: String) -> String {
         if result.removedWorkoutEntries == 0 {
-            return "No workout-linked Health cache found in the \(scope)."
+            return "No cached workout data found in the \(scope)."
         }
-        return "Removed \(result.removedWorkoutEntries) workout-linked Health record\(result.removedWorkoutEntries == 1 ? "" : "s") from the \(scope)."
+        return "Removed \(result.removedWorkoutEntries) workout record\(result.removedWorkoutEntries == 1 ? "" : "s") from the \(scope)."
     }
 
     private func dailyResultMessage(from result: HealthCacheClearResult, scope: String) -> String {
         if result.removedDailyEntries == 0 && result.removedCoveredDays == 0 {
-            return "No daily Health cache found in the \(scope)."
+            return "No cached daily data found in the \(scope)."
         }
-        return "Removed \(result.removedDailyEntries) daily entry\(result.removedDailyEntries == 1 ? "" : "ies") and reset \(result.removedCoveredDays) scanned day\(result.removedCoveredDays == 1 ? "" : "s") in the \(scope)."
+        return "Removed \(result.removedDailyEntries) daily entr\(result.removedDailyEntries == 1 ? "y" : "ies") and \(result.removedCoveredDays) scanned day\(result.removedCoveredDays == 1 ? "" : "s") from the \(scope)."
     }
 
     private func combinedResultMessage(from result: HealthCacheClearResult, scope: String) -> String {
         if !result.removedAnything {
-            return "No Health cache found in the \(scope)."
+            return "No cached data found in the \(scope)."
         }
-        return "Removed \(result.removedWorkoutEntries) workout record\(result.removedWorkoutEntries == 1 ? "" : "s"), \(result.removedDailyEntries) daily entr\(result.removedDailyEntries == 1 ? "y" : "ies"), and reset \(result.removedCoveredDays) scanned day\(result.removedCoveredDays == 1 ? "" : "s") in the \(scope)."
-    }
-
-    private func relativeRange(daysBack: Int? = nil, yearsBack: Int? = nil) -> DateInterval {
-        let now = Date()
-        let calendar = Calendar.current
-
-        let start: Date
-        if let daysBack {
-            start = calendar.date(byAdding: .day, value: -daysBack, to: now) ?? now
-        } else if let yearsBack {
-            start = calendar.date(byAdding: .year, value: -yearsBack, to: now) ?? now
-        } else {
-            start = now
-        }
-
-        return DateInterval(start: calendar.startOfDay(for: start), end: syncEndDate)
-    }
-
-    private func allCachedRange() -> DateInterval {
-        guard let earliestCachedDate else {
-            return relativeRange(yearsBack: 1)
-        }
-        return DateInterval(start: Calendar.current.startOfDay(for: earliestCachedDate), end: syncEndDate)
-    }
-
-    private func formattedDate(_ date: Date) -> String {
-        SettingsDateFormatters.mediumDate.string(from: date)
+        return "Cleared \(result.removedWorkoutEntries) workout record\(result.removedWorkoutEntries == 1 ? "" : "s") and \(result.removedDailyEntries) daily entr\(result.removedDailyEntries == 1 ? "y" : "ies") from the \(scope)."
     }
 }
+
+// MARK: - Flow Layout
+
+private struct FlowLayout: Layout {
+    var spacing: CGFloat = 8
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let maxWidth = proposal.width ?? .infinity
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        var rowHeight: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x + size.width > maxWidth, x > 0 {
+                y += rowHeight + spacing
+                x = 0
+                rowHeight = 0
+            }
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
+        }
+        return CGSize(width: maxWidth, height: y + rowHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var x = bounds.minX
+        var y = bounds.minY
+        var rowHeight: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x + size.width > bounds.maxX, x > bounds.minX {
+                y += rowHeight + spacing
+                x = bounds.minX
+                rowHeight = 0
+            }
+            subview.place(at: CGPoint(x: x, y: y), proposal: .unspecified)
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
+        }
+    }
+}
+
+// MARK: - Legacy Aliases (preserve compilation)
+
+typealias HealthHistorySyncView = HealthDataSettingsView
+typealias HealthCacheManagementView = HealthDataSettingsView
 
 struct SleepSourceSettingsView: View {
     @EnvironmentObject private var healthManager: HealthKitManager

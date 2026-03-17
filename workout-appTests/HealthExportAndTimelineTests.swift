@@ -13,6 +13,35 @@ final class HealthExportAndTimelineTests: XCTestCase {
         XCTAssertEqual(resolved.end, reference)
     }
 
+    @MainActor
+    func testBodyCompositionViewModelUsesLocalDailyHealthStoreData() {
+        let rangeStart = dayStart(year: 2026, month: 1, day: 10)
+        let rangeEnd = endOfDay(dayStart(year: 2026, month: 1, day: 12))
+        let displayRange = DateInterval(start: rangeStart, end: rangeEnd)
+        let entries = [
+            DailyHealthData(dayStart: dayStart(year: 2026, month: 1, day: 5), bodyMass: 80.0),
+            DailyHealthData(dayStart: dayStart(year: 2026, month: 1, day: 10), bodyMass: 81.0),
+            DailyHealthData(dayStart: dayStart(year: 2026, month: 1, day: 11), bodyMass: 81.5),
+            DailyHealthData(dayStart: dayStart(year: 2026, month: 1, day: 12), bodyMass: 82.0)
+        ]
+        let model = BodyCompositionViewModel()
+
+        model.load(
+            dailyEntries: entries,
+            metricKind: .weight,
+            displayRange: displayRange,
+            reportGranularity: .weekly
+        )
+
+        XCTAssertEqual(model.earliestSampleDate, dayStart(year: 2026, month: 1, day: 5))
+        XCTAssertEqual(model.sampleCountInDisplayRange, 3)
+        XCTAssertEqual(model.representativeSeries.map(\.date), [
+            dayStart(year: 2026, month: 1, day: 10),
+            dayStart(year: 2026, month: 1, day: 11),
+            dayStart(year: 2026, month: 1, day: 12)
+        ])
+    }
+
     func testTimelineSamplingKeepsCompactViewNearTargetCount() {
         let indices = TimelineSampling.sampledIndices(totalCount: 13, targetCount: 12)
 

@@ -17,7 +17,6 @@ struct HomeView: View {
     @AppStorage("weightIncrement") private var weightIncrement: Double = 2.5
 
     @State private var showingImportWizard = false
-    @State private var showingHealthWizard = false
     @State private var showingQuickStart = false
     @State private var quickStartExercise: String?
     @State private var selectedExercise: ExerciseSelection?
@@ -181,12 +180,6 @@ struct HomeView: View {
                 isPresented: $showingImportWizard,
                 dataManager: dataManager,
                 iCloudManager: iCloudManager
-            )
-        }
-        .sheet(isPresented: $showingHealthWizard) {
-            HealthSyncWizard(
-                isPresented: $showingHealthWizard,
-                workouts: dataManager.workouts
             )
         }
         .sheet(isPresented: $showingQuickStart) {
@@ -392,11 +385,7 @@ struct HomeView: View {
                     showingImportWizard = true
                 }
                 SecondaryChip(title: "Health", icon: "heart.fill") {
-                    if healthManager.authorizationStatus == .authorized {
-                        selectedTab = .health
-                    } else {
-                        showingHealthWizard = true
-                    }
+                    selectedTab = .health
                 }
             }
             .padding(.horizontal, Theme.Spacing.lg)

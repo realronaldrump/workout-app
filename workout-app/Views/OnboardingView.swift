@@ -11,7 +11,6 @@ struct OnboardingView: View {
 
     @State private var step = 0
     @State private var showingImportWizard = false
-    @State private var showingHealthWizard = false
     @State private var welcomeVisible = false
     @State private var welcomeFloating = false
 
@@ -57,24 +56,12 @@ struct OnboardingView: View {
                 iCloudManager: iCloudManager
             )
         }
-        .fullScreenCover(isPresented: $showingHealthWizard) {
-            HealthSyncWizard(
-                isPresented: $showingHealthWizard,
-                workouts: dataManager.workouts
-            )
-        }
         .onChange(of: showingImportWizard) { _, isShowing in
             guard !isShowing else { return }
             guard step == 1 else { return }
             guard !dataManager.workouts.isEmpty else { return }
             withAnimation(reduceMotion ? .easeOut(duration: 0.2) : Theme.Animation.spring) {
                 step = 2
-            }
-        }
-        .onChange(of: healthManager.authorizationStatus) { _, newValue in
-            // If the user authorizes in the wizard, show the "Connected" state immediately.
-            if step == 2, newValue == .authorized {
-                Haptics.notify(.success)
             }
         }
     }
@@ -255,7 +242,7 @@ struct OnboardingView: View {
                         .tracking(1.0)
                         .multilineTextAlignment(.center)
 
-                    Text("Sleep and recovery alongside training. Read-only and on-device.")
+                    Text("Sleep and recovery alongside training. Use Settings later to connect and sync Apple Health.")
                         .font(Theme.Typography.body)
                         .foregroundStyle(Theme.Colors.textSecondary)
                         .multilineTextAlignment(.center)
@@ -346,12 +333,7 @@ struct OnboardingView: View {
         case 1:
             return "Import from Strong"
         default:
-            switch healthManager.authorizationStatus {
-            case .authorized, .unavailable:
-                return "Continue"
-            default:
-                return "Connect Apple Health"
-            }
+            return "Continue"
         }
     }
 
@@ -386,12 +368,7 @@ struct OnboardingView: View {
         case 1:
             showingImportWizard = true
         default:
-            switch healthManager.authorizationStatus {
-            case .authorized, .unavailable:
-                completeOnboarding()
-            default:
-                showingHealthWizard = true
-            }
+            completeOnboarding()
         }
     }
 

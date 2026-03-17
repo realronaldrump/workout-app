@@ -2,10 +2,8 @@ import SwiftUI
 
 struct HealthHubView: View {
     @EnvironmentObject var healthManager: HealthKitManager
-    @EnvironmentObject var dataManager: WorkoutDataManager
     @EnvironmentObject private var dateRangeContext: HealthDateRangeContext
 
-    @State private var showingHealthWizard = false
     @State private var timelineDensity: TimelineDensity = .compact
     @State private var selectedMetric: HealthMetric?
     @State private var cachedDailyData: [DailyHealthData] = []
@@ -113,12 +111,6 @@ struct HealthHubView: View {
         .navigationBarHidden(true)
         .navigationDestination(item: $selectedMetric) { metric in
             HealthMetricDetailView(metric: metric)
-        }
-        .sheet(isPresented: $showingHealthWizard) {
-            HealthSyncWizard(
-                isPresented: $showingHealthWizard,
-                workouts: dataManager.workouts
-            )
         }
         .onAppear {
             healthManager.refreshAuthorizationStatus()
@@ -287,22 +279,9 @@ struct HealthHubView: View {
                 .font(Theme.Typography.title3)
                 .foregroundStyle(Theme.Colors.textPrimary)
 
-            Text("Allow access to view daily activity, sleep, vitals, and recovery metrics.")
+            Text("Use Settings to connect and sync Apple Health before viewing daily activity, sleep, vitals, and recovery metrics here.")
                 .font(Theme.Typography.body)
                 .foregroundStyle(Theme.Colors.textSecondary)
-
-            Button {
-                showingHealthWizard = true
-            } label: {
-                Text("Connect Health")
-                    .font(Theme.Typography.headline)
-                    .foregroundStyle(Theme.Colors.textPrimary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, Theme.Spacing.sm)
-                    .background(Theme.Colors.elevated)
-                    .cornerRadius(Theme.CornerRadius.large)
-            }
-            .buttonStyle(.plain)
         }
         .padding(Theme.Spacing.xl)
         .softCard(elevation: 1)
