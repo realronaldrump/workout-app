@@ -10,6 +10,30 @@ struct HealthSyncWizard: View {
     @State private var hasStartedSync = false
     @State private var showingCloseConfirmation = false
 
+    private var initialWorkoutTargets: [Workout] {
+        healthManager.recommendedInitialWorkoutSyncTargets(from: workouts)
+    }
+
+    private var missingWorkoutCount: Int {
+        workouts.filter { healthManager.getHealthData(for: $0.id) == nil }.count
+    }
+
+    private var skippedOlderWorkoutCount: Int {
+        max(0, missingWorkoutCount - initialWorkoutTargets.count)
+    }
+
+    private var initialDailyRange: DateInterval {
+        healthManager.recommendedInitialDailySyncRange()
+    }
+
+    private var syncSummaryText: String {
+        if initialWorkoutTargets.isEmpty {
+            return "Recent workout cache is already covered."
+        }
+
+        return "Recent workouts \(healthManager.syncedWorkoutsCount) / \(initialWorkoutTargets.count)"
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -97,11 +121,19 @@ struct HealthSyncWizard: View {
                     .font(Theme.Typography.title)
                     .foregroundStyle(Theme.Colors.textPrimary)
 
-                Text("Read-only and on-device.")
+                Text("Read-only, on-device, and starts with recent history.")
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Colors.textSecondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal)
+
+                if skippedOlderWorkoutCount > 0 {
+                    Text("We start with recent missing workouts and the last year of daily Health history so setup stays fast. Older history can be backfilled later.")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Colors.textTertiary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                }
             }
 
             Spacer()
@@ -164,9 +196,13 @@ struct HealthSyncWizard: View {
                 Text("Syncing Health Data")
                     .font(Theme.Typography.headline)
 
-                Text("Workouts \(healthManager.syncedWorkoutsCount) / \(workouts.count)")
+                Text(syncSummaryText)
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Colors.textSecondary)
+
+                Text("Daily history covers the last 12 months by default.")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.textTertiary)
             }
 
             if healthManager.isDailySyncing {
@@ -194,10 +230,18 @@ struct HealthSyncWizard: View {
             Text(workouts.isEmpty ? "Connected" : "Sync Complete")
                 .font(Theme.Typography.title)
 
-            Text(workouts.isEmpty ? "We'll start syncing once you import or log workouts." : "Health data is ready.")
+            Text(workouts.isEmpty ? "We'll start syncing once you import or log workouts." : "Recent Health data is ready.")
                 .font(Theme.Typography.body)
                 .foregroundStyle(Theme.Colors.textSecondary)
                 .multilineTextAlignment(.center)
+
+            if skippedOlderWorkoutCount > 0 {
+                Text("Skipped \(skippedOlderWorkoutCount) older unsynced workout\(skippedOlderWorkoutCount == 1 ? "" : "s") to keep setup fast. Use Health Cache or Health History in Settings to backfill more.")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.textTertiary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+            }
 
             Spacer()
 
@@ -257,15 +301,8 @@ struct HealthSyncWizard: View {
                     return
                 }
 
-                // The syncAllWorkouts method now updates published properties on healthManager
-                // We don't need to manually poll, but we do need to wait for it to finish
-                _ = try await healthManager.syncAllWorkouts(workouts)
-
-                let end = Date()
-                let start = Calendar.current.date(byAdding: .month, value: -12, to: end) ?? end.addingTimeInterval(-31_536_000)
-                let rangeStart = Calendar.current.startOfDay(for: start)
-                let rangeEnd = Calendar.current.date(bySettingHour: 23, minute: 59, second: 59, of: end) ?? end
-                try await healthManager.syncDailyHealthData(range: DateInterval(start: rangeStart, end: rangeEnd))
+                _ = try await healthManager.syncAllWorkouts(initialWorkoutTargets)
+                await healthManager.ensureDailyHealthData(range: initialDailyRange)
 
                 // Slight delay to show completion before moving to success
                 try await Task.sleep(nanoseconds: 500_000_000)

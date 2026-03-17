@@ -8,6 +8,8 @@ struct WorkoutHealthInsightsView: View {
     @State private var showHeartRateSamples = false
     @State private var showHRVSamples = false
     @State private var showBloodOxygenSamples = false
+    @State private var isLoadingRawSamples = false
+    @State private var rawSampleError: String?
 
     var body: some View {
         ZStack {
@@ -56,11 +58,49 @@ struct WorkoutHealthInsightsView: View {
                 .foregroundStyle(Theme.Colors.textPrimary)
 
             if data.heartRateSamples.isEmpty, data.hrvSamples.isEmpty, data.bloodOxygenSamples.isEmpty {
-                Text("No raw samples stored for this workout.")
-                    .font(Theme.Typography.body)
-                    .foregroundStyle(Theme.Colors.textSecondary)
-                    .padding(Theme.Spacing.lg)
-                    .softCard(elevation: 1)
+                VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+                    Text("Raw samples are not cached for this workout.")
+                        .font(Theme.Typography.body)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+
+                    Button {
+                        loadRawSamples()
+                    } label: {
+                        HStack(spacing: Theme.Spacing.sm) {
+                            if isLoadingRawSamples {
+                                ProgressView()
+                                    .tint(.white)
+                            } else {
+                                Image(systemName: "waveform.path.ecg")
+                                    .font(Theme.Typography.subheadlineStrong)
+                            }
+
+                            Text(isLoadingRawSamples ? "Loading Samples" : "Load Raw Samples")
+                                .font(Theme.Typography.headline)
+                                .foregroundStyle(.white)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, Theme.Spacing.md)
+                        .brutalistButtonChrome(
+                            fill: Theme.Colors.accent,
+                            cornerRadius: Theme.CornerRadius.large
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isLoadingRawSamples)
+
+                    Text("This fetches workout-level heart rate, HRV, blood oxygen, and respiratory samples on demand without re-syncing the whole app.")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Colors.textTertiary)
+
+                    if let rawSampleError {
+                        Text(rawSampleError)
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Colors.error)
+                    }
+                }
+                .padding(Theme.Spacing.lg)
+                .softCard(elevation: 1)
             } else {
                 if !data.heartRateSamples.isEmpty {
                     Toggle(isOn: $showHeartRateSamples) {
@@ -140,6 +180,22 @@ struct WorkoutHealthInsightsView: View {
                 .padding(Theme.Spacing.md)
                 .softCard(elevation: 1)
             }
+        }
+    }
+
+    private func loadRawSamples() {
+        guard !isLoadingRawSamples else { return }
+
+        rawSampleError = nil
+        isLoadingRawSamples = true
+
+        Task {
+            do {
+                _ = try await healthManager.loadDetailedSamplesIfNeeded(for: workout.id, force: true)
+            } catch {
+                rawSampleError = error.localizedDescription
+            }
+            isLoadingRawSamples = false
         }
     }
 }

@@ -464,7 +464,7 @@ private extension HealthCSVExporter {
     }
 
     nonisolated static func hasMeaningfulHealthData(_ healthData: WorkoutHealthData) -> Bool {
-        let hasRespiratoryRateAverage = !healthData.respiratoryRateSamples.isEmpty
+        let hasRespiratoryRateAverage = healthData.avgRespiratoryRate != nil
 
         return healthData.avgHeartRate != nil ||
         healthData.maxHeartRate != nil ||
@@ -485,10 +485,10 @@ private extension HealthCSVExporter {
         healthData.dailyMoveMinutes != nil ||
         healthData.dailyStandMinutes != nil ||
         healthData.vo2Max != nil ||
-        !healthData.hrvSamples.isEmpty ||
+        healthData.avgHRV != nil ||
         healthData.restingHeartRate != nil ||
-        !healthData.bloodOxygenSamples.isEmpty ||
-        !healthData.respiratoryRateSamples.isEmpty ||
+        healthData.avgBloodOxygen != nil ||
+        healthData.avgRespiratoryRate != nil ||
         hasRespiratoryRateAverage ||
         healthData.bodyMass != nil ||
         healthData.bodyFatPercentage != nil ||
@@ -646,18 +646,15 @@ private extension HealthCSVExporter {
     }
 
     nonisolated static func avgHRV(_ healthData: WorkoutHealthData) -> Double? {
-        guard !healthData.hrvSamples.isEmpty else { return nil }
-        return healthData.hrvSamples.map(\.value).reduce(0, +) / Double(healthData.hrvSamples.count)
+        healthData.avgHRV
     }
 
     nonisolated static func avgBloodOxygen(_ healthData: WorkoutHealthData) -> Double? {
-        guard !healthData.bloodOxygenSamples.isEmpty else { return nil }
-        return healthData.bloodOxygenSamples.map(\.value).reduce(0, +) / Double(healthData.bloodOxygenSamples.count)
+        healthData.avgBloodOxygen
     }
 
     nonisolated static func avgRespiratoryRate(_ healthData: WorkoutHealthData) -> Double? {
-        guard !healthData.respiratoryRateSamples.isEmpty else { return nil }
-        return healthData.respiratoryRateSamples.map(\.value).reduce(0, +) / Double(healthData.respiratoryRateSamples.count)
+        healthData.avgRespiratoryRate
     }
 }
 

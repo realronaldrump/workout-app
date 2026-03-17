@@ -2,7 +2,46 @@ import CoreLocation
 import Foundation
 import HealthKit
 
+private enum DefaultHealthSyncPlan {
+    static let initialWorkoutYearsBack = 1
+    static let initialWorkoutMaxCount = 120
+    static let initialDailyMonthsBack = 12
+    static let autoSyncRecentCount = 3
+    static let batchAppleWorkoutCandidateLimit = 200
+    static let batchAppleWorkoutRangeLimitDays = 400
+}
+
 extension HealthKitManager {
+    func recommendedInitialWorkoutSyncTargets(
+        from workouts: [Workout],
+        yearsBack: Int = DefaultHealthSyncPlan.initialWorkoutYearsBack,
+        maxCount: Int = DefaultHealthSyncPlan.initialWorkoutMaxCount
+    ) -> [Workout] {
+        guard !workouts.isEmpty else { return [] }
+
+        let now = Date()
+        let cutoff = Calendar.current.date(byAdding: .year, value: -yearsBack, to: now) ?? now
+
+        let sorted = workouts.sorted { $0.date > $1.date }
+        let missingRecent = sorted.filter { workout in
+            workout.date >= cutoff && healthDataStore[workout.id] == nil
+        }
+
+        return Array(missingRecent.prefix(maxCount))
+    }
+
+    func recommendedInitialDailySyncRange(
+        reference: Date = Date(),
+        monthsBack: Int = DefaultHealthSyncPlan.initialDailyMonthsBack
+    ) -> DateInterval {
+        let calendar = Calendar.current
+        let start = calendar.date(byAdding: .month, value: -monthsBack, to: reference)
+            ?? reference.addingTimeInterval(-31_536_000)
+        let rangeStart = calendar.startOfDay(for: start)
+        let rangeEnd = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: reference) ?? reference
+        return DateInterval(start: rangeStart, end: rangeEnd)
+    }
+
     func applySleepSourcePreference(
         key: String?,
         name: String?,
@@ -71,7 +110,7 @@ extension HealthKitManager {
 
         if refreshedAny {
             healthDataStore = updatedStore
-            persistData()
+            persistData(changedWorkoutIDs: Array(matchingWorkoutIDs))
         }
 
         if !hadFailure {
@@ -87,8 +126,31 @@ extension HealthKitManager {
         return (sleepWindowStart, sleepWindowEnd)
     }
 
+    private func prefetchedAppleWorkoutCandidates(for workouts: [Workout]) async throws -> [HKWorkout]? {
+        guard !workouts.isEmpty else { return [] }
+        guard workouts.count <= DefaultHealthSyncPlan.batchAppleWorkoutCandidateLimit else { return nil }
+
+        let sorted = workouts.sorted { $0.date < $1.date }
+        guard let firstWorkout = sorted.first, let lastWorkout = sorted.last else { return [] }
+
+        let firstWindow = firstWorkout.estimatedWindow(defaultMinutes: 60)
+        let lastWindow = lastWorkout.estimatedWindow(defaultMinutes: 60)
+        let daySpan = Calendar.current.dateComponents([.day], from: firstWindow.start, to: lastWindow.end).day ?? 0
+        guard daySpan <= DefaultHealthSyncPlan.batchAppleWorkoutRangeLimitDays else { return nil }
+
+        let relaxedTolerance: TimeInterval = 12 * 60 * 60
+        return try await fetchAppleWorkouts(
+            from: firstWindow.start.addingTimeInterval(-relaxedTolerance),
+            to: lastWindow.end.addingTimeInterval(relaxedTolerance)
+        )
+    }
+
     /// Sync health data for a single workout
-    func syncHealthDataForWorkout(_ workout: Workout, persist: Bool = true) async throws -> WorkoutHealthData {
+    func syncHealthDataForWorkout(
+        _ workout: Workout,
+        persist: Bool = true,
+        appleWorkoutCandidates: [HKWorkout]? = nil
+    ) async throws -> WorkoutHealthData {
         guard healthStore != nil else {
             throw HealthKitError.notAvailable
         }
@@ -279,7 +341,14 @@ extension HealthKitManager {
         )
 
         // Fetch the best-matching Apple workout (with a relaxed fallback for timestamp drift).
-        if let appleWorkout = try await fetchBestMatchingAppleWorkout(for: workout) {
+        let matchedAppleWorkout: HKWorkout?
+        if let appleWorkoutCandidates {
+            matchedAppleWorkout = bestMatchingAppleWorkout(for: workout, candidates: appleWorkoutCandidates)
+        } else {
+            matchedAppleWorkout = try await fetchBestMatchingAppleWorkout(for: workout)
+        }
+
+        if let appleWorkout = matchedAppleWorkout {
             healthData.appleWorkoutType = appleWorkout.workoutActivityType.name
             healthData.appleWorkoutDuration = appleWorkout.duration
             healthData.appleWorkoutUUID = appleWorkout.uuid
@@ -309,14 +378,50 @@ extension HealthKitManager {
         }
 
         // Store in local cache
+        healthData.captureRawSampleSummaries()
         healthDataStore[workout.id] = healthData
         if persist {
-            persistData()
+            persistData(changedWorkoutIDs: [workout.id])
             lastSyncDate = Date()
             userDefaults.set(lastSyncDate, forKey: lastSyncKey)
         }
 
         return healthData
+    }
+
+    func loadDetailedSamplesIfNeeded(for workoutID: UUID, force: Bool = false) async throws -> WorkoutHealthData? {
+        guard healthStore != nil else {
+            throw HealthKitError.notAvailable
+        }
+        guard authorizationStatus == .authorized else {
+            throw HealthKitError.authorizationFailed("Health access is not authorized.")
+        }
+        guard var cached = healthDataStore[workoutID] else {
+            return nil
+        }
+        guard force || !cached.hasRawSamples else {
+            return cached
+        }
+
+        let start = cached.workoutStartTime
+        let end = cached.workoutEndTime
+
+        let heartRateSamples = try await fetchHeartRateSamples(from: start, to: end)
+        cached.heartRateSamples = heartRateSamples
+        if !heartRateSamples.isEmpty {
+            let values = heartRateSamples.map(\.value)
+            cached.avgHeartRate = values.reduce(0, +) / Double(values.count)
+            cached.maxHeartRate = values.max()
+            cached.minHeartRate = values.min()
+        }
+
+        cached.hrvSamples = try await fetchHRVSamples(from: start, to: end)
+        cached.bloodOxygenSamples = try await fetchBloodOxygenSamples(from: start, to: end)
+        cached.respiratoryRateSamples = try await fetchRespiratoryRateSamples(from: start, to: end)
+        cached.captureRawSampleSummaries()
+
+        healthDataStore[workoutID] = cached
+        return cached
     }
 
     /// Lightweight background sync for the most recent workouts that are missing data.
@@ -325,8 +430,12 @@ extension HealthKitManager {
         guard isHealthKitAvailable() else { return }
         guard !isAutoSyncing else { return }
 
-        let missing = workouts.filter { healthDataStore[$0.id] == nil }
-        let recentMissing = Array(missing.prefix(3))
+        let recentMissing = Array(
+            workouts
+                .sorted { $0.date > $1.date }
+                .filter { healthDataStore[$0.id] == nil }
+                .prefix(DefaultHealthSyncPlan.autoSyncRecentCount)
+        )
         guard !recentMissing.isEmpty else { return }
 
         isAutoSyncing = true
@@ -334,9 +443,15 @@ extension HealthKitManager {
         syncProgress = 0
         syncedWorkoutsCount = 0
 
+        let appleWorkoutCandidates = try? await prefetchedAppleWorkoutCandidates(for: recentMissing)
+
         for (index, workout) in recentMissing.enumerated() {
             do {
-                _ = try await syncHealthDataForWorkout(workout, persist: false)
+                _ = try await syncHealthDataForWorkout(
+                    workout,
+                    persist: false,
+                    appleWorkoutCandidates: appleWorkoutCandidates ?? nil
+                )
             } catch {
                 print("Auto sync failed for workout \(workout.id): \(error)")
             }
@@ -347,7 +462,7 @@ extension HealthKitManager {
 
         lastSyncDate = Date()
         userDefaults.set(lastSyncDate, forKey: lastSyncKey)
-        persistData()
+        persistData(changedWorkoutIDs: recentMissing.map(\.id))
     }
 
     /// Sync health data for all workouts
@@ -379,15 +494,20 @@ extension HealthKitManager {
             syncProgress = 1
             lastSyncDate = Date()
             userDefaults.set(lastSyncDate, forKey: lastSyncKey)
-            persistData()
+            persistData(changedWorkoutIDs: [])
             return []
         }
 
         let total = Double(workouts.count)
+        let appleWorkoutCandidates = try await prefetchedAppleWorkoutCandidates(for: workouts)
 
         for (index, workout) in workouts.enumerated() {
             do {
-                let healthData = try await syncHealthDataForWorkout(workout, persist: false)
+                let healthData = try await syncHealthDataForWorkout(
+                    workout,
+                    persist: false,
+                    appleWorkoutCandidates: appleWorkoutCandidates
+                )
                 results.append(healthData)
             } catch {
                 print("Failed to sync workout \(workout.id): \(error)")
@@ -403,7 +523,7 @@ extension HealthKitManager {
         userDefaults.set(lastSyncDate, forKey: lastSyncKey)
 
         // Persist final result
-        persistData()
+        persistData(changedWorkoutIDs: results.map(\.workoutId))
 
         return results
     }
@@ -454,6 +574,7 @@ extension HealthKitManager {
         var locationByAppleUUID: [UUID: ResolvedWorkoutLocation] = [:]
         var appleUUIDsWithNoLocation: Set<UUID> = []
         var updated = 0
+        var updatedWorkoutIDs: [UUID] = []
 
         for workout in targets {
             let cached = healthDataStore[workout.id]
@@ -513,10 +634,11 @@ extension HealthKitManager {
             }
             healthDataStore[workout.id] = healthData
             updated += 1
+            updatedWorkoutIDs.append(workout.id)
         }
 
         if updated > 0 {
-            persistData()
+            persistData(changedWorkoutIDs: updatedWorkoutIDs)
         }
 
         return updated

@@ -429,11 +429,11 @@ struct StrongImportWizard: View {
 
     private var healthSyncStatusDetail: String {
         if healthManager.isSyncing {
-            return "Syncing workout health data."
+            return "Syncing recent workout health data."
         }
         switch healthSyncState {
         case .idle:
-            return "Waiting to start automatic sync."
+            return "Waiting to start automatic recent sync."
         case .unavailable:
             return "Apple Health is unavailable on this device."
         case .needsAuthorization:
@@ -442,7 +442,7 @@ struct StrongImportWizard: View {
             }
             return "Authorization is required to sync health data."
         case .syncing:
-            return "Syncing workout health data."
+            return "Syncing recent workout health data."
         case .synced(let date):
             return "Completed \(formatDate(date))"
         case .failed(let message):
@@ -569,12 +569,17 @@ struct StrongImportWizard: View {
                                 importPhase = .processing
                             }
 
-                            let healthSnapshot = await MainActor.run {
-                                Array(healthManager.healthDataStore.values)
+                            let healthIdentitySnapshot = await MainActor.run {
+                                healthManager.healthDataStore.values.map {
+                                    WorkoutHealthIdentitySnapshot(
+                                        workoutId: $0.workoutId,
+                                        workoutDate: $0.workoutDate
+                                    )
+                                }
                             }
 
                             // Process workout sets (nonisolated async)
-                            await dataManager.processImportedWorkoutSets(sets, healthDataSnapshot: healthSnapshot)
+                            await dataManager.processImportedWorkoutSets(sets, healthIdentitySnapshot: healthIdentitySnapshot)
 
                             await MainActor.run {
                                 let stats = dataManager.calculateStats()
@@ -632,10 +637,19 @@ struct StrongImportWizard: View {
         }
 
         let missing = dataManager.workouts.filter { healthManager.getHealthData(for: $0.id) == nil }
-        syncTargetCount = missing.count
         guard !missing.isEmpty else {
+            syncTargetCount = 0
             healthSyncState = .synced(Date())
             healthSyncNote = "No new workouts to sync"
+            return
+        }
+
+        let plannedTargets = healthManager.recommendedInitialWorkoutSyncTargets(from: dataManager.workouts)
+        syncTargetCount = plannedTargets.count
+
+        guard !plannedTargets.isEmpty else {
+            healthSyncState = .synced(Date())
+            healthSyncNote = "Skipped \(missing.count) older unsynced workout\(missing.count == 1 ? "" : "s") to keep import fast. Use Health Cache later to backfill them."
             return
         }
 
@@ -654,10 +668,17 @@ struct StrongImportWizard: View {
                 }
 
                 healthSyncState = .syncing
-                let results = try await healthManager.syncAllWorkouts(missing)
+                let results = try await healthManager.syncAllWorkouts(plannedTargets)
                 let hasData = results.contains { $0.hasHealthData }
+                let skippedCount = max(0, missing.count - plannedTargets.count)
                 if !hasData {
-                    healthSyncNote = "No matching health samples were found for imported workouts."
+                    if skippedCount > 0 {
+                        healthSyncNote = "No matching recent Health samples were found. \(skippedCount) older workout\(skippedCount == 1 ? " was" : "s were") skipped to keep import fast."
+                    } else {
+                        healthSyncNote = "No matching recent Health samples were found for imported workouts."
+                    }
+                } else if skippedCount > 0 {
+                    healthSyncNote = "Synced \(plannedTargets.count) recent workout\(plannedTargets.count == 1 ? "" : "s"). \(skippedCount) older workout\(skippedCount == 1 ? " was" : "s were") skipped to keep import fast."
                 }
                 healthSyncState = .synced(Date())
             } catch {

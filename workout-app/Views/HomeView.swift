@@ -70,7 +70,12 @@ struct HomeView: View {
                             Task {
                                 await dataManager.loadLatestWorkoutData(
                                     iCloudManager: iCloudManager,
-                                    healthDataSnapshot: Array(healthManager.healthDataStore.values)
+                                    healthIdentitySnapshot: healthManager.healthDataStore.values.map {
+                                        WorkoutHealthIdentitySnapshot(
+                                            workoutId: $0.workoutId,
+                                            workoutDate: $0.workoutDate
+                                        )
+                                    }
                                 )
                             }
                         }
@@ -195,7 +200,12 @@ struct HomeView: View {
                 Task {
                     await dataManager.loadLatestWorkoutData(
                         iCloudManager: iCloudManager,
-                        healthDataSnapshot: Array(healthManager.healthDataStore.values)
+                        healthIdentitySnapshot: healthManager.healthDataStore.values.map {
+                            WorkoutHealthIdentitySnapshot(
+                                workoutId: $0.workoutId,
+                                workoutDate: $0.workoutDate
+                            )
+                        }
                     )
                     await insightsEngine.generateInsights()
                     rebuildHomeHighlights()
@@ -209,7 +219,12 @@ struct HomeView: View {
         .refreshable {
             await dataManager.loadLatestWorkoutData(
                 iCloudManager: iCloudManager,
-                healthDataSnapshot: Array(healthManager.healthDataStore.values)
+                healthIdentitySnapshot: healthManager.healthDataStore.values.map {
+                    WorkoutHealthIdentitySnapshot(
+                        workoutId: $0.workoutId,
+                        workoutDate: $0.workoutDate
+                    )
+                }
             )
             await insightsEngine.generateInsights()
             rebuildHomeHighlights()

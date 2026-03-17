@@ -12,6 +12,11 @@ struct ExerciseSummary {
     let stats: ExerciseStats
 }
 
+struct WorkoutHealthIdentitySnapshot {
+    let workoutId: UUID
+    let workoutDate: Date
+}
+
 @MainActor
 class WorkoutDataManager: ObservableObject {
     @Published var workouts: [Workout] = []
@@ -32,7 +37,7 @@ class WorkoutDataManager: ObservableObject {
 
     nonisolated func processImportedWorkoutSets(
         _ sets: [WorkoutSet],
-        healthDataSnapshot: [WorkoutHealthData] = []
+        healthIdentitySnapshot: [WorkoutHealthIdentitySnapshot] = []
     ) async {
         let snapshots: (existingImported: [Workout], identitySnapshot: [String: UUID]) = await MainActor.run {
             self.isLoading = true
@@ -46,7 +51,7 @@ class WorkoutDataManager: ObservableObject {
                 sets: sets,
                 existingImported: snapshots.existingImported,
                 identitySnapshot: snapshots.identitySnapshot,
-                healthDataSnapshot: healthDataSnapshot
+                healthIdentitySnapshot: healthIdentitySnapshot
             )
         }
         let (processedWorkouts, newIdentityEntries) = await task.value
@@ -72,7 +77,7 @@ class WorkoutDataManager: ObservableObject {
     /// Sets `isLoading` / `error` so views can show loading and error states.
     func loadLatestWorkoutData(
         iCloudManager: iCloudDocumentManager,
-        healthDataSnapshot: [WorkoutHealthData]
+        healthIdentitySnapshot: [WorkoutHealthIdentitySnapshot]
     ) async {
         let searchDirectories = await iCloudManager.storageSearchDirectories()
         isLoading = true
@@ -99,7 +104,7 @@ class WorkoutDataManager: ObservableObject {
                 isLoading = false
                 return
             }
-            await processImportedWorkoutSets(sets, healthDataSnapshot: healthDataSnapshot)
+            await processImportedWorkoutSets(sets, healthIdentitySnapshot: healthIdentitySnapshot)
         case .failure(let loadError):
             isLoading = false
             error = loadError.localizedDescription
@@ -441,7 +446,7 @@ private extension WorkoutDataManager {
         sets: [WorkoutSet],
         existingImported: [Workout],
         identitySnapshot: [String: UUID],
-        healthDataSnapshot: [WorkoutHealthData]
+        healthIdentitySnapshot: [WorkoutHealthIdentitySnapshot]
     ) -> ([Workout], [String: UUID]) {
         let calendar = Calendar.current
         let groupedByWorkout = Dictionary(grouping: sets) { set in
@@ -453,7 +458,7 @@ private extension WorkoutDataManager {
             identitySnapshot: identitySnapshot,
             calendar: calendar
         )
-        var legacyCandidatesByHour = makeLegacyCandidatesByHour(from: healthDataSnapshot, calendar: calendar)
+        var legacyCandidatesByHour = makeLegacyCandidatesByHour(from: healthIdentitySnapshot, calendar: calendar)
 
         var workouts: [Workout] = []
         workouts.reserveCapacity(groupedByWorkout.count)
@@ -492,14 +497,14 @@ private extension WorkoutDataManager {
     }
 
     nonisolated static func makeLegacyCandidatesByHour(
-        from healthDataSnapshot: [WorkoutHealthData],
+        from healthIdentitySnapshot: [WorkoutHealthIdentitySnapshot],
         calendar: Calendar
     ) -> [String: [LegacyWorkoutCandidate]] {
         var candidatesByHour: [String: [LegacyWorkoutCandidate]] = [:]
-        for health in healthDataSnapshot {
-            let bucket = WorkoutIdentity.hourBucket(for: health.workoutDate, calendar: calendar)
+        for snapshot in healthIdentitySnapshot {
+            let bucket = WorkoutIdentity.hourBucket(for: snapshot.workoutDate, calendar: calendar)
             candidatesByHour[bucket, default: []].append(
-                LegacyWorkoutCandidate(id: health.workoutId, date: health.workoutDate)
+                LegacyWorkoutCandidate(id: snapshot.workoutId, date: snapshot.workoutDate)
             )
         }
         return candidatesByHour

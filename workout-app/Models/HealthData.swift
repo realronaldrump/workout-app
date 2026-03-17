@@ -42,21 +42,24 @@ struct WorkoutHealthData: Identifiable, Codable {
 
     // MARK: - Recovery & Vitals
     var hrvSamples: [HRVSample]
+    var storedHRVAverage: Double?
     var avgHRV: Double? {
-        guard !hrvSamples.isEmpty else { return nil }
+        guard !hrvSamples.isEmpty else { return storedHRVAverage }
         return hrvSamples.map { $0.value }.reduce(0, +) / Double(hrvSamples.count)
     }
 
     var restingHeartRate: Double?
     var bloodOxygenSamples: [BloodOxygenSample]
+    var storedBloodOxygenAverage: Double?
     var avgBloodOxygen: Double? {
-        guard !bloodOxygenSamples.isEmpty else { return nil }
+        guard !bloodOxygenSamples.isEmpty else { return storedBloodOxygenAverage }
         return bloodOxygenSamples.map { $0.value }.reduce(0, +) / Double(bloodOxygenSamples.count)
     }
 
     var respiratoryRateSamples: [RespiratoryRateSample]
+    var storedRespiratoryRateAverage: Double?
     var avgRespiratoryRate: Double? {
-        guard !respiratoryRateSamples.isEmpty else { return nil }
+        guard !respiratoryRateSamples.isEmpty else { return storedRespiratoryRateAverage }
         return respiratoryRateSamples.map { $0.value }.reduce(0, +) / Double(respiratoryRateSamples.count)
     }
 
@@ -114,9 +117,12 @@ struct WorkoutHealthData: Identifiable, Codable {
         stepCount: Int? = nil,
         flightsClimbed: Int? = nil,
         hrvSamples: [HRVSample] = [],
+        storedHRVAverage: Double? = nil,
         restingHeartRate: Double? = nil,
         bloodOxygenSamples: [BloodOxygenSample] = [],
+        storedBloodOxygenAverage: Double? = nil,
         respiratoryRateSamples: [RespiratoryRateSample] = [],
+        storedRespiratoryRateAverage: Double? = nil,
         bodyMass: Double? = nil,
         bodyFatPercentage: Double? = nil,
         bodyTemperature: Double? = nil,
@@ -157,9 +163,12 @@ struct WorkoutHealthData: Identifiable, Codable {
         self.stepCount = stepCount
         self.flightsClimbed = flightsClimbed
         self.hrvSamples = hrvSamples
+        self.storedHRVAverage = storedHRVAverage
         self.restingHeartRate = restingHeartRate
         self.bloodOxygenSamples = bloodOxygenSamples
+        self.storedBloodOxygenAverage = storedBloodOxygenAverage
         self.respiratoryRateSamples = respiratoryRateSamples
+        self.storedRespiratoryRateAverage = storedRespiratoryRateAverage
         self.bodyMass = bodyMass
         self.bodyFatPercentage = bodyFatPercentage
         self.bodyTemperature = bodyTemperature
@@ -193,6 +202,33 @@ struct WorkoutHealthData: Identifiable, Codable {
         return nil
     }
 
+    var hasRawSamples: Bool {
+        !heartRateSamples.isEmpty ||
+        !hrvSamples.isEmpty ||
+        !bloodOxygenSamples.isEmpty ||
+        !respiratoryRateSamples.isEmpty
+    }
+
+    mutating func captureRawSampleSummaries() {
+        if !hrvSamples.isEmpty {
+            storedHRVAverage = hrvSamples.map(\.value).reduce(0, +) / Double(hrvSamples.count)
+        }
+        if !bloodOxygenSamples.isEmpty {
+            storedBloodOxygenAverage = bloodOxygenSamples.map(\.value).reduce(0, +) / Double(bloodOxygenSamples.count)
+        }
+        if !respiratoryRateSamples.isEmpty {
+            storedRespiratoryRateAverage = respiratoryRateSamples.map(\.value).reduce(0, +) / Double(respiratoryRateSamples.count)
+        }
+    }
+
+    mutating func removeRawSamplesPreservingSummaries() {
+        captureRawSampleSummaries()
+        heartRateSamples = []
+        hrvSamples = []
+        bloodOxygenSamples = []
+        respiratoryRateSamples = []
+    }
+
     /// Checks if meaningful health data was synced
     var hasHealthData: Bool {
         avgHeartRate != nil ||
@@ -203,8 +239,9 @@ struct WorkoutHealthData: Identifiable, Codable {
         dailyActiveEnergy != nil ||
         dailyBasalEnergy != nil ||
         vo2Max != nil ||
-        !hrvSamples.isEmpty ||
-        !bloodOxygenSamples.isEmpty ||
+        avgHRV != nil ||
+        avgBloodOxygen != nil ||
+        avgRespiratoryRate != nil ||
         appleWorkoutType != nil
     }
 }
