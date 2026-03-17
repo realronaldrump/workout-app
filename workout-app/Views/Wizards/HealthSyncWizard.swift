@@ -236,7 +236,12 @@ struct HealthSyncWizard: View {
                 .multilineTextAlignment(.center)
 
             if skippedOlderWorkoutCount > 0 {
-                Text("Skipped \(skippedOlderWorkoutCount) older unsynced workout\(skippedOlderWorkoutCount == 1 ? "" : "s") to keep setup fast. Use Health Cache or Health History in Settings to backfill more.")
+                Text(
+                    "Skipped \(skippedOlderWorkoutCount) older unsynced "
+                        + "workout\(skippedOlderWorkoutCount == 1 ? "" : "s") "
+                        + "to keep setup fast. Use Health Cache or Health "
+                        + "History in Settings to backfill more."
+                )
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Colors.textTertiary)
                     .multilineTextAlignment(.center)

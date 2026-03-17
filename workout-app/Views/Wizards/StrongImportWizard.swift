@@ -673,12 +673,18 @@ struct StrongImportWizard: View {
                 let skippedCount = max(0, missing.count - plannedTargets.count)
                 if !hasData {
                     if skippedCount > 0 {
-                        healthSyncNote = "No matching recent Health samples were found. \(skippedCount) older workout\(skippedCount == 1 ? " was" : "s were") skipped to keep import fast."
+                        healthSyncNote =
+                            "No matching recent Health samples were found. "
+                            + "\(skippedCount) older workout\(skippedCount == 1 ? " was" : "s were") "
+                            + "skipped to keep import fast."
                     } else {
                         healthSyncNote = "No matching recent Health samples were found for imported workouts."
                     }
                 } else if skippedCount > 0 {
-                    healthSyncNote = "Synced \(plannedTargets.count) recent workout\(plannedTargets.count == 1 ? "" : "s"). \(skippedCount) older workout\(skippedCount == 1 ? " was" : "s were") skipped to keep import fast."
+                    healthSyncNote =
+                        "Synced \(plannedTargets.count) recent workout\(plannedTargets.count == 1 ? "" : "s"). "
+                        + "\(skippedCount) older workout\(skippedCount == 1 ? " was" : "s were") "
+                        + "skipped to keep import fast."
                 }
                 healthSyncState = .synced(Date())
             } catch {

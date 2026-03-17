@@ -11,8 +11,6 @@ struct HealthCacheClearResult {
 }
 
 extension HealthKitManager {
-    private static let persistedRawSampleRetentionDays = 180
-
     private func getDocumentsDirectory() -> URL {
         let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
         return paths[0]
@@ -38,13 +36,16 @@ extension HealthKitManager {
         workoutDataDirectoryURL.appendingPathComponent("\(workoutID.uuidString).json")
     }
 
-    private func shouldPersistRawSamples(for workoutDate: Date, reference: Date = Date()) -> Bool {
-        let cutoff = Calendar.current.date(byAdding: .day, value: -Self.persistedRawSampleRetentionDays, to: reference)
+    private nonisolated static func shouldPersistRawSamples(for workoutDate: Date, reference: Date = Date()) -> Bool {
+        let cutoff = Calendar.current.date(byAdding: .day, value: -180, to: reference)
             ?? reference
         return workoutDate >= cutoff
     }
 
-    private func preparedWorkoutCacheEntry(_ entry: WorkoutHealthData, reference: Date = Date()) -> WorkoutHealthData {
+    private nonisolated static func preparedWorkoutCacheEntry(
+        _ entry: WorkoutHealthData,
+        reference: Date = Date()
+    ) -> WorkoutHealthData {
         guard !shouldPersistRawSamples(for: entry.workoutDate, reference: reference) else {
             var prepared = entry
             prepared.captureRawSampleSummaries()
@@ -61,13 +62,14 @@ extension HealthKitManager {
         try fileManager.createDirectory(at: workoutDataDirectoryURL, withIntermediateDirectories: true)
 
         let encoder = JSONEncoder()
-        let preparedEntries = entries.map(preparedWorkoutCacheEntry)
+        let writeOptions: Data.WritingOptions = [.atomic, .completeFileProtection]
+        let preparedEntries = entries.map { Self.preparedWorkoutCacheEntry($0) }
         let validFileNames = Set(preparedEntries.map { "\($0.workoutId.uuidString).json" })
 
         for entry in preparedEntries {
             let fileURL = workoutDataFileURL(for: entry.workoutId)
             let data = try encoder.encode(entry)
-            try data.write(to: fileURL, options: [.atomic, .completeFileProtection])
+            try data.write(to: fileURL, options: writeOptions)
         }
 
         let directoryContents = try fileManager.contentsOfDirectory(
@@ -86,6 +88,10 @@ extension HealthKitManager {
         let directoryURL = workoutDataDirectoryURL
         let idsToPersist = changedWorkoutIDs ?? Array(snapshot.keys)
         let idsToRemove = removedWorkoutIDs
+        let writeOptions: Data.WritingOptions = [.atomic, .completeFileProtection]
+        let preparedEntriesByID = Dictionary(uniqueKeysWithValues: idsToPersist.compactMap { workoutID in
+            snapshot[workoutID].map { (workoutID, Self.preparedWorkoutCacheEntry($0)) }
+        })
 
         Task.detached(priority: .utility) {
             do {
@@ -96,16 +102,15 @@ extension HealthKitManager {
 
                 for workoutID in idsToPersist {
                     let fileURL = directoryURL.appendingPathComponent("\(workoutID.uuidString).json")
-                    guard let entry = snapshot[workoutID] else {
+                    guard let preparedEntry = preparedEntriesByID[workoutID] else {
                         if fileManager.fileExists(atPath: fileURL.path) {
                             try? fileManager.removeItem(at: fileURL)
                         }
                         continue
                     }
 
-                    let preparedEntry = preparedWorkoutCacheEntry(entry)
                     let data = try encoder.encode(preparedEntry)
-                    try data.write(to: fileURL, options: [.atomic, .completeFileProtection])
+                    try data.write(to: fileURL, options: writeOptions)
                 }
 
                 for workoutID in idsToRemove {
@@ -136,10 +141,11 @@ extension HealthKitManager {
     func persistDailyHealthData() {
         let entries = Array(dailyHealthStore.values)
         let url = dailyDataFileURL
+        let writeOptions: Data.WritingOptions = [.atomic, .completeFileProtection]
         Task.detached(priority: .utility) {
             do {
                 let data = try JSONEncoder().encode(entries)
-                try data.write(to: url, options: [.atomic, .completeFileProtection])
+                try data.write(to: url, options: writeOptions)
             } catch {
                 print("Failed to persist daily health data: \(error)")
             }
@@ -149,10 +155,11 @@ extension HealthKitManager {
     func persistDailyHealthCoverage() {
         let coveredDays = Array(dailyHealthCoverage).sorted()
         let url = dailyCoverageFileURL
+        let writeOptions: Data.WritingOptions = [.atomic, .completeFileProtection]
         Task.detached(priority: .utility) {
             do {
                 let data = try JSONEncoder().encode(coveredDays)
-                try data.write(to: url, options: [.atomic, .completeFileProtection])
+                try data.write(to: url, options: writeOptions)
             } catch {
                 print("Failed to persist daily health coverage: \(error)")
             }
@@ -277,7 +284,7 @@ extension HealthKitManager {
                     let healthDataArray = try fileURLs.map { fileURL in
                         let data = try Data(contentsOf: fileURL)
                         let decoded = try decoder.decode(WorkoutHealthData.self, from: data)
-                        return preparedWorkoutCacheEntry(decoded)
+                        return Self.preparedWorkoutCacheEntry(decoded)
                     }
                     healthDataStore = Dictionary(uniqueKeysWithValues: healthDataArray.map { ($0.workoutId, $0) })
                     print("Loaded \(healthDataStore.count) health records")
@@ -293,7 +300,7 @@ extension HealthKitManager {
             guard FileManager.default.fileExists(atPath: dataFileURL.path) else { return }
             let data = try Data(contentsOf: dataFileURL)
             let healthDataArray = try JSONDecoder().decode([WorkoutHealthData].self, from: data)
-            let preparedEntries = healthDataArray.map(preparedWorkoutCacheEntry)
+            let preparedEntries = healthDataArray.map { Self.preparedWorkoutCacheEntry($0) }
             healthDataStore = Dictionary(uniqueKeysWithValues: preparedEntries.map { ($0.workoutId, $0) })
             try writeWorkoutEntriesToDirectory(preparedEntries)
             try? FileManager.default.removeItem(at: dataFileURL)
