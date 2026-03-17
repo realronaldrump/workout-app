@@ -2,6 +2,17 @@ import XCTest
 @testable import workout_app
 
 final class HealthExportAndTimelineTests: XCTestCase {
+    func testHealthDateRangeContextAllTimeUsesProvidedEarliestDate() {
+        let reference = dayStart(year: 2026, month: 6, day: 30).addingTimeInterval(12 * 60 * 60)
+        let earliest = dayStart(year: 2024, month: 6, day: 15)
+        let context = HealthDateRangeContext(selectedRange: .allTime)
+
+        let resolved = context.resolvedRange(reference: reference, earliest: earliest)
+
+        XCTAssertEqual(resolved.start, earliest)
+        XCTAssertEqual(resolved.end, reference)
+    }
+
     func testTimelineSamplingKeepsCompactViewNearTargetCount() {
         let indices = TimelineSampling.sampledIndices(totalCount: 13, targetCount: 12)
 

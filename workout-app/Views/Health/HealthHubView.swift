@@ -12,7 +12,7 @@ struct HealthHubView: View {
     @State private var cachedSummaryCards: [HealthSummaryCardModel] = []
 
     private var earliestDate: Date? {
-        healthManager.allTimeDailyHealthStartDate
+        healthManager.dailyHealthStore.keys.min()
     }
 
     private var currentRange: DateInterval {
@@ -21,10 +21,6 @@ struct HealthHubView: View {
 
     private var rangeLabel: String {
         dateRangeContext.rangeLabel(earliest: earliestDate)
-    }
-
-    private var isAllTimeRange: Bool {
-        dateRangeContext.selectedRange == .allTime
     }
 
     private var timelineSourceDays: [DailyHealthData] {
@@ -79,23 +75,6 @@ struct HealthHubView: View {
         timelineDensity != .compact && timelineSourceDays.count > TimelinePresentation.compactTargetCount
     }
 
-    private var historyStatusText: String? {
-        guard healthManager.authorizationStatus == .authorized else { return nil }
-        guard isAllTimeRange else { return nil }
-
-        if healthManager.isResolvingDailyHealthHistory && healthManager.allTimeDailyHealthStartDate == nil {
-            return "Checking your earliest Apple Health data so All uses your full history."
-        }
-
-        let totalDays = healthManager.dayCount(in: currentRange)
-        guard totalDays > 0 else { return nil }
-
-        let coveredDays = healthManager.coveredDayCount(in: currentRange)
-        guard coveredDays < totalDays else { return nil }
-
-        return "All time loads in yearly batches. \(coveredDays) of \(totalDays) days have been scanned so far, and overview cards reflect the loaded days."
-    }
-
     private var headerSubtitle: String {
         let dayCount = cachedDailyData.count
         let countLabel = dayCount == 1 ? "1 day with data" : "\(dayCount) days with data"
@@ -111,10 +90,6 @@ struct HealthHubView: View {
                     headerSection
 
                     timeRangeSection
-
-                    if let historyStatusText {
-                        historyStatusCard(text: historyStatusText)
-                    }
 
                     if healthManager.authorizationStatus == .unavailable {
                         unavailableCard
@@ -148,29 +123,15 @@ struct HealthHubView: View {
         .onAppear {
             healthManager.refreshAuthorizationStatus()
             refreshCachedContent()
-            triggerDailySync(force: false)
         }
         .onChange(of: dateRangeContext.selectedRange) { _, _ in
             timelineDensity = .compact
             refreshCachedContent()
-            triggerDailySync(force: false)
         }
         .onChange(of: dateRangeContext.customRange) { _, _ in
             if dateRangeContext.selectedRange == .custom {
                 timelineDensity = .compact
                 refreshCachedContent()
-                triggerDailySync(force: false)
-            }
-        }
-        .onChange(of: healthManager.authorizationStatus) { _, newValue in
-            if newValue == .authorized {
-                triggerDailySync(force: false)
-            }
-        }
-        .onChange(of: healthManager.earliestAvailableDailyHealthDate) { _, _ in
-            if isAllTimeRange {
-                refreshCachedContent()
-                triggerDailySync(force: false)
             }
         }
         .onReceive(healthManager.$dailyHealthStore) { _ in
@@ -180,49 +141,15 @@ struct HealthHubView: View {
 
     private var headerSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            HStack(alignment: .center) {
-                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                    Text("Health")
-                        .font(Theme.Typography.screenTitle)
-                        .foregroundStyle(Theme.Colors.textPrimary)
-                        .tracking(1.5)
+            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                Text("Health")
+                    .font(Theme.Typography.screenTitle)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                    .tracking(1.5)
 
-                    Text(headerSubtitle)
-                        .font(Theme.Typography.body)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                }
-
-                Spacer()
-
-                Button {
-                    triggerDailySync(force: true)
-                } label: {
-                    Group {
-                        if healthManager.isDailySyncing {
-                            ProgressView(value: healthManager.dailySyncProgress)
-                                .progressViewStyle(CircularProgressViewStyle())
-                                .tint(Theme.Colors.accent)
-                        } else {
-                            Image(systemName: "arrow.clockwise")
-                                .font(Theme.Typography.bodyStrong)
-                                .foregroundStyle(Theme.Colors.textPrimary)
-                        }
-                    }
-                    .frame(width: 44, height: 44)
-                    .background(
-                        Circle()
-                            .fill(Theme.Colors.surfaceRaised)
-                    )
-                    .overlay(
-                        Circle()
-                            .strokeBorder(Theme.Colors.border.opacity(0.5), lineWidth: 1)
-                    )
-                }
-                .buttonStyle(.plain)
-                .disabled(
-                    healthManager.authorizationStatus != .authorized || healthManager.isDailySyncing
-                )
-                .accessibilityLabel("Refresh health data")
+                Text(headerSubtitle)
+                    .font(Theme.Typography.body)
+                    .foregroundStyle(Theme.Colors.textSecondary)
             }
 
             if let lastSync = healthManager.lastDailySyncDate {
@@ -236,15 +163,6 @@ struct HealthHubView: View {
     private var timeRangeSection: some View {
         HealthDateRangeSection(earliestDate: earliestDate)
             .padding(.horizontal, Theme.Spacing.xs)
-    }
-
-    private func historyStatusCard(text: String) -> some View {
-        Text(text)
-            .font(Theme.Typography.caption)
-            .foregroundStyle(Theme.Colors.textSecondary)
-            .padding(Theme.Spacing.md)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .softCard(elevation: 1)
     }
 
     private var summarySection: some View {
@@ -410,22 +328,13 @@ struct HealthHubView: View {
                 .font(Theme.Typography.title3)
                 .foregroundStyle(Theme.Colors.textPrimary)
 
-            Text("Sync Apple Health to see daily activity, sleep, vitals, and recovery trends.")
+            Text("Use Settings to sync Apple Health data before viewing daily activity, sleep, vitals, and recovery trends here.")
                 .font(Theme.Typography.body)
                 .foregroundStyle(Theme.Colors.textSecondary)
 
-            Button {
-                triggerDailySync(force: true)
-            } label: {
-                Text("Sync Now")
-                    .font(Theme.Typography.headline)
-                    .foregroundStyle(Theme.Colors.textPrimary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, Theme.Spacing.sm)
-                    .background(Theme.Colors.elevated)
-                    .cornerRadius(Theme.CornerRadius.large)
-            }
-            .buttonStyle(.plain)
+            Text("Health date ranges only filter the data already stored in the app.")
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.Colors.textTertiary)
         }
         .padding(Theme.Spacing.xl)
         .softCard(elevation: 1)
@@ -496,50 +405,12 @@ struct HealthHubView: View {
         HealthHubFormatters.mediumDateTime.string(from: date)
     }
 
-    private func triggerDailySync(force: Bool) {
-        guard healthManager.authorizationStatus == .authorized else { return }
-        guard !healthManager.isDailySyncing else { return }
-
-        Task {
-            await healthManager.ensureEarliestAvailableDailyHealthDate()
-
-            let resolvedRange = resolvedCurrentRange()
-
-            if isAllTimeRange {
-                if force {
-                    let refreshRange = DailyTimelineRangePolicy.recentRefreshRange(within: resolvedRange)
-                    try? await healthManager.syncDailyHealthData(range: refreshRange)
-                    await healthManager.ensureDailyHealthData(
-                        range: resolvedRange,
-                        batchSizeDays: DailyTimelineRangePolicy.historyBackfillBatchDays,
-                        direction: .backward
-                    )
-                } else {
-                    await healthManager.ensureDailyHealthData(
-                        range: resolvedRange,
-                        batchSizeDays: DailyTimelineRangePolicy.historyBackfillBatchDays,
-                        maxBatches: 1,
-                        direction: .backward
-                    )
-                }
-            } else if force {
-                try? await healthManager.syncDailyHealthData(range: resolvedRange)
-            } else {
-                await healthManager.ensureDailyHealthData(range: resolvedCurrentRange())
-            }
-        }
-    }
-
     private func refreshCachedContent() {
         let filtered = healthManager.dailyHealthStore.values
             .filter { currentRange.contains($0.dayStart) }
             .sorted { $0.dayStart < $1.dayStart }
         cachedDailyData = filtered
         cachedSummaryCards = buildSummaryCards(from: filtered)
-    }
-
-    private func resolvedCurrentRange() -> DateInterval {
-        dateRangeContext.resolvedRange(earliest: healthManager.allTimeDailyHealthStartDate)
     }
 }
 
@@ -593,8 +464,6 @@ enum TimelineSampling {
 
 enum DailyTimelineRangePolicy {
     static let recentWindowDays = 90
-    static let recentRefreshDays = 30
-    static let historyBackfillBatchDays = 365
     static let longRangeThresholdDays = 366
 
     static func shouldLimitTimeline(
@@ -620,15 +489,6 @@ enum DailyTimelineRangePolicy {
         return sortedDays.filter { $0.dayStart >= cutoff }
     }
 
-    static func recentRefreshRange(
-        within range: DateInterval,
-        calendar: Calendar = .current
-    ) -> DateInterval {
-        let refreshStartReference = calendar.date(byAdding: .day, value: -(recentRefreshDays - 1), to: range.end) ?? range.start
-        let refreshStart = max(calendar.startOfDay(for: refreshStartReference), calendar.startOfDay(for: range.start))
-        let refreshEnd = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: range.end) ?? range.end
-        return DateInterval(start: refreshStart, end: refreshEnd)
-    }
 }
 
 private struct TimelinePresentation {
