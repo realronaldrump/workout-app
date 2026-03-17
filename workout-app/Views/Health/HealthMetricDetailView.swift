@@ -12,7 +12,7 @@ struct HealthMetricDetailView: View {
     @State private var sampleError: String?
 
     private var earliestDate: Date? {
-        healthManager.allTimeDailyHealthStartDate
+        healthManager.dailyHealthStore.keys.min()
     }
 
     private var range: DateInterval {
@@ -139,7 +139,7 @@ struct HealthMetricDetailView: View {
             Text("No data in this range")
                 .font(Theme.Typography.title3)
                 .foregroundStyle(Theme.Colors.textPrimary)
-            Text("Try a longer time range or sync Apple Health.")
+            Text("Try a longer time range or use Settings to sync more Apple Health data.")
                 .font(Theme.Typography.body)
                 .foregroundStyle(Theme.Colors.textSecondary)
         }

@@ -8,7 +8,7 @@ struct HealthCategoryDetailView: View {
     @EnvironmentObject private var dateRangeContext: HealthDateRangeContext
 
     private var earliestDate: Date? {
-        healthManager.allTimeDailyHealthStartDate
+        healthManager.dailyHealthStore.keys.min()
     }
 
     private var range: DateInterval {
@@ -79,7 +79,7 @@ struct HealthCategoryDetailView: View {
             Text("No data yet")
                 .font(Theme.Typography.title3)
                 .foregroundStyle(Theme.Colors.textPrimary)
-            Text("Sync Apple Health to see \(category.title.lowercased()) metrics.")
+            Text("Use Settings to sync Apple Health data before viewing \(category.title.lowercased()) metrics here.")
                 .font(Theme.Typography.body)
                 .foregroundStyle(Theme.Colors.textSecondary)
         }
