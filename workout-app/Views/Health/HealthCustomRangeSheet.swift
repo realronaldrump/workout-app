@@ -26,47 +26,69 @@ struct HealthCustomRangeSheet: View {
             ZStack {
                 AdaptiveBackground()
 
-                VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-                    DatePicker(
-                        "Start",
-                        selection: $startDate,
-                        in: (earliestSelectableDate ?? Date.distantPast)...Date(),
-                        displayedComponents: .date
-                    )
-                    .datePickerStyle(.graphical)
+                ScrollView(showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
+                        dateCard(
+                            title: "Start",
+                            selection: $startDate,
+                            range: (earliestSelectableDate ?? Date.distantPast)...Date()
+                        )
 
-                    DatePicker(
-                        "End",
-                        selection: $endDate,
-                        in: startDate...Date(),
-                        displayedComponents: .date
-                    )
-                    .datePickerStyle(.graphical)
+                        dateCard(
+                            title: "End",
+                            selection: $endDate,
+                            range: startDate...Date()
+                        )
 
-                    Button {
-                        let calendar = Calendar.current
-                        let start = calendar.startOfDay(for: startDate)
-                        let end = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: endDate) ?? endDate
-                        range = DateInterval(start: start, end: end)
-                        onApply()
-                        dismiss()
-                    } label: {
-                        Text("Apply Range")
-                            .font(Theme.Typography.headline)
-                            .foregroundStyle(Theme.Colors.textPrimary)
-                            .frame(maxWidth: .infinity)
-                            .padding(Theme.Spacing.md)
-                            .background(Theme.Colors.elevated)
-                            .cornerRadius(Theme.CornerRadius.large)
+                        Button {
+                            let calendar = Calendar.current
+                            let start = calendar.startOfDay(for: startDate)
+                            let end = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: endDate) ?? endDate
+                            range = DateInterval(start: start, end: end)
+                            onApply()
+                            dismiss()
+                        } label: {
+                            Text("Apply Range")
+                                .font(Theme.Typography.headline)
+                                .foregroundStyle(Theme.Colors.textPrimary)
+                                .frame(maxWidth: .infinity)
+                                .padding(Theme.Spacing.md)
+                                .background(Theme.Colors.elevated)
+                                .cornerRadius(Theme.CornerRadius.large)
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
-
-                    Spacer()
+                    .padding(Theme.Spacing.xl)
                 }
-                .padding(Theme.Spacing.xl)
             }
             .navigationTitle("Custom Range")
             .navigationBarTitleDisplayMode(.inline)
         }
+    }
+
+    private func dateCard(
+        title: String,
+        selection: Binding<Date>,
+        range: ClosedRange<Date>
+    ) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            Text(title)
+                .font(Theme.Typography.metricLabel)
+                .foregroundStyle(Theme.Colors.textTertiary)
+                .textCase(.uppercase)
+                .tracking(0.8)
+
+            DatePicker(
+                title,
+                selection: selection,
+                in: range,
+                displayedComponents: .date
+            )
+            .datePickerStyle(.graphical)
+            .labelsHidden()
+            .tint(Theme.Colors.accent)
+        }
+        .padding(Theme.Spacing.lg)
+        .softCard(elevation: 2)
     }
 }
