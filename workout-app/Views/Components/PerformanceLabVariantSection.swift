@@ -25,12 +25,12 @@ struct PerformanceLabVariantSection: View {
                 .buttonStyle(.plain)
             }
 
-            Text("How different versions of a similar exercise mix tend to change performance.")
+            Text("Compare how swapping exercises in a similar routine affects your results.")
                 .font(Theme.Typography.caption)
                 .foregroundColor(Theme.Colors.textSecondary)
 
             if patterns.isEmpty {
-                Text("Repeat a similar set of exercises in different ways and the app will compare those variants here.")
+                Text("Try mixing up your exercises across workouts and the app will compare the variants here.")
                     .font(Theme.Typography.body)
                     .foregroundColor(Theme.Colors.textSecondary)
                     .padding(Theme.Spacing.lg)

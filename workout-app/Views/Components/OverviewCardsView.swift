@@ -20,7 +20,7 @@ struct OverviewCardsView: View {
                     title: "Total Workouts",
                     value: "\(stats.totalWorkouts)",
                     icon: "figure.strengthtraining.traditional",
-                    color: .blue
+                    color: Theme.Colors.accent
                 )
 
                 StatCard(
@@ -28,21 +28,21 @@ struct OverviewCardsView: View {
                     value: "\(stats.currentStreak)",
                     subtitle: "days",
                     icon: "flame.fill",
-                    color: .orange
+                    color: Theme.Colors.accentSecondary
                 )
 
                 StatCard(
                     title: "Total Volume",
                     value: SharedFormatters.volumeCompact(stats.totalVolume),
                     icon: "scalemass.fill",
-                    color: .green
+                    color: Theme.Colors.success
                 )
 
                 StatCard(
                     title: "Total Sets",
                     value: "\(stats.totalSets)",
                     icon: "number.square.fill",
-                    color: .purple
+                    color: Theme.Colors.accentTertiary
                 )
             }
 

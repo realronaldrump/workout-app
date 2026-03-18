@@ -9,54 +9,63 @@ enum Theme {
     // MARK: - Colors
 
     enum Colors {
-        // Warm Precision palette: sophisticated, warm neutrals, real depth.
-        // Electric blue accent remains the hero color.
+        // Warm Precision palette with full dark mode support.
+        // Uses adaptive UIColors that automatically resolve per trait collection.
 
-        // Core surfaces — warm ivory, layered depth
-        static let background = Color(uiColor: UIColor(hex: 0xF6F4F0))
-        static let surface = Color(uiColor: UIColor(hex: 0xFFFFFF))
-        static let elevated = Color(uiColor: UIColor(hex: 0xFFFFFF))
-        static let cardBackground = Color(uiColor: UIColor(hex: 0xFFFFFF))
-        static let border = Color(uiColor: UIColor(hex: 0xE0DBD3))  // Warm subtle border
+        /// Helper: creates a SwiftUI Color that adapts between light and dark mode.
+        private static func adaptive(light: UInt32, dark: UInt32) -> Color {
+            Color(uiColor: UIColor { trait in
+                trait.userInterfaceStyle == .dark
+                    ? UIColor(hex: dark)
+                    : UIColor(hex: light)
+            })
+        }
 
-        // Text hierarchy — warm, refined contrast
-        static let textPrimary = Color(uiColor: UIColor(hex: 0x1A1714))
-        static let textSecondary = Color(uiColor: UIColor(hex: 0x6B6560))
-        static let textTertiary = Color(uiColor: UIColor(hex: 0xA39E99))
+        // Core surfaces — warm ivory (light) / deep charcoal (dark)
+        static let background      = adaptive(light: 0xF6F4F0, dark: 0x0F0F11)
+        static let surface         = adaptive(light: 0xFFFFFF, dark: 0x1C1C1E)
+        static let elevated        = adaptive(light: 0xFFFFFF, dark: 0x2C2C2E)
+        static let cardBackground  = adaptive(light: 0xFFFFFF, dark: 0x1C1C1E)
+        static let border          = adaptive(light: 0xE0DBD3, dark: 0x38383A)
 
-        // Accent colors — vibrant and confident
-        static let accent = Color(uiColor: UIColor(hex: 0x2563EB))  // Royal blue — deeper, richer
-        static let accentSecondary = Color(uiColor: UIColor(hex: 0xF97316)) // Warm amber-orange
-        static let accentTertiary = Color(uiColor: UIColor(hex: 0x8B5CF6))  // Violet punch
+        // Text hierarchy — warm contrast (light) / soft white (dark)
+        static let textPrimary     = adaptive(light: 0x1A1714, dark: 0xECECED)
+        static let textSecondary   = adaptive(light: 0x6B6560, dark: 0x98989D)
+        static let textTertiary    = adaptive(light: 0xA39E99, dark: 0x5A5A5E)
 
-        // Semantic colors — clear, confident
-        static let success = Color(uiColor: UIColor(hex: 0x16A34A))
-        static let warning = Color(uiColor: UIColor(hex: 0xF59E0B))
-        static let error = Color(uiColor: UIColor(hex: 0xEF4444))
-        static let info = accent
+        // Accent colors — slightly lighter in dark for contrast
+        static let accent          = adaptive(light: 0x2563EB, dark: 0x3B82F6)
+        static let accentSecondary = adaptive(light: 0xF97316, dark: 0xFB923C)
+        static let accentTertiary  = adaptive(light: 0x8B5CF6, dark: 0xA78BFA)
+
+        // Semantic colors — boosted luminance in dark
+        static let success         = adaptive(light: 0x16A34A, dark: 0x4ADE80)
+        static let warning         = adaptive(light: 0xF59E0B, dark: 0xFBBF24)
+        static let error           = adaptive(light: 0xEF4444, dark: 0xF87171)
+        static let info            = accent
         static let shadowOpacity: Double = 0.08
 
         // PR/Achievement
-        static let gold = Color(uiColor: UIColor(hex: 0xF59E0B))
+        static let gold            = adaptive(light: 0xF59E0B, dark: 0xFBBF24)
 
-        // Muscle groups — vibrant, distinguishable
-        static let chest = Color(uiColor: UIColor(hex: 0xEF4444))
-        static let back = Color(uiColor: UIColor(hex: 0x2563EB))
-        static let shoulders = Color(uiColor: UIColor(hex: 0xF59E0B))
-        static let biceps = Color(uiColor: UIColor(hex: 0xA855F7))
-        static let triceps = Color(uiColor: UIColor(hex: 0xEC4899))
-        static let quads = Color(uiColor: UIColor(hex: 0x16A34A))
-        static let hamstrings = Color(uiColor: UIColor(hex: 0x14B8A6))
-        static let glutes = Color(uiColor: UIColor(hex: 0x8B5CF6))
-        static let calves = Color(uiColor: UIColor(hex: 0x06B6D4))
-        static let core = Color(uiColor: UIColor(hex: 0xF59E0B))
-        static let cardio = Color(uiColor: UIColor(hex: 0x06B6D4))
+        // Muscle groups — boosted luminance in dark
+        static let chest           = adaptive(light: 0xEF4444, dark: 0xF87171)
+        static let back            = adaptive(light: 0x2563EB, dark: 0x3B82F6)
+        static let shoulders       = adaptive(light: 0xF59E0B, dark: 0xFBBF24)
+        static let biceps          = adaptive(light: 0xA855F7, dark: 0xC084FC)
+        static let triceps         = adaptive(light: 0xEC4899, dark: 0xF472B6)
+        static let quads           = adaptive(light: 0x16A34A, dark: 0x4ADE80)
+        static let hamstrings      = adaptive(light: 0x14B8A6, dark: 0x2DD4BF)
+        static let glutes          = adaptive(light: 0x8B5CF6, dark: 0xA78BFA)
+        static let calves          = adaptive(light: 0x06B6D4, dark: 0x22D3EE)
+        static let core            = adaptive(light: 0xF59E0B, dark: 0xFBBF24)
+        static let cardio          = adaptive(light: 0x06B6D4, dark: 0x22D3EE)
 
-        // Surface tints — for section variety and colored backgrounds
-        static let accentTint = Color(uiColor: UIColor(hex: 0x2563EB)).opacity(0.06)
-        static let warmTint = Color(uiColor: UIColor(hex: 0xF97316)).opacity(0.05)
-        static let successTint = Color(uiColor: UIColor(hex: 0x16A34A)).opacity(0.06)
-        static let surfaceRaised = Color(uiColor: UIColor(hex: 0xFAF9F7))
+        // Surface tints — pre-resolved adaptive fills
+        static let accentTint      = adaptive(light: 0xEEF2FC, dark: 0x141C30)
+        static let warmTint        = adaptive(light: 0xFFF8F0, dark: 0x251D14)
+        static let successTint     = adaptive(light: 0xEFFBF3, dark: 0x122118)
+        static let surfaceRaised   = adaptive(light: 0xFAF9F7, dark: 0x222224)
 
         /// Lookup muscle group color by enum value.
         static func muscleGroupColor(for group: MuscleGroup) -> Color {
@@ -79,18 +88,27 @@ enum Theme {
     // MARK: - UIKit Colors (for UIAppearance)
 
     enum UIColors {
-        static let background = UIColor(hex: 0xF6F4F0)
-        static let surface = UIColor(hex: 0xFFFFFF)
-        static let elevated = UIColor(hex: 0xFFFFFF)
-        static let cardBackground = UIColor(hex: 0xFFFFFF)
-        static let border = UIColor(hex: 0xE0DBD3)
+        /// Helper: creates a UIColor that adapts between light and dark mode.
+        private static func adaptive(light: UInt32, dark: UInt32) -> UIColor {
+            UIColor { trait in
+                trait.userInterfaceStyle == .dark
+                    ? UIColor(hex: dark)
+                    : UIColor(hex: light)
+            }
+        }
 
-        static let textPrimary = UIColor(hex: 0x1A1714)
-        static let textSecondary = UIColor(hex: 0x6B6560)
-        static let textTertiary = UIColor(hex: 0xA39E99)
+        static let background      = adaptive(light: 0xF6F4F0, dark: 0x0F0F11)
+        static let surface         = adaptive(light: 0xFFFFFF, dark: 0x1C1C1E)
+        static let elevated        = adaptive(light: 0xFFFFFF, dark: 0x2C2C2E)
+        static let cardBackground  = adaptive(light: 0xFFFFFF, dark: 0x1C1C1E)
+        static let border          = adaptive(light: 0xE0DBD3, dark: 0x38383A)
 
-        static let accent = UIColor(hex: 0x2563EB)
-        static let accentSecondary = UIColor(hex: 0xF97316)
+        static let textPrimary     = adaptive(light: 0x1A1714, dark: 0xECECED)
+        static let textSecondary   = adaptive(light: 0x6B6560, dark: 0x98989D)
+        static let textTertiary    = adaptive(light: 0xA39E99, dark: 0x5A5A5E)
+
+        static let accent          = adaptive(light: 0x2563EB, dark: 0x3B82F6)
+        static let accentSecondary = adaptive(light: 0xF97316, dark: 0xFB923C)
     }
 
     static func configureGlobalAppearance() {
@@ -343,8 +361,10 @@ struct SplashBackground: View {
 struct SoftCardBackground: ViewModifier {
     var cornerRadius: CGFloat = Theme.CornerRadius.large
     var elevation: CGFloat = 1
+    @Environment(\.colorScheme) private var colorScheme
 
     func body(content: Content) -> some View {
+        let isDark = colorScheme == .dark
         content
             .background(
                 RoundedRectangle(cornerRadius: cornerRadius)
@@ -352,9 +372,12 @@ struct SoftCardBackground: ViewModifier {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: cornerRadius)
-                    .strokeBorder(Theme.Colors.border.opacity(0.5), lineWidth: 1)
+                    .strokeBorder(
+                        Theme.Colors.border.opacity(isDark ? 0.8 : 0.5),
+                        lineWidth: isDark ? 0.5 : 1
+                    )
             )
-            // Layered shadow system — inner soft + outer ambient
+            // Layered shadow system — visible in light, subtle in dark
             .shadow(
                 color: Color.black.opacity(0.03 * elevation),
                 radius: 1,
@@ -362,10 +385,10 @@ struct SoftCardBackground: ViewModifier {
                 y: 1
             )
             .shadow(
-                color: Color.black.opacity(0.05 * elevation),
-                radius: 8 * elevation,
+                color: Color.black.opacity((isDark ? 0.15 : 0.05) * elevation),
+                radius: isDark ? 4 : 8 * elevation,
                 x: 0,
-                y: 4 * elevation
+                y: isDark ? 2 : 4 * elevation
             )
             .shadow(
                 color: Color.black.opacity(0.02 * elevation),
@@ -382,8 +405,10 @@ struct GlassBackground: ViewModifier {
     var opacity: Double = 0.08
     var cornerRadius: CGFloat = Theme.CornerRadius.medium
     var elevation: CGFloat = 1
+    @Environment(\.colorScheme) private var colorScheme
 
     func body(content: Content) -> some View {
+        let isDark = colorScheme == .dark
         content
             .background(
                 RoundedRectangle(cornerRadius: cornerRadius)
@@ -391,7 +416,10 @@ struct GlassBackground: ViewModifier {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: cornerRadius)
-                    .strokeBorder(Theme.Colors.border.opacity(0.4), lineWidth: 1)
+                    .strokeBorder(
+                        Theme.Colors.border.opacity(isDark ? 0.7 : 0.4),
+                        lineWidth: isDark ? 0.5 : 1
+                    )
             )
             .shadow(
                 color: Color.black.opacity(0.04 * elevation),
@@ -410,8 +438,10 @@ struct BrutalistButtonChrome: ViewModifier {
     var cornerRadius: CGFloat = Theme.CornerRadius.large
     var borderWidth: CGFloat = 1
     var shadowOffset: CGFloat = 2
+    @Environment(\.colorScheme) private var colorScheme
 
     func body(content: Content) -> some View {
+        let isDark = colorScheme == .dark
         content
             .background(
                 RoundedRectangle(cornerRadius: cornerRadius)
@@ -419,7 +449,10 @@ struct BrutalistButtonChrome: ViewModifier {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: cornerRadius)
-                    .strokeBorder(border.opacity(0.4), lineWidth: borderWidth)
+                    .strokeBorder(
+                        border.opacity(isDark ? 0.7 : 0.4),
+                        lineWidth: isDark ? 0.5 : borderWidth
+                    )
             )
             .shadow(
                 color: Color.black.opacity(0.06),

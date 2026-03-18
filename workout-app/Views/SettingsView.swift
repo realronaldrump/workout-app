@@ -17,6 +17,7 @@ struct SettingsView: View {
     @AppStorage("intentionalRestDays") private var intentionalRestDays: Int = 1
     @AppStorage("sessionsPerWeekGoal") private var sessionsPerWeekGoal: Int = 4
     @AppStorage("preferredSleepSourceName") private var preferredSleepSourceName: String = ""
+    @AppStorage("appearanceMode") private var appearanceMode: Int = AppearanceMode.system.rawValue
 
     var body: some View {
         ZStack {
@@ -45,6 +46,32 @@ struct SettingsView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, Theme.Spacing.xl)
                 .animateOnAppear()
+
+                // Appearance Section
+                VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+                    SettingsSectionLabel("APPEARANCE")
+
+                    HStack(spacing: Theme.Spacing.sm) {
+                        Image(systemName: appearanceIcon)
+                            .font(Theme.Typography.subheadlineStrong)
+                            .foregroundStyle(.white)
+                            .frame(width: 32, height: 32)
+                            .background(Theme.Colors.accent)
+                            .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
+
+                        Text("Theme")
+                            .font(Theme.Typography.body)
+
+                        Spacer()
+                    }
+                    .padding(.horizontal)
+
+                    BrutalistSegmentedPicker(
+                        title: "Appearance",
+                        selection: $appearanceMode,
+                        options: AppearanceMode.allCases.map { ($0.label, $0.rawValue) }
+                    )
+                }
 
                 // Data Management Section
                 VStack(alignment: .leading, spacing: Theme.Spacing.md) {
@@ -409,6 +436,14 @@ struct SettingsView: View {
             sessionsPerWeekGoal = 1
         } else if sessionsPerWeekGoal > 14 {
             sessionsPerWeekGoal = 14
+        }
+    }
+
+    private var appearanceIcon: String {
+        switch AppearanceMode(rawValue: appearanceMode) ?? .system {
+        case .system: return "circle.lefthalf.filled"
+        case .light:  return "sun.max.fill"
+        case .dark:   return "moon.fill"
         }
     }
 

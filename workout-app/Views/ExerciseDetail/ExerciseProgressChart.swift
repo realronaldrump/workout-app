@@ -124,7 +124,7 @@ struct ExerciseProgressChart: View {
         [
             ChartSeries.progress.rawValue: chartColor,
             ChartSeries.rollingAverage.rawValue: chartColor.opacity(0.55),
-            ChartSeries.trend.rawValue: Color.secondary.opacity(0.5)
+            ChartSeries.trend.rawValue: Theme.Colors.textTertiary.opacity(0.5)
         ]
     }
 

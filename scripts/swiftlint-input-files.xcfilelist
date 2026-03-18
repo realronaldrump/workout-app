@@ -63,7 +63,6 @@ $(SRCROOT)/workout-app/Views/Components/ShareSheet.swift
 $(SRCROOT)/workout-app/Views/Components/VolumeProgressChart.swift
 $(SRCROOT)/workout-app/Views/Components/WordmarkLockup.swift
 $(SRCROOT)/workout-app/Views/Components/WorkoutHRChart.swift
-$(SRCROOT)/workout-app/Views/DashboardView.swift
 $(SRCROOT)/workout-app/Views/ExerciseDetailView.swift
 $(SRCROOT)/workout-app/Views/ExerciseListView.swift
 $(SRCROOT)/workout-app/Views/ExerciseStatDetailView.swift

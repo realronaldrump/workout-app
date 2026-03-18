@@ -43,13 +43,13 @@ struct ExerciseStatDetailView: View {
     private var tint: Color {
         switch kind {
         case .totalSets:
-            return .blue
+            return Theme.Colors.accent
         case .maxWeight:
-            return .orange
+            return Theme.Colors.accentSecondary
         case .maxVolume:
-            return .green
+            return Theme.Colors.success
         case .avgReps:
-            return .purple
+            return Theme.Colors.accentTertiary
         }
     }
 
@@ -85,9 +85,9 @@ struct ExerciseStatDetailView: View {
 
     private var subtitle: String {
         if points.isEmpty {
-            return "sessions 0"
+            return "No sessions yet"
         }
-        return "sessions \(points.count)"
+        return "\(points.count) session\(points.count == 1 ? "" : "s")"
     }
 
     private var trendChart: some View {

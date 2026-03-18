@@ -167,7 +167,7 @@ struct ExerciseStatsCards: View {
                     title: "Total Sets",
                     value: "\(stats.totalSets)",
                     icon: "number",
-                    color: .blue,
+                    color: Theme.Colors.accent,
                     onTap: { selectedStat = .totalSets }
                 )
 
@@ -175,7 +175,7 @@ struct ExerciseStatsCards: View {
                     title: "Max Weight",
                     value: "\(Int(stats.maxWeight)) lbs",
                     icon: "scalemass.fill",
-                    color: .orange,
+                    color: Theme.Colors.accentSecondary,
                     onTap: { selectedStat = .maxWeight }
                 )
 
@@ -183,7 +183,7 @@ struct ExerciseStatsCards: View {
                     title: "Max Volume",
                     value: SharedFormatters.volumeWithUnit(stats.maxVolume),
                     icon: "chart.bar.fill",
-                    color: .green,
+                    color: Theme.Colors.success,
                     onTap: { selectedStat = .maxVolume }
                 )
 
@@ -191,7 +191,7 @@ struct ExerciseStatsCards: View {
                     title: "Avg Reps",
                     value: String(format: "%.1f", stats.avgReps),
                     icon: "repeat",
-                    color: .purple,
+                    color: Theme.Colors.accentTertiary,
                     onTap: { selectedStat = .avgReps }
                 )
             }

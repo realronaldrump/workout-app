@@ -59,6 +59,18 @@ enum HealthHubCategory: String, CaseIterable, Identifiable {
         case .sessions: return Theme.Colors.textPrimary
         }
     }
+
+    var primaryMetric: HealthMetric? {
+        switch self {
+        case .activity: return .steps
+        case .sleep: return .sleep
+        case .heart: return .restingHeartRate
+        case .vitals: return .bloodOxygen
+        case .cardio: return .vo2Max
+        case .body: return .bodyMass
+        case .sessions: return nil
+        }
+    }
 }
 
 enum HealthMetric: String, CaseIterable, Identifiable {

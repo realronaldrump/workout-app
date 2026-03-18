@@ -208,7 +208,7 @@ struct HealthDataSettingsView: View {
                 .frame(width: 36, height: 36)
         } else {
             Image(systemName: healthManager.authorizationStatus == .authorized ? "heart.fill" : "heart.slash")
-                .font(.system(size: 18, weight: .semibold))
+                .font(Theme.Iconography.title3Strong)
                 .foregroundStyle(.white)
                 .frame(width: 36, height: 36)
                 .background(healthManager.authorizationStatus == .authorized ? Theme.Colors.success : Theme.Colors.textTertiary)
@@ -346,7 +346,7 @@ struct HealthDataSettingsView: View {
                     ProgressView().controlSize(.mini)
                 } else {
                     Image(systemName: "arrow.down.circle")
-                        .font(.system(size: 11, weight: .medium))
+                        .font(Theme.Typography.caption2)
                 }
             }
             .foregroundStyle(Theme.Colors.textPrimary)
@@ -411,7 +411,7 @@ struct HealthDataSettingsView: View {
                         .foregroundStyle(Theme.Colors.textSecondary)
                     Spacer()
                     Image(systemName: showAdvancedCache ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 11, weight: .medium))
+                        .font(Theme.Typography.caption2)
                         .foregroundStyle(Theme.Colors.textTertiary)
                 }
                 .padding(.vertical, Theme.Spacing.xs)
@@ -536,7 +536,7 @@ struct HealthDataSettingsView: View {
     private func sectionHeader(_ title: String, icon: String) -> some View {
         HStack(spacing: Theme.Spacing.sm) {
             Image(systemName: icon)
-                .font(.system(size: 14, weight: .semibold))
+                .font(Theme.Iconography.mediumStrong)
                 .foregroundStyle(Theme.Colors.accent)
             Text(title)
                 .font(Theme.Typography.bodyBold)
@@ -554,7 +554,7 @@ struct HealthDataSettingsView: View {
         Button(action: action) {
             HStack(spacing: Theme.Spacing.sm) {
                 Image(systemName: icon)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(Theme.Typography.subheadlineStrong)
                     .foregroundStyle(.white)
                     .frame(width: 32, height: 32)
                     .background(tint)
@@ -570,7 +570,7 @@ struct HealthDataSettingsView: View {
                 }
                 Spacer()
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(Theme.Typography.caption2Bold)
                     .foregroundStyle(Theme.Colors.textTertiary)
             }
             .padding(Theme.Spacing.md)
@@ -590,7 +590,7 @@ struct HealthDataSettingsView: View {
         Button(action: action) {
             HStack(spacing: Theme.Spacing.sm) {
                 Image(systemName: icon)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(Theme.Iconography.small)
                     .foregroundStyle(tint)
                     .frame(width: 24, height: 24)
 
@@ -601,7 +601,7 @@ struct HealthDataSettingsView: View {
                 Spacer()
 
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 10, weight: .medium))
+                    .font(Theme.Iconography.micro)
                     .foregroundStyle(Theme.Colors.textTertiary)
             }
             .padding(.vertical, Theme.Spacing.sm)

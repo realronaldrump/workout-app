@@ -76,7 +76,7 @@ struct WorkoutVariantPatternCard: View {
                 .font(Theme.Typography.subheadline)
                 .foregroundStyle(Theme.Colors.textSecondary)
 
-            Text("Compared with \(pattern.baselineSampleSize) more typical sessions • latest match \(pattern.representativeWorkout.date.formatted(date: .abbreviated, time: .omitted))")
+            Text("Based on \(pattern.baselineSampleSize) baseline sessions · last seen \(pattern.representativeWorkout.date.formatted(date: .abbreviated, time: .omitted))")
                 .font(Theme.Typography.microcopy)
                 .foregroundStyle(Theme.Colors.textTertiary)
         }

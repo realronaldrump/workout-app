@@ -49,7 +49,7 @@ struct ConsistencyView: View {
                     .font(Theme.Typography.bodyBold)
                     .foregroundColor(Theme.Colors.textPrimary)
 
-                Text("Each bar is one week. Marked break days scale the orange goal marker down automatically.")
+                Text("Each bar is one week. Break days automatically lower the weekly goal.")
                     .font(Theme.Typography.caption)
                     .foregroundColor(Theme.Colors.textTertiary)
             }

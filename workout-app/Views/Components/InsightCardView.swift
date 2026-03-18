@@ -150,11 +150,11 @@ struct EmptyInsightsView: View {
                 .foregroundColor(Theme.Colors.textTertiary)
 
             VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                Text("insights 0")
+                Text("No Insights Yet")
                     .font(Theme.Typography.headline)
                     .foregroundColor(Theme.Colors.textSecondary)
 
-                Text("min sessions 4")
+                Text("Log at least 4 sessions to unlock insights")
                     .font(Theme.Typography.subheadline)
                     .foregroundColor(Theme.Colors.textTertiary)
             }

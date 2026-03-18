@@ -73,7 +73,7 @@ class WorkoutDataManager: ObservableObject {
     }
 
     /// Centralized method for loading workout data from iCloud storage.
-    /// Previously duplicated in both HomeView and DashboardView.
+    /// Centralized so views share one loading path.
     /// Sets `isLoading` / `error` so views can show loading and error states.
     func loadLatestWorkoutData(
         iCloudManager: iCloudDocumentManager,
