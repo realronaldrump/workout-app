@@ -35,6 +35,8 @@ struct HomeView: View {
     @State private var selectedWeekBucketStart: Date?
     @State private var derivedStateTask: Task<Void, Never>?
     @State private var recoveryCoverageTask: Task<Void, Never>?
+    @State private var showingTagging = false
+    @AppStorage("dismissedUntaggedCount") private var dismissedUntaggedCount: Int = -1
     private let maxContentWidth: CGFloat = 820
 
     init(
@@ -101,6 +103,11 @@ struct HomeView: View {
                             }
                         )
                         .padding(.horizontal, Theme.Spacing.lg)
+
+                        if shouldShowUntaggedBanner {
+                            untaggedExercisesBanner
+                                .padding(.horizontal, Theme.Spacing.lg)
+                        }
 
                         weeklySummarySection
                             .padding(.horizontal, Theme.Spacing.lg)
@@ -174,6 +181,9 @@ struct HomeView: View {
         }
         .navigationDestination(isPresented: $showingMuscleRecency) {
             MuscleRecencyView(dataManager: dataManager)
+        }
+        .navigationDestination(isPresented: $showingTagging) {
+            ExerciseTaggingView(dataManager: dataManager)
         }
         .sheet(isPresented: $showingImportWizard) {
             StrongImportWizard(
@@ -283,6 +293,72 @@ struct HomeView: View {
         case 17..<22: return "Good evening"
         default: return "Late night"
         }
+    }
+
+    // MARK: - Untagged Exercises Banner
+
+    private var untaggedExerciseNames: [String] {
+        let allNames = Set(dataManager.workouts.flatMap { $0.exercises.map(\.name) })
+        return allNames.filter { metadataManager.resolvedTags(for: $0).isEmpty }.sorted()
+    }
+
+    private var shouldShowUntaggedBanner: Bool {
+        let count = untaggedExerciseNames.count
+        return count > 0 && count != dismissedUntaggedCount
+    }
+
+    private var untaggedExercisesBanner: some View {
+        HStack(spacing: Theme.Spacing.md) {
+            Image(systemName: "tag")
+                .font(Theme.Typography.footnoteBold)
+                .foregroundStyle(Theme.Colors.accent)
+                .frame(width: 32, height: 32)
+                .background(Theme.Colors.accent.opacity(0.1))
+                .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(untaggedExerciseNames.count) exercise\(untaggedExerciseNames.count == 1 ? "" : "s") without tags")
+                    .font(Theme.Typography.captionBold)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                Text("Tag them for muscle tracking")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.textTertiary)
+            }
+
+            Spacer()
+
+            Button {
+                Haptics.selection()
+                showingTagging = true
+            } label: {
+                Text("Tag")
+                    .font(Theme.Typography.captionBold)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, Theme.Spacing.md)
+                    .padding(.vertical, Theme.Spacing.xs)
+                    .background(Theme.Colors.accent)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.medium))
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                withAnimation(Theme.Animation.spring) {
+                    dismissedUntaggedCount = untaggedExerciseNames.count
+                }
+            } label: {
+                Image(systemName: "xmark")
+                    .font(Theme.Typography.caption2Bold)
+                    .foregroundStyle(Theme.Colors.textTertiary)
+                    .frame(width: 28, height: 28)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(Theme.Spacing.md)
+        .softCard(elevation: 1)
+        .transition(.asymmetric(
+            insertion: .move(edge: .top).combined(with: .opacity),
+            removal: .opacity
+        ))
     }
 
     // MARK: - Quick Actions

@@ -23,6 +23,7 @@ struct MainTabView: View {
     @State private var pendingOnboarding = false
     @State private var selectedTab: AppTab = .today
     @State private var showSplash = true
+    @State private var hasCompletedInitialLoad = false
     @State private var insightsRefreshTask: Task<Void, Never>?
     @State private var variantAnalysisTask: Task<Void, Never>?
     @State private var sleepSummaryRefreshTask: Task<Void, Never>?
@@ -125,6 +126,11 @@ struct MainTabView: View {
             scheduleVariantAnalysis()
             schedulePendingSleepSummaryRefresh()
         }
+        .onChange(of: dataManager.isLoading) { _, isLoading in
+            if !isLoading {
+                refreshOnboardingState()
+            }
+        }
         .onChange(of: healthManager.authorizationStatus) { _, newValue in
             guard newValue == .authorized else { return }
             schedulePendingSleepSummaryRefresh()
@@ -174,6 +180,11 @@ struct MainTabView: View {
     }
 
     private func refreshOnboardingState() {
+        // Don't evaluate onboarding until the initial data load finishes
+        // and no load is in-flight. Otherwise workouts.isEmpty is temporarily
+        // true for returning users, causing the onboarding wizard to flash
+        // briefly before data arrives.
+        guard hasCompletedInitialLoad, !dataManager.isLoading else { return }
         let shouldShow = !hasSeenOnboarding && dataManager.workouts.isEmpty
         if showSplash {
             pendingOnboarding = shouldShow
@@ -215,6 +226,8 @@ struct MainTabView: View {
             await logStore.load()
             dataManager.setLoggedWorkouts(logStore.workouts)
             await sessionManager.restoreDraft()
+            hasCompletedInitialLoad = true
+            refreshOnboardingState()
         }
     }
 

@@ -351,8 +351,8 @@ struct BodyCompositionTrendChart: View {
 
     private var xAxisComponent: Calendar.Component {
         if dateRangeInDays > 730 { return .year }       // 2+ years: yearly ticks
-        if dateRangeInDays > 180 { return .month }      // 6m-2y: monthly ticks
-        if dateRangeInDays > 28 { return .weekOfYear }  // 1-6m: weekly ticks
+        if dateRangeInDays > 90 { return .month }       // 3m-2y: monthly ticks
+        if dateRangeInDays > 28 { return .weekOfYear }  // 1-3m: weekly ticks
         return .day                                      // under 1 month: daily ticks
     }
 
@@ -363,10 +363,10 @@ struct BodyCompositionTrendChart: View {
             return 1
         case .month:
             if dateRangeInDays > 365 { return 2 }        // 1-2y: every 2 months
-            return 1                                     // 6-12m: monthly
+            if dateRangeInDays > 180 { return 2 }        // 6m-1y: every 2 months
+            return 1                                     // 3-6m: monthly
         case .weekOfYear:
-            if dateRangeInDays > 90 { return 2 }         // 3-6m: every 2 weeks
-            return 1                                     // 1-3m: weekly
+            return 2                                     // 1-3m: every 2 weeks
         default:
             if dateRangeInDays <= 7 { return 1 }         // under 1w: daily
             if dateRangeInDays <= 14 { return 2 }        // 1-2w: every 2 days
