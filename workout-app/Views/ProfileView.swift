@@ -127,10 +127,22 @@ struct ProfileView: View {
             SectionLabel(text: "Preferences")
 
             VStack(spacing: 1) {
+                NavigationLink(destination: FeatureGuidesView()) {
+                    ProfileLinkRow(
+                        icon: "book.fill",
+                        color: Theme.Colors.accent,
+                        title: "Feature Guides",
+                        subtitle: "Learn how everything works"
+                    )
+                }
+                .buttonStyle(PlainButtonStyle())
+
+                Divider().padding(.leading, 50)
+
                 NavigationLink(destination: GymProfilesView()) {
                     ProfileLinkRow(
                         icon: "mappin.and.ellipse",
-                        color: Theme.Colors.accent,
+                        color: Theme.Colors.accentSecondary,
                         title: "Gym Profiles",
                         subtitle: "Manage saved gyms"
                     )

@@ -185,6 +185,13 @@ struct MainTabView: View {
         // true for returning users, causing the onboarding wizard to flash
         // briefly before data arrives.
         guard hasCompletedInitialLoad, !dataManager.isLoading else { return }
+
+        // If the user already has workout data, permanently suppress onboarding
+        // so it never flashes again — even during transient empty states.
+        if !dataManager.workouts.isEmpty && !hasSeenOnboarding {
+            hasSeenOnboarding = true
+        }
+
         let shouldShow = !hasSeenOnboarding && dataManager.workouts.isEmpty
         if showSplash {
             pendingOnboarding = shouldShow
@@ -226,6 +233,21 @@ struct MainTabView: View {
             await logStore.load()
             dataManager.setLoggedWorkouts(logStore.workouts)
             await sessionManager.restoreDraft()
+
+            // Detect existing users before evaluating onboarding. CSV-imported
+            // workout data loads later (in HomeView), so at this point
+            // dataManager.workouts may still be empty for users whose data is
+            // primarily from imports. A quick file-existence check prevents the
+            // onboarding wizard from flashing for those users.
+            if !hasSeenOnboarding {
+                let hasLoggedData = !logStore.workouts.isEmpty
+                let directories = await iCloudManager.storageSearchDirectories()
+                let hasImportedFile = WorkoutDataManager.latestWorkoutFile(in: directories) != nil
+                if hasLoggedData || hasImportedFile {
+                    hasSeenOnboarding = true
+                }
+            }
+
             hasCompletedInitialLoad = true
             refreshOnboardingState()
         }
