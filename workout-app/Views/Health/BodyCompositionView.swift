@@ -565,6 +565,9 @@ struct BodyCompositionView: View {
                         }
                     }
                 }
+                .chartPlotStyle { plotArea in
+                    plotArea.clipped()
+                }
                 .padding(Theme.Spacing.lg)
                 .softCard(elevation: 1)
             }

@@ -98,6 +98,7 @@ struct StatCard: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
                     .allowsTightening(true)
+                    .contentTransition(.numericText())
 
                 if let subtitle = subtitle {
                     Text(subtitle)
@@ -120,7 +121,11 @@ struct StatCard: View {
         .padding(.horizontal, Theme.Spacing.lg)
         .padding(.vertical, Theme.Spacing.md)
         .frame(height: tileHeight)
-        .softCard(elevation: 1)
+        .background(
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
+                .fill(color.opacity(0.06))
+        )
+        .glassBackground(opacity: 0.1, cornerRadius: Theme.CornerRadius.large, elevation: 2)
         .opacity(isAppearing ? 1 : 0)
         .offset(y: isAppearing ? 0 : 8)
         .onAppear {

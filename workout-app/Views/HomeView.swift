@@ -1,5 +1,6 @@
 import Combine
 import SwiftUI
+// swiftlint:disable type_body_length file_length
 
 struct HomeView: View {
     @ObservedObject var dataManager: WorkoutDataManager
@@ -354,7 +355,7 @@ struct HomeView: View {
             .buttonStyle(.plain)
         }
         .padding(Theme.Spacing.md)
-        .softCard(elevation: 1)
+        .glassBackground(opacity: 0.1, cornerRadius: Theme.CornerRadius.large, elevation: 1)
         .transition(.asymmetric(
             insertion: .move(edge: .top).combined(with: .opacity),
             removal: .opacity
@@ -444,7 +445,7 @@ struct HomeView: View {
                         }
                         .padding(.horizontal, Theme.Spacing.lg)
                         .padding(.vertical, Theme.Spacing.md)
-                        .softCard(cornerRadius: Theme.CornerRadius.xlarge, elevation: 1)
+                        .glassBackground(opacity: 0.1, cornerRadius: Theme.CornerRadius.xlarge, elevation: 1)
                     }
                 )
                 .buttonStyle(.plain)
@@ -517,9 +518,10 @@ struct HomeView: View {
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
                 .frame(height: weeklySummaryCardHeight(for: selectedBucket))
+                .animation(Theme.Animation.gentleSpring, value: selectedWeekBucketStart)
 
                 if buckets.count > 1 {
-                    HStack(spacing: 8) {
+                    HStack(spacing: Theme.Spacing.sm) {
                         ForEach(visibleWeekIndicatorBuckets(from: buckets)) { bucket in
                             Capsule()
                                 .fill(isSelectedWeekBucket(bucket) ? Theme.Colors.accent : Theme.Colors.border.opacity(0.5))
@@ -532,7 +534,7 @@ struct HomeView: View {
             }
         }
         .padding(Theme.Spacing.lg)
-        .softCard(elevation: 2)
+        .glassBackground(opacity: 0.1, cornerRadius: Theme.CornerRadius.large, elevation: 2)
         .animateOnAppear(delay: 0.15)
     }
 
@@ -1055,3 +1057,5 @@ struct HomeView: View {
         return Array(buckets[lowerBound..<upperBound])
     }
 }
+
+// swiftlint:enable type_body_length file_length

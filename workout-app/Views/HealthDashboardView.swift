@@ -999,6 +999,9 @@ private struct TrendCard: View {
                 }
                 .chartYAxis(.hidden)
                 .chartXAxis(.hidden)
+                .chartPlotStyle { plotArea in
+                    plotArea.clipped()
+                }
                 .frame(height: 70)
                 .accessibilityLabel(Text("\(title) trend"))
                 .accessibilityValue(Text(accessibilityTrendSummary))

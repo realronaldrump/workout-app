@@ -649,7 +649,9 @@ struct StrongImportWizard: View {
 
         guard !plannedTargets.isEmpty else {
             healthSyncState = .synced(Date())
-            healthSyncNote = "Skipped \(missing.count) older unsynced workout\(missing.count == 1 ? "" : "s") to keep import fast. Use Health Cache later to backfill them."
+            healthSyncNote =
+                "Skipped \(missing.count) older unsynced workout\(missing.count == 1 ? "" : "s") " +
+                "to keep import fast. Use Health Cache later to backfill them."
             return
         }
 

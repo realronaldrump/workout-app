@@ -1,6 +1,7 @@
 import CoreLocation
 import Foundation
 import HealthKit
+// swiftlint:disable file_length
 
 struct ResolvedWorkoutLocation {
     let location: CLLocation
@@ -568,6 +569,64 @@ extension HealthKitManager {
             .replacingOccurrences(of: "_", with: ".")
     }
 
+    func fetchCategoryDurationSum(
+        type: HKCategoryTypeIdentifier,
+        from start: Date,
+        to end: Date
+    ) async throws -> Double? {
+        guard let healthStore = healthStore else {
+            throw HealthKitError.notAvailable
+        }
+        guard let categoryType = HKObjectType.categoryType(forIdentifier: type) else {
+            return nil
+        }
+
+        let predicate = HKQuery.predicateForSamples(withStart: start, end: end, options: [])
+
+        return try await withCheckedThrowingContinuation { continuation in
+            let query = HKSampleQuery(
+                sampleType: categoryType,
+                predicate: predicate,
+                limit: HKObjectQueryNoLimit,
+                sortDescriptors: nil
+            ) { _, samples, error in
+                if let error {
+                    if let auth = Self.authorizationFailure(from: error) {
+                        Task { @MainActor in
+                            self.authorizationStatus = auth.status
+                        }
+                        continuation.resume(throwing: auth.error)
+                        return
+                    }
+                    if Self.isNoDataError(error) {
+                        continuation.resume(returning: nil)
+                        return
+                    }
+                    continuation.resume(throwing: HealthKitError.queryFailed(error.localizedDescription))
+                    return
+                }
+
+                let categorySamples = samples as? [HKCategorySample] ?? []
+                guard !categorySamples.isEmpty else {
+                    continuation.resume(returning: nil)
+                    return
+                }
+
+                let totalDuration = categorySamples.reduce(0.0) { sum, sample in
+                    let interval = DateInterval(start: sample.startDate, end: sample.endDate)
+                    let queryInterval = DateInterval(start: start, end: end)
+                    if let intersection = interval.intersection(with: queryInterval) {
+                        return sum + intersection.duration
+                    }
+                    return sum
+                }
+
+                continuation.resume(returning: totalDuration)
+            }
+            healthStore.execute(query)
+        }
+    }
+
     func fetchQuantitySamples(
         type: HKQuantityTypeIdentifier,
         from start: Date,
@@ -838,7 +897,6 @@ extension HealthKitManager {
         }
     }
 
-    // swiftlint:disable:next cyclomatic_complexity
     func fetchDailySleepSummaries(from start: Date, to end: Date) async throws -> [Date: SleepSummary] {
         guard let healthStore = healthStore else {
             throw HealthKitError.notAvailable
@@ -1096,6 +1154,7 @@ extension HealthKitManager {
         return bestSourceKey
     }
 
+    // swiftlint:disable:next function_parameter_count
     private nonisolated static func buildSleepSummary(
         from stageMap: [SleepStage: [DateInterval]],
         descriptor: SleepSourceDescriptor?,

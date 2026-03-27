@@ -95,6 +95,9 @@ struct VolumeProgressChart: View {
                         }
                     }
                 }
+                .chartPlotStyle { plotArea in
+                    plotArea.clipped()
+                }
                 .padding(Theme.Spacing.lg)
                 .softCard(elevation: 2)
                 .simultaneousGesture(

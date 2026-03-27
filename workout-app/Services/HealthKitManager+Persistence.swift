@@ -93,7 +93,7 @@ extension HealthKitManager {
             snapshot[workoutID].map { (workoutID, Self.preparedWorkoutCacheEntry($0)) }
         })
 
-        Task.detached(priority: .utility) {
+        Task { @MainActor in
             do {
                 let fileManager = FileManager.default
                 try fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true)
@@ -142,7 +142,7 @@ extension HealthKitManager {
         let entries = Array(dailyHealthStore.values)
         let url = dailyDataFileURL
         let writeOptions: Data.WritingOptions = [.atomic, .completeFileProtection]
-        Task.detached(priority: .utility) {
+        Task { @MainActor in
             do {
                 let data = try JSONEncoder().encode(entries)
                 try data.write(to: url, options: writeOptions)
@@ -156,7 +156,7 @@ extension HealthKitManager {
         let coveredDays = Array(dailyHealthCoverage).sorted()
         let url = dailyCoverageFileURL
         let writeOptions: Data.WritingOptions = [.atomic, .completeFileProtection]
-        Task.detached(priority: .utility) {
+        Task { @MainActor in
             do {
                 let data = try JSONEncoder().encode(coveredDays)
                 try data.write(to: url, options: writeOptions)

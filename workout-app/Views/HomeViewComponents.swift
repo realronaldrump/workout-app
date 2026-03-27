@@ -71,7 +71,7 @@ struct HomeEmptyState: View {
             }
         }
         .padding(Theme.Spacing.xl)
-        .softCard(elevation: 2)
+        .glassBackground(opacity: 0.1, cornerRadius: Theme.CornerRadius.large, elevation: 2)
     }
 }
 
@@ -149,7 +149,7 @@ struct CompactChangeCard: View {
         }
         .padding(Theme.Spacing.lg)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .softCard(elevation: 1)
+        .glassBackground(opacity: 0.1, cornerRadius: Theme.CornerRadius.large, elevation: 1)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(metric.title): \(formatValue(metric)), \(metric.isPositive ? "increased" : "decreased")")
     }
@@ -225,7 +225,7 @@ struct HomeWorkoutRow: View {
             .accessibilityLabel("Repeat \(workout.name)")
         }
         .padding(Theme.Spacing.lg)
-        .softCard(elevation: 1)
+        .glassBackground(opacity: 0.1, cornerRadius: Theme.CornerRadius.large, elevation: 1)
     }
 }
 
@@ -598,7 +598,7 @@ struct ExploreRow: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Theme.Spacing.lg)
-        .softCard(elevation: 1)
+        .glassBackground(opacity: 0.1, cornerRadius: Theme.CornerRadius.large, elevation: 1)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(title), \(subtitle)")
         .accessibilityAddTraits(.isButton)

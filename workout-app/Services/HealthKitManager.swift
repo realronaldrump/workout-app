@@ -99,7 +99,23 @@ class HealthKitManager: ObservableObject {
             .walkingAsymmetryPercentage,
             .walkingDoubleSupportPercentage,
             .stairAscentSpeed,
-            .stairDescentSpeed
+            .stairDescentSpeed,
+
+            // Expanded Metrics
+            .distanceSwimming,
+            .swimmingStrokeCount,
+            .distanceWheelchair,
+            .pushCount,
+            .distanceDownhillSnowSports,
+            .bloodPressureSystolic,
+            .bloodPressureDiastolic,
+            .bloodGlucose,
+            .basalBodyTemperature,
+            .dietaryWater,
+            .dietaryEnergyConsumed,
+            .dietaryProtein,
+            .dietaryCarbohydrates,
+            .dietaryFatTotal
         ]
 
         for identifier in quantityTypes {
@@ -114,7 +130,8 @@ class HealthKitManager: ObservableObject {
             .appleStandHour,
             .lowHeartRateEvent,
             .highHeartRateEvent,
-            .irregularHeartRhythmEvent
+            .irregularHeartRhythmEvent,
+            .mindfulSession
         ]
 
         for identifier in categoryTypes {

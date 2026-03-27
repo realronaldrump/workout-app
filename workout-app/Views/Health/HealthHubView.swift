@@ -8,6 +8,7 @@ struct HealthHubView: View {
     @State private var selectedMetric: HealthMetric?
     @State private var cachedDailyData: [DailyHealthData] = []
     @State private var cachedSummaryCards: [HealthSummaryCardModel] = []
+    @State private var isCatchUpSyncing = false
 
     private var earliestDate: Date? {
         healthManager.dailyHealthStore.keys.min()
@@ -116,6 +117,9 @@ struct HealthHubView: View {
             healthManager.refreshAuthorizationStatus()
             refreshCachedContent()
         }
+        .task {
+            await catchUpRecentHealthData()
+        }
         .onChange(of: dateRangeContext.selectedRange) { _, _ in
             timelineDensity = .compact
             refreshCachedContent()
@@ -144,10 +148,32 @@ struct HealthHubView: View {
                     .foregroundStyle(Theme.Colors.textSecondary)
             }
 
-            if let lastSync = healthManager.lastDailySyncDate {
+            if healthManager.authorizationStatus == .authorized {
+                syncStatusRow
+            }
+        }
+    }
+
+    private var syncStatusRow: some View {
+        HStack(spacing: Theme.Spacing.xs) {
+            if isCatchUpSyncing || healthManager.isDailySyncing {
+                ProgressView()
+                    .controlSize(.mini)
+                Text("Syncing…")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.textTertiary)
+            } else if let lastSync = healthManager.lastDailySyncDate {
                 Text("Last sync \(formatSyncDate(lastSync))")
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Colors.textTertiary)
+
+                Button {
+                    Task { await catchUpRecentHealthData(force: true) }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Colors.accent)
+                }
             }
         }
     }
@@ -279,9 +305,30 @@ struct HealthHubView: View {
                 .font(Theme.Typography.title3)
                 .foregroundStyle(Theme.Colors.textPrimary)
 
-            Text("Use Settings to connect and sync Apple Health before viewing daily activity, sleep, vitals, and recovery metrics here.")
+            Text("View daily activity, sleep, vitals, and recovery metrics by connecting Apple Health.")
                 .font(Theme.Typography.body)
                 .foregroundStyle(Theme.Colors.textSecondary)
+
+            Button {
+                Task { await connectAndSync() }
+            } label: {
+                HStack(spacing: Theme.Spacing.xs) {
+                    Image(systemName: "heart.fill")
+                    Text("Connect")
+                        .tracking(0.8)
+                }
+                .font(Theme.Typography.metricLabel)
+                .textCase(.uppercase)
+                .foregroundStyle(Theme.Colors.background)
+                .padding(.horizontal, Theme.Spacing.lg)
+                .padding(.vertical, Theme.Spacing.sm)
+                .background(Theme.Colors.accent)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                        .stroke(Theme.Colors.border, lineWidth: 1)
+                )
+            }
         }
         .padding(Theme.Spacing.xl)
         .softCard(elevation: 1)
@@ -307,16 +354,68 @@ struct HealthHubView: View {
                 .font(Theme.Typography.title3)
                 .foregroundStyle(Theme.Colors.textPrimary)
 
-            Text("Use Settings to sync Apple Health data before viewing daily activity, sleep, vitals, and recovery trends here.")
+            Text("Sync recent Apple Health data to see daily activity, sleep, vitals, and recovery trends.")
                 .font(Theme.Typography.body)
                 .foregroundStyle(Theme.Colors.textSecondary)
 
-            Text("Health date ranges only filter the data already stored in the app.")
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Colors.textTertiary)
+            Button {
+                Task { await catchUpRecentHealthData(force: true) }
+            } label: {
+                HStack(spacing: Theme.Spacing.xs) {
+                    Image(systemName: "arrow.clockwise")
+                    Text("Sync Now")
+                        .tracking(0.8)
+                }
+                .font(Theme.Typography.metricLabel)
+                .textCase(.uppercase)
+                .foregroundStyle(Theme.Colors.accent)
+            }
+            .padding(.top, Theme.Spacing.xs)
         }
         .padding(Theme.Spacing.xl)
         .softCard(elevation: 1)
+    }
+
+    private func connectAndSync() async {
+        do {
+            try await healthManager.requestAuthorization()
+        } catch {
+            return
+        }
+        guard healthManager.authorizationStatus == .authorized else { return }
+        await catchUpRecentHealthData(force: true)
+    }
+
+    private func catchUpRecentHealthData(force: Bool = false) async {
+        guard healthManager.authorizationStatus == .authorized else { return }
+        guard !isCatchUpSyncing, !healthManager.isDailySyncing else { return }
+
+        let calendar = Calendar.current
+        let now = Date()
+
+        // Determine how far back to sync: since last sync or last 7 days, whichever is shorter
+        let defaultLookback = calendar.date(byAdding: .day, value: -7, to: now) ?? now
+        let syncStart: Date
+        if let lastSync = healthManager.lastDailySyncDate, !force {
+            // Sync from the day before last sync to catch any late-arriving data
+            syncStart = calendar.startOfDay(for: calendar.date(byAdding: .day, value: -1, to: lastSync) ?? lastSync)
+        } else {
+            syncStart = calendar.startOfDay(for: defaultLookback)
+        }
+
+        let syncEnd = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: now) ?? now
+        guard syncStart < syncEnd else { return }
+
+        let range = DateInterval(start: syncStart, end: syncEnd)
+
+        isCatchUpSyncing = true
+        defer { isCatchUpSyncing = false }
+
+        do {
+            try await healthManager.syncDailyHealthData(range: range)
+        } catch {
+            // Silently fail — this is a background convenience sync
+        }
     }
 
     private func buildSummaryCards(from dailyData: [DailyHealthData]) -> [HealthSummaryCardModel] {

@@ -64,7 +64,10 @@ struct ExerciseBreakdownView: View {
                     .foregroundColor(Theme.Colors.textTertiary)
             }
         }
-        .frame(height: CGFloat(exerciseData.count) * 40)
+        .frame(height: CGFloat(exerciseData.count) * 44)
+        .chartPlotStyle { plotArea in
+            plotArea.clipped()
+        }
         .chartXAxis {
             AxisMarks { value in
                 AxisGridLine()

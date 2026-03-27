@@ -146,6 +146,9 @@ struct ExerciseStatDetailView: View {
                             }
                         }
                     }
+                    .chartPlotStyle { plotArea in
+                        plotArea.clipped()
+                    }
                     .frame(height: 180)
                 }
                 .padding(Theme.Spacing.lg)

@@ -14,11 +14,9 @@ struct ExerciseListView: View {
     @AppStorage("favoriteExercises") private var favoriteExercisesData: String = "[]"
 
     private var favoriteExercises: Set<String> {
-        get {
-            guard let data = favoriteExercisesData.data(using: .utf8),
-                  let array = try? JSONDecoder().decode([String].self, from: data) else { return [] }
-            return Set(array)
-        }
+        guard let data = favoriteExercisesData.data(using: .utf8),
+              let array = try? JSONDecoder().decode([String].self, from: data) else { return [] }
+        return Set(array)
     }
 
     private func toggleFavorite(_ name: String) {

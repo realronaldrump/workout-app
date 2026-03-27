@@ -128,7 +128,10 @@ struct HealthSyncWizard: View {
                     .padding(.horizontal)
 
                 if skippedOlderWorkoutCount > 0 {
-                    Text("We start with recent missing workouts and the last year of daily Health history so setup stays fast. Older history can be backfilled later.")
+                    Text(
+                        "We start with recent missing workouts and the last year of daily Health history so setup stays fast. " +
+                        "Older history can be backfilled later."
+                    )
                         .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.Colors.textTertiary)
                         .multilineTextAlignment(.center)

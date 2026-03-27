@@ -246,6 +246,9 @@ struct HealthCategoryDetailView: View {
             }
         }
         .chartYAxis(.hidden)
+        .chartPlotStyle { plotArea in
+            plotArea.clipped()
+        }
         .frame(height: 160)
     }
 
@@ -327,8 +330,8 @@ struct HealthCategoryDetailView: View {
 
     private func trendPercentage(for metric: HealthMetric) -> Double? {
         let values = dailyData.compactMap { day -> (Date, Double)? in
-            guard let v = day.value(for: metric) else { return nil }
-            return (day.dayStart, v)
+            guard let metricValue = day.value(for: metric) else { return nil }
+            return (day.dayStart, metricValue)
         }
         guard values.count >= 4 else { return nil }
 
@@ -531,6 +534,9 @@ private struct EnrichedMetricRow: View {
                 }
                 .chartXAxis(.hidden)
                 .chartYAxis(.hidden)
+                .chartPlotStyle { plotArea in
+                    plotArea.clipped()
+                }
                 .frame(height: 56)
             }
         }

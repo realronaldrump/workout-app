@@ -14,7 +14,7 @@ struct WorkoutHRChart: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             Text("Heart Rate")
                 .font(Theme.Typography.headline)
                 .foregroundStyle(Theme.Colors.textSecondary)
@@ -45,7 +45,6 @@ struct WorkoutHRChart: View {
                 plotArea.clipped()
             }
             .frame(height: 200)
-            .clipped()
         }
     }
 }

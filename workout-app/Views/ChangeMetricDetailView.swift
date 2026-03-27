@@ -1,5 +1,6 @@
 import SwiftUI
 import Charts
+// swiftlint:disable type_body_length file_length
 
 struct ChangeMetricDetailView: View {
     let metric: ChangeMetric
@@ -615,6 +616,9 @@ struct ChangeMetricDetailView: View {
                             }
                         }
                     }
+                }
+                .chartPlotStyle { plotArea in
+                    plotArea.clipped()
                 }
                 .frame(height: 220)
                 .padding(Theme.Spacing.lg)
@@ -1363,3 +1367,5 @@ private struct EmptyStateTile: View {
             )
     }
 }
+
+// swiftlint:enable type_body_length file_length

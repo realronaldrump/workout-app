@@ -93,7 +93,10 @@ struct WorkoutSessionInsightsView: View {
                             .foregroundStyle(Theme.Colors.textTertiary)
                     }
                 }
-                .frame(height: CGFloat(exerciseVolumes.count) * 34 + 20)
+                .frame(height: CGFloat(exerciseVolumes.count) * 38 + 20)
+                .chartPlotStyle { plotArea in
+                    plotArea.clipped()
+                }
                 .chartXAxis {
                     AxisMarks { value in
                         AxisGridLine()

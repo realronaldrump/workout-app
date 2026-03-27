@@ -1,5 +1,6 @@
 import SwiftUI
 import Charts
+// swiftlint:disable type_body_length file_length
 
 struct MetricDetailView: View {
     let kind: WorkoutMetricDetailKind
@@ -139,7 +140,11 @@ struct MetricDetailView: View {
                 case .totalVolume:
                     HeroChip(title: "Total", value: SharedFormatters.volumeCompact(totalVolume), tint: Theme.Colors.accent)
                     HeroChip(title: "Avg / Session", value: SharedFormatters.volumePrecise(avgVolumePerSession), tint: Theme.Colors.success)
-                    HeroChip(title: "Peak Session", value: SharedFormatters.volumePrecise(peakVolumeSession?.totalVolume ?? 0), tint: Theme.Colors.accentSecondary)
+                    HeroChip(
+                        title: "Peak Session",
+                        value: SharedFormatters.volumePrecise(peakVolumeSession?.totalVolume ?? 0),
+                        tint: Theme.Colors.accentSecondary
+                    )
                     HeroChip(title: "Sessions", value: "\(workouts.count)", tint: Theme.Colors.warning)
                 }
             }
@@ -515,6 +520,9 @@ struct MetricDetailView: View {
                         .foregroundStyle(Theme.Colors.textTertiary)
                     }
                 }
+                .chartPlotStyle { plotArea in
+                    plotArea.clipped()
+                }
                 .frame(height: 190)
             }
         }
@@ -590,6 +598,9 @@ struct MetricDetailView: View {
                         .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.Colors.textTertiary)
                     }
+                }
+                .chartPlotStyle { plotArea in
+                    plotArea.clipped()
                 }
                 .frame(height: 220)
             }
@@ -1622,3 +1633,5 @@ private struct VolumePoint: Identifiable {
     let date: Date
     let value: Double
 }
+
+// swiftlint:enable type_body_length file_length

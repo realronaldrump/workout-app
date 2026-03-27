@@ -1,6 +1,7 @@
 import SwiftUI
 import HealthKit
 import CoreLocation
+// swiftlint:disable type_body_length file_length
 
 private struct AutoTagMapFallbackCandidate: Identifiable {
     let workoutId: UUID
@@ -1139,3 +1140,5 @@ struct GymBulkAssignView: View {
         endDate = Date()
     }
 }
+
+// swiftlint:enable type_body_length file_length

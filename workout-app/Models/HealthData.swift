@@ -43,7 +43,7 @@ struct WorkoutHealthData: Identifiable, Codable {
     // MARK: - Recovery & Vitals
     var hrvSamples: [HRVSample]
     var storedHRVAverage: Double?
-    var avgHRV: Double? {
+    nonisolated var avgHRV: Double? {
         guard !hrvSamples.isEmpty else { return storedHRVAverage }
         return hrvSamples.map { $0.value }.reduce(0, +) / Double(hrvSamples.count)
     }
@@ -51,14 +51,14 @@ struct WorkoutHealthData: Identifiable, Codable {
     var restingHeartRate: Double?
     var bloodOxygenSamples: [BloodOxygenSample]
     var storedBloodOxygenAverage: Double?
-    var avgBloodOxygen: Double? {
+    nonisolated var avgBloodOxygen: Double? {
         guard !bloodOxygenSamples.isEmpty else { return storedBloodOxygenAverage }
         return bloodOxygenSamples.map { $0.value }.reduce(0, +) / Double(bloodOxygenSamples.count)
     }
 
     var respiratoryRateSamples: [RespiratoryRateSample]
     var storedRespiratoryRateAverage: Double?
-    var avgRespiratoryRate: Double? {
+    nonisolated var avgRespiratoryRate: Double? {
         guard !respiratoryRateSamples.isEmpty else { return storedRespiratoryRateAverage }
         return respiratoryRateSamples.map { $0.value }.reduce(0, +) / Double(respiratoryRateSamples.count)
     }
@@ -83,6 +83,23 @@ struct WorkoutHealthData: Identifiable, Codable {
     var vo2Max: Double?
     var heartRateRecovery: Double?
     var walkingHeartRateAverage: Double?
+
+    // MARK: - Extended Metrics
+    var distanceSwimming: Double?
+    var swimmingStrokeCount: Int?
+    var distanceWheelchair: Double?
+    var pushCount: Int?
+    var distanceDownhillSnowSports: Double?
+    var bloodPressureSystolic: Double?
+    var bloodPressureDiastolic: Double?
+    var bloodGlucose: Double?
+    var basalBodyTemperature: Double?
+    var dietaryWater: Double?
+    var dietaryEnergyConsumed: Double?
+    var dietaryProtein: Double?
+    var dietaryCarbohydrates: Double?
+    var dietaryFatTotal: Double?
+    var mindfulSessionDuration: Double?
 
     // MARK: - Workout from Apple Health
     var appleWorkoutType: String?
@@ -143,7 +160,22 @@ struct WorkoutHealthData: Identifiable, Codable {
         workoutRouteStartLongitude: Double? = nil,
         workoutLocationLatitude: Double? = nil,
         workoutLocationLongitude: Double? = nil,
-        workoutLocationSource: WorkoutLocationSource? = nil
+        workoutLocationSource: WorkoutLocationSource? = nil,
+        distanceSwimming: Double? = nil,
+        swimmingStrokeCount: Int? = nil,
+        distanceWheelchair: Double? = nil,
+        pushCount: Int? = nil,
+        distanceDownhillSnowSports: Double? = nil,
+        bloodPressureSystolic: Double? = nil,
+        bloodPressureDiastolic: Double? = nil,
+        bloodGlucose: Double? = nil,
+        basalBodyTemperature: Double? = nil,
+        dietaryWater: Double? = nil,
+        dietaryEnergyConsumed: Double? = nil,
+        dietaryProtein: Double? = nil,
+        dietaryCarbohydrates: Double? = nil,
+        dietaryFatTotal: Double? = nil,
+        mindfulSessionDuration: Double? = nil
     ) {
         self.id = id
         self.workoutId = workoutId
@@ -190,6 +222,21 @@ struct WorkoutHealthData: Identifiable, Codable {
         self.workoutLocationLatitude = workoutLocationLatitude
         self.workoutLocationLongitude = workoutLocationLongitude
         self.workoutLocationSource = workoutLocationSource
+        self.distanceSwimming = distanceSwimming
+        self.swimmingStrokeCount = swimmingStrokeCount
+        self.distanceWheelchair = distanceWheelchair
+        self.pushCount = pushCount
+        self.distanceDownhillSnowSports = distanceDownhillSnowSports
+        self.bloodPressureSystolic = bloodPressureSystolic
+        self.bloodPressureDiastolic = bloodPressureDiastolic
+        self.bloodGlucose = bloodGlucose
+        self.basalBodyTemperature = basalBodyTemperature
+        self.dietaryWater = dietaryWater
+        self.dietaryEnergyConsumed = dietaryEnergyConsumed
+        self.dietaryProtein = dietaryProtein
+        self.dietaryCarbohydrates = dietaryCarbohydrates
+        self.dietaryFatTotal = dietaryFatTotal
+        self.mindfulSessionDuration = mindfulSessionDuration
     }
 
     var resolvedWorkoutLocationCoordinate: CLLocationCoordinate2D? {
@@ -209,7 +256,7 @@ struct WorkoutHealthData: Identifiable, Codable {
         !respiratoryRateSamples.isEmpty
     }
 
-    mutating func captureRawSampleSummaries() {
+    nonisolated mutating func captureRawSampleSummaries() {
         if !hrvSamples.isEmpty {
             storedHRVAverage = hrvSamples.map(\.value).reduce(0, +) / Double(hrvSamples.count)
         }
@@ -221,7 +268,7 @@ struct WorkoutHealthData: Identifiable, Codable {
         }
     }
 
-    mutating func removeRawSamplesPreservingSummaries() {
+    nonisolated mutating func removeRawSamplesPreservingSummaries() {
         captureRawSampleSummaries()
         heartRateSamples = []
         hrvSamples = []
@@ -230,7 +277,7 @@ struct WorkoutHealthData: Identifiable, Codable {
     }
 
     /// Checks if meaningful health data was synced
-    var hasHealthData: Bool {
+    nonisolated var hasHealthData: Bool {
         avgHeartRate != nil ||
         !heartRateSamples.isEmpty ||
         activeCalories != nil ||
@@ -242,7 +289,14 @@ struct WorkoutHealthData: Identifiable, Codable {
         avgHRV != nil ||
         avgBloodOxygen != nil ||
         avgRespiratoryRate != nil ||
-        appleWorkoutType != nil
+        appleWorkoutType != nil ||
+        distanceSwimming != nil ||
+        distanceWheelchair != nil ||
+        distanceDownhillSnowSports != nil ||
+        bloodPressureSystolic != nil ||
+        bloodGlucose != nil ||
+        dietaryEnergyConsumed != nil ||
+        mindfulSessionDuration != nil
     }
 }
 

@@ -3,12 +3,12 @@ import Foundation
 import HealthKit
 
 private enum DefaultHealthSyncPlan {
-    static let initialWorkoutYearsBack = 1
-    static let initialWorkoutMaxCount = 120
-    static let initialDailyMonthsBack = 12
-    static let autoSyncRecentCount = 3
-    static let batchAppleWorkoutCandidateLimit = 200
-    static let batchAppleWorkoutRangeLimitDays = 400
+    nonisolated(unsafe) static let initialWorkoutYearsBack = 1
+    nonisolated(unsafe) static let initialWorkoutMaxCount = 120
+    nonisolated(unsafe) static let initialDailyMonthsBack = 12
+    nonisolated(unsafe) static let autoSyncRecentCount = 3
+    nonisolated(unsafe) static let batchAppleWorkoutCandidateLimit = 200
+    nonisolated(unsafe) static let batchAppleWorkoutRangeLimitDays = 400
 }
 
 extension HealthKitManager {
@@ -145,6 +145,7 @@ extension HealthKitManager {
         )
     }
 
+    // swiftlint:disable:next cyclomatic_complexity function_body_length
     /// Sync health data for a single workout
     func syncHealthDataForWorkout(
         _ workout: Workout,
@@ -202,6 +203,18 @@ extension HealthKitManager {
             unit: .meter()
         )
 
+        healthData.distanceSwimming = try await fetchQuantitySum(
+            type: .distanceSwimming, from: startTime, to: endTime, unit: .meter()
+        )
+        
+        healthData.distanceWheelchair = try await fetchQuantitySum(
+            type: .distanceWheelchair, from: startTime, to: endTime, unit: .meter()
+        )
+        
+        healthData.distanceDownhillSnowSports = try await fetchQuantitySum(
+            type: .distanceDownhillSnowSports, from: startTime, to: endTime, unit: .meter()
+        )
+
         // Fetch step count
         if let steps = try await fetchQuantitySum(
             type: .stepCount,
@@ -220,6 +233,18 @@ extension HealthKitManager {
             unit: .count()
         ) {
             healthData.flightsClimbed = Int(flights)
+        }
+        
+        if let strokes = try await fetchQuantitySum(
+            type: .swimmingStrokeCount, from: startTime, to: endTime, unit: .count()
+        ) {
+            healthData.swimmingStrokeCount = Int(strokes)
+        }
+        
+        if let pushes = try await fetchQuantitySum(
+            type: .pushCount, from: startTime, to: endTime, unit: .count()
+        ) {
+            healthData.pushCount = Int(pushes)
         }
 
         // Fetch HRV samples
@@ -264,6 +289,22 @@ extension HealthKitManager {
             to: dayEnd,
             unit: .degreeCelsius()
         )
+        
+        healthData.bloodPressureSystolic = try await fetchLatestQuantity(
+            type: .bloodPressureSystolic, from: dayStart, to: dayEnd, unit: HKUnit.millimeterOfMercury()
+        )
+        
+        healthData.bloodPressureDiastolic = try await fetchLatestQuantity(
+            type: .bloodPressureDiastolic, from: dayStart, to: dayEnd, unit: HKUnit.millimeterOfMercury()
+        )
+        
+        healthData.bloodGlucose = try await fetchLatestQuantity(
+            type: .bloodGlucose, from: dayStart, to: dayEnd, unit: HKUnit(from: "mg/dL")
+        )
+        
+        healthData.basalBodyTemperature = try await fetchLatestQuantity(
+            type: .basalBodyTemperature, from: dayStart, to: dayEnd, unit: .degreeCelsius()
+        )
 
         // Fetch sleep summary (night before workout)
         let sleepWindow = sleepSummaryWindow(for: workout)
@@ -285,6 +326,26 @@ extension HealthKitManager {
             from: dayStart,
             to: dayEnd,
             unit: .kilocalorie()
+        )
+        
+        healthData.dietaryWater = try await fetchQuantitySum(
+            type: .dietaryWater, from: dayStart, to: dayEnd, unit: .liter()
+        )
+        healthData.dietaryEnergyConsumed = try await fetchQuantitySum(
+            type: .dietaryEnergyConsumed, from: dayStart, to: dayEnd, unit: .kilocalorie()
+        )
+        healthData.dietaryProtein = try await fetchQuantitySum(
+            type: .dietaryProtein, from: dayStart, to: dayEnd, unit: .gram()
+        )
+        healthData.dietaryCarbohydrates = try await fetchQuantitySum(
+            type: .dietaryCarbohydrates, from: dayStart, to: dayEnd, unit: .gram()
+        )
+        healthData.dietaryFatTotal = try await fetchQuantitySum(
+            type: .dietaryFatTotal, from: dayStart, to: dayEnd, unit: .gram()
+        )
+        
+        healthData.mindfulSessionDuration = try await fetchCategoryDurationSum(
+            type: .mindfulSession, from: dayStart, to: dayEnd
         )
 
         if let steps = try await fetchQuantitySum(
@@ -450,7 +511,7 @@ extension HealthKitManager {
                 _ = try await syncHealthDataForWorkout(
                     workout,
                     persist: false,
-                    appleWorkoutCandidates: appleWorkoutCandidates ?? nil
+                    appleWorkoutCandidates: appleWorkoutCandidates
                 )
             } catch {
                 print("Auto sync failed for workout \(workout.id): \(error)")
@@ -528,6 +589,7 @@ extension HealthKitManager {
         return results
     }
 
+    // swiftlint:disable:next cyclomatic_complexity
     /// Best-effort workout-location hydration for recent workouts.
     /// Used by gym discovery so it can work even when locations weren't previously cached.
     func hydrateRouteStartLocationsForRecentWorkouts(

@@ -412,7 +412,7 @@ struct GlassBackground: ViewModifier {
         content
             .background(
                 RoundedRectangle(cornerRadius: cornerRadius)
-                    .fill(Theme.Colors.cardBackground)
+                    .fill(.ultraThinMaterial)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: cornerRadius)
@@ -471,8 +471,8 @@ struct AppInteractionButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .opacity(isEnabled ? 1.0 : 0.55)
-            .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
-            .animation(Theme.Animation.bouncy, value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed ? 0.94 : 1.0)
+            .animation(Theme.Animation.gentleSpring, value: configuration.isPressed)
             .animation(Theme.Animation.quick, value: isEnabled)
     }
 }
@@ -483,8 +483,9 @@ extension Theme {
     /// Primary action gradient — hero buttons, CTAs
     static let accentGradient = LinearGradient(
         colors: [
+            Color(uiColor: UIColor(hex: 0x60A5FA)),
             Color(uiColor: UIColor(hex: 0x2563EB)),
-            Color(uiColor: UIColor(hex: 0x3B82F6))
+            Color(uiColor: UIColor(hex: 0x1E40AF))
         ],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
