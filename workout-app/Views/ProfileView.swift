@@ -25,6 +25,7 @@ struct ProfileView: View {
             }
         }
         .navigationBarHidden(true)
+        .analyticsScreen("Profile")
         .navigationDestination(isPresented: $showingWorkoutHistory) {
             WorkoutHistoryView(workouts: dataManager.workouts, showsBackButton: true)
         }

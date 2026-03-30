@@ -11,15 +11,17 @@ enum FontRegistrar {
         guard !didRegister else { return }
         didRegister = true
 
-        // If the font is already available (e.g. via UIAppFonts in Info.plist),
-        // don't re-register it (which can produce "file already registered" logs).
+        // If both bundled fonts are already available (e.g. via UIAppFonts in
+        // Info.plist), don't re-register them and produce duplicate logs.
         #if canImport(UIKit)
-        if UIFont(name: "BebasNeue-Regular", size: 12) != nil {
+        if UIFont(name: "InstrumentSans-Regular", size: 12) != nil,
+           UIFont(name: "Sora-Regular", size: 12) != nil {
             return
         }
         #endif
 
-        registerFont(named: "BebasNeue-Regular", ext: "ttf")
+        registerFont(named: "InstrumentSans[wdth,wght]", ext: "ttf")
+        registerFont(named: "Sora[wght]", ext: "ttf")
     }
 
     private static func registerFont(named name: String, ext: String) {

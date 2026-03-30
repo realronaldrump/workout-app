@@ -146,13 +146,11 @@ private struct LongestStreakRow: View {
             Text("\(rank)")
                 .font(Theme.Typography.captionBold)
                 .foregroundColor(Theme.Colors.textTertiary)
-                .monospacedDigit()
                 .frame(width: 18, alignment: .leading)
 
             Text("\(run.workoutDayCount) day\(run.workoutDayCount == 1 ? "" : "s")")
                 .font(Theme.Typography.subheadline)
                 .foregroundColor(Theme.Colors.textPrimary)
-                .monospacedDigit()
 
             Spacer()
 
@@ -213,12 +211,10 @@ struct LongestStreaksPreview: View {
                             Text("#\(index + 1)")
                                 .font(Theme.Typography.captionBold)
                                 .foregroundColor(Theme.Colors.textTertiary)
-                                .monospacedDigit()
 
                             Text("\(run.workoutDayCount)d")
                                 .font(Theme.Typography.captionBold)
                                 .foregroundColor(Theme.Colors.textPrimary)
-                                .monospacedDigit()
 
                             Spacer()
 

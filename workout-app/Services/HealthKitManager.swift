@@ -222,9 +222,15 @@ class HealthKitManager: ObservableObject {
             return try await authorizationTask.value
         }
 
+        AppAnalytics.shared.track(AnalyticsSignal.healthAuthorizationStarted)
+
         let task = Task { @MainActor in
             guard let healthStore = healthStore else {
                 authorizationStatus = .unavailable
+                AppAnalytics.shared.track(
+                    AnalyticsSignal.healthAuthorizationFailed,
+                    payload: ["Health.status": "unavailable"]
+                )
                 throw HealthKitError.notAvailable
             }
 
@@ -235,8 +241,19 @@ class HealthKitManager: ObservableObject {
                 )
                 // Await status update so callers can safely continue without a race.
                 await checkAuthorizationStatusAsync()
+                AppAnalytics.shared.track(
+                    AnalyticsSignal.healthAuthorizationCompleted,
+                    payload: ["Health.status": authorizationStatus.analyticsLabel]
+                )
             } catch {
                 authorizationStatus = .denied
+                AppAnalytics.shared.track(
+                    AnalyticsSignal.healthAuthorizationFailed,
+                    payload: [
+                        "Health.status": authorizationStatus.analyticsLabel,
+                        "Health.errorDomain": String(describing: type(of: error))
+                    ]
+                )
                 throw HealthKitError.authorizationFailed(error.localizedDescription)
             }
         }
@@ -244,5 +261,20 @@ class HealthKitManager: ObservableObject {
         authorizationTask = task
         defer { authorizationTask = nil }
         try await task.value
+    }
+}
+
+private extension HealthKitAuthorizationStatus {
+    var analyticsLabel: String {
+        switch self {
+        case .notDetermined:
+            return "notDetermined"
+        case .authorized:
+            return "authorized"
+        case .denied:
+            return "denied"
+        case .unavailable:
+            return "unavailable"
+        }
     }
 }

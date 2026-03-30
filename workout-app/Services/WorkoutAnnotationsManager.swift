@@ -66,6 +66,11 @@ final class WorkoutAnnotationsManager: ObservableObject {
         persist()
     }
 
+    func clearAll() {
+        annotations = [:]
+        try? FileManager.default.removeItem(at: fileURL())
+    }
+
     private func fileURL() -> URL {
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         return documents.appendingPathComponent(fileName)

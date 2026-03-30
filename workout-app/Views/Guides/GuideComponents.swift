@@ -997,7 +997,6 @@ struct DemoSessionBar: View {
 
                         HStack(spacing: Theme.Spacing.sm) {
                             Text("23:45")
-                                .monospacedDigit()
                             Text("·")
                             Text("4 exercises")
                             Text("·")

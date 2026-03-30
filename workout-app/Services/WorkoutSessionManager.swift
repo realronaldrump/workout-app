@@ -108,6 +108,13 @@ final class WorkoutSessionManager: ObservableObject {
 
         activeSession = session
         schedulePersistDraft()
+        AppAnalytics.shared.track(
+            AnalyticsSignal.sessionStarted,
+            payload: [
+                "Session.hasGymProfile": gymProfileId == nil ? "false" : "true",
+                "Session.hasPrefilledExercise": (preselected?.isEmpty == false) ? "true" : "false"
+            ]
+        )
     }
 
     func updateSessionName(_ name: String) {
@@ -154,6 +161,10 @@ final class WorkoutSessionManager: ObservableObject {
         touch(&session)
         activeSession = session
         schedulePersistDraft()
+        AppAnalytics.shared.track(
+            AnalyticsSignal.sessionExerciseAdded,
+            payload: ["Session.isPrefilled": initialSetPrefill == nil ? "false" : "true"]
+        )
     }
 
     func removeExercise(id: UUID) {
@@ -185,6 +196,7 @@ final class WorkoutSessionManager: ObservableObject {
         touch(&session)
         activeSession = session
         schedulePersistDraft()
+        AppAnalytics.shared.track(AnalyticsSignal.sessionSetAdded)
     }
 
     func updateSet(exerciseId: UUID, setId: UUID, prefill: SetPrefill) {
@@ -249,6 +261,12 @@ final class WorkoutSessionManager: ObservableObject {
         touch(&session)
         activeSession = session
         schedulePersistDraft()
+        if set.isCompleted {
+            AppAnalytics.shared.track(
+                AnalyticsSignal.sessionSetCompleted,
+                payload: ["Session.isCardio": isCardio ? "true" : "false"]
+            )
+        }
         return .toggled(isCompleted: set.isCompleted)
     }
 
@@ -381,13 +399,25 @@ final class WorkoutSessionManager: ObservableObject {
         activeSession = nil
         isPresentingSessionUI = false
         await deleteDraftFile()
+        AppAnalytics.shared.track(
+            AnalyticsSignal.sessionFinished,
+            payload: [
+                "Session.exerciseCount": "\(loggedExercises.count)",
+                "Session.completedSetCount": "\(totalLoggedSets)"
+            ],
+            floatValue: max(0, endedAt.timeIntervalSince(session.startedAt))
+        )
         return workout
     }
 
     func discardDraft() async {
+        let didHaveActiveSession = activeSession != nil
         activeSession = nil
         isPresentingSessionUI = false
         await deleteDraftFile()
+        if didHaveActiveSession {
+            AppAnalytics.shared.track(AnalyticsSignal.sessionDiscarded)
+        }
     }
 
     /// Forces an immediate draft write for lifecycle edges (e.g. app moving to background).

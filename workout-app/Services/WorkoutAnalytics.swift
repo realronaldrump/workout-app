@@ -65,6 +65,96 @@ struct WorkoutAnalytics {
         return runs
     }
 
+    /// Returns the current Sunday-start calendar-week streak.
+    /// A week counts once if it contains at least one workout. Fully excused
+    /// weeks are skipped so saved breaks pause the streak instead of breaking it.
+    static func currentWeeklyStreak(
+        for workouts: [Workout],
+        intentionalBreakRanges: [IntentionalBreakRange]? = nil,
+        referenceDate: Date = Date(),
+        calendar: Calendar = .current
+    ) -> Int {
+        guard !workouts.isEmpty else { return 0 }
+
+        var calendar = calendar
+        calendar.firstWeekday = 1
+        calendar.minimumDaysInFirstWeek = 1
+
+        let normalizedReferenceDate = calendar.startOfDay(for: referenceDate)
+        let workoutDays = IntentionalBreaksAnalytics.normalizedWorkoutDays(
+            for: workouts,
+            calendar: calendar
+        )
+        guard let earliestWorkoutDay = workoutDays.min() else { return 0 }
+
+        let boundsStart = calendar.startOfDay(for: earliestWorkoutDay)
+        let currentWeekStart = startOfWeek(for: normalizedReferenceDate, calendar: calendar)
+        let earliestWeekStart = startOfWeek(for: earliestWorkoutDay, calendar: calendar)
+        let workoutWeekStarts = Set(workoutDays.map { startOfWeek(for: $0, calendar: calendar) })
+        let breakDays = IntentionalBreaksAnalytics.breakDaySet(
+            from: intentionalBreakRanges ?? IntentionalBreaksStore.load(
+                key: IntentionalBreaksStore.savedBreaksKey
+            ),
+            excluding: workoutDays,
+            within: boundsStart...normalizedReferenceDate,
+            calendar: calendar
+        )
+
+        var streak = 0
+        var cursor = currentWeekStart
+
+        while cursor >= earliestWeekStart {
+            let naturalWeekEnd = calendar.date(byAdding: .day, value: 6, to: cursor) ?? cursor
+            let trackedStart = max(cursor, boundsStart)
+            let trackedEnd = min(naturalWeekEnd, normalizedReferenceDate)
+
+            if trackedStart <= trackedEnd {
+                let trackedDays = max(
+                    (calendar.dateComponents([.day], from: trackedStart, to: trackedEnd).day ?? 0) + 1,
+                    0
+                )
+                let excludedDays = IntentionalBreaksAnalytics.dayCount(
+                    from: trackedStart,
+                    to: trackedEnd,
+                    breakDays: breakDays,
+                    includeStart: true,
+                    includeEnd: true,
+                    calendar: calendar
+                )
+                let eligibleDays = max(trackedDays - excludedDays, 0)
+
+                if eligibleDays == 0 {
+                    guard let previousWeek = calendar.date(
+                        byAdding: .weekOfYear,
+                        value: -1,
+                        to: cursor
+                    ) else {
+                        break
+                    }
+                    cursor = previousWeek
+                    continue
+                }
+
+                if workoutWeekStarts.contains(cursor) {
+                    streak += 1
+                } else {
+                    break
+                }
+            }
+
+            guard let previousWeek = calendar.date(byAdding: .weekOfYear, value: -1, to: cursor) else {
+                break
+            }
+            cursor = previousWeek
+        }
+
+        return streak
+    }
+
+    private static func startOfWeek(for date: Date, calendar: Calendar) -> Date {
+        calendar.dateInterval(of: .weekOfYear, for: date)?.start ?? calendar.startOfDay(for: date)
+    }
+
     static func repRangeDistribution(for workouts: [Workout]) -> [RepRangeBucket] {
         let allSets = workouts.flatMap { $0.exercises }.flatMap { $0.sets }
 

@@ -4,12 +4,23 @@ struct WordmarkLockup: View {
     var showTagline: Bool = true
     var tagline: String = "Best Workout App in The World"
     var isOnSplash: Bool = false
+    var alignment: HorizontalAlignment = .center
 
     private var primaryText: Color { isOnSplash ? .white : Theme.Colors.textPrimary }
     private var secondaryText: Color { isOnSplash ? Color.white.opacity(0.86) : Theme.Colors.textSecondary }
+    private var textAlignment: TextAlignment {
+        switch alignment {
+        case .leading:
+            return .leading
+        case .trailing:
+            return .trailing
+        default:
+            return .center
+        }
+    }
 
     var body: some View {
-        VStack(spacing: 10) {
+        VStack(alignment: alignment, spacing: 10) {
             Text("Davis's")
                 .font(Theme.Typography.eyebrowRounded)
                 .foregroundStyle(secondaryText)
@@ -46,7 +57,7 @@ struct WordmarkLockup: View {
                 Text(tagline)
                     .font(Theme.Typography.subheadline)
                     .foregroundStyle(secondaryText)
-                    .multilineTextAlignment(.center)
+                    .multilineTextAlignment(textAlignment)
                     .padding(.top, 4)
             }
         }

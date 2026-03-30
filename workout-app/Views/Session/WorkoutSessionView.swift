@@ -135,6 +135,7 @@ struct WorkoutSessionView: View {
                 }
             }
             .toolbar(.hidden, for: .navigationBar)
+            .analyticsScreen("WorkoutSession")
             .safeAreaInset(edge: .top, spacing: 0) {
                 sessionTopBar
             }
@@ -592,6 +593,10 @@ struct WorkoutSessionView: View {
                 finishDidSave = false
             } catch {
                 finishErrorMessage = error.localizedDescription
+                AppAnalytics.shared.track(
+                    AnalyticsSignal.sessionFinishFailed,
+                    payload: ["Session.errorDomain": String(describing: type(of: error))]
+                )
             }
         }
     }
@@ -977,7 +982,6 @@ private struct SessionSetRow: View {
                     .font(Theme.Typography.captionBold)
                     .foregroundColor(Theme.Colors.textSecondary)
                     .frame(width: 28, alignment: .leading)
-                    .monospacedDigit()
 
                 if let cardioConfig {
                     cardioField(kind: cardioConfig.primary, countLabel: cardioConfig.countLabel)
@@ -1111,7 +1115,6 @@ private struct SessionSetRow: View {
                     .focused($focusedField, equals: focus)
                     .font(Theme.Typography.body)
                     .foregroundColor(Theme.Colors.textPrimary)
-                    .monospacedDigit()
                     .multilineTextAlignment(.center)
                     .frame(minWidth: 40)
             }
@@ -1140,7 +1143,6 @@ private struct SessionSetRow: View {
                 .focused($focusedField, equals: focus)
                 .font(Theme.Typography.body)
                 .foregroundColor(Theme.Colors.textPrimary)
-                .monospacedDigit()
         }
         .frame(width: width)
     }

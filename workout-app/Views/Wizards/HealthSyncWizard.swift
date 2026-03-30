@@ -4,6 +4,7 @@ struct HealthSyncWizard: View {
     @Binding var isPresented: Bool
     @EnvironmentObject var healthManager: HealthKitManager
     let workouts: [Workout]
+    let source: String
 
     @State private var step = 0
     @State private var errorMessage: String?
@@ -97,6 +98,16 @@ struct HealthSyncWizard: View {
             } message: {
                 Text(errorMessage ?? "Unknown error")
             }
+        }
+        .analyticsScreen("HealthSyncWizard", source: source)
+        .onAppear {
+            AppAnalytics.shared.track(
+                AnalyticsSignal.healthSyncWizardViewed,
+                payload: [
+                    "Context.source": source,
+                    "Health.workoutCount": "\(workouts.count)"
+                ]
+            )
         }
     }
 
@@ -192,7 +203,6 @@ struct HealthSyncWizard: View {
 
                 Text("\(Int(healthManager.syncProgress * 100))%")
                     .font(Theme.Typography.title2)
-                    .monospacedDigit()
             }
 
             VStack(spacing: Theme.Spacing.sm) {
@@ -278,6 +288,10 @@ struct HealthSyncWizard: View {
     }
 
     private func requestAuthorization() {
+        AppAnalytics.shared.track(
+            AnalyticsSignal.healthAuthorizationStarted,
+            payload: ["Context.source": source]
+        )
         Task {
             do {
                 try await healthManager.requestAuthorization()
@@ -298,6 +312,13 @@ struct HealthSyncWizard: View {
     private func startSync() {
         guard !hasStartedSync else { return }
         hasStartedSync = true
+        AppAnalytics.shared.track(
+            AnalyticsSignal.healthSyncStarted,
+            payload: [
+                "Context.source": source,
+                "Health.targetWorkoutCount": "\(initialWorkoutTargets.count)"
+            ]
+        )
 
         Task {
             do {
@@ -319,8 +340,22 @@ struct HealthSyncWizard: View {
                     step = 3 // Success step
                 }
                 Haptics.notify(.success)
+                AppAnalytics.shared.track(
+                    AnalyticsSignal.healthSyncCompleted,
+                    payload: [
+                        "Context.source": source,
+                        "Health.targetWorkoutCount": "\(initialWorkoutTargets.count)"
+                    ]
+                )
             } catch {
                 errorMessage = error.localizedDescription
+                AppAnalytics.shared.track(
+                    AnalyticsSignal.healthSyncFailed,
+                    payload: [
+                        "Context.source": source,
+                        "Health.errorDomain": String(describing: type(of: error))
+                    ]
+                )
             }
         }
     }

@@ -46,9 +46,11 @@ struct WorkoutApp: App {
             "weightIncrement": 2.5,
             "preferredSleepSourceKey": "",
             "preferredSleepSourceName": "",
-            "appearanceMode": AppearanceMode.system.rawValue
+            "appearanceMode": AppearanceMode.system.rawValue,
+            AppAnalytics.collectionEnabledKey: true
         ])
 
+        AppAnalytics.shared.configureIfNeeded()
         FontRegistrar.registerFontsIfNeeded()
         Theme.configureGlobalAppearance()
     }
@@ -67,6 +69,7 @@ struct WorkoutApp: App {
                 .preferredColorScheme(resolvedColorScheme)
         }
         .onChange(of: scenePhase) { _, newPhase in
+            AppAnalytics.shared.handleScenePhaseChange(newPhase)
             guard newPhase == .inactive || newPhase == .background else { return }
             sessionManager.saveImmediately()
         }

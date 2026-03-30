@@ -8,6 +8,10 @@ struct SettingsView: View {
     @EnvironmentObject var logStore: WorkoutLogStore
     @EnvironmentObject var sessionManager: WorkoutSessionManager
     @EnvironmentObject var intentionalBreaksManager: IntentionalBreaksManager
+    @EnvironmentObject var annotationsManager: WorkoutAnnotationsManager
+    @EnvironmentObject var gymProfilesManager: GymProfilesManager
+
+    @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
 
     @State private var showingImportWizard = false
     @State private var showingHealthWizard = false
@@ -18,6 +22,7 @@ struct SettingsView: View {
     @AppStorage("sessionsPerWeekGoal") private var sessionsPerWeekGoal: Int = 4
     @AppStorage("preferredSleepSourceName") private var preferredSleepSourceName: String = ""
     @AppStorage("appearanceMode") private var appearanceMode: Int = AppearanceMode.system.rawValue
+    @AppStorage(AppAnalytics.collectionEnabledKey) private var analyticsCollectionEnabled = true
 
     var body: some View {
         ZStack {
@@ -313,6 +318,30 @@ struct SettingsView: View {
                             )
                         }
                         .buttonStyle(PlainButtonStyle())
+
+                        Divider().padding(.leading, 50)
+
+                        Toggle(isOn: $analyticsCollectionEnabled) {
+                            HStack(spacing: Theme.Spacing.sm) {
+                                Image(systemName: "chart.line.uptrend.xyaxis")
+                                    .font(Theme.Typography.subheadlineStrong)
+                                    .foregroundStyle(.white)
+                                    .frame(width: 32, height: 32)
+                                    .background(Theme.Colors.accentSecondary)
+                                    .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
+
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Anonymous Analytics")
+                                        .font(Theme.Typography.body)
+                                    Text(analyticsSubtitle)
+                                        .font(Theme.Typography.caption)
+                                        .foregroundStyle(Theme.Colors.textSecondary)
+                                }
+                            }
+                        }
+                        .tint(Theme.Colors.accent)
+                        .padding()
+                        .softCard(elevation: 1)
                     }
                 }
 
@@ -375,13 +404,15 @@ struct SettingsView: View {
             StrongImportWizard(
                 isPresented: $showingImportWizard,
                 dataManager: dataManager,
-                iCloudManager: iCloudManager
+                iCloudManager: iCloudManager,
+                source: "settings"
             )
         }
         .sheet(isPresented: $showingHealthWizard) {
             HealthSyncWizard(
                 isPresented: $showingHealthWizard,
-                workouts: dataManager.workouts
+                workouts: dataManager.workouts,
+                source: "settings"
             )
         }
         .alert("Clear All Data", isPresented: $showingDeleteAlert) {
@@ -394,21 +425,30 @@ struct SettingsView: View {
                     await MainActor.run {
                         healthManager.clearAllData()
                         intentionalBreaksManager.clearAll()
+                        annotationsManager.clearAll()
+                        gymProfilesManager.clearAll()
                         dataManager.clearAllData()
+                        hasSeenOnboarding = false
                     }
                 }
             }
         } message: {
             Text(
-                "WARNING: This will permanently delete all imported CSV files, logged workouts, " +
-                "intentional break dates, active session drafts, and health data from your device. This action cannot be undone."
+                "WARNING: This will permanently delete all data — imported CSVs, logged workouts, " +
+                "gym profiles, annotations, break dates, session drafts, and health data. " +
+                "You will be returned to onboarding as a new user. This cannot be undone."
             )
         }
         .onAppear {
             healthManager.refreshAuthorizationStatus()
             normalizeIncrementIfNeeded()
             normalizeSessionsGoalIfNeeded()
+            AppAnalytics.shared.configureIfNeeded()
         }
+        .onChange(of: analyticsCollectionEnabled) { _, newValue in
+            AppAnalytics.shared.setCollectionEnabled(newValue)
+        }
+        .analyticsScreen("Settings")
     }
 
     private var incrementOptions: [Double] {
@@ -470,6 +510,10 @@ struct SettingsView: View {
             return "Auto-select the strongest sleep source"
         }
         return "\(preferredSleepSourceName) preferred, fallback enabled"
+    }
+
+    private var analyticsSubtitle: String {
+        AppAnalytics.shared.statusSummary + ". No raw Health values, route data, file contents, or names."
     }
 
     private var healthDataSubtitle: String {

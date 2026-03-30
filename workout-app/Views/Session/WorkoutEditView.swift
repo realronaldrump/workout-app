@@ -387,7 +387,6 @@ private struct LoggedSetEditorRow: View {
                 .font(Theme.Typography.captionBold)
                 .foregroundColor(Theme.Colors.textSecondary)
                 .frame(width: 34, alignment: .leading)
-                .monospacedDigit()
 
             if let cardioConfig {
                 cardioField(kind: cardioConfig.primary, countLabel: cardioConfig.countLabel)
@@ -443,7 +442,6 @@ private struct LoggedSetEditorRow: View {
                 .focused($focusedField, equals: focus)
                 .font(Theme.Typography.body)
                 .foregroundColor(Theme.Colors.textPrimary)
-                .monospacedDigit()
         }
         .frame(width: width)
     }

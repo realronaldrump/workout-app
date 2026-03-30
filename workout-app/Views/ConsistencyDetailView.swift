@@ -1092,7 +1092,6 @@ private struct ConsistencyWeekPillar: View {
                 Text("\(bucket.sessions)")
                     .font(Theme.Typography.captionBold)
                     .foregroundColor(isSelected ? Theme.Colors.accent : Theme.Colors.textPrimary)
-                    .monospacedDigit()
 
                 Text(label)
                     .font(Theme.Typography.caption)

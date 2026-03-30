@@ -61,6 +61,9 @@ struct AppPillButton: View {
                 Text(title)
                     .font(Theme.Typography.captionBold)
                     .foregroundStyle(textColor)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+                    .allowsTightening(true)
             }
             .padding(.horizontal, Theme.Spacing.md)
             .padding(.vertical, Theme.Spacing.xs)

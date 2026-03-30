@@ -87,6 +87,7 @@ struct ExportWorkoutsView: View {
         }
         .navigationTitle("Export")
         .navigationBarTitleDisplayMode(.inline)
+        .analyticsScreen("ExportWorkouts")
         .sheet(item: $activeSheet) { sheet in
             sheetView(for: sheet)
         }
@@ -941,6 +942,10 @@ private extension ExportWorkoutsView {
 
     @MainActor
     func requestHealthAuthorization() {
+        AppAnalytics.shared.track(
+            AnalyticsSignal.healthAuthorizationStarted,
+            payload: ["Context.source": "export"]
+        )
         Task {
             do {
                 try await ensureHealthAuthorization()
@@ -956,6 +961,7 @@ private extension ExportWorkoutsView {
     @MainActor
     func startHealthDailySummaryExport() {
         guard healthDailySummaryExportButtonEnabled else { return }
+        trackExportStarted(kind: "healthDailySummary", extra: ["Export.metricCount": "\(selectedHealthSummaryMetrics.count)"])
 
         healthDailySummaryStatusMessage = nil
         healthDailySummaryFileURL = nil
@@ -1001,18 +1007,25 @@ private extension ExportWorkoutsView {
                                 ? "Saved on-device (iCloud unavailable)"
                                 : "Saved to iCloud Drive"
                             isExportingHealthDailySummary = false
+                            trackExportCompleted(
+                                kind: "healthDailySummary",
+                                itemCount: entries.count,
+                                extra: ["Export.metricCount": "\(metrics.count)"]
+                            )
                             presentShare(fileURL)
                             Haptics.notify(.success)
                         }
                     } catch {
                         await MainActor.run {
                             isExportingHealthDailySummary = false
+                            trackExportFailed(kind: "healthDailySummary", error: error)
                             showError(error)
                         }
                     }
                 }
             } catch {
                 isExportingHealthDailySummary = false
+                trackExportFailed(kind: "healthDailySummary", error: error)
                 showError(error)
             }
         }
@@ -1021,6 +1034,10 @@ private extension ExportWorkoutsView {
     @MainActor
     func startHealthWorkoutSummaryExport() {
         guard healthWorkoutSummaryExportButtonEnabled else { return }
+        trackExportStarted(
+            kind: "healthWorkoutSummary",
+            extra: ["Export.includeLocations": includeHealthWorkoutLocations ? "true" : "false"]
+        )
 
         healthWorkoutSummaryStatusMessage = nil
         healthWorkoutSummaryFileURL = nil
@@ -1075,18 +1092,25 @@ private extension ExportWorkoutsView {
                                 ? "Saved on-device (iCloud unavailable)"
                                 : "Saved to iCloud Drive"
                             isExportingHealthWorkoutSummary = false
+                            trackExportCompleted(
+                                kind: "healthWorkoutSummary",
+                                itemCount: workoutsSnapshot.count,
+                                extra: ["Export.includeLocations": includeLocations ? "true" : "false"]
+                            )
                             presentShare(fileURL)
                             Haptics.notify(.success)
                         }
                     } catch {
                         await MainActor.run {
                             isExportingHealthWorkoutSummary = false
+                            trackExportFailed(kind: "healthWorkoutSummary", error: error)
                             showError(error)
                         }
                     }
                 }
             } catch {
                 isExportingHealthWorkoutSummary = false
+                trackExportFailed(kind: "healthWorkoutSummary", error: error)
                 showError(error)
             }
         }
@@ -1095,6 +1119,7 @@ private extension ExportWorkoutsView {
     @MainActor
     func startHealthMetricSamplesExport() {
         guard healthMetricSamplesExportButtonEnabled else { return }
+        trackExportStarted(kind: "healthMetricSamples", extra: ["Export.metricCount": "\(selectedHealthSampleMetrics.count)"])
 
         healthMetricSamplesStatusMessage = nil
         healthMetricSamplesFileURL = nil
@@ -1145,18 +1170,25 @@ private extension ExportWorkoutsView {
                                 ? "Saved on-device (iCloud unavailable)"
                                 : "Saved to iCloud Drive"
                             isExportingHealthMetricSamples = false
+                            trackExportCompleted(
+                                kind: "healthMetricSamples",
+                                itemCount: samplesByMetric.values.reduce(0) { $0 + $1.count },
+                                extra: ["Export.metricCount": "\(metrics.count)"]
+                            )
                             presentShare(fileURL)
                             Haptics.notify(.success)
                         }
                     } catch {
                         await MainActor.run {
                             isExportingHealthMetricSamples = false
+                            trackExportFailed(kind: "healthMetricSamples", error: error)
                             showError(error)
                         }
                     }
                 }
             } catch {
                 isExportingHealthMetricSamples = false
+                trackExportFailed(kind: "healthMetricSamples", error: error)
                 showError(error)
             }
         }
@@ -1165,6 +1197,7 @@ private extension ExportWorkoutsView {
     @MainActor
     func startWorkoutExport() {
         guard workoutExportButtonEnabled else { return }
+        trackExportStarted(kind: "workouts")
 
         workoutExportStatusMessage = nil
         workoutExportFileURL = nil
@@ -1213,12 +1246,14 @@ private extension ExportWorkoutsView {
                         ? "Saved on-device (iCloud unavailable)"
                         : "Saved to iCloud Drive"
                     isExportingWorkouts = false
+                    trackExportCompleted(kind: "workouts", itemCount: workoutsSnapshot.count)
                     presentShare(fileURL)
                     Haptics.notify(.success)
                 }
             } catch {
                 await MainActor.run {
                     isExportingWorkouts = false
+                    trackExportFailed(kind: "workouts", error: error)
                     showError(error)
                 }
             }
@@ -1228,6 +1263,10 @@ private extension ExportWorkoutsView {
     @MainActor
     func startExerciseExport() {
         guard exerciseExportButtonEnabled else { return }
+        trackExportStarted(
+            kind: "exerciseList",
+            extra: ["Export.includeTags": includeExerciseTags ? "true" : "false"]
+        )
 
         exerciseExportStatusMessage = nil
         exerciseExportFileURL = nil
@@ -1289,12 +1328,18 @@ private extension ExportWorkoutsView {
                         ? "Saved on-device (iCloud unavailable)"
                         : "Saved to iCloud Drive"
                     isExportingExercises = false
+                    trackExportCompleted(
+                        kind: "exerciseList",
+                        itemCount: exerciseNames.count,
+                        extra: ["Export.includeTags": includeTags ? "true" : "false"]
+                    )
                     presentShare(fileURL)
                     Haptics.notify(.success)
                 }
             } catch {
                 await MainActor.run {
                     isExportingExercises = false
+                    trackExportFailed(kind: "exerciseList", error: error)
                     showError(error)
                 }
             }
@@ -1304,6 +1349,10 @@ private extension ExportWorkoutsView {
     @MainActor
     func startExerciseHistoryExport() {
         guard exerciseHistoryExportButtonEnabled else { return }
+        trackExportStarted(
+            kind: "exerciseHistory",
+            extra: ["Export.selectionCount": "\(selectedExerciseNamesInRange.count)"]
+        )
 
         exerciseHistoryExportStatusMessage = nil
         exerciseHistoryExportFileURL = nil
@@ -1363,12 +1412,18 @@ private extension ExportWorkoutsView {
                         : "Saved to iCloud Drive"
                     isExportingExerciseHistory = false
                     isFilteredExportsExpanded = true
+                    trackExportCompleted(
+                        kind: "exerciseHistory",
+                        itemCount: workoutsSnapshot.count,
+                        extra: ["Export.selectionCount": "\(selectedExerciseCount)"]
+                    )
                     presentShare(fileURL)
                     Haptics.notify(.success)
                 }
             } catch {
                 await MainActor.run {
                     isExportingExerciseHistory = false
+                    trackExportFailed(kind: "exerciseHistory", error: error)
                     showError(error)
                 }
             }
@@ -1378,6 +1433,10 @@ private extension ExportWorkoutsView {
     @MainActor
     func startMuscleGroupExport() {
         guard muscleGroupExportButtonEnabled else { return }
+        trackExportStarted(
+            kind: "muscleGroup",
+            extra: ["Export.selectionCount": "\(selectedMuscleTagIdsInRange.count)"]
+        )
 
         muscleGroupExportStatusMessage = nil
         muscleGroupExportFileURL = nil
@@ -1441,12 +1500,18 @@ private extension ExportWorkoutsView {
                         : "Saved to iCloud Drive"
                     isExportingMuscleGroups = false
                     isFilteredExportsExpanded = true
+                    trackExportCompleted(
+                        kind: "muscleGroup",
+                        itemCount: workoutsSnapshot.count,
+                        extra: ["Export.selectionCount": "\(selectedGroupCount)"]
+                    )
                     presentShare(fileURL)
                     Haptics.notify(.success)
                 }
             } catch {
                 await MainActor.run {
                     isExportingMuscleGroups = false
+                    trackExportFailed(kind: "muscleGroup", error: error)
                     showError(error)
                 }
             }
@@ -1456,6 +1521,10 @@ private extension ExportWorkoutsView {
     @MainActor
     func startWorkoutDatesExport() {
         guard workoutDatesExportButtonEnabled else { return }
+        trackExportStarted(
+            kind: "workoutDates",
+            extra: ["Export.selectionCount": "\(selectedWorkoutDateIdsInRange.count)"]
+        )
 
         workoutDatesExportStatusMessage = nil
         workoutDatesExportFileURL = nil
@@ -1507,12 +1576,18 @@ private extension ExportWorkoutsView {
                         : "Saved to iCloud Drive"
                     isExportingWorkoutDates = false
                     isFilteredExportsExpanded = true
+                    trackExportCompleted(
+                        kind: "workoutDates",
+                        itemCount: workoutsSnapshot.count,
+                        extra: ["Export.selectionCount": "\(selectedDateCount)"]
+                    )
                     presentShare(fileURL)
                     Haptics.notify(.success)
                 }
             } catch {
                 await MainActor.run {
                     isExportingWorkoutDates = false
+                    trackExportFailed(kind: "workoutDates", error: error)
                     showError(error)
                 }
             }
@@ -1657,6 +1732,39 @@ private extension ExportWorkoutsView {
 
     func formatDay(_ date: Date) -> String {
         date.formatted(date: .abbreviated, time: .omitted)
+    }
+
+    func trackExportStarted(kind: String, extra: [String: String] = [:]) {
+        AppAnalytics.shared.track(
+            AnalyticsSignal.exportStarted,
+            payload: baseExportPayload(kind: kind).merging(extra) { _, new in new }
+        )
+    }
+
+    func trackExportCompleted(kind: String, itemCount: Int, extra: [String: String] = [:]) {
+        AppAnalytics.shared.track(
+            AnalyticsSignal.exportCompleted,
+            payload: baseExportPayload(kind: kind)
+                .merging(["Export.itemCount": "\(itemCount)"]) { _, new in new }
+                .merging(extra) { _, new in new }
+        )
+    }
+
+    func trackExportFailed(kind: String, error: Error) {
+        AppAnalytics.shared.track(
+            AnalyticsSignal.exportFailed,
+            payload: baseExportPayload(kind: kind).merging([
+                "Export.errorDomain": String(describing: type(of: error))
+            ]) { _, new in new }
+        )
+    }
+
+    func baseExportPayload(kind: String) -> [String: String] {
+        [
+            "Export.kind": kind,
+            "Export.range": selectedRange.accessibilityTitle,
+            "Export.workoutCount": "\(workoutsInSelection.count)"
+        ]
     }
 }
 

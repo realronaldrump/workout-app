@@ -296,7 +296,6 @@ private struct ConsistencyMetricPill: View {
             Text(value)
                 .font(Theme.Typography.subheadline)
                 .foregroundColor(highlight ? Theme.Colors.success : Theme.Colors.textPrimary)
-                .monospacedDigit()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, Theme.Spacing.md)
@@ -429,7 +428,6 @@ private struct WeeklyConsistencyBar: View {
             Text("\(bucket.sessions)")
                 .font(Theme.Typography.captionBold)
                 .foregroundColor(sessionTextColor)
-                .monospacedDigit()
 
             if showLabel {
                 Text(label)

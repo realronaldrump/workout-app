@@ -15,27 +15,20 @@ struct OnboardingView: View {
     @State private var welcomeFloating = false
 
     private let totalSteps = 3
-    private var isSplashStep: Bool { step == 0 }
+    private let onboardingPrimaryText = Color.white
+    private let onboardingSecondaryText = Color.white.opacity(0.82)
+    private let onboardingTertiaryText = Color.white.opacity(0.68)
 
     var body: some View {
         ZStack {
-            Group {
-                if isSplashStep {
-                    SplashBackground()
-                        .transition(.opacity)
-                } else {
-                    AdaptiveBackground()
-                        .transition(.opacity)
-                }
-            }
-            .animation(reduceMotion ? .easeOut(duration: 0.2) : .easeInOut(duration: 0.25), value: isSplashStep)
+            SplashBackground()
 
             VStack(spacing: Theme.Spacing.lg) {
                 topBar
 
                 TabView(selection: $step) {
                     welcomeStep.tag(0)
-                    importStep.tag(1)
+                    getStartedStep.tag(1)
                     healthStep.tag(2)
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
@@ -44,7 +37,25 @@ struct OnboardingView: View {
             }
             .padding(.vertical, Theme.Spacing.xl)
         }
+        .analyticsScreen("Onboarding")
+        .onAppear {
+            AppAnalytics.shared.track(AnalyticsSignal.onboardingStarted)
+            AppAnalytics.shared.track(
+                AnalyticsSignal.onboardingStepViewed,
+                payload: [
+                    "Onboarding.step": "\(step)",
+                    "Onboarding.totalSteps": "\(totalSteps)"
+                ]
+            )
+        }
         .onChange(of: step) { _, newValue in
+            AppAnalytics.shared.track(
+                AnalyticsSignal.onboardingStepViewed,
+                payload: [
+                    "Onboarding.step": "\(newValue)",
+                    "Onboarding.totalSteps": "\(totalSteps)"
+                ]
+            )
             if newValue == 0 {
                 startWelcomeAnimation()
             }
@@ -53,7 +64,8 @@ struct OnboardingView: View {
             StrongImportWizard(
                 isPresented: $showingImportWizard,
                 dataManager: dataManager,
-                iCloudManager: iCloudManager
+                iCloudManager: iCloudManager,
+                source: "onboarding"
             )
         }
         .onChange(of: showingImportWizard) { _, isShowing in
@@ -72,10 +84,14 @@ struct OnboardingView: View {
                 Spacer()
 
                 Button("Skip") {
+                    AppAnalytics.shared.track(
+                        AnalyticsSignal.onboardingSkipped,
+                        payload: ["Onboarding.step": "\(step)"]
+                    )
                     completeOnboarding()
                 }
                 .font(Theme.Typography.subheadline)
-                .foregroundStyle(isSplashStep ? Color.white.opacity(0.86) : Theme.Colors.textSecondary)
+                .foregroundStyle(onboardingSecondaryText)
                 .padding(.horizontal, Theme.Spacing.lg)
                 .frame(minHeight: 44)
                 .buttonStyle(.plain)
@@ -84,9 +100,7 @@ struct OnboardingView: View {
             HStack(spacing: 8) {
                 ForEach(0..<totalSteps, id: \.self) { index in
                     Capsule()
-                        .fill(index <= step
-                              ? (isSplashStep ? Color.white : Theme.Colors.accent)
-                              : (isSplashStep ? Color.white.opacity(0.20) : Theme.Colors.border.opacity(0.5)))
+                        .fill(index <= step ? Color.white : Color.white.opacity(0.20))
                         .frame(width: index == step ? 24 : 8, height: 4)
                         .animation(reduceMotion ? .easeOut(duration: 0.2) : .spring(response: 0.4, dampingFraction: 0.75), value: step)
                 }
@@ -97,28 +111,28 @@ struct OnboardingView: View {
 
     private var footer: some View {
         VStack(spacing: Theme.Spacing.md) {
-            Button(action: handlePrimaryAction) {
-                Text(primaryButtonTitle)
-                    .font(Theme.Typography.headline)
-                    .foregroundStyle(isSplashStep ? Theme.Colors.accent : .white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, Theme.Spacing.md)
-                    .frame(minHeight: 52)
-                    .background(
-                        isSplashStep
-                        ? AnyShapeStyle(Theme.Colors.surface)
-                        : AnyShapeStyle(Theme.accentGradient)
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge))
-                    .shadow(color: (isSplashStep ? Color.black : Theme.Colors.accent).opacity(0.15), radius: 8, y: 4)
-                    .shadow(color: (isSplashStep ? Color.black : Theme.Colors.accent).opacity(0.08), radius: 16, y: 8)
+            if let primary = primaryButtonTitle {
+                Button(action: handlePrimaryAction) {
+                    Text(primary)
+                        .font(Theme.Typography.headline)
+                        .foregroundStyle(Theme.Colors.accent)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, Theme.Spacing.md)
+                        .frame(minHeight: 52)
+                        .background(
+                            AnyShapeStyle(Theme.Colors.surface)
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge))
+                        .shadow(color: Color.black.opacity(0.15), radius: 8, y: 4)
+                        .shadow(color: Color.black.opacity(0.08), radius: 16, y: 8)
+                }
             }
 
             if let secondary = secondaryButtonTitle {
                 Button(action: handleSecondaryAction) {
                     Text(secondary)
                         .font(Theme.Typography.subheadline)
-                        .foregroundStyle(isSplashStep ? Color.white.opacity(0.86) : Theme.Colors.textSecondary)
+                        .foregroundStyle(onboardingSecondaryText)
                         .frame(minHeight: 44)
                 }
                 .buttonStyle(.plain)
@@ -128,89 +142,374 @@ struct OnboardingView: View {
     }
 
     private var welcomeStep: some View {
-        VStack(spacing: Theme.Spacing.xl) {
-            Spacer()
+        ZStack {
+            splashHeroBackdrop
 
-            WordmarkLockup(showTagline: true, isOnSplash: true)
-                .padding(.horizontal, Theme.Spacing.xl)
-                .opacity(welcomeVisible ? 1 : 0)
-                .scaleEffect(welcomeVisible || reduceMotion ? 1 : 0.98)
-                .offset(y: welcomeFloating ? -4 : 0)
-                .animation(reduceMotion ? .easeOut(duration: 0.25) : .spring(response: 0.55, dampingFraction: 0.82), value: welcomeVisible)
-                .animation(reduceMotion ? nil : .easeInOut(duration: 2.4).repeatForever(autoreverses: true), value: welcomeFloating)
-
-            VStack(spacing: Theme.Spacing.sm) {
-                Text("TRAIN WITH CLARITY")
-                    .font(Theme.Typography.sectionHeader)
-                    .foregroundStyle(Theme.Colors.textPrimary)
-                    .tracking(1.0)
-                    .multilineTextAlignment(.center)
-
-                Text("See what's changed, what's working, and what to do next.")
-                    .font(Theme.Typography.body)
-                    .foregroundStyle(Theme.Colors.textSecondary)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: 520)
+            ViewThatFits(in: .vertical) {
+                welcomeHeroLayout(compact: false)
+                welcomeHeroLayout(compact: true)
             }
-            .padding(Theme.Spacing.xl)
-            .softCard(cornerRadius: Theme.CornerRadius.xlarge, elevation: 1)
             .padding(.horizontal, Theme.Spacing.xl)
-
-            Spacer()
         }
         .onAppear {
             startWelcomeAnimation()
         }
     }
 
-    private var importStep: some View {
+    private func welcomeHeroLayout(compact: Bool) -> some View {
+        VStack(alignment: .leading, spacing: compact ? Theme.Spacing.lg : Theme.Spacing.xl) {
+            Spacer(minLength: compact ? 0 : Theme.Spacing.sm)
+
+            VStack(alignment: .leading, spacing: compact ? Theme.Spacing.md : Theme.Spacing.lg) {
+                if !compact {
+                    splashEyebrow
+                }
+
+                WordmarkLockup(
+                    showTagline: false,
+                    isOnSplash: true,
+                    alignment: .leading
+                )
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .opacity(welcomeVisible ? 1 : 0)
+                .scaleEffect(
+                    compact ? 0.84 : (welcomeVisible || reduceMotion ? 1 : 0.98),
+                    anchor: .leading
+                )
+                .offset(y: welcomeFloating ? -4 : 0)
+                .animation(reduceMotion ? .easeOut(duration: 0.25) : .spring(response: 0.55, dampingFraction: 0.82), value: welcomeVisible)
+                .animation(reduceMotion ? nil : .easeInOut(duration: 2.4).repeatForever(autoreverses: true), value: welcomeFloating)
+
+                if compact {
+                    Text("Performance, recovery, and momentum in one focused briefing.")
+                        .font(Theme.Typography.subheadlineStrong)
+                        .foregroundStyle(Color.white.opacity(0.84))
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                        Text("Know what changed, what is working, and what to do next.")
+                            .font(Theme.Typography.heroTitle)
+                            .foregroundStyle(.white)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        Text("Performance, recovery, and momentum in one focused briefing instead of a wall of charts.")
+                            .font(Theme.Typography.body)
+                            .foregroundStyle(Color.white.opacity(0.82))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    splashPillRow
+                }
+            }
+
+            splashPreviewPanel(compact: compact)
+
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var splashHeroBackdrop: some View {
+        ZStack {
+            Circle()
+                .fill(Color.white.opacity(0.08))
+                .frame(width: 220, height: 220)
+                .blur(radius: 10)
+                .offset(x: 120, y: -130)
+
+            RoundedRectangle(cornerRadius: 42, style: .continuous)
+                .fill(Color.white.opacity(0.05))
+                .frame(width: 220, height: 220)
+                .rotationEffect(.degrees(18))
+                .offset(x: 135, y: 180)
+
+            RoundedRectangle(cornerRadius: 36, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
+                .frame(width: 180, height: 180)
+                .rotationEffect(.degrees(-14))
+                .offset(x: -110, y: 220)
+        }
+        .allowsHitTesting(false)
+    }
+
+    private var splashEyebrow: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "waveform.path.ecg")
+                .font(Theme.Typography.captionBold)
+            Text("PERFORMANCE INTELLIGENCE")
+                .font(Theme.Typography.captionBold)
+                .tracking(0.8)
+        }
+        .foregroundStyle(Color.white.opacity(0.88))
+        .padding(.horizontal, Theme.Spacing.md)
+        .padding(.vertical, Theme.Spacing.xs)
+        .background(
+            Capsule()
+                .fill(Color.white.opacity(0.12))
+        )
+        .overlay(
+            Capsule()
+                .strokeBorder(Color.white.opacity(0.16), lineWidth: 1)
+        )
+    }
+
+    private var splashPillRow: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: Theme.Spacing.sm) {
+                splashMiniPill(title: "Trends", systemImage: "chart.line.uptrend.xyaxis")
+                splashMiniPill(title: "Recovery", systemImage: "heart.text.square")
+                splashMiniPill(title: "Momentum", systemImage: "figure.run")
+            }
+
+            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                HStack(spacing: Theme.Spacing.sm) {
+                    splashMiniPill(title: "Trends", systemImage: "chart.line.uptrend.xyaxis")
+                    splashMiniPill(title: "Recovery", systemImage: "heart.text.square")
+                }
+                splashMiniPill(title: "Momentum", systemImage: "figure.run")
+            }
+        }
+    }
+
+    private func splashMiniPill(title: String, systemImage: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: systemImage)
+                .font(Theme.Typography.captionBold)
+            Text(title)
+                .font(Theme.Typography.captionBold)
+        }
+        .foregroundStyle(Color.white.opacity(0.88))
+        .padding(.horizontal, Theme.Spacing.md)
+        .padding(.vertical, Theme.Spacing.xs)
+        .background(
+            Capsule()
+                .fill(Color.white.opacity(0.10))
+        )
+        .overlay(
+            Capsule()
+                .strokeBorder(Color.white.opacity(0.14), lineWidth: 1)
+        )
+    }
+
+    private func splashPreviewPanel(compact: Bool) -> some View {
+        ZStack(alignment: .bottomTrailing) {
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(Color.white.opacity(0.14))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 28, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.18), lineWidth: 1)
+                )
+                .shadow(color: Color.black.opacity(0.12), radius: 22, y: 12)
+
+            VStack(alignment: .leading, spacing: compact ? Theme.Spacing.md : Theme.Spacing.lg) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text("TODAY")
+                        .font(Theme.Typography.captionBold)
+                        .foregroundStyle(Color.white.opacity(0.72))
+                        .tracking(1.0)
+
+                    Spacer()
+
+                    Text("CLEAR NEXT STEP")
+                        .font(Theme.Typography.captionBold)
+                        .foregroundStyle(Color.white.opacity(0.88))
+                        .padding(.horizontal, Theme.Spacing.sm)
+                        .padding(.vertical, 6)
+                        .background(
+                            Capsule()
+                                .fill(Color.white.opacity(0.12))
+                        )
+                }
+
+                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                    Text("One focused briefing before you train.")
+                        .font(Theme.Typography.cardHeader)
+                        .foregroundStyle(.white)
+
+                    Text("Spot workload shifts, recovery context, and the muscles that actually need attention.")
+                        .font(compact ? Theme.Typography.caption : Theme.Typography.subheadline)
+                        .foregroundStyle(Color.white.opacity(0.76))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                VStack(alignment: .leading, spacing: compact ? Theme.Spacing.sm : Theme.Spacing.md) {
+                    splashSignalRow(
+                        systemImage: "chart.bar.doc.horizontal",
+                        title: "See what moved",
+                        detail: "Volume, frequency, and exercise trends"
+                    )
+                    splashSignalRow(
+                        systemImage: "bolt.heart",
+                        title: "Train with context",
+                        detail: "Sleep and recovery alongside your sessions"
+                    )
+                    if !compact {
+                        splashSignalRow(
+                            systemImage: "target",
+                            title: "Get one next move",
+                            detail: "Know where to push instead of guessing"
+                        )
+                    }
+                }
+            }
+            .padding(compact ? Theme.Spacing.lg : Theme.Spacing.xl)
+
+            HStack(spacing: 10) {
+                Image(systemName: "flame.fill")
+                    .font(Theme.Typography.captionBold)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("4x / week")
+                        .font(Theme.Typography.captionBold)
+                    Text("Momentum goal")
+                        .font(Theme.Typography.caption2)
+                }
+            }
+            .foregroundStyle(Theme.Colors.textPrimary)
+            .padding(.horizontal, Theme.Spacing.md)
+            .padding(.vertical, Theme.Spacing.sm)
+            .background(
+                Capsule()
+                    .fill(Theme.Colors.surface)
+            )
+            .overlay(
+                Capsule()
+                    .strokeBorder(Color.white.opacity(0.45), lineWidth: 1)
+            )
+            .offset(x: -18, y: compact ? 14 : 18)
+        }
+    }
+
+    private func splashSignalRow(systemImage: String, title: String, detail: String) -> some View {
+        HStack(alignment: .top, spacing: Theme.Spacing.md) {
+            Image(systemName: systemImage)
+                .font(Theme.Typography.calloutBold)
+                .foregroundStyle(.white)
+                .frame(width: 28, height: 28)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.white.opacity(0.10))
+                )
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(Theme.Typography.subheadlineBold)
+                    .foregroundStyle(.white)
+
+                Text(detail)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Color.white.opacity(0.74))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private var getStartedStep: some View {
         VStack(spacing: Theme.Spacing.xl) {
             Spacer()
 
-            VStack(spacing: Theme.Spacing.lg) {
-                Image(systemName: "square.and.arrow.down.on.square")
-                    .font(Theme.Iconography.featureLarge)
-                    .foregroundStyle(Theme.Colors.accent)
-                    .frame(width: 100, height: 100)
+            VStack(spacing: Theme.Spacing.sm) {
+                Text("HOW DO YOU WANT TO START?")
+                    .font(Theme.Typography.sectionHeader)
+                    .foregroundStyle(onboardingPrimaryText)
+                    .tracking(1.0)
+                    .multilineTextAlignment(.center)
+
+                Text("Import your history or jump right in.")
+                    .font(Theme.Typography.body)
+                    .foregroundStyle(onboardingSecondaryText)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(.horizontal, Theme.Spacing.xl)
+
+            VStack(spacing: Theme.Spacing.md) {
+                // Import from Strong option
+                Button {
+                    Haptics.selection()
+                    AppAnalytics.shared.track(AnalyticsSignal.onboardingImportSelected)
+                    showingImportWizard = true
+                } label: {
+                    HStack(spacing: Theme.Spacing.lg) {
+                        Image(systemName: "square.and.arrow.down.on.square")
+                            .font(Theme.Iconography.prominent)
+                            .foregroundStyle(Theme.Colors.accent)
+                            .frame(width: 48, height: 48)
+                            .background(
+                                Circle()
+                                    .fill(Theme.Colors.accentTint)
+                            )
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Import from Strong")
+                                .font(Theme.Typography.bodyBold)
+                                .foregroundStyle(Theme.Colors.textPrimary)
+                            Text("Bring your Strong CSV workout history")
+                                .font(Theme.Typography.caption)
+                                .foregroundStyle(Theme.Colors.textSecondary)
+                        }
+
+                        Spacer()
+
+                        Image(systemName: "chevron.right")
+                            .font(Theme.Typography.caption2Bold)
+                            .foregroundStyle(Theme.Colors.textTertiary)
+                    }
+                    .padding(Theme.Spacing.lg)
                     .background(
-                        Circle()
-                            .fill(Theme.Colors.accentTint)
+                        RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
+                            .fill(Theme.Colors.surfaceRaised)
                     )
                     .overlay(
-                        Circle()
-                            .strokeBorder(Theme.Colors.accent.opacity(0.2), lineWidth: 1)
+                        RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
+                            .strokeBorder(Theme.Colors.accent.opacity(0.25), lineWidth: 1)
                     )
-                    .shadow(color: Theme.Colors.accent.opacity(0.12), radius: 12, y: 4)
-
-                VStack(spacing: Theme.Spacing.sm) {
-                    Text("Bring your history.")
-                        .font(Theme.Typography.sectionHeader)
-                        .foregroundStyle(Theme.Colors.textPrimary)
-                        .tracking(1.0)
-                        .multilineTextAlignment(.center)
-
-                    Text("Import your Strong CSV in under a minute.")
-                        .font(Theme.Typography.body)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, Theme.Spacing.xl)
                 }
+                .buttonStyle(.plain)
 
-                DisclosureGroup("What gets imported?") {
-                    VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                        learnMoreBullet("Workout names, dates & durations")
-                        learnMoreBullet("Exercise names & order")
-                        learnMoreBullet("Sets, reps, weight & RPE")
-                        learnMoreBullet("Cardio distance, time & calories")
-                        learnMoreBullet("Workout notes")
+                // Start fresh option
+                Button {
+                    Haptics.selection()
+                    AppAnalytics.shared.track(AnalyticsSignal.onboardingStartFreshSelected)
+                    withAnimation(reduceMotion ? .easeOut(duration: 0.2) : Theme.Animation.spring) {
+                        step = 2
                     }
-                    .padding(.top, Theme.Spacing.sm)
+                } label: {
+                    HStack(spacing: Theme.Spacing.lg) {
+                        Image(systemName: "figure.strengthtraining.traditional")
+                            .font(Theme.Iconography.prominent)
+                            .foregroundStyle(Theme.Colors.success)
+                            .frame(width: 48, height: 48)
+                            .background(
+                                Circle()
+                                    .fill(Theme.Colors.success.opacity(0.08))
+                            )
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Start Fresh")
+                                .font(Theme.Typography.bodyBold)
+                                .foregroundStyle(Theme.Colors.textPrimary)
+                            Text("Jump right in and log your first workout")
+                                .font(Theme.Typography.caption)
+                                .foregroundStyle(Theme.Colors.textSecondary)
+                        }
+
+                        Spacer()
+
+                        Image(systemName: "chevron.right")
+                            .font(Theme.Typography.caption2Bold)
+                            .foregroundStyle(Theme.Colors.textTertiary)
+                    }
+                    .padding(Theme.Spacing.lg)
+                    .background(
+                        RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
+                            .fill(Theme.Colors.surfaceRaised)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
+                            .strokeBorder(Theme.Colors.border.opacity(0.35), lineWidth: 1)
+                    )
                 }
-                .font(Theme.Typography.subheadline)
-                .foregroundStyle(Theme.Colors.textSecondary)
-                .tint(Theme.Colors.textTertiary)
-                .padding(.horizontal, Theme.Spacing.xl)
+                .buttonStyle(.plain)
             }
+            .padding(.horizontal, Theme.Spacing.xl)
 
             Spacer()
         }
@@ -238,13 +537,13 @@ struct OnboardingView: View {
                 VStack(spacing: Theme.Spacing.sm) {
                     Text("Add recovery context.")
                         .font(Theme.Typography.sectionHeader)
-                        .foregroundStyle(Theme.Colors.textPrimary)
+                        .foregroundStyle(onboardingPrimaryText)
                         .tracking(1.0)
                         .multilineTextAlignment(.center)
 
                     Text("Sleep and recovery alongside training. Use Settings later to connect and sync Apple Health.")
                         .font(Theme.Typography.body)
-                        .foregroundStyle(Theme.Colors.textSecondary)
+                        .foregroundStyle(onboardingSecondaryText)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, Theme.Spacing.xl)
                 }
@@ -261,8 +560,18 @@ struct OnboardingView: View {
                     .padding(.top, Theme.Spacing.sm)
                 }
                 .font(Theme.Typography.subheadline)
-                .foregroundStyle(Theme.Colors.textSecondary)
-                .tint(Theme.Colors.textTertiary)
+                .foregroundStyle(onboardingSecondaryText)
+                .tint(onboardingTertiaryText)
+                .padding(.horizontal, Theme.Spacing.lg)
+                .padding(.vertical, Theme.Spacing.md)
+                .background(
+                    RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
+                        .fill(Color.white.opacity(0.10))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.16), lineWidth: 1)
+                )
                 .padding(.horizontal, Theme.Spacing.xl)
 
                 healthStatusPill
@@ -301,17 +610,17 @@ struct OnboardingView: View {
                 .frame(width: 8, height: 8)
             Text(statusText)
                 .font(Theme.Typography.captionBold)
-                .foregroundStyle(Theme.Colors.textSecondary)
+                .foregroundStyle(onboardingSecondaryText)
         }
         .padding(.horizontal, Theme.Spacing.lg)
         .padding(.vertical, Theme.Spacing.sm)
         .background(
             Capsule()
-                .fill(Theme.Colors.surfaceRaised)
+                .fill(Color.white.opacity(0.10))
         )
         .overlay(
             Capsule()
-                .strokeBorder(Theme.Colors.border.opacity(0.4), lineWidth: 1)
+                .strokeBorder(Color.white.opacity(0.16), lineWidth: 1)
         )
         .padding(.top, Theme.Spacing.sm)
     }
@@ -319,19 +628,19 @@ struct OnboardingView: View {
     private func learnMoreBullet(_ text: String) -> some View {
         HStack(alignment: .top, spacing: Theme.Spacing.sm) {
             Text("•")
-                .foregroundStyle(Theme.Colors.textTertiary)
+                .foregroundStyle(onboardingTertiaryText)
             Text(text)
-                .foregroundStyle(Theme.Colors.textSecondary)
+                .foregroundStyle(onboardingSecondaryText)
         }
         .font(Theme.Typography.subheadline)
     }
 
-    private var primaryButtonTitle: String {
+    private var primaryButtonTitle: String? {
         switch step {
         case 0:
             return "Get started"
         case 1:
-            return "Import from Strong"
+            return nil
         default:
             return "Continue"
         }
@@ -339,21 +648,10 @@ struct OnboardingView: View {
 
     private var secondaryButtonTitle: String? {
         switch step {
-        case 0:
+        case 0, 1:
             return nil
-        case 1:
-            return "Skip for now"
         default:
             return "Not now"
-        }
-    }
-
-    private var primaryButtonColor: Color {
-        switch step {
-        case 1:
-            return Theme.Colors.accent
-        default:
-            return Theme.Colors.accent
         }
     }
 
@@ -365,8 +663,6 @@ struct OnboardingView: View {
             withAnimation(reduceMotion ? .easeOut(duration: 0.2) : Theme.Animation.spring) {
                 step = 1
             }
-        case 1:
-            showingImportWizard = true
         default:
             completeOnboarding()
         }
@@ -374,18 +670,14 @@ struct OnboardingView: View {
 
     private func handleSecondaryAction() {
         Haptics.selection()
-
-        switch step {
-        case 1:
-            withAnimation(reduceMotion ? .easeOut(duration: 0.2) : Theme.Animation.spring) {
-                step = 2
-            }
-        default:
-            completeOnboarding()
-        }
+        completeOnboarding()
     }
 
     private func completeOnboarding() {
+        AppAnalytics.shared.track(
+            AnalyticsSignal.onboardingCompleted,
+            payload: ["Onboarding.finalStep": "\(step)"]
+        )
         hasSeenOnboarding = true
         isPresented = false
     }

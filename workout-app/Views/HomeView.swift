@@ -30,6 +30,7 @@ struct HomeView: View {
     @State private var showRepeatWorkoutId: UUID?
     @State private var cachedWeekBuckets: [HomeWeekBucket] = []
     @State private var cachedOverallStats: WorkoutStats?
+    @State private var cachedCurrentWeekStreak = 0
     @State private var cachedWeeklyChangeMetrics: [ChangeMetric] = []
     @State private var cachedMuscleSuggestions: [MuscleGroupSuggestion] = []
     @State private var cachedHomeHighlights: [HighlightItem] = []
@@ -149,6 +150,7 @@ struct HomeView: View {
             }
         }
         .navigationBarHidden(true)
+        .analyticsScreen("Home")
         .navigationDestination(item: $selectedExercise) { selection in
             ExerciseDetailView(
                 exerciseName: selection.id,
@@ -190,7 +192,8 @@ struct HomeView: View {
             StrongImportWizard(
                 isPresented: $showingImportWizard,
                 dataManager: dataManager,
-                iCloudManager: iCloudManager
+                iCloudManager: iCloudManager,
+                source: "home"
             )
         }
         .sheet(isPresented: $showingQuickStart) {
@@ -473,7 +476,7 @@ struct HomeView: View {
     // MARK: - Weekly Summary
 
     private var weeklySummarySection: some View {
-        let streak = cachedOverallStats?.currentStreak ?? 0
+        let streak = cachedCurrentWeekStreak
         let buckets = cachedWeekBuckets
         let selectedBucket = selectedWeekBucket ?? buckets.first
 
@@ -870,6 +873,10 @@ struct HomeView: View {
         let weekBuckets = buildWeekBuckets(workouts: workouts, intentionalBreakRanges: breaks)
 
         cachedWeekBuckets = weekBuckets
+        cachedCurrentWeekStreak = WorkoutAnalytics.currentWeeklyStreak(
+            for: workouts,
+            intentionalBreakRanges: breaks
+        )
         cachedOverallStats = workouts.isEmpty
             ? nil
             : dataManager.calculateStats(for: workouts, intentionalBreakRanges: breaks)
@@ -1039,7 +1046,12 @@ struct HomeView: View {
 
     private func weeklySummaryCardHeight(for bucket: HomeWeekBucket) -> CGFloat {
         let visibleSessionCount = min(bucket.workouts.count, 3)
-        let baseHeight: CGFloat = bucket.workouts.isEmpty ? 188 : 188 + (CGFloat(visibleSessionCount) * 76)
+        let populatedBaseHeight: CGFloat = 188
+        let emptyWeekHeight: CGFloat = 224
+        let sessionCardHeight: CGFloat = 76
+        let baseHeight: CGFloat = bucket.workouts.isEmpty
+            ? emptyWeekHeight
+            : populatedBaseHeight + (CGFloat(visibleSessionCount) * sessionCardHeight)
         return min(baseHeight, 416)
     }
 

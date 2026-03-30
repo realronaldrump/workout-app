@@ -105,6 +105,7 @@ struct MainTabView: View {
         .environmentObject(variantEngine)
         .environmentObject(similarityEngine)
         .tint(Theme.Colors.accent)
+        .analyticsScreen("MainTabs")
         .overlay {
             if showSplash {
                 InAppSplashView(statusText: "Stronger than Strong")
@@ -119,6 +120,16 @@ struct MainTabView: View {
             bootstrapStoresIfNeeded()
             scheduleVariantAnalysis()
             schedulePendingSleepSummaryRefresh()
+            AppAnalytics.shared.track(
+                AnalyticsSignal.tabSelected,
+                payload: ["Navigation.tab": selectedTab.rawValue]
+            )
+        }
+        .onChange(of: selectedTab) { _, newValue in
+            AppAnalytics.shared.track(
+                AnalyticsSignal.tabSelected,
+                payload: ["Navigation.tab": newValue.rawValue]
+            )
         }
         .onChange(of: dataManager.workouts) { _, _ in
             refreshOnboardingState()

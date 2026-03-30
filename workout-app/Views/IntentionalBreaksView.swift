@@ -353,16 +353,37 @@ private struct IntentionalBreakSuggestionCard: View {
                     .font(Theme.Typography.caption)
                     .foregroundColor(Theme.Colors.textSecondary)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
-            Spacer()
-
-            HStack(spacing: Theme.Spacing.xs) {
-                AppPillButton(title: "Dismiss", systemImage: "xmark", variant: .subtle, action: onDismiss)
-                AppPillButton(title: "Add", systemImage: "plus", variant: .accent, action: onAdd)
+            ViewThatFits(in: .horizontal) {
+                fullWidthActions
+                compactActions
             }
+            .layoutPriority(1)
         }
         .padding(Theme.Spacing.lg)
         .softCard(elevation: 1)
+    }
+
+    private var fullWidthActions: some View {
+        HStack(spacing: Theme.Spacing.xs) {
+            AppPillButton(title: "Dismiss", systemImage: "xmark", variant: .subtle, action: onDismiss)
+            AppPillButton(title: "Add", systemImage: "plus", variant: .accent, action: onAdd)
+        }
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private var compactActions: some View {
+        HStack(spacing: Theme.Spacing.xs) {
+            AppPillIconButton(
+                systemImage: "xmark",
+                accessibilityLabel: "Dismiss break suggestion",
+                tint: Theme.Colors.textSecondary,
+                action: onDismiss
+            )
+            AppPillButton(title: "Add", systemImage: "plus", variant: .accent, action: onAdd)
+        }
+        .fixedSize(horizontal: true, vertical: false)
     }
 }
 

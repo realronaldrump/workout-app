@@ -51,7 +51,6 @@ struct ProgressReviewSection: View {
                     Text(comparison.deltaLabel)
                         .font(Theme.Typography.metric)
                         .foregroundStyle(statusColor(for: comparison.outcomeStatus))
-                        .monospacedDigit()
                 }
 
                 VStack(spacing: Theme.Spacing.md) {
@@ -287,7 +286,6 @@ struct ProgressReviewView: View {
                 Text(comparison.deltaLabel)
                     .font(Theme.Typography.metricLarge)
                     .foregroundStyle(statusColor(for: comparison.outcomeStatus))
-                    .monospacedDigit()
 
                 if !comparison.supportingEvidence.isEmpty {
                     VStack(alignment: .leading, spacing: Theme.Spacing.sm) {

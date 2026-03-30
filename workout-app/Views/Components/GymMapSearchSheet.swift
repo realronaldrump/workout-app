@@ -373,7 +373,6 @@ struct GymMapSearchSheet: View {
                 Text("\(combinedResults.count)")
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Colors.textTertiary)
-                    .monospacedDigit()
             }
 
             if combinedResults.isEmpty {

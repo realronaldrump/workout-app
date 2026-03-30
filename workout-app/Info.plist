@@ -6,6 +6,12 @@
 	<string>Big Beautiful Workout App</string>
 	<key>CFBundleName</key>
 	<string>Big Beautiful Workout App</string>
+	<key>BBWAnalyticsDebugLogging</key>
+	<false/>
+	<key>BBWTelemetryDeckAppID</key>
+	<string>CFF42D6B-1F35-4388-9085-77CCE65D7890</string>
+	<key>BBWTelemetryDeckNamespace</key>
+	<string>com.bigbeautifulworkoutapp</string>
 	<key>NSHealthShareUsageDescription</key>
 	<string>Davis's Big Beautiful Workout App reads your Apple Health data, such as workouts, sleep, activity, cardio, and recovery metrics, to power workout insights and training history.</string>
 	<key>NSHealthUpdateUsageDescription</key>
@@ -24,7 +30,8 @@
 	</dict>
 	<key>UIAppFonts</key>
 	<array>
-		<string>BebasNeue-Regular.ttf</string>
+		<string>InstrumentSans[wdth,wght].ttf</string>
+		<string>Sora[wght].ttf</string>
 	</array>
 	<key>UILaunchScreen</key>
 	<dict>

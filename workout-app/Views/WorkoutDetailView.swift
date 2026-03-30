@@ -415,13 +415,11 @@ struct ExerciseCard: View {
                             if isCardio {
                                 Text(cardioSetSummary(set))
                                     .font(Theme.Typography.body)
-                                    .monospacedDigit()
 
                                 Spacer()
                             } else {
                                 Text("\(Int(set.weight)) lbs × \(set.reps)")
                                     .font(Theme.Typography.body)
-                                    .monospacedDigit()
 
                                 Spacer()
 

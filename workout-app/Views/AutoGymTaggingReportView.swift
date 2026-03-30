@@ -103,7 +103,6 @@ struct AutoGymTaggingReportView: View {
                 Text("\(report.assigned) / \(report.attempted) tagged")
                     .font(Theme.Typography.captionBold)
                     .foregroundStyle(Theme.Colors.textSecondary)
-                    .monospacedDigit()
             }
 
             VStack(spacing: Theme.Spacing.sm) {
@@ -127,7 +126,6 @@ struct AutoGymTaggingReportView: View {
             Text("\(value)")
                 .font(Theme.Typography.captionBold)
                 .foregroundStyle(Theme.Colors.textPrimary)
-                .monospacedDigit()
         }
     }
 

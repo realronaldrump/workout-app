@@ -1,10 +1,12 @@
 import SwiftUI
 import UniformTypeIdentifiers
+// swiftlint:disable type_body_length
 
 struct StrongImportWizard: View {
     @Binding var isPresented: Bool
     @ObservedObject var dataManager: WorkoutDataManager
     @ObservedObject var iCloudManager: iCloudDocumentManager
+    let source: String
     @EnvironmentObject var healthManager: HealthKitManager
     @EnvironmentObject var annotationsManager: WorkoutAnnotationsManager
     @EnvironmentObject var gymProfilesManager: GymProfilesManager
@@ -21,6 +23,12 @@ struct StrongImportWizard: View {
     @State private var healthSyncState: HealthSyncState = .idle
     @State private var healthSyncNote: String?
     @State private var syncTargetCount: Int?
+    @State private var autoGymTagState: AutoGymTagState = .idle
+    @State private var autoGymTagProgress: Double = 0
+    @State private var autoGymTagReport: AutoGymTaggingReport?
+    @State private var autoGymTagErrorMessage: String?
+    @State private var autoGymTagRoutePermissionUnavailable = false
+    @State private var showingAutoGymTagReport = false
 
     var body: some View {
         NavigationStack {
@@ -48,12 +56,40 @@ struct StrongImportWizard: View {
             .navigationBarBackButtonHidden(true)
             .toolbar(.hidden, for: .navigationBar)
         }
+        .analyticsScreen("StrongImportWizard", source: source)
+        .onAppear {
+            AppAnalytics.shared.track(
+                AnalyticsSignal.importWizardViewed,
+                payload: ["Context.source": source]
+            )
+            AppAnalytics.shared.track(
+                AnalyticsSignal.importWizardStepViewed,
+                payload: [
+                    "Context.source": source,
+                    "Import.step": "\(step)"
+                ]
+            )
+        }
+        .onChange(of: step) { _, newValue in
+            AppAnalytics.shared.track(
+                AnalyticsSignal.importWizardStepViewed,
+                payload: [
+                    "Context.source": source,
+                    "Import.step": "\(newValue)"
+                ]
+            )
+        }
         .fileImporter(
             isPresented: $showingFileImporter,
             allowedContentTypes: [UTType.commaSeparatedText],
             allowsMultipleSelection: false
         ) { result in
             handleFileImport(result)
+        }
+        .sheet(isPresented: $showingAutoGymTagReport) {
+            if let report = autoGymTagReport {
+                AutoGymTaggingReportView(report: report)
+            }
         }
     }
 
@@ -122,6 +158,15 @@ struct StrongImportWizard: View {
         case syncing
         case synced(Date)
         case failed(String)
+    }
+
+    private enum AutoGymTagState {
+        case idle
+        case unavailable
+        case needsAuthorization
+        case tagging
+        case complete
+        case failed
     }
 
     // MARK: - Steps
@@ -266,31 +311,7 @@ struct StrongImportWizard: View {
 
                 importDetailsCard
                 healthSyncStatusCard
-
-                NavigationLink(destination: GymBulkAssignView(autoStartAutoTagging: true)) {
-                    HStack(spacing: Theme.Spacing.md) {
-                        Image(systemName: "mappin.and.ellipse")
-                            .font(Theme.Iconography.prominent)
-                            .foregroundStyle(Theme.Colors.accent)
-
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Auto-Detect Gym Tags")
-                                .font(Theme.Typography.headline)
-                                .foregroundColor(Theme.Colors.textPrimary)
-                            Text("Run gym auto-tag first, then fix misses with map search.")
-                                .font(Theme.Typography.caption)
-                                .foregroundColor(Theme.Colors.textSecondary)
-                        }
-
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.Colors.textTertiary)
-                    }
-                    .padding(Theme.Spacing.lg)
-                    .softCard(elevation: 2)
-                }
-                .buttonStyle(.plain)
+                autoGymTagStatusCard
 
                 primaryActionButton(title: "Done", fill: Theme.Colors.success) {
                     isPresented = false
@@ -321,6 +342,78 @@ struct StrongImportWizard: View {
             statusRow(title: "Storage", value: storageStatusText, valueColor: storageStatusColor)
             if let completedAt = importCompletedAt {
                 statusRow(title: "Completed", value: formatDate(completedAt))
+            }
+        }
+        .padding(Theme.Spacing.lg)
+        .softCard()
+    }
+
+    private var autoGymTagStatusCard: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            HStack(spacing: Theme.Spacing.sm) {
+                Image(systemName: "mappin.and.ellipse")
+                    .foregroundStyle(Theme.Colors.accent)
+                Text("Gym Tags")
+                    .font(Theme.Typography.headline)
+            }
+
+            statusRow(title: "Status", value: autoGymTagStatusText, valueColor: autoGymTagStatusColor)
+
+            Text(autoGymTagStatusDetail)
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.Colors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if autoGymTagState == .tagging {
+                ProgressView(value: autoGymTagProgress)
+                    .progressViewStyle(.linear)
+                    .tint(Theme.Colors.accent)
+            }
+
+            if let report = autoGymTagReport, report.attempted > 0 {
+                statusRow(title: "Tagged", value: "\(report.assigned) of \(report.attempted)")
+            }
+
+            if autoGymTagNeedsReviewCount > 0 {
+                statusRow(title: "Needs Review", value: "\(autoGymTagNeedsReviewCount)", valueColor: Theme.Colors.warning)
+            }
+
+            if autoGymTagRoutePermissionUnavailable {
+                Text("Workout route location permission was unavailable, so any misses were left for manual review.")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.warning)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if case .needsAuthorization = autoGymTagState {
+                Text("Settings > Health > Data Access > workout-app")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if shouldShowAutoGymTagActions {
+                HStack(spacing: Theme.Spacing.md) {
+                    if let report = autoGymTagReport, !report.items.isEmpty {
+                        Button("View Results") {
+                            showingAutoGymTagReport = true
+                        }
+                        .font(Theme.Typography.captionBold)
+                        .foregroundStyle(Theme.Colors.accent)
+                        .buttonStyle(.plain)
+                    }
+
+                    NavigationLink(destination: gymReviewDestination) {
+                        HStack(spacing: Theme.Spacing.xs) {
+                            Text(gymReviewLinkTitle)
+                            Image(systemName: "chevron.right")
+                        }
+                        .font(Theme.Typography.captionBold)
+                        .foregroundStyle(Theme.Colors.accent)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.top, Theme.Spacing.xs)
             }
         }
         .padding(Theme.Spacing.lg)
@@ -474,6 +567,113 @@ struct StrongImportWizard: View {
         syncTargetCount ?? dataManager.workouts.count
     }
 
+    private var importedWorkoutStartDate: Date? {
+        dataManager.importedWorkouts.map(\.date).min()
+    }
+
+    private var importedWorkoutEndDate: Date? {
+        dataManager.importedWorkouts.map(\.date).max()
+    }
+
+    private var autoGymTagNeedsReviewCount: Int {
+        autoGymTagReport?.items.reduce(into: 0) { count, item in
+            if case .skipped = item.status {
+                count += 1
+            }
+        } ?? 0
+    }
+
+    private var shouldShowAutoGymTagActions: Bool {
+        switch autoGymTagState {
+        case .idle, .tagging:
+            return false
+        case .unavailable, .needsAuthorization, .complete, .failed:
+            return true
+        }
+    }
+
+    private var gymReviewDestination: some View {
+        GymBulkAssignView(
+            autoStartAutoTagging: autoGymTagState != .complete,
+            initialStartDate: importedWorkoutStartDate,
+            initialEndDate: importedWorkoutEndDate,
+            initialShowUnassignedOnly: true
+        )
+    }
+
+    private var gymReviewLinkTitle: String {
+        if autoGymTagNeedsReviewCount > 0 {
+            return "Review Misses"
+        }
+        switch autoGymTagState {
+        case .failed, .needsAuthorization, .unavailable:
+            return "Open Gym Review"
+        default:
+            return "Review Gym Tags"
+        }
+    }
+
+    private var autoGymTagStatusText: String {
+        switch autoGymTagState {
+        case .idle:
+            return "Pending"
+        case .unavailable:
+            return "Unavailable"
+        case .needsAuthorization:
+            return "Authorization Needed"
+        case .tagging:
+            return "Detecting"
+        case .complete:
+            return "Complete"
+        case .failed:
+            return "Failed"
+        }
+    }
+
+    private var autoGymTagStatusDetail: String {
+        switch autoGymTagState {
+        case .idle:
+            return "Imported workouts will be checked for matching gym tags."
+        case .unavailable:
+            return "Apple Health is unavailable on this device, so gym auto-detect can’t run."
+        case .needsAuthorization:
+            if healthManager.authorizationStatus == .denied {
+                return "Apple Health access is denied. Enable access in Settings to auto-detect gyms."
+            }
+            return "Health access is required to match imported workouts to Apple workouts."
+        case .tagging:
+            return "Auto-detecting gym tags for imported workouts."
+        case .complete:
+            guard let report = autoGymTagReport else {
+                return "Gym tag detection finished."
+            }
+            if report.attempted == 0 {
+                return "All imported workouts already had gym tags."
+            }
+            if autoGymTagNeedsReviewCount > 0 {
+                return "Tagged \(report.assigned) workout\(report.assigned == 1 ? "" : "s") automatically. \(autoGymTagNeedsReviewCount) still need review."
+            }
+            return "Tagged \(report.assigned) workout\(report.assigned == 1 ? "" : "s") automatically."
+        case .failed:
+            return autoGymTagErrorMessage.map { "Auto-detect failed: \($0)" } ?? "Auto-detect failed."
+        }
+    }
+
+    private var autoGymTagStatusColor: Color {
+        switch autoGymTagState {
+        case .idle:
+            return Theme.Colors.textTertiary
+        case .unavailable, .needsAuthorization:
+            return Theme.Colors.warning
+        case .tagging:
+            return Theme.Colors.warning
+        case .complete:
+            return autoGymTagNeedsReviewCount > 0 ? Theme.Colors.warning : Theme.Colors.success
+        case .failed:
+            return Theme.Colors.error
+        }
+    }
+
     private func formatDate(_ date: Date) -> String {
         date.formatted(date: .abbreviated, time: .shortened)
     }
@@ -500,6 +700,14 @@ struct StrongImportWizard: View {
         case .success(let urls):
             guard let url = urls.first else { return }
 
+            AppAnalytics.shared.track(
+                AnalyticsSignal.importFileSelectionStarted,
+                payload: [
+                    "Context.source": source,
+                    "Import.fileExtension": url.pathExtension.lowercased()
+                ]
+            )
+
             importError = nil
             importStats = nil
             importCompletedAt = nil
@@ -507,6 +715,12 @@ struct StrongImportWizard: View {
             healthSyncState = .idle
             healthSyncNote = nil
             syncTargetCount = nil
+            autoGymTagState = .idle
+            autoGymTagProgress = 0
+            autoGymTagReport = nil
+            autoGymTagErrorMessage = nil
+            autoGymTagRoutePermissionUnavailable = false
+            showingAutoGymTagReport = false
             importedFileName = url.lastPathComponent
             importPhase = .reading
             isImporting = true
@@ -584,6 +798,14 @@ struct StrongImportWizard: View {
                             await MainActor.run {
                                 let stats = dataManager.calculateStats()
                                 importStats = (stats.totalWorkouts, stats.totalExercises)
+                                AppAnalytics.shared.track(
+                                    AnalyticsSignal.importCompleted,
+                                    payload: [
+                                        "Context.source": source,
+                                        "Import.workoutCount": "\(stats.totalWorkouts)",
+                                        "Import.exerciseCount": "\(stats.totalExercises)"
+                                    ]
+                                )
                             }
 
                             await MainActor.run {
@@ -597,6 +819,7 @@ struct StrongImportWizard: View {
                                 Haptics.notify(.success)
 
                                 startAutoHealthSyncIfNeeded()
+                                startAutoGymTaggingIfNeeded()
                             }
                         } catch {
                             await MainActor.run {
@@ -604,6 +827,13 @@ struct StrongImportWizard: View {
                                 importError = "Import failed to save: \(error.localizedDescription)"
                                 isImporting = false
                                 importPhase = .idle
+                                AppAnalytics.shared.track(
+                                    AnalyticsSignal.importFailed,
+                                    payload: [
+                                        "Context.source": source,
+                                        "Import.errorDomain": String(describing: type(of: error))
+                                    ]
+                                )
                             }
                         }
                     }
@@ -612,6 +842,13 @@ struct StrongImportWizard: View {
 
         case .failure(let error):
             importError = error.localizedDescription
+            AppAnalytics.shared.track(
+                AnalyticsSignal.importFailed,
+                payload: [
+                    "Context.source": source,
+                    "Import.errorDomain": String(describing: type(of: error))
+                ]
+            )
         }
     }
 
@@ -694,4 +931,79 @@ struct StrongImportWizard: View {
             }
         }
     }
+
+    @MainActor
+    private func startAutoGymTaggingIfNeeded() {
+        autoGymTagProgress = 0
+        autoGymTagReport = nil
+        autoGymTagErrorMessage = nil
+        autoGymTagRoutePermissionUnavailable = false
+
+        let importedWorkouts = dataManager.importedWorkouts
+        guard !importedWorkouts.isEmpty else {
+            autoGymTagState = .idle
+            return
+        }
+        guard healthManager.isHealthKitAvailable() else {
+            autoGymTagState = .unavailable
+            return
+        }
+        if healthManager.authorizationStatus == .denied {
+            autoGymTagState = .needsAuthorization
+            return
+        }
+
+        let targets = AutoGymTaggingRunner.workoutsNeedingGymTag(
+            in: importedWorkouts,
+            annotationsManager: annotationsManager,
+            gymProfilesManager: gymProfilesManager
+        )
+        guard !targets.isEmpty else {
+            autoGymTagState = .complete
+            autoGymTagReport = AutoGymTaggingReport(
+                attempted: 0,
+                assigned: 0,
+                skippedNoMatchingWorkout: 0,
+                skippedNoRoute: 0,
+                skippedNoGymMatch: 0,
+                skippedGymsMissingLocation: 0,
+                items: []
+            )
+            return
+        }
+
+        autoGymTagState = .tagging
+
+        Task { @MainActor in
+            do {
+                let result = try await AutoGymTaggingRunner.run(
+                    for: importedWorkouts,
+                    annotationsManager: annotationsManager,
+                    gymProfilesManager: gymProfilesManager,
+                    healthManager: healthManager
+                ) { progress in
+                    autoGymTagProgress = progress
+                }
+                autoGymTagReport = result.report
+                autoGymTagRoutePermissionUnavailable = result.routePermissionUnavailable
+                autoGymTagState = .complete
+            } catch {
+                if healthManager.authorizationStatus == .denied {
+                    autoGymTagState = .needsAuthorization
+                    autoGymTagErrorMessage = nil
+                    return
+                }
+
+                if let healthError = error as? HealthKitError, case .notAvailable = healthError {
+                    autoGymTagState = .unavailable
+                    autoGymTagErrorMessage = nil
+                    return
+                }
+
+                autoGymTagErrorMessage = error.localizedDescription
+                autoGymTagState = .failed
+            }
+        }
+    }
 }
+// swiftlint:enable type_body_length

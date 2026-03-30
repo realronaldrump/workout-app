@@ -138,7 +138,6 @@ struct FinishSessionSheet: View {
             Text(value)
                 .font(Theme.Typography.captionBold)
                 .foregroundColor(Theme.Colors.textPrimary)
-                .monospacedDigit()
         }
     }
 

@@ -2,7 +2,7 @@ import SwiftUI
 import UIKit
 
 /// Centralized theme system — Warm Precision.
-/// Refined surfaces, layered shadows, Bebas Neue headings, generous radii.
+/// Refined surfaces, layered shadows, two-family typography, generous radii.
 /// Premium athletic aesthetic with warmth and depth.
 enum Theme {
 
@@ -120,11 +120,11 @@ enum Theme {
 
         nav.titleTextAttributes = [
             .foregroundColor: UIColors.textPrimary,
-            .font: UIFont(name: "BebasNeue-Regular", size: 20) ?? UIFont.systemFont(ofSize: 17, weight: .semibold)
+            .font: Typography.uiKitDisplay(size: 19, textStyle: .headline, weight: .semibold)
         ]
         nav.largeTitleTextAttributes = [
             .foregroundColor: UIColors.textPrimary,
-            .font: UIFont(name: "BebasNeue-Regular", size: 40) ?? UIFont.systemFont(ofSize: 34, weight: .bold)
+            .font: Typography.uiKitDisplay(size: 30, textStyle: .largeTitle, weight: .bold)
         ]
 
         let navButton = UIBarButtonItemAppearance(style: .plain)
@@ -174,12 +174,12 @@ enum Theme {
         stacked.normal.iconColor = UIColors.textTertiary
         stacked.normal.titleTextAttributes = [
             .foregroundColor: UIColors.textTertiary,
-            .font: UIFont(name: "BebasNeue-Regular", size: 11) ?? UIFont.systemFont(ofSize: 10, weight: .medium)
+            .font: Typography.uiKitText(size: 11, textStyle: .caption2, weight: .medium)
         ]
         stacked.selected.iconColor = UIColors.accent
         stacked.selected.titleTextAttributes = [
             .foregroundColor: UIColors.accent,
-            .font: UIFont(name: "BebasNeue-Regular", size: 11) ?? UIFont.systemFont(ofSize: 10, weight: .medium)
+            .font: Typography.uiKitText(size: 11, textStyle: .caption2, weight: .medium)
         ]
 
         let tabBar = UITabBar.appearance()
@@ -191,62 +191,152 @@ enum Theme {
     // MARK: - Typography
 
     enum Typography {
-        // Bebas Neue — brand headings, section titles, labels
-        static let wordmarkHuge = Font.custom("BebasNeue-Regular", size: 56, relativeTo: .largeTitle)
-        static let wordmarkHugeCompact = Font.custom("BebasNeue-Regular", size: 44, relativeTo: .largeTitle)
-        static let wordmarkBig = Font.custom("BebasNeue-Regular", size: 38, relativeTo: .title)
-        static let wordmarkBigCompact = Font.custom("BebasNeue-Regular", size: 30, relativeTo: .title)
-        static let eyebrowRounded = Font.system(size: 14, weight: .semibold, design: .rounded)
-        static let screenTitle = Font.custom("BebasNeue-Regular", size: 42, relativeTo: .largeTitle)
-        static let sectionHeader = Font.custom("BebasNeue-Regular", size: 26, relativeTo: .title)
-        static let sectionHeader2 = Font.custom("BebasNeue-Regular", size: 22, relativeTo: .title2)
-        static let cardHeader = Font.custom("BebasNeue-Regular", size: 20, relativeTo: .title3)
-        static let metricLabel = Font.custom("BebasNeue-Regular", size: 13, relativeTo: .caption)
-        static let tabLabel = Font.custom("BebasNeue-Regular", size: 11, relativeTo: .caption2)
-        static let heroTitle = Font.custom("BebasNeue-Regular", size: 38, relativeTo: .title)
+        enum TextWeight {
+            case regular
+            case medium
+            case semibold
+            case bold
 
-        // System fonts — clean, modern
-        static let largeTitle = Font.largeTitle.weight(.heavy)
-        static let title = Font.title.weight(.heavy)
-        static let title2 = Font.custom("BebasNeue-Regular", size: 24, relativeTo: .title2)
-        static let title3 = Font.custom("BebasNeue-Regular", size: 20, relativeTo: .title3)
-        static let avatarMonogram = Font.title.weight(.bold)
-        static let bodyLarge = Font.title3
-        static let title4 = Font.title3.weight(.semibold)
-        static let title4Bold = Font.title3.weight(.bold)
-        static let headline = Font.headline.weight(.bold)
-        static let body = Font.body
-        static let bodyBold = Font.body.weight(.semibold)
-        static let bodyStrong = Font.body.weight(.bold)
-        static let callout = Font.callout.weight(.medium)
-        static let calloutStrong = Font.callout.weight(.semibold)
-        static let calloutBold = Font.callout.weight(.bold)
-        static let subheadline = Font.subheadline.weight(.medium)
-        static let subheadlineStrong = Font.subheadline.weight(.semibold)
-        static let subheadlineBold = Font.subheadline.weight(.bold)
-        static let footnote = Font.footnote.weight(.medium)
-        static let footnoteStrong = Font.footnote.weight(.semibold)
-        static let footnoteBold = Font.footnote.weight(.bold)
-        static let caption = Font.caption.weight(.medium)
-        static let captionStrong = Font.caption.weight(.semibold)
-        static let captionBold = Font.caption.weight(.bold)
-        static let caption2 = Font.caption2.weight(.medium)
-        static let caption2Bold = Font.caption2.weight(.bold)
+            fileprivate var fontName: String {
+                switch self {
+                case .regular:
+                    return "InstrumentSans-Regular"
+                case .medium:
+                    return "InstrumentSans-Regular_Medium"
+                case .semibold:
+                    return "InstrumentSans-Regular_SemiBold"
+                case .bold:
+                    return "InstrumentSans-Regular_Bold"
+                }
+            }
 
-        // Monospaced for numbers — precision data
-        static let number = Font.system(size: 28, weight: .bold, design: .monospaced)
-        static let numberLarge = Font.system(size: 42, weight: .bold, design: .monospaced)
-        static let numberSmall = Font.system(size: 17, weight: .bold, design: .monospaced)
-        static let metricLarge = Font.system(size: 48, weight: .heavy, design: .monospaced)
-        static let metric = Font.system(size: 30, weight: .bold, design: .monospaced)
-        static let condensed = Font.system(size: 16, weight: .semibold, design: .default)
-        static let microcopy = Font.system(size: 13, weight: .regular, design: .default)
-        static let microcopySmall = Font.system(size: 10, weight: .regular, design: .default)
-        static let microLabel = Font.system(size: 10, weight: .bold, design: .default)
+            fileprivate var fallback: UIFont.Weight {
+                switch self {
+                case .regular:
+                    return .regular
+                case .medium:
+                    return .medium
+                case .semibold:
+                    return .semibold
+                case .bold:
+                    return .bold
+                }
+            }
+        }
 
-        // Mono helpers for data-dense UI
-        static let monoMedium = Font.system(size: 18, weight: .bold, design: .monospaced)
-        static let monoSmall = Font.system(size: 14, weight: .semibold, design: .monospaced)
+        enum DisplayWeight {
+            case regular
+            case semibold
+            case bold
+
+            fileprivate var fontName: String {
+                switch self {
+                case .regular:
+                    return "Sora-Regular"
+                case .semibold:
+                    return "Sora-Regular_SemiBold"
+                case .bold:
+                    return "Sora-Regular_Bold"
+                }
+            }
+
+            fileprivate var fallback: UIFont.Weight {
+                switch self {
+                case .regular:
+                    return .regular
+                case .semibold:
+                    return .semibold
+                case .bold:
+                    return .bold
+                }
+            }
+        }
+
+        private static func text(_ weight: TextWeight, size: CGFloat, relativeTo style: Font.TextStyle) -> Font {
+            Font.custom(weight.fontName, size: size, relativeTo: style)
+        }
+
+        private static func display(_ weight: DisplayWeight, size: CGFloat, relativeTo style: Font.TextStyle) -> Font {
+            Font.custom(weight.fontName, size: size, relativeTo: style)
+        }
+
+        private static func scaledUIFont(
+            named name: String,
+            size: CGFloat,
+            textStyle: UIFont.TextStyle,
+            fallbackWeight: UIFont.Weight
+        ) -> UIFont {
+            let base = UIFont(name: name, size: size) ?? UIFont.systemFont(ofSize: size, weight: fallbackWeight)
+            return UIFontMetrics(forTextStyle: textStyle).scaledFont(for: base)
+        }
+
+        static func uiKitText(size: CGFloat, textStyle: UIFont.TextStyle, weight: TextWeight) -> UIFont {
+            scaledUIFont(named: weight.fontName, size: size, textStyle: textStyle, fallbackWeight: weight.fallback)
+        }
+
+        static func uiKitDisplay(size: CGFloat, textStyle: UIFont.TextStyle, weight: DisplayWeight) -> UIFont {
+            scaledUIFont(named: weight.fontName, size: size, textStyle: textStyle, fallbackWeight: weight.fallback)
+        }
+
+        // Sora handles brand and display moments. Sizes are moderated from the
+        // previous condensed wordmark so the wider letterforms still fit well.
+        static let wordmarkHuge = display(.bold, size: 36, relativeTo: .largeTitle)
+        static let wordmarkHugeCompact = display(.bold, size: 30, relativeTo: .largeTitle)
+        static let wordmarkBig = display(.semibold, size: 28, relativeTo: .title)
+        static let wordmarkBigCompact = display(.semibold, size: 24, relativeTo: .title)
+        static let eyebrowRounded = text(.medium, size: 13, relativeTo: .caption)
+        static let screenTitle = display(.bold, size: 32, relativeTo: .largeTitle)
+        static let sectionHeader = display(.semibold, size: 24, relativeTo: .title)
+        static let sectionHeader2 = display(.semibold, size: 20, relativeTo: .title2)
+        static let cardHeader = display(.semibold, size: 18, relativeTo: .title3)
+        static let metricLabel = text(.semibold, size: 12, relativeTo: .caption)
+        static let tabLabel = text(.medium, size: 11, relativeTo: .caption2)
+        static let heroTitle = display(.bold, size: 30, relativeTo: .title)
+
+        // Instrument Sans carries the app UI. Display grades stay reserved for
+        // headings and brand moments to keep the hierarchy tight.
+        static let largeTitle = display(.bold, size: 32, relativeTo: .largeTitle)
+        static let title = display(.bold, size: 28, relativeTo: .title)
+        static let title2 = display(.semibold, size: 22, relativeTo: .title2)
+        static let title3 = display(.semibold, size: 18, relativeTo: .title3)
+        static let avatarMonogram = display(.bold, size: 22, relativeTo: .title3)
+        static let bodyLarge = text(.medium, size: 20, relativeTo: .title3)
+        static let title4 = display(.semibold, size: 17, relativeTo: .headline)
+        static let title4Bold = display(.bold, size: 17, relativeTo: .headline)
+        static let headline = text(.semibold, size: 17, relativeTo: .headline)
+        static let body = text(.regular, size: 17, relativeTo: .body)
+        static let bodyBold = text(.semibold, size: 17, relativeTo: .body)
+        static let bodyStrong = text(.bold, size: 17, relativeTo: .body)
+        static let callout = text(.medium, size: 16, relativeTo: .callout)
+        static let calloutStrong = text(.semibold, size: 16, relativeTo: .callout)
+        static let calloutBold = text(.bold, size: 16, relativeTo: .callout)
+        static let subheadline = text(.medium, size: 15, relativeTo: .subheadline)
+        static let subheadlineStrong = text(.semibold, size: 15, relativeTo: .subheadline)
+        static let subheadlineBold = text(.bold, size: 15, relativeTo: .subheadline)
+        static let footnote = text(.medium, size: 13, relativeTo: .footnote)
+        static let footnoteStrong = text(.semibold, size: 13, relativeTo: .footnote)
+        static let footnoteBold = text(.bold, size: 13, relativeTo: .footnote)
+        static let caption = text(.medium, size: 12, relativeTo: .caption)
+        static let captionStrong = text(.semibold, size: 12, relativeTo: .caption)
+        static let captionBold = text(.bold, size: 12, relativeTo: .caption)
+        static let caption2 = text(.medium, size: 11, relativeTo: .caption2)
+        static let caption2Bold = text(.bold, size: 11, relativeTo: .caption2)
+
+        // Numeric emphasis now uses the UI family instead of a monospaced face.
+        static let number = text(.bold, size: 28, relativeTo: .title2)
+        static let numberLarge = text(.bold, size: 40, relativeTo: .largeTitle)
+        static let numberSmall = text(.bold, size: 17, relativeTo: .headline)
+        static let metricLarge = text(.bold, size: 44, relativeTo: .largeTitle)
+        static let metric = text(.bold, size: 30, relativeTo: .title)
+        static let condensed = text(.semibold, size: 16, relativeTo: .callout)
+        static let microcopy = text(.regular, size: 13, relativeTo: .footnote)
+        static let microcopySmall = text(.regular, size: 11, relativeTo: .caption2)
+        static let microLabel = text(.bold, size: 10, relativeTo: .caption2)
+
+        // Legacy "mono" tokens keep their names for compatibility, but now
+        // resolve to the primary UI family.
+        static let monoMedium = text(.bold, size: 18, relativeTo: .headline)
+        static let monoSmall = text(.semibold, size: 14, relativeTo: .footnote)
     }
 
     enum Iconography {
