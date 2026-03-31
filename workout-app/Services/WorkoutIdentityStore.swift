@@ -23,6 +23,7 @@ enum WorkoutIdentity {
 
 @MainActor
 final class WorkoutIdentityStore {
+    private let database = AppDatabase.shared
     private let fileName = "workout_identity_map.json"
     private var cache: [String: String] = [:]
 
@@ -57,14 +58,8 @@ final class WorkoutIdentityStore {
 
     func clear() {
         cache.removeAll()
-        let url = fileURL()
-        do {
-            if FileManager.default.fileExists(atPath: url.path) {
-                try FileManager.default.removeItem(at: url)
-            }
-        } catch {
-            print("Failed to delete workout identity map: \(error)")
-        }
+        try? database.clearWorkoutIdentities()
+        removeLegacyFile()
     }
 
     private func fileURL() -> URL {
@@ -73,23 +68,41 @@ final class WorkoutIdentityStore {
     }
 
     private func load() {
-        let url = fileURL()
-        guard FileManager.default.fileExists(atPath: url.path) else { return }
         do {
-            let data = try Data(contentsOf: url)
+            let stored = try database.loadWorkoutIdentities()
+            if !stored.isEmpty || !FileManager.default.fileExists(atPath: fileURL().path) {
+                cache = Dictionary(uniqueKeysWithValues: stored.map { ($0.key, $0.value.uuidString) })
+                removeLegacyFile()
+                return
+            }
+
+            let data = try Data(contentsOf: fileURL())
             cache = try JSONDecoder().decode([String: String].self, from: data)
+            let decoded = cache.compactMapValues(UUID.init(uuidString:))
+            try database.mergeWorkoutIdentities(decoded)
+            removeLegacyFile()
         } catch {
             print("Failed to load workout identity map: \(error)")
         }
     }
 
     private func persist() {
-        let url = fileURL()
         do {
-            let data = try JSONEncoder().encode(cache)
-            try data.write(to: url, options: [.atomic, .completeFileProtection])
+            let entries = cache.compactMapValues(UUID.init(uuidString:))
+            try database.mergeWorkoutIdentities(entries)
+            removeLegacyFile()
         } catch {
             print("Failed to persist workout identity map: \(error)")
+        }
+    }
+
+    private func removeLegacyFile() {
+        let url = fileURL()
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        do {
+            try FileManager.default.removeItem(at: url)
+        } catch {
+            print("Failed to delete workout identity map: \(error)")
         }
     }
 }

@@ -10,6 +10,8 @@ struct ChangeMetricDetailView: View {
     @EnvironmentObject var dataManager: WorkoutDataManager
     @EnvironmentObject var annotationsManager: WorkoutAnnotationsManager
     @EnvironmentObject var gymProfilesManager: GymProfilesManager
+    @State private var cachedCurrentWorkouts: [Workout] = []
+    @State private var cachedPreviousWorkouts: [Workout] = []
 
     private enum WindowBucket: String {
         case previous
@@ -64,11 +66,11 @@ struct ChangeMetricDetailView: View {
     }
 
     private var currentWorkouts: [Workout] {
-        workouts.filter { window.current.contains($0.date) }
+        cachedCurrentWorkouts
     }
 
     private var previousWorkouts: [Workout] {
-        workouts.filter { window.previous.contains($0.date) }
+        cachedPreviousWorkouts
     }
 
     private var windowLabel: String {
@@ -212,6 +214,17 @@ struct ChangeMetricDetailView: View {
         }
         .navigationTitle(metric.title)
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            refreshCachedWindows()
+        }
+        .onChange(of: workouts) { _, _ in
+            refreshCachedWindows()
+        }
+    }
+
+    private func refreshCachedWindows() {
+        cachedCurrentWorkouts = workouts.filter { window.current.contains($0.date) }
+        cachedPreviousWorkouts = workouts.filter { window.previous.contains($0.date) }
     }
 
     private var sessionsDetailContent: some View {

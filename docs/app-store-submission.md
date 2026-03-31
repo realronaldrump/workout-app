@@ -106,7 +106,7 @@ Version 1.0 "What's New":
 
 ## App Privacy answers
 
-These are best-effort answers based on the current repo only. Re-check them if you add any backend, analytics, crash reporting, ads, login, or purchases.
+These are best-effort answers based on the current repo only. Re-check them any time you change analytics, crash reporting, ads, login, purchases, or any backend behavior.
 
 Tracking:
 
@@ -114,7 +114,13 @@ Tracking:
 
 Data collection:
 
-- Likely `No`, based on Apple's definition of data collection. The current code stores app data locally and in the user's own iCloud container, and it does not include an obvious developer-operated backend or third-party analytics SDK.
+- `Yes`, because the app now sends anonymous product analytics events to TelemetryDeck.
+
+Analytics/privacy notes:
+
+- Product analytics should be disclosed in App Privacy based on the current implementation.
+- The analytics implementation is intended to avoid raw Health values, route coordinates, file contents, profile names, and gym addresses.
+- The app includes an in-app toggle to disable anonymous analytics.
 
 Data accessed by the app:
 
@@ -126,7 +132,7 @@ Data accessed by the app:
 
 Privacy form cautions:
 
-- If you later add any server sync, telemetry, crash SDK, advertising SDK, or subscription SDK, revisit the App Privacy answers before submission.
+- If you later expand telemetry payloads, add crash reporting, add ads, or add any server sync, revisit the App Privacy answers before submission.
 - If you add account creation, you will also need account deletion support.
 
 ## URLs you still need

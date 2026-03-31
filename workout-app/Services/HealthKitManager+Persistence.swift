@@ -11,6 +11,8 @@ struct HealthCacheClearResult {
 }
 
 extension HealthKitManager {
+    private var database: AppDatabase { AppDatabase.shared }
+
     private func getDocumentsDirectory() -> URL {
         let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
         return paths[0]
@@ -32,8 +34,27 @@ extension HealthKitManager {
         getDocumentsDirectory().appendingPathComponent("daily_health_coverage.json")
     }
 
-    private func workoutDataFileURL(for workoutID: UUID) -> URL {
-        workoutDataDirectoryURL.appendingPathComponent("\(workoutID.uuidString).json")
+    private func removeLegacyItem(at url: URL) {
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: url.path) else { return }
+        do {
+            try fileManager.removeItem(at: url)
+        } catch {
+            print("Failed to remove legacy cache item at \(url.lastPathComponent): \(error)")
+        }
+    }
+
+    private func removeLegacyWorkoutPersistenceFiles() {
+        removeLegacyItem(at: workoutDataDirectoryURL)
+        removeLegacyItem(at: dataFileURL)
+    }
+
+    private func removeLegacyDailyDataFile() {
+        removeLegacyItem(at: dailyDataFileURL)
+    }
+
+    private func removeLegacyDailyCoverageFile() {
+        removeLegacyItem(at: dailyCoverageFileURL)
     }
 
     private nonisolated static func shouldPersistRawSamples(for workoutDate: Date, reference: Date = Date()) -> Bool {
@@ -57,81 +78,25 @@ extension HealthKitManager {
         return prepared
     }
 
-    private func writeWorkoutEntriesToDirectory(_ entries: [WorkoutHealthData]) throws {
-        let fileManager = FileManager.default
-        try fileManager.createDirectory(at: workoutDataDirectoryURL, withIntermediateDirectories: true)
-
-        let encoder = JSONEncoder()
-        let writeOptions: Data.WritingOptions = [.atomic, .completeFileProtection]
-        let preparedEntries = entries.map { Self.preparedWorkoutCacheEntry($0) }
-        let validFileNames = Set(preparedEntries.map { "\($0.workoutId.uuidString).json" })
-
-        for entry in preparedEntries {
-            let fileURL = workoutDataFileURL(for: entry.workoutId)
-            let data = try encoder.encode(entry)
-            try data.write(to: fileURL, options: writeOptions)
-        }
-
-        let directoryContents = try fileManager.contentsOfDirectory(
-            at: workoutDataDirectoryURL,
-            includingPropertiesForKeys: nil,
-            options: [.skipsHiddenFiles]
-        )
-
-        for fileURL in directoryContents where !validFileNames.contains(fileURL.lastPathComponent) {
-            try? fileManager.removeItem(at: fileURL)
-        }
-    }
-
     func persistData(changedWorkoutIDs: [UUID]? = nil, removedWorkoutIDs: [UUID] = []) {
         let snapshot = healthDataStore
-        let directoryURL = workoutDataDirectoryURL
         let idsToPersist = changedWorkoutIDs ?? Array(snapshot.keys)
         let idsToRemove = removedWorkoutIDs
-        let writeOptions: Data.WritingOptions = [.atomic, .completeFileProtection]
-        let preparedEntriesByID = Dictionary(uniqueKeysWithValues: idsToPersist.compactMap { workoutID in
-            snapshot[workoutID].map { (workoutID, Self.preparedWorkoutCacheEntry($0)) }
-        })
+        let database = database
+        let preparedEntries = idsToPersist.compactMap { workoutID in
+            snapshot[workoutID].map { Self.preparedWorkoutCacheEntry($0) }
+        }
 
+        // Keep persistence work ordered so older snapshots cannot land after newer ones.
         Task { @MainActor in
             do {
-                let fileManager = FileManager.default
-                try fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true)
-
-                let encoder = JSONEncoder()
-
-                for workoutID in idsToPersist {
-                    let fileURL = directoryURL.appendingPathComponent("\(workoutID.uuidString).json")
-                    guard let preparedEntry = preparedEntriesByID[workoutID] else {
-                        if fileManager.fileExists(atPath: fileURL.path) {
-                            try? fileManager.removeItem(at: fileURL)
-                        }
-                        continue
-                    }
-
-                    let data = try encoder.encode(preparedEntry)
-                    try data.write(to: fileURL, options: writeOptions)
+                if !preparedEntries.isEmpty {
+                    try database.saveWorkoutHealthData(preparedEntries)
                 }
-
-                for workoutID in idsToRemove {
-                    let fileURL = directoryURL.appendingPathComponent("\(workoutID.uuidString).json")
-                    if fileManager.fileExists(atPath: fileURL.path) {
-                        try? fileManager.removeItem(at: fileURL)
-                    }
+                if !idsToRemove.isEmpty {
+                    try database.deleteWorkoutHealthData(ids: idsToRemove)
                 }
-
-                if changedWorkoutIDs == nil {
-                    let validFileNames = Set(snapshot.keys.map { "\($0.uuidString).json" })
-                    let directoryContents = try fileManager.contentsOfDirectory(
-                        at: directoryURL,
-                        includingPropertiesForKeys: nil,
-                        options: [.skipsHiddenFiles]
-                    )
-
-                    for fileURL in directoryContents where !validFileNames.contains(fileURL.lastPathComponent) {
-                        try? fileManager.removeItem(at: fileURL)
-                    }
-                }
+                removeLegacyWorkoutPersistenceFiles()
             } catch {
                 print("Failed to persist health data: \(error)")
             }
@@ -140,12 +105,11 @@ extension HealthKitManager {
 
     func persistDailyHealthData() {
         let entries = Array(dailyHealthStore.values)
-        let url = dailyDataFileURL
-        let writeOptions: Data.WritingOptions = [.atomic, .completeFileProtection]
+        let database = database
         Task { @MainActor in
             do {
-                let data = try JSONEncoder().encode(entries)
-                try data.write(to: url, options: writeOptions)
+                try database.saveDailyHealthData(entries)
+                removeLegacyDailyDataFile()
             } catch {
                 print("Failed to persist daily health data: \(error)")
             }
@@ -153,13 +117,12 @@ extension HealthKitManager {
     }
 
     func persistDailyHealthCoverage() {
-        let coveredDays = Array(dailyHealthCoverage).sorted()
-        let url = dailyCoverageFileURL
-        let writeOptions: Data.WritingOptions = [.atomic, .completeFileProtection]
+        let coveredDays = dailyHealthCoverage
+        let database = database
         Task { @MainActor in
             do {
-                let data = try JSONEncoder().encode(coveredDays)
-                try data.write(to: url, options: writeOptions)
+                try database.saveDailyHealthCoverage(coveredDays)
+                removeLegacyDailyCoverageFile()
             } catch {
                 print("Failed to persist daily health coverage: \(error)")
             }
@@ -269,6 +232,16 @@ extension HealthKitManager {
         cleanupLegacyUserDefaults()
 
         do {
+            let stored = try database.loadWorkoutHealthData()
+            if !stored.isEmpty {
+                let preparedEntries = stored.map { Self.preparedWorkoutCacheEntry($0) }
+                healthDataStore = Dictionary(uniqueKeysWithValues: preparedEntries.map { ($0.workoutId, $0) })
+                lastSyncDate = userDefaults.object(forKey: lastSyncKey) as? Date
+                removeLegacyWorkoutPersistenceFiles()
+                print("Loaded \(healthDataStore.count) health records")
+                return
+            }
+
             let fileManager = FileManager.default
 
             if fileManager.fileExists(atPath: workoutDataDirectoryURL.path) {
@@ -286,7 +259,9 @@ extension HealthKitManager {
                         let decoded = try decoder.decode(WorkoutHealthData.self, from: data)
                         return Self.preparedWorkoutCacheEntry(decoded)
                     }
+                    try database.saveWorkoutHealthData(healthDataArray)
                     healthDataStore = Dictionary(uniqueKeysWithValues: healthDataArray.map { ($0.workoutId, $0) })
+                    removeLegacyWorkoutPersistenceFiles()
                     print("Loaded \(healthDataStore.count) health records")
                     lastSyncDate = userDefaults.object(forKey: lastSyncKey) as? Date
                     return
@@ -301,9 +276,9 @@ extension HealthKitManager {
             let data = try Data(contentsOf: dataFileURL)
             let healthDataArray = try JSONDecoder().decode([WorkoutHealthData].self, from: data)
             let preparedEntries = healthDataArray.map { Self.preparedWorkoutCacheEntry($0) }
+            try database.saveWorkoutHealthData(preparedEntries)
             healthDataStore = Dictionary(uniqueKeysWithValues: preparedEntries.map { ($0.workoutId, $0) })
-            try writeWorkoutEntriesToDirectory(preparedEntries)
-            try? FileManager.default.removeItem(at: dataFileURL)
+            removeLegacyWorkoutPersistenceFiles()
             print("Loaded \(healthDataStore.count) health records")
         } catch {
             print("Failed to load persisted health data: \(error)")
@@ -324,6 +299,8 @@ extension HealthKitManager {
             userDefaults.removeObject(forKey: lastDailySyncKey)
 
             do {
+                try database.clearDailyHealthData()
+                try database.clearDailyHealthCoverage()
                 if FileManager.default.fileExists(atPath: dailyDataFileURL.path) {
                     try FileManager.default.removeItem(at: dailyDataFileURL)
                     print("Deleted daily health data store file (version bump)")
@@ -341,24 +318,34 @@ extension HealthKitManager {
         }
 
         do {
-            guard FileManager.default.fileExists(atPath: dailyDataFileURL.path) else { return }
-            let data = try Data(contentsOf: dailyDataFileURL)
-            let dailyArray = try JSONDecoder().decode([DailyHealthData].self, from: data)
+            let stored = try database.loadDailyHealthData()
+            let dailyArray: [DailyHealthData]
+            if !stored.isEmpty || !FileManager.default.fileExists(atPath: dailyDataFileURL.path) {
+                dailyArray = stored
+            } else {
+                let data = try Data(contentsOf: dailyDataFileURL)
+                dailyArray = try JSONDecoder().decode([DailyHealthData].self, from: data)
+                try database.saveDailyHealthData(dailyArray)
+            }
             dailyHealthStore = Dictionary(uniqueKeysWithValues: dailyArray.map { ($0.dayStart, $0) })
+            removeLegacyDailyDataFile()
             print("Loaded \(dailyHealthStore.count) daily health records")
         } catch {
             print("Failed to load persisted daily health data: \(error)")
         }
 
         do {
-            guard FileManager.default.fileExists(atPath: dailyCoverageFileURL.path) else {
-                dailyHealthCoverage = []
-                lastDailySyncDate = userDefaults.object(forKey: lastDailySyncKey) as? Date
-                return
+            let stored = try database.loadDailyHealthCoverage()
+            if !stored.isEmpty || !FileManager.default.fileExists(atPath: dailyCoverageFileURL.path) {
+                dailyHealthCoverage = stored
+            } else {
+                let data = try Data(contentsOf: dailyCoverageFileURL)
+                let coverageArray = try JSONDecoder().decode([Date].self, from: data)
+                let coverage = Set(coverageArray)
+                dailyHealthCoverage = coverage
+                try database.saveDailyHealthCoverage(coverage)
             }
-            let data = try Data(contentsOf: dailyCoverageFileURL)
-            let coverageArray = try JSONDecoder().decode([Date].self, from: data)
-            dailyHealthCoverage = Set(coverageArray)
+            removeLegacyDailyCoverageFile()
             print("Loaded \(dailyHealthCoverage.count) covered daily health days")
         } catch {
             dailyHealthCoverage = []
@@ -391,6 +378,9 @@ extension HealthKitManager {
         userDefaults.removeObject(forKey: pendingWorkoutSleepSummaryRefreshKey)
 
         do {
+            try database.clearWorkoutHealthData()
+            try database.clearDailyHealthData()
+            try database.clearDailyHealthCoverage()
             if FileManager.default.fileExists(atPath: workoutDataDirectoryURL.path) {
                 try FileManager.default.removeItem(at: workoutDataDirectoryURL)
                 print("Deleted health data store directory")

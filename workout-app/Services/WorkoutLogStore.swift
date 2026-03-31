@@ -5,21 +5,27 @@ import Foundation
 final class WorkoutLogStore: ObservableObject {
     @Published private(set) var workouts: [LoggedWorkout] = []
 
+    private let database = AppDatabase.shared
     private let fileName = "logged_workouts_v1.json"
 
     func load() async {
-        let url = fileURL()
-        guard FileManager.default.fileExists(atPath: url.path) else {
-            workouts = []
-            return
-        }
-
+        let legacyURL = fileURL()
         do {
-            let data = try Data(contentsOf: url)
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-            let decoded = try decoder.decode([LoggedWorkout].self, from: data)
-            workouts = decoded.sorted { $0.startedAt > $1.startedAt }
+            let loaded = try await Task.detached(priority: .userInitiated) { [database, legacyURL] in
+                let stored = try database.loadLoggedWorkouts()
+                if !stored.isEmpty || !FileManager.default.fileExists(atPath: legacyURL.path) {
+                    return stored
+                }
+
+                let data = try Data(contentsOf: legacyURL)
+                let decoder = JSONDecoder()
+                decoder.dateDecodingStrategy = .iso8601
+                let decoded = try decoder.decode([LoggedWorkout].self, from: data)
+                try database.replaceLoggedWorkouts(decoded)
+                return decoded
+            }.value
+            workouts = loaded.sorted { $0.startedAt > $1.startedAt }
+            removeLegacyFile()
         } catch {
             print("Failed to load logged workouts: \(error)")
             workouts = []
@@ -50,6 +56,11 @@ final class WorkoutLogStore: ObservableObject {
 
     func clearAll() async {
         workouts.removeAll()
+        do {
+            try database.clearLoggedWorkouts()
+        } catch {
+            print("Failed to clear logged workouts store: \(error)")
+        }
         let url = fileURL()
         do {
             if FileManager.default.fileExists(atPath: url.path) {
@@ -61,22 +72,37 @@ final class WorkoutLogStore: ObservableObject {
     }
 
     private func fileURL() -> URL {
+        Self.staticFileURL(fileName: fileName)
+    }
+
+    private nonisolated static func staticFileURL(fileName: String) -> URL {
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         return documents.appendingPathComponent(fileName)
     }
 
     private func persist() {
         let snapshot = workouts
-        let url = fileURL()
+        let database = database
+        let legacyURL = fileURL()
         Task.detached(priority: .utility) {
-            let encoder = JSONEncoder()
-            encoder.dateEncodingStrategy = .iso8601
             do {
-                let data = try encoder.encode(snapshot)
-                try data.write(to: url, options: [.atomic, .completeFileProtection])
+                try database.replaceLoggedWorkouts(snapshot)
+                if FileManager.default.fileExists(atPath: legacyURL.path) {
+                    try? FileManager.default.removeItem(at: legacyURL)
+                }
             } catch {
                 print("Failed to persist logged workouts: \(error)")
             }
+        }
+    }
+
+    private func removeLegacyFile() {
+        let url = fileURL()
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        do {
+            try FileManager.default.removeItem(at: url)
+        } catch {
+            print("Failed to delete logged workouts store: \(error)")
         }
     }
 }

@@ -37,6 +37,7 @@ struct HomeView: View {
     @State private var selectedWeekBucketStart: Date?
     @State private var derivedStateTask: Task<Void, Never>?
     @State private var recoveryCoverageTask: Task<Void, Never>?
+    @State private var hasScheduledInitialWorkoutRefresh = false
     @State private var showingTagging = false
     @AppStorage("dismissedUntaggedCount") private var dismissedUntaggedCount: Int = -1
     private let maxContentWidth: CGFloat = 820
@@ -73,12 +74,7 @@ struct HomeView: View {
                             Task {
                                 await dataManager.loadLatestWorkoutData(
                                     iCloudManager: iCloudManager,
-                                    healthIdentitySnapshot: healthManager.healthDataStore.values.map {
-                                        WorkoutHealthIdentitySnapshot(
-                                            workoutId: $0.workoutId,
-                                            workoutDate: $0.workoutDate
-                                        )
-                                    }
+                                    healthIdentitySnapshot: healthIdentitySnapshot
                                 )
                             }
                         }
@@ -203,35 +199,16 @@ struct HomeView: View {
             refreshHomeDerivedState()
             rebuildHomeHighlights()
             healthManager.refreshAuthorizationStatus()
-            if dataManager.workouts.isEmpty {
-                Task {
-                    await dataManager.loadLatestWorkoutData(
-                        iCloudManager: iCloudManager,
-                        healthIdentitySnapshot: healthManager.healthDataStore.values.map {
-                            WorkoutHealthIdentitySnapshot(
-                                workoutId: $0.workoutId,
-                                workoutDate: $0.workoutDate
-                            )
-                        }
-                    )
-                    await insightsEngine.generateInsights()
-                    rebuildHomeHighlights()
-                    await refreshRecoveryCoverage()
-                }
-            } else {
+            if !dataManager.workouts.isEmpty {
                 triggerAutoHealthSync()
                 scheduleRecoveryCoverageRefresh()
             }
+            scheduleInitialWorkoutRefreshIfNeeded()
         }
         .refreshable {
             await dataManager.loadLatestWorkoutData(
                 iCloudManager: iCloudManager,
-                healthIdentitySnapshot: healthManager.healthDataStore.values.map {
-                    WorkoutHealthIdentitySnapshot(
-                        workoutId: $0.workoutId,
-                        workoutDate: $0.workoutDate
-                    )
-                }
+                healthIdentitySnapshot: healthIdentitySnapshot
             )
             await insightsEngine.generateInsights()
             rebuildHomeHighlights()
@@ -302,13 +279,22 @@ struct HomeView: View {
     // MARK: - Untagged Exercises Banner
 
     private var untaggedExerciseNames: [String] {
-        let allNames = Set(dataManager.workouts.flatMap { $0.exercises.map(\.name) })
-        return allNames.filter { metadataManager.resolvedTags(for: $0).isEmpty }.sorted()
+        dataManager.allExerciseNames()
+            .filter { metadataManager.resolvedTags(for: $0).isEmpty }
     }
 
     private var shouldShowUntaggedBanner: Bool {
         let count = untaggedExerciseNames.count
         return count > 0 && count != dismissedUntaggedCount
+    }
+
+    private var healthIdentitySnapshot: [WorkoutHealthIdentitySnapshot] {
+        healthManager.healthDataStore.values.map {
+            WorkoutHealthIdentitySnapshot(
+                workoutId: $0.workoutId,
+                workoutDate: $0.workoutDate
+            )
+        }
     }
 
     private var untaggedExercisesBanner: some View {
@@ -914,7 +900,7 @@ struct HomeView: View {
     }
 
     private func refreshRecoveryCoverage() async {
-        let exerciseNames = Set(dataManager.workouts.flatMap { $0.exercises.map(\.name) })
+        let exerciseNames = Set(dataManager.allExerciseNames())
         let tagMappings = ExerciseMetadataManager.shared.resolvedMappings(for: exerciseNames)
         await recoveryCoverageEngine.analyze(
             workouts: dataManager.workouts,
@@ -930,6 +916,25 @@ struct HomeView: View {
         recoveryCoverageTask = Task {
             try? await Task.sleep(nanoseconds: debounceNs)
             guard !Task.isCancelled else { return }
+            await refreshRecoveryCoverage()
+        }
+    }
+
+    private func scheduleInitialWorkoutRefreshIfNeeded() {
+        guard !hasScheduledInitialWorkoutRefresh else { return }
+        hasScheduledInitialWorkoutRefresh = true
+
+        Task {
+            await dataManager.loadLatestWorkoutData(
+                iCloudManager: iCloudManager,
+                healthIdentitySnapshot: healthIdentitySnapshot
+            )
+            guard !Task.isCancelled else { return }
+
+            await insightsEngine.generateInsights()
+            guard !Task.isCancelled else { return }
+
+            rebuildHomeHighlights()
             await refreshRecoveryCoverage()
         }
     }

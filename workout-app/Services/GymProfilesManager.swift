@@ -9,6 +9,7 @@ final class GymProfilesManager: ObservableObject {
 
     @AppStorage("lastUsedGymProfileId") private var lastUsedGymProfileIdString: String = ""
 
+    private let database = AppDatabase.shared
     private let fileName = "gym_profiles.json"
     private let annotationsManager: WorkoutAnnotationsManager
 
@@ -158,7 +159,8 @@ final class GymProfilesManager: ObservableObject {
     func clearAll() {
         gyms = []
         lastUsedGymProfileId = nil
-        try? FileManager.default.removeItem(at: fileURL())
+        try? database.clearGymProfiles()
+        removeLegacyFile()
     }
 
     private func fileURL() -> URL {
@@ -168,13 +170,14 @@ final class GymProfilesManager: ObservableObject {
 
     private func persist() {
         let entries = gyms
-        let url = fileURL()
+        let database = database
+        let legacyURL = fileURL()
         Task.detached(priority: .utility) {
-            let encoder = JSONEncoder()
-            encoder.dateEncodingStrategy = .iso8601
             do {
-                let data = try encoder.encode(entries)
-                try data.write(to: url, options: [.atomic, .completeFileProtection])
+                try database.saveGymProfiles(entries)
+                if FileManager.default.fileExists(atPath: legacyURL.path) {
+                    try? FileManager.default.removeItem(at: legacyURL)
+                }
             } catch {
                 print("Failed to persist gym profiles: \(error)")
             }
@@ -182,15 +185,32 @@ final class GymProfilesManager: ObservableObject {
     }
 
     private func load() {
-        let url = fileURL()
-        guard FileManager.default.fileExists(atPath: url.path) else { return }
         do {
-            let data = try Data(contentsOf: url)
+            let stored = try database.loadGymProfiles()
+            if !stored.isEmpty || !FileManager.default.fileExists(atPath: fileURL().path) {
+                gyms = stored
+                removeLegacyFile()
+                return
+            }
+
+            let data = try Data(contentsOf: fileURL())
             let decoder = JSONDecoder()
             decoder.dateDecodingStrategy = .iso8601
             gyms = try decoder.decode([GymProfile].self, from: data)
+            try database.saveGymProfiles(gyms)
+            removeLegacyFile()
         } catch {
             print("Failed to load gym profiles: \(error)")
+        }
+    }
+
+    private func removeLegacyFile() {
+        let url = fileURL()
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        do {
+            try FileManager.default.removeItem(at: url)
+        } catch {
+            print("Failed to delete gym profiles store: \(error)")
         }
     }
 

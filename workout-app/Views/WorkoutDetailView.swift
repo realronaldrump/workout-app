@@ -18,10 +18,14 @@ struct WorkoutDetailView: View {
     @State private var showingWorkoutHealthInsights = false
     @State private var showingEdit = false
     @State private var selectedSimilarityComparison: WorkoutSimilarityComparisonSelection?
+    @State private var cachedResolvedWorkout: Workout?
+    @State private var cachedSimilarityReview: WorkoutSimilarityReview?
+    @State private var cachedVariantReview: WorkoutVariantWorkoutReview?
+    @State private var cachedHealthData: WorkoutHealthData?
     @Environment(\.dismiss) private var dismiss
 
     private var resolvedWorkout: Workout {
-        dataManager.workouts.first(where: { $0.id == workout.id }) ?? workout
+        cachedResolvedWorkout ?? dataManager.workouts.first(where: { $0.id == workout.id }) ?? workout
     }
 
     private var isLoggedWorkout: Bool {
@@ -29,7 +33,7 @@ struct WorkoutDetailView: View {
     }
 
     private var similarityReview: WorkoutSimilarityReview? {
-        similarityEngine.review(for: resolvedWorkout.id)
+        cachedSimilarityReview
     }
 
     private func workoutDateTimeToolbarText(for date: Date) -> String {
@@ -100,7 +104,7 @@ struct WorkoutDetailView: View {
 
                     GymAssignmentCard(workout: workout)
 
-                    if let review = variantEngine.review(for: workout.id) {
+                    if let review = cachedVariantReview {
                         variantReviewSection(review: review)
                     }
 
@@ -146,7 +150,19 @@ struct WorkoutDetailView: View {
             workoutTopBar
         }
         .onAppear {
-            // Health data is now observed directly from healthManager
+            refreshCachedWorkoutState()
+        }
+        .onChange(of: dataManager.workouts) { _, _ in
+            refreshCachedWorkoutState()
+        }
+        .onReceive(healthManager.$healthDataStore) { _ in
+            cachedHealthData = healthManager.getHealthData(for: workout.id)
+        }
+        .onReceive(variantEngine.$library) { _ in
+            cachedVariantReview = variantEngine.review(for: workout.id)
+        }
+        .onReceive(similarityEngine.$library) { _ in
+            cachedSimilarityReview = similarityEngine.review(for: resolvedWorkout.id)
         }
         .alert("Sync Error", isPresented: $showingSyncError) {
             Button("OK", role: .cancel) {}
@@ -261,7 +277,7 @@ struct WorkoutDetailView: View {
                 syncButton
             }
 
-            if let data = healthManager.getHealthData(for: workout.id) {
+            if let data = cachedHealthData {
                 MetricTileButton(
                     action: {
                         showingWorkoutHealthInsights = true
@@ -277,7 +293,7 @@ struct WorkoutDetailView: View {
     }
 
     private var syncButton: some View {
-        let hasData = healthManager.getHealthData(for: workout.id) != nil
+        let hasData = cachedHealthData != nil
 
         return Button(action: syncHealthData) {
             HStack(spacing: 6) {
@@ -341,6 +357,14 @@ struct WorkoutDetailView: View {
                 showingSyncError = true
             }
         }
+    }
+
+    private func refreshCachedWorkoutState() {
+        let resolved = dataManager.workouts.first(where: { $0.id == workout.id }) ?? workout
+        cachedResolvedWorkout = resolved
+        cachedSimilarityReview = similarityEngine.review(for: resolved.id)
+        cachedVariantReview = variantEngine.review(for: resolved.id)
+        cachedHealthData = healthManager.getHealthData(for: resolved.id)
     }
 
 }

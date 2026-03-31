@@ -421,12 +421,15 @@ enum InsightType: Sendable {
 enum MuscleGroup: String, CaseIterable, Codable, Sendable {
     case chest
     case back
+    case traps
     case shoulders
     case biceps
     case triceps
+    case forearms
     case quads
     case hamstrings
     case glutes
+    case adductors
     case calves
     case core
     case cardio
@@ -455,12 +458,15 @@ enum MuscleGroup: String, CaseIterable, Codable, Sendable {
         switch self {
         case .chest: return "Chest"
         case .back: return "Back"
+        case .traps: return "Traps"
         case .shoulders: return "Shoulders"
         case .biceps: return "Biceps"
         case .triceps: return "Triceps"
+        case .forearms: return "Forearms"
         case .quads: return "Quads"
         case .hamstrings: return "Hamstrings"
         case .glutes: return "Glutes"
+        case .adductors: return "Adductors"
         case .calves: return "Calves"
         case .core: return "Core"
         case .cardio: return "Cardio"

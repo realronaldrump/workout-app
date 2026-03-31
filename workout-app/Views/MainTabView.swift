@@ -26,6 +26,7 @@ struct MainTabView: View {
     @State private var hasCompletedInitialLoad = false
     @State private var insightsRefreshTask: Task<Void, Never>?
     @State private var variantAnalysisTask: Task<Void, Never>?
+    @State private var similarityAnalysisTask: Task<Void, Never>?
     @State private var sleepSummaryRefreshTask: Task<Void, Never>?
     @EnvironmentObject private var sessionManager: WorkoutSessionManager
     @EnvironmentObject private var healthManager: HealthKitManager
@@ -119,6 +120,7 @@ struct MainTabView: View {
             refreshOnboardingState()
             bootstrapStoresIfNeeded()
             scheduleVariantAnalysis()
+            scheduleSimilarityAnalysis()
             schedulePendingSleepSummaryRefresh()
             AppAnalytics.shared.track(
                 AnalyticsSignal.tabSelected,
@@ -135,6 +137,7 @@ struct MainTabView: View {
             refreshOnboardingState()
             scheduleInsightsRefresh()
             scheduleVariantAnalysis()
+            scheduleSimilarityAnalysis()
             schedulePendingSleepSummaryRefresh()
         }
         .onChange(of: dataManager.isLoading) { _, isLoading in
@@ -243,6 +246,7 @@ struct MainTabView: View {
             LegacyProgramCleanup.runIfNeeded()
             await logStore.load()
             dataManager.setLoggedWorkouts(logStore.workouts)
+            await dataManager.loadPersistedImportedWorkouts()
             await sessionManager.restoreDraft()
 
             // Detect existing users before evaluating onboarding. CSV-imported
@@ -287,6 +291,14 @@ struct MainTabView: View {
             try? await Task.sleep(nanoseconds: debounceNs)
             guard !Task.isCancelled else { return }
             await triggerVariantAnalysis()
+        }
+    }
+
+    private func scheduleSimilarityAnalysis(debounceNs: UInt64 = 250_000_000) {
+        similarityAnalysisTask?.cancel()
+        similarityAnalysisTask = Task {
+            try? await Task.sleep(nanoseconds: debounceNs)
+            guard !Task.isCancelled else { return }
             await similarityEngine.analyze(workouts: dataManager.workouts)
         }
     }

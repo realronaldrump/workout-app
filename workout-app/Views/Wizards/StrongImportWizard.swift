@@ -791,9 +791,16 @@ struct StrongImportWizard: View {
                                     )
                                 }
                             }
+                            let requestID = await MainActor.run {
+                                dataManager.beginImportedWorkoutRequest()
+                            }
 
-                            // Process workout sets (nonisolated async)
-                            await dataManager.processImportedWorkoutSets(sets, healthIdentitySnapshot: healthIdentitySnapshot)
+                            // Process workout sets on the shared data manager.
+                            await dataManager.processImportedWorkoutSets(
+                                sets,
+                                healthIdentitySnapshot: healthIdentitySnapshot,
+                                requestID: requestID
+                            )
 
                             await MainActor.run {
                                 let stats = dataManager.calculateStats()

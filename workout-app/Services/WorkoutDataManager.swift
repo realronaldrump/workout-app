@@ -28,22 +28,26 @@ class WorkoutDataManager: ObservableObject {
 
     private static let intentionalRestDaysKey = "intentionalRestDays"
     private static let defaultIntentionalRestDays = 1
+    private static let importedWorkoutsSourcePathKey = "importedWorkoutsSourcePath"
+    private static let importedWorkoutsSourceTimestampKey = "importedWorkoutsSourceTimestamp"
 
+    private let database = AppDatabase.shared
     private let identityStore = WorkoutIdentityStore()
+    private let userDefaults = UserDefaults.standard
     private var exerciseHistoryCache: [String: [ExerciseHistorySession]] = [:]
     private var exerciseSummariesCache: [ExerciseSummary] = []
     private var allExerciseNamesCache: [String] = []
     private var recentExerciseNamesCache: [String] = []
+    private var importedWorkoutRequestID: UInt64 = 0
 
-    nonisolated func processImportedWorkoutSets(
+    func processImportedWorkoutSets(
         _ sets: [WorkoutSet],
-        healthIdentitySnapshot: [WorkoutHealthIdentitySnapshot] = []
+        healthIdentitySnapshot: [WorkoutHealthIdentitySnapshot] = [],
+        requestID: UInt64? = nil
     ) async {
-        let snapshots: (existingImported: [Workout], identitySnapshot: [String: UUID]) = await MainActor.run {
-            self.isLoading = true
-            self.error = nil
-            return (existingImported: self.importedWorkouts, identitySnapshot: self.identityStore.snapshot())
-        }
+        isLoading = true
+        error = nil
+        let snapshots = (existingImported: importedWorkouts, identitySnapshot: identityStore.snapshot())
 
         // Run heavy grouping logic on a background thread
         let task = Task.detached(priority: .userInitiated) {
@@ -56,12 +60,17 @@ class WorkoutDataManager: ObservableObject {
         }
         let (processedWorkouts, newIdentityEntries) = await task.value
 
-        // Update UI on MainActor
-        await MainActor.run {
-            self.importedWorkouts = processedWorkouts
-            self.mergeSources()
-            self.isLoading = false
-            self.identityStore.merge(newIdentityEntries)
+        guard requestID.map(isCurrentImportedWorkoutRequest) ?? true else { return }
+
+        importedWorkouts = processedWorkouts
+        mergeSources()
+        isLoading = false
+        identityStore.merge(newIdentityEntries)
+
+        do {
+            try database.saveImportedWorkouts(processedWorkouts)
+        } catch {
+            print("Failed to persist imported workouts: \(error)")
         }
     }
 
@@ -79,9 +88,37 @@ class WorkoutDataManager: ObservableObject {
         iCloudManager: iCloudDocumentManager,
         healthIdentitySnapshot: [WorkoutHealthIdentitySnapshot]
     ) async {
+        let requestID = beginImportedWorkoutRequest()
         let searchDirectories = await iCloudManager.storageSearchDirectories()
         isLoading = true
         error = nil
+
+        do {
+            let persistedWorkouts = try await Task.detached(priority: .userInitiated) { [database] in
+                try database.loadImportedWorkouts()
+            }.value
+            let latestFile = Self.latestWorkoutFile(in: searchDirectories)
+            let latestSignature = Self.importSourceSignature(for: latestFile)
+            let cachedSignature = cachedImportSourceSignature()
+
+            if !persistedWorkouts.isEmpty, latestSignature == cachedSignature {
+                guard isCurrentImportedWorkoutRequest(requestID) else { return }
+                importedWorkouts = persistedWorkouts.sorted { $0.date > $1.date }
+                mergeSources()
+                isLoading = false
+                return
+            }
+
+            if latestFile == nil {
+                guard isCurrentImportedWorkoutRequest(requestID) else { return }
+                importedWorkouts = persistedWorkouts.sorted { $0.date > $1.date }
+                mergeSources()
+                isLoading = false
+                return
+            }
+        } catch {
+            print("Failed to load cached imported workouts: \(error)")
+        }
 
         let setsResult = await Task.detached(priority: .userInitiated) { [searchDirectories] in
             do {
@@ -99,15 +136,45 @@ class WorkoutDataManager: ObservableObject {
         switch setsResult {
         case .success(let sets):
             guard !sets.isEmpty else {
+                guard isCurrentImportedWorkoutRequest(requestID) else { return }
                 importedWorkouts = []
                 mergeSources()
                 isLoading = false
+                clearImportSourceSignature()
+                do {
+                    try database.clearImportedWorkouts()
+                } catch {
+                    print("Failed to clear imported workouts: \(error)")
+                }
                 return
             }
-            await processImportedWorkoutSets(sets, healthIdentitySnapshot: healthIdentitySnapshot)
+            await processImportedWorkoutSets(
+                sets,
+                healthIdentitySnapshot: healthIdentitySnapshot,
+                requestID: requestID
+            )
+            guard isCurrentImportedWorkoutRequest(requestID) else { return }
+            if let latestFile = Self.latestWorkoutFile(in: searchDirectories) {
+                persistImportSourceSignature(Self.importSourceSignature(for: latestFile))
+            }
         case .failure(let loadError):
+            guard isCurrentImportedWorkoutRequest(requestID) else { return }
             isLoading = false
             error = loadError.localizedDescription
+        }
+    }
+
+    func loadPersistedImportedWorkouts() async {
+        let requestID = importedWorkoutRequestID
+        do {
+            let persisted = try await Task.detached(priority: .userInitiated) { [database] in
+                try database.loadImportedWorkouts()
+            }.value
+            guard requestID == importedWorkoutRequestID else { return }
+            importedWorkouts = persisted.sorted { $0.date > $1.date }
+            mergeSources()
+        } catch {
+            print("Failed to load persisted imported workouts: \(error)")
         }
     }
 
@@ -127,6 +194,12 @@ class WorkoutDataManager: ObservableObject {
         }
 
         return nil
+    }
+
+    nonisolated static func importSourceSignature(for fileURL: URL?) -> String? {
+        guard let fileURL else { return nil }
+        let creationDate = (try? fileURL.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? .distantPast
+        return "\(fileURL.standardizedFileURL.path)|\(creationDate.timeIntervalSince1970)"
     }
 
     nonisolated private static func listNewestFirst(_ files: [URL]) -> [URL] {
@@ -356,6 +429,45 @@ class WorkoutDataManager: ObservableObject {
         self.allExerciseNamesCache = []
         self.recentExerciseNamesCache = []
         self.identityStore.clear()
+        clearImportSourceSignature()
+        try? database.clearImportedWorkouts()
+    }
+
+    private func cachedImportSourceSignature() -> String? {
+        let path = userDefaults.string(forKey: Self.importedWorkoutsSourcePathKey)
+        let timestamp = userDefaults.object(forKey: Self.importedWorkoutsSourceTimestampKey) as? Double
+        guard let path, let timestamp else { return nil }
+        return "\(path)|\(timestamp)"
+    }
+
+    private func persistImportSourceSignature(_ signature: String?) {
+        guard let signature else {
+            clearImportSourceSignature()
+            return
+        }
+
+        let parts = signature.split(separator: "|", maxSplits: 1).map(String.init)
+        guard parts.count == 2, let timestamp = Double(parts[1]) else {
+            clearImportSourceSignature()
+            return
+        }
+
+        userDefaults.set(parts[0], forKey: Self.importedWorkoutsSourcePathKey)
+        userDefaults.set(timestamp, forKey: Self.importedWorkoutsSourceTimestampKey)
+    }
+
+    private func clearImportSourceSignature() {
+        userDefaults.removeObject(forKey: Self.importedWorkoutsSourcePathKey)
+        userDefaults.removeObject(forKey: Self.importedWorkoutsSourceTimestampKey)
+    }
+
+    func beginImportedWorkoutRequest() -> UInt64 {
+        importedWorkoutRequestID &+= 1
+        return importedWorkoutRequestID
+    }
+
+    private func isCurrentImportedWorkoutRequest(_ requestID: UInt64) -> Bool {
+        requestID == importedWorkoutRequestID
     }
 
     private func rebuildDerivedCaches() {

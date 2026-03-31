@@ -5,6 +5,7 @@ import Foundation
 final class WorkoutAnnotationsManager: ObservableObject {
     @Published private(set) var annotations: [UUID: WorkoutAnnotation] = [:]
 
+    private let database = AppDatabase.shared
     private let fileName = "workout_annotations.json"
     private let userDefaults = UserDefaults.standard
     private let migrationFlagKey = "workout_annotations_migrated_v2"
@@ -68,7 +69,8 @@ final class WorkoutAnnotationsManager: ObservableObject {
 
     func clearAll() {
         annotations = [:]
-        try? FileManager.default.removeItem(at: fileURL())
+        try? database.clearAnnotations()
+        removeLegacyFile()
     }
 
     private func fileURL() -> URL {
@@ -78,12 +80,14 @@ final class WorkoutAnnotationsManager: ObservableObject {
 
     private func persist() {
         let entries = Array(annotations.values)
-        let url = fileURL()
+        let database = database
+        let legacyURL = fileURL()
         Task.detached(priority: .utility) {
-            let encoder = JSONEncoder()
             do {
-                let data = try encoder.encode(entries)
-                try data.write(to: url, options: [.atomic, .completeFileProtection])
+                try database.replaceAnnotations(entries)
+                if FileManager.default.fileExists(atPath: legacyURL.path) {
+                    try? FileManager.default.removeItem(at: legacyURL)
+                }
             } catch {
                 print("Failed to persist annotations: \(error)")
             }
@@ -91,20 +95,24 @@ final class WorkoutAnnotationsManager: ObservableObject {
     }
 
     private func load() {
-        let url = fileURL()
-        guard FileManager.default.fileExists(atPath: url.path) else { return }
         do {
-            let data = try Data(contentsOf: url)
+            let stored = try database.loadAnnotations()
+            if !stored.isEmpty || !FileManager.default.fileExists(atPath: fileURL().path) {
+                annotations = Dictionary(uniqueKeysWithValues: stored.map { ($0.workoutId, $0) })
+                removeLegacyFile()
+                return
+            }
+
+            let data = try Data(contentsOf: fileURL())
             let decoder = JSONDecoder()
             let entries = try decoder.decode([WorkoutAnnotation].self, from: data)
-            // Purge any legacy habit-only annotations and keep only gym assignments.
             let filtered = entries.filter { $0.gymProfileId != nil }
             annotations = Dictionary(uniqueKeysWithValues: filtered.map { ($0.workoutId, $0) })
+            try database.replaceAnnotations(filtered)
+            removeLegacyFile()
 
-            // One-time rewrite to drop legacy keys from disk.
             if !userDefaults.bool(forKey: migrationFlagKey) {
                 userDefaults.set(true, forKey: migrationFlagKey)
-                persist()
             }
         } catch {
             print("Failed to load annotations: \(error)")
@@ -112,4 +120,14 @@ final class WorkoutAnnotationsManager: ObservableObject {
     }
 
     // No-op placeholder: legacy code used to carry non-gym fields. Left intentionally blank.
+
+    private func removeLegacyFile() {
+        let url = fileURL()
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        do {
+            try FileManager.default.removeItem(at: url)
+        } catch {
+            print("Failed to delete workout annotations store: \(error)")
+        }
+    }
 }

@@ -13,7 +13,7 @@ struct WorkoutSet: Identifiable, Codable, Hashable {
     let seconds: Double
 }
 
-struct Exercise: Identifiable, Hashable {
+struct Exercise: Identifiable, Hashable, Codable {
     let id: UUID
     let name: String
     var sets: [WorkoutSet]
@@ -55,7 +55,7 @@ struct Exercise: Identifiable, Hashable {
     }
 }
 
-struct Workout: Identifiable, Hashable {
+struct Workout: Identifiable, Hashable, Codable {
     let id: UUID
     let date: Date
     let name: String
