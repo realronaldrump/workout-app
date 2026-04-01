@@ -435,4 +435,3 @@ private struct ActionRow: View {
         .softCard(elevation: 1)
     }
 }
-

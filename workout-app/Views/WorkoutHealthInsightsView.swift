@@ -199,5 +199,3 @@ struct WorkoutHealthInsightsView: View {
         }
     }
 }
-
-

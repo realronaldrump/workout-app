@@ -1,6 +1,6 @@
 import Foundation
 
-struct GymProfile: Identifiable, Codable, Hashable {
+nonisolated struct GymProfile: Identifiable, Codable, Hashable {
     let id: UUID
     var name: String
     var address: String?

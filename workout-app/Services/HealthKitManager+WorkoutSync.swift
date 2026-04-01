@@ -3,12 +3,12 @@ import Foundation
 import HealthKit
 
 private enum DefaultHealthSyncPlan {
-    nonisolated(unsafe) static let initialWorkoutYearsBack = 1
-    nonisolated(unsafe) static let initialWorkoutMaxCount = 120
-    nonisolated(unsafe) static let initialDailyMonthsBack = 12
-    nonisolated(unsafe) static let autoSyncRecentCount = 3
-    nonisolated(unsafe) static let batchAppleWorkoutCandidateLimit = 200
-    nonisolated(unsafe) static let batchAppleWorkoutRangeLimitDays = 400
+    nonisolated static let initialWorkoutYearsBack = 1
+    nonisolated static let initialWorkoutMaxCount = 120
+    nonisolated static let initialDailyMonthsBack = 12
+    nonisolated static let autoSyncRecentCount = 3
+    nonisolated static let batchAppleWorkoutCandidateLimit = 200
+    nonisolated static let batchAppleWorkoutRangeLimitDays = 400
 }
 
 extension HealthKitManager {
@@ -145,7 +145,6 @@ extension HealthKitManager {
         )
     }
 
-    // swiftlint:disable:next cyclomatic_complexity function_body_length
     /// Sync health data for a single workout
     func syncHealthDataForWorkout(
         _ workout: Workout,
@@ -162,15 +161,24 @@ extension HealthKitManager {
         // Calculate workout time window
         let (startTime, endTime) = calculateWorkoutWindow(workout)
 
-        // Fetch all health data for this window
         var healthData = WorkoutHealthData(
             workoutId: workout.id,
             workoutDate: workout.date,
             workoutStartTime: startTime,
             workoutEndTime: endTime
         )
+        try await populateWorkoutWindowMetrics(&healthData, for: workout, startTime: startTime, endTime: endTime)
+        try await populateWorkoutDayMetrics(&healthData, workoutDate: workout.date)
+        try await populateAppleWorkoutMetrics(&healthData, for: workout, candidates: appleWorkoutCandidates)
+        return cacheSyncedHealthData(healthData, workoutID: workout.id, persist: persist)
+    }
 
-        // Fetch heart rate data
+    private func populateWorkoutWindowMetrics(
+        _ healthData: inout WorkoutHealthData,
+        for workout: Workout,
+        startTime: Date,
+        endTime: Date
+    ) async throws {
         let heartRateSamples = try await fetchHeartRateSamples(from: startTime, to: endTime)
         healthData.heartRateSamples = heartRateSamples
         if !heartRateSamples.isEmpty {
@@ -206,11 +214,11 @@ extension HealthKitManager {
         healthData.distanceSwimming = try await fetchQuantitySum(
             type: .distanceSwimming, from: startTime, to: endTime, unit: .meter()
         )
-        
+
         healthData.distanceWheelchair = try await fetchQuantitySum(
             type: .distanceWheelchair, from: startTime, to: endTime, unit: .meter()
         )
-        
+
         healthData.distanceDownhillSnowSports = try await fetchQuantitySum(
             type: .distanceDownhillSnowSports, from: startTime, to: endTime, unit: .meter()
         )
@@ -234,13 +242,13 @@ extension HealthKitManager {
         ) {
             healthData.flightsClimbed = Int(flights)
         }
-        
+
         if let strokes = try await fetchQuantitySum(
             type: .swimmingStrokeCount, from: startTime, to: endTime, unit: .count()
         ) {
             healthData.swimmingStrokeCount = Int(strokes)
         }
-        
+
         if let pushes = try await fetchQuantitySum(
             type: .pushCount, from: startTime, to: endTime, unit: .count()
         ) {
@@ -257,15 +265,17 @@ extension HealthKitManager {
             to: endTime,
             unit: HKUnit(from: "count/min")
         )
+    }
 
-        // Fetch blood oxygen samples
+    private func populateWorkoutDayMetrics(
+        _ healthData: inout WorkoutHealthData,
+        workoutDate: Date
+    ) async throws {
+        let startTime = healthData.workoutStartTime
+        let endTime = healthData.workoutEndTime
         healthData.bloodOxygenSamples = try await fetchBloodOxygenSamples(from: startTime, to: endTime)
-
-        // Fetch respiratory rate samples
         healthData.respiratoryRateSamples = try await fetchRespiratoryRateSamples(from: startTime, to: endTime)
-
-        // Fetch body measurements (from around workout time)
-        let dayStart = Calendar.current.startOfDay(for: workout.date)
+        let dayStart = Calendar.current.startOfDay(for: workoutDate)
         let dayEnd = Calendar.current.date(byAdding: .day, value: 1, to: dayStart)
             ?? dayStart.addingTimeInterval(60 * 60 * 24)
 
@@ -289,31 +299,32 @@ extension HealthKitManager {
             to: dayEnd,
             unit: .degreeCelsius()
         )
-        
+
         healthData.bloodPressureSystolic = try await fetchLatestQuantity(
             type: .bloodPressureSystolic, from: dayStart, to: dayEnd, unit: HKUnit.millimeterOfMercury()
         )
-        
+
         healthData.bloodPressureDiastolic = try await fetchLatestQuantity(
             type: .bloodPressureDiastolic, from: dayStart, to: dayEnd, unit: HKUnit.millimeterOfMercury()
         )
-        
+
         healthData.bloodGlucose = try await fetchLatestQuantity(
             type: .bloodGlucose, from: dayStart, to: dayEnd, unit: HKUnit(from: "mg/dL")
         )
-        
+
         healthData.basalBodyTemperature = try await fetchLatestQuantity(
             type: .basalBodyTemperature, from: dayStart, to: dayEnd, unit: .degreeCelsius()
         )
 
-        // Fetch sleep summary (night before workout)
-        let sleepWindow = sleepSummaryWindow(for: workout)
+        let sleepWindow = sleepSummaryWindow(
+            startTime: healthData.workoutStartTime,
+            workoutDate: workoutDate
+        )
         healthData.sleepSummary = try await fetchSleepSummary(
             from: sleepWindow.start,
             to: sleepWindow.end
         )
 
-        // Daily activity totals
         healthData.dailyActiveEnergy = try await fetchQuantitySum(
             type: .activeEnergyBurned,
             from: dayStart,
@@ -327,7 +338,7 @@ extension HealthKitManager {
             to: dayEnd,
             unit: .kilocalorie()
         )
-        
+
         healthData.dietaryWater = try await fetchQuantitySum(
             type: .dietaryWater, from: dayStart, to: dayEnd, unit: .liter()
         )
@@ -343,7 +354,7 @@ extension HealthKitManager {
         healthData.dietaryFatTotal = try await fetchQuantitySum(
             type: .dietaryFatTotal, from: dayStart, to: dayEnd, unit: .gram()
         )
-        
+
         healthData.mindfulSessionDuration = try await fetchCategoryDurationSum(
             type: .mindfulSession, from: dayStart, to: dayEnd
         )
@@ -378,7 +389,6 @@ extension HealthKitManager {
             unit: .minute()
         )
 
-        // Cardio fitness metrics near workout day
         let vo2WindowStart = Calendar.current.date(byAdding: .day, value: -45, to: dayStart) ?? dayStart
         healthData.vo2Max = try await fetchLatestQuantity(
             type: .vo2Max,
@@ -400,8 +410,13 @@ extension HealthKitManager {
             to: dayEnd,
             unit: HKUnit(from: "count/min")
         )
+    }
 
-        // Fetch the best-matching Apple workout (with a relaxed fallback for timestamp drift).
+    private func populateAppleWorkoutMetrics(
+        _ healthData: inout WorkoutHealthData,
+        for workout: Workout,
+        candidates appleWorkoutCandidates: [HKWorkout]?
+    ) async throws {
         let matchedAppleWorkout: HKWorkout?
         if let appleWorkoutCandidates {
             matchedAppleWorkout = bestMatchingAppleWorkout(for: workout, candidates: appleWorkoutCandidates)
@@ -414,7 +429,6 @@ extension HealthKitManager {
             healthData.appleWorkoutDuration = appleWorkout.duration
             healthData.appleWorkoutUUID = appleWorkout.uuid
 
-            // Get additional metrics from Apple workout
             if let avgSpeed = appleWorkout.statistics(for: HKQuantityType(.runningSpeed))?.averageQuantity() {
                 healthData.avgSpeed = avgSpeed.doubleValue(for: HKUnit.meter().unitDivided(by: .second()))
             }
@@ -422,7 +436,6 @@ extension HealthKitManager {
                 healthData.avgPower = avgPower.doubleValue(for: .watt())
             }
 
-            // Capture the best workout location Apple Health exposes for this workout.
             do {
                 if let resolvedLocation = try await fetchWorkoutLocation(for: appleWorkout) {
                     healthData.workoutLocationLatitude = resolvedLocation.location.coordinate.latitude
@@ -437,16 +450,21 @@ extension HealthKitManager {
                 // Workout location is optional; don't fail the overall health sync.
             }
         }
+    }
 
-        // Store in local cache
+    private func cacheSyncedHealthData(
+        _ healthData: WorkoutHealthData,
+        workoutID: UUID,
+        persist: Bool
+    ) -> WorkoutHealthData {
+        var healthData = healthData
         healthData.captureRawSampleSummaries()
-        healthDataStore[workout.id] = healthData
+        healthDataStore[workoutID] = healthData
         if persist {
-            persistData(changedWorkoutIDs: [workout.id])
+            persistData(changedWorkoutIDs: [workoutID])
             lastSyncDate = Date()
             userDefaults.set(lastSyncDate, forKey: lastSyncKey)
         }
-
         return healthData
     }
 
@@ -589,7 +607,6 @@ extension HealthKitManager {
         return results
     }
 
-    // swiftlint:disable:next cyclomatic_complexity
     /// Best-effort workout-location hydration for recent workouts.
     /// Used by gym discovery so it can work even when locations weren't previously cached.
     func hydrateRouteStartLocationsForRecentWorkouts(
@@ -609,13 +626,7 @@ extension HealthKitManager {
             print("Workout route authorization unavailable during location hydration: \(error)")
         }
 
-        let sorted = workouts.sorted { $0.date > $1.date }
-        let targets = sorted
-            .prefix(maxWorkouts)
-            .filter { workout in
-                guard let cached = healthDataStore[workout.id] else { return true }
-                return cached.resolvedWorkoutLocationCoordinate == nil
-            }
+        let targets = recentLocationHydrationTargets(from: workouts, maxWorkouts: maxWorkouts)
 
         guard !targets.isEmpty else { return 0 }
 
@@ -640,60 +651,29 @@ extension HealthKitManager {
 
         for workout in targets {
             let cached = healthDataStore[workout.id]
-
-            let appleWorkout: HKWorkout?
-            if let appleUUID = cached?.appleWorkoutUUID, let exact = appleByUUID[appleUUID] {
-                appleWorkout = exact
-            } else {
-                appleWorkout = bestMatchingAppleWorkout(
-                    for: workout,
-                    candidates: appleWorkouts,
-                    strictStartDifferenceSeconds: 20 * 60,
-                    relaxedStartDifferenceSeconds: relaxedTolerance
-                )
-            }
+            let appleWorkout = matchingAppleWorkout(
+                for: workout,
+                cachedAppleWorkoutUUID: cached?.appleWorkoutUUID,
+                appleByUUID: appleByUUID,
+                appleWorkouts: appleWorkouts,
+                relaxedTolerance: relaxedTolerance
+            )
 
             guard let appleWorkout else { continue }
-
-            let appleUUID = appleWorkout.uuid
-            let resolvedLocation: ResolvedWorkoutLocation?
-            if let existing = locationByAppleUUID[appleUUID] {
-                resolvedLocation = existing
-            } else if appleUUIDsWithNoLocation.contains(appleUUID) {
-                resolvedLocation = nil
-            } else {
-                let fetched: ResolvedWorkoutLocation?
-                do {
-                    fetched = try await fetchWorkoutLocation(for: appleWorkout)
-                } catch {
-                    print("Failed to hydrate workout location for \(appleUUID): \(error)")
-                    fetched = nil
-                }
-                if let fetched {
-                    locationByAppleUUID[appleUUID] = fetched
-                } else {
-                    appleUUIDsWithNoLocation.insert(appleUUID)
-                }
-                resolvedLocation = fetched
-            }
+            let resolvedLocation = await resolveHydratedLocation(
+                for: appleWorkout,
+                locationByAppleUUID: &locationByAppleUUID,
+                appleUUIDsWithNoLocation: &appleUUIDsWithNoLocation
+            )
 
             guard let resolvedLocation else { continue }
 
-            var healthData = cached ?? WorkoutHealthData(
-                workoutId: workout.id,
-                workoutDate: workout.date,
-                workoutStartTime: workout.estimatedWindow(defaultMinutes: 60).start,
-                workoutEndTime: workout.estimatedWindow(defaultMinutes: 60).end
+            let healthData = hydratedHealthData(
+                for: workout,
+                cached: cached,
+                appleWorkout: appleWorkout,
+                resolvedLocation: resolvedLocation
             )
-            healthData.appleWorkoutUUID = appleWorkout.uuid
-            healthData.appleWorkoutType = appleWorkout.workoutActivityType.name
-            healthData.workoutLocationLatitude = resolvedLocation.location.coordinate.latitude
-            healthData.workoutLocationLongitude = resolvedLocation.location.coordinate.longitude
-            healthData.workoutLocationSource = resolvedLocation.source
-            if resolvedLocation.source == .route {
-                healthData.workoutRouteStartLatitude = resolvedLocation.location.coordinate.latitude
-                healthData.workoutRouteStartLongitude = resolvedLocation.location.coordinate.longitude
-            }
             healthDataStore[workout.id] = healthData
             updated += 1
             updatedWorkoutIDs.append(workout.id)
@@ -706,9 +686,100 @@ extension HealthKitManager {
         return updated
     }
 
+    private func recentLocationHydrationTargets(
+        from workouts: [Workout],
+        maxWorkouts: Int
+    ) -> [Workout] {
+        workouts
+            .sorted { $0.date > $1.date }
+            .prefix(maxWorkouts)
+            .filter { workout in
+                guard let cached = healthDataStore[workout.id] else { return true }
+                return cached.resolvedWorkoutLocationCoordinate == nil
+            }
+    }
+
+    private func matchingAppleWorkout(
+        for workout: Workout,
+        cachedAppleWorkoutUUID: UUID?,
+        appleByUUID: [UUID: HKWorkout],
+        appleWorkouts: [HKWorkout],
+        relaxedTolerance: TimeInterval
+    ) -> HKWorkout? {
+        if let cachedAppleWorkoutUUID, let exact = appleByUUID[cachedAppleWorkoutUUID] {
+            return exact
+        }
+
+        return bestMatchingAppleWorkout(
+            for: workout,
+            candidates: appleWorkouts,
+            strictStartDifferenceSeconds: 20 * 60,
+            relaxedStartDifferenceSeconds: relaxedTolerance
+        )
+    }
+
+    private func resolveHydratedLocation(
+        for appleWorkout: HKWorkout,
+        locationByAppleUUID: inout [UUID: ResolvedWorkoutLocation],
+        appleUUIDsWithNoLocation: inout Set<UUID>
+    ) async -> ResolvedWorkoutLocation? {
+        let appleUUID = appleWorkout.uuid
+        if let existing = locationByAppleUUID[appleUUID] {
+            return existing
+        }
+        if appleUUIDsWithNoLocation.contains(appleUUID) {
+            return nil
+        }
+
+        do {
+            let location = try await fetchWorkoutLocation(for: appleWorkout)
+            if let location {
+                locationByAppleUUID[appleUUID] = location
+            } else {
+                appleUUIDsWithNoLocation.insert(appleUUID)
+            }
+            return location
+        } catch {
+            print("Failed to hydrate workout location for \(appleUUID): \(error)")
+            appleUUIDsWithNoLocation.insert(appleUUID)
+            return nil
+        }
+    }
+
+    private func hydratedHealthData(
+        for workout: Workout,
+        cached: WorkoutHealthData?,
+        appleWorkout: HKWorkout,
+        resolvedLocation: ResolvedWorkoutLocation
+    ) -> WorkoutHealthData {
+        var healthData = cached ?? WorkoutHealthData(
+            workoutId: workout.id,
+            workoutDate: workout.date,
+            workoutStartTime: workout.estimatedWindow(defaultMinutes: 60).start,
+            workoutEndTime: workout.estimatedWindow(defaultMinutes: 60).end
+        )
+        healthData.appleWorkoutUUID = appleWorkout.uuid
+        healthData.appleWorkoutType = appleWorkout.workoutActivityType.name
+        healthData.workoutLocationLatitude = resolvedLocation.location.coordinate.latitude
+        healthData.workoutLocationLongitude = resolvedLocation.location.coordinate.longitude
+        healthData.workoutLocationSource = resolvedLocation.source
+        if resolvedLocation.source == .route {
+            healthData.workoutRouteStartLatitude = resolvedLocation.location.coordinate.latitude
+            healthData.workoutRouteStartLongitude = resolvedLocation.location.coordinate.longitude
+        }
+        return healthData
+    }
+
     private func calculateWorkoutWindow(_ workout: Workout) -> (Date, Date) {
         let window = workout.estimatedWindow(defaultMinutes: 60)
         return (window.start, window.end)
+    }
+
+    private func sleepSummaryWindow(startTime: Date, workoutDate: Date) -> (start: Date, end: Date) {
+        let dayStart = Calendar.current.startOfDay(for: workoutDate)
+        let sleepWindowEnd = startTime
+        let sleepWindowStart = Calendar.current.date(byAdding: .hour, value: -24, to: sleepWindowEnd) ?? dayStart
+        return (sleepWindowStart, sleepWindowEnd)
     }
 
     // Duration parsing lives on Workout (Models/WorkoutModels.swift).

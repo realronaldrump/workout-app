@@ -3,7 +3,7 @@ import SwiftUI
 
 /// Minimal per-workout annotation state.
 /// Intentionally excludes subjective check-ins (stress/caffeine/mood/soreness).
-struct WorkoutAnnotation: Identifiable, Codable {
+nonisolated struct WorkoutAnnotation: Identifiable, Codable {
     let workoutId: UUID
     var gymProfileId: UUID?
 
@@ -98,13 +98,13 @@ struct StreakRun: Identifiable, Hashable {
     }
 }
 
-enum SleepSourceSelectionMode: String, Codable {
+nonisolated enum SleepSourceSelectionMode: String, Codable {
     case automatic
     case preferred
     case fallback
 }
 
-struct SleepSummary: Codable {
+nonisolated struct SleepSummary: Codable {
     var totalSleep: TimeInterval
     var inBed: TimeInterval
     var stageDurations: [SleepStage: TimeInterval]
@@ -142,7 +142,7 @@ struct SleepSummary: Codable {
     }
 }
 
-struct SleepSourceOption: Identifiable, Hashable {
+nonisolated struct SleepSourceOption: Identifiable, Hashable {
     let key: String
     let name: String
     let bundleIdentifier: String?
@@ -150,7 +150,7 @@ struct SleepSourceOption: Identifiable, Hashable {
     var id: String { key }
 }
 
-enum SleepStage: String, Codable, CaseIterable {
+nonisolated enum SleepStage: String, Codable, CaseIterable {
     case awake
     case inBed
     case core

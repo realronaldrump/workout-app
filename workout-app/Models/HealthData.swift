@@ -1,7 +1,7 @@
 import CoreLocation
 import Foundation
 
-enum WorkoutLocationSource: String, Codable, Sendable {
+nonisolated enum WorkoutLocationSource: String, Codable, Sendable {
     case route
     case metadata
 }
@@ -9,7 +9,7 @@ enum WorkoutLocationSource: String, Codable, Sendable {
 // MARK: - Core Health Data Model
 
 /// Represents all health data synced from Apple Health for a specific workout window
-struct WorkoutHealthData: Identifiable, Codable {
+nonisolated struct WorkoutHealthData: Identifiable, Codable {
     let id: UUID
     let workoutId: UUID
     let workoutDate: Date
@@ -302,7 +302,7 @@ struct WorkoutHealthData: Identifiable, Codable {
 
 // MARK: - Sample Types
 
-struct HeartRateSample: Identifiable, Codable {
+nonisolated struct HeartRateSample: Identifiable, Codable {
     let id: UUID
     let timestamp: Date
     let value: Double // beats per minute
@@ -314,7 +314,7 @@ struct HeartRateSample: Identifiable, Codable {
     }
 }
 
-struct HRVSample: Identifiable, Codable {
+nonisolated struct HRVSample: Identifiable, Codable {
     let id: UUID
     let timestamp: Date
     let value: Double // SDNN in milliseconds
@@ -326,7 +326,7 @@ struct HRVSample: Identifiable, Codable {
     }
 }
 
-struct BloodOxygenSample: Identifiable, Codable {
+nonisolated struct BloodOxygenSample: Identifiable, Codable {
     let id: UUID
     let timestamp: Date
     let value: Double // percentage (0-100)
@@ -338,7 +338,7 @@ struct BloodOxygenSample: Identifiable, Codable {
     }
 }
 
-struct RespiratoryRateSample: Identifiable, Codable {
+nonisolated struct RespiratoryRateSample: Identifiable, Codable {
     let id: UUID
     let timestamp: Date
     let value: Double // breaths per minute

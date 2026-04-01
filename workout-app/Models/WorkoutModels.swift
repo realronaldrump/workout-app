@@ -1,6 +1,6 @@
 import Foundation
 
-struct WorkoutSet: Identifiable, Codable, Hashable {
+nonisolated struct WorkoutSet: Identifiable, Codable, Hashable {
     var id = UUID()
     let date: Date
     let workoutName: String
@@ -13,7 +13,7 @@ struct WorkoutSet: Identifiable, Codable, Hashable {
     let seconds: Double
 }
 
-struct Exercise: Identifiable, Hashable, Codable {
+nonisolated struct Exercise: Identifiable, Hashable, Codable {
     let id: UUID
     let name: String
     var sets: [WorkoutSet]
@@ -55,7 +55,7 @@ struct Exercise: Identifiable, Hashable, Codable {
     }
 }
 
-struct Workout: Identifiable, Hashable, Codable {
+nonisolated struct Workout: Identifiable, Hashable, Codable {
     let id: UUID
     let date: Date
     let name: String

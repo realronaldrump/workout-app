@@ -1,8 +1,8 @@
 import CoreData
 import Foundation
 
-final class AppDatabase {
-    nonisolated(unsafe) static let shared = AppDatabase()
+nonisolated final class AppDatabase: @unchecked Sendable {
+    static let shared = AppDatabase()
 
     private enum EntityName {
         static let importedWorkout = "ImportedWorkoutRecord"
@@ -16,15 +16,8 @@ final class AppDatabase {
     }
 
     private let container: NSPersistentContainer
-    private let encoder: JSONEncoder
-    private let decoder: JSONDecoder
 
-    nonisolated init(inMemory: Bool = false) {
-        encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-
+    init(inMemory: Bool = false) {
         let model = Self.makeModel()
         container = NSPersistentContainer(name: "WorkoutAppStore", managedObjectModel: model)
 
@@ -73,7 +66,7 @@ final class AppDatabase {
                 object.setValue(workout.id.uuidString, forKey: "workoutId")
                 object.setValue(workout.date, forKey: "workoutDate")
                 object.setValue(Date(), forKey: "updatedAt")
-                object.setValue(try self.encoder.encode(workout), forKey: "payload")
+                object.setValue(try Self.makeEncoder().encode(workout), forKey: "payload")
             }
         }
     }
@@ -104,7 +97,7 @@ final class AppDatabase {
             object.setValue(workout.id.uuidString, forKey: "workoutId")
             object.setValue(workout.startedAt, forKey: "workoutDate")
             object.setValue(workout.updatedAt, forKey: "updatedAt")
-            object.setValue(try self.encoder.encode(workout), forKey: "payload")
+            object.setValue(try Self.makeEncoder().encode(workout), forKey: "payload")
         }
     }
 
@@ -119,7 +112,7 @@ final class AppDatabase {
                 object.setValue(workout.id.uuidString, forKey: "workoutId")
                 object.setValue(workout.startedAt, forKey: "workoutDate")
                 object.setValue(workout.updatedAt, forKey: "updatedAt")
-                object.setValue(try self.encoder.encode(workout), forKey: "payload")
+                object.setValue(try Self.makeEncoder().encode(workout), forKey: "payload")
             }
         }
     }
@@ -248,7 +241,7 @@ final class AppDatabase {
                 object.setValue(entry.workoutId.uuidString, forKey: "workoutId")
                 object.setValue(entry.workoutDate, forKey: "workoutDate")
                 object.setValue(Date(), forKey: "updatedAt")
-                object.setValue(try self.encoder.encode(entry), forKey: "payload")
+                object.setValue(try Self.makeEncoder().encode(entry), forKey: "payload")
             }
         }
     }
@@ -288,7 +281,7 @@ final class AppDatabase {
                 )
                 object.setValue(entry.dayStart, forKey: "dayStart")
                 object.setValue(Date(), forKey: "updatedAt")
-                object.setValue(try self.encoder.encode(entry), forKey: "payload")
+                object.setValue(try Self.makeEncoder().encode(entry), forKey: "payload")
             }
         }
     }
@@ -347,7 +340,7 @@ final class AppDatabase {
                 )
                 object.setValue(gym.id.uuidString, forKey: "recordId")
                 object.setValue(Date(), forKey: "updatedAt")
-                object.setValue(try self.encoder.encode(gym), forKey: "payload")
+                object.setValue(try Self.makeEncoder().encode(gym), forKey: "payload")
             }
         }
     }
@@ -370,7 +363,7 @@ final class AppDatabase {
             let objects = try context.fetch(request)
             return try objects.compactMap { object in
                 guard let payload = object.value(forKey: "payload") as? Data else { return nil }
-                return try self.decoder.decode(T.self, from: payload)
+                return try Self.makeDecoder().decode(T.self, from: payload)
             }
         }
     }
@@ -474,12 +467,37 @@ final class AppDatabase {
         return model
     }
 
+    private nonisolated static func makeEncoder() -> JSONEncoder {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        return encoder
+    }
+
+    private nonisolated static func makeDecoder() -> JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return decoder
+    }
+
     private enum AttributeSpec {
         case string(String)
         case optionalString(String)
         case date(String)
         case dateKey(String)
         case binary(String)
+
+        var indexName: String? {
+            switch self {
+            case .string(let name):
+                return name
+            case .date(let name) where name == "workoutDate" || name == "updatedAt":
+                return name
+            case .dateKey(let name):
+                return name
+            case .optionalString, .date, .binary:
+                return nil
+            }
+        }
     }
 
     private nonisolated static func blobEntity(
@@ -498,7 +516,9 @@ final class AppDatabase {
         let entity = NSEntityDescription()
         entity.name = name
         entity.managedObjectClassName = NSStringFromClass(NSManagedObject.self)
-        entity.properties = attributes.map(Self.attribute)
+        let properties = attributes.map(Self.attribute)
+        entity.properties = properties
+        entity.indexes = Self.indexDescriptions(for: attributes, properties: properties)
         entity.uniquenessConstraints = [[uniqueKey]]
         return entity
     }
@@ -510,22 +530,18 @@ final class AppDatabase {
             attribute.name = name
             attribute.attributeType = .stringAttributeType
             attribute.isOptional = false
-            attribute.isIndexed = true
         case .optionalString(let name):
             attribute.name = name
             attribute.attributeType = .stringAttributeType
             attribute.isOptional = true
-            attribute.isIndexed = false
         case .date(let name):
             attribute.name = name
             attribute.attributeType = .dateAttributeType
             attribute.isOptional = false
-            attribute.isIndexed = name == "workoutDate" || name == "updatedAt"
         case .dateKey(let name):
             attribute.name = name
             attribute.attributeType = .dateAttributeType
             attribute.isOptional = false
-            attribute.isIndexed = true
         case .binary(let name):
             attribute.name = name
             attribute.attributeType = .binaryDataAttributeType
@@ -533,5 +549,20 @@ final class AppDatabase {
             attribute.allowsExternalBinaryDataStorage = true
         }
         return attribute
+    }
+
+    private nonisolated static func indexDescriptions(
+        for attributes: [AttributeSpec],
+        properties: [NSPropertyDescription]
+    ) -> [NSFetchIndexDescription] {
+        let indexedPropertyNames = attributes.compactMap { $0.indexName }
+        guard !indexedPropertyNames.isEmpty else { return [] }
+
+        let propertiesByName = Dictionary(uniqueKeysWithValues: properties.map { ($0.name, $0) })
+        return indexedPropertyNames.compactMap { propertyName -> NSFetchIndexDescription? in
+            guard let property = propertiesByName[propertyName] else { return nil }
+            let element = NSFetchIndexElementDescription(property: property, collationType: .binary)
+            return NSFetchIndexDescription(name: "\(propertyName)Index", elements: [element])
+        }
     }
 }

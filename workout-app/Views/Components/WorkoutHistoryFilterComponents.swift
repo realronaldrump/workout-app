@@ -8,6 +8,12 @@ enum HistoryFilterSheet: String, Identifiable {
     var id: String { rawValue }
 }
 
+enum HistorySummarySheet: String, Identifiable {
+    case locations
+
+    var id: String { rawValue }
+}
+
 enum HistoryDateWindow: CaseIterable, Hashable {
     case allTime
     case last30Days
@@ -151,8 +157,10 @@ struct HistorySummaryMetricTile: View {
     let title: String
     let value: String
     let tint: Color
+    var action: (() -> Void)? = nil
 
-    var body: some View {
+    @ViewBuilder
+    private var tileContent: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
             Text(title.uppercased())
                 .font(Theme.Typography.metricLabel)
@@ -176,6 +184,103 @@ struct HistorySummaryMetricTile: View {
             RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
                 .strokeBorder(tint.opacity(0.18), lineWidth: 1)
         )
+    }
+
+    var body: some View {
+        Group {
+            if let action {
+                Button(action: action) {
+                    tileContent
+                }
+                .buttonStyle(AppInteractionButtonStyle())
+            } else {
+                tileContent
+            }
+        }
+    }
+}
+
+struct HistoryLocationBreakdownItem: Identifiable, Hashable {
+    let option: HistoryLocationOption
+    let workoutCount: Int
+    let lastWorkoutDate: Date
+
+    var id: String { option.id }
+}
+
+struct HistoryLocationBreakdownSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let items: [HistoryLocationBreakdownItem]
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                AdaptiveBackground()
+
+                if items.isEmpty {
+                    ContentUnavailableView(
+                        "No locations in view",
+                        systemImage: "mappin.slash",
+                        description: Text("Adjust the current filters or date window to see location history here.")
+                    )
+                } else {
+                    List {
+                        ForEach(items) { item in
+                            HStack(alignment: .top, spacing: Theme.Spacing.md) {
+                                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                                    Text(item.option.title)
+                                        .font(Theme.Typography.bodyBold)
+                                        .foregroundStyle(Theme.Colors.textPrimary)
+
+                                    Text(workoutCountLabel(item.workoutCount))
+                                        .font(Theme.Typography.captionBold)
+                                        .foregroundStyle(Theme.Colors.accentSecondary)
+
+                                    if !item.option.subtitle.isEmpty {
+                                        Text(item.option.subtitle)
+                                            .font(Theme.Typography.caption)
+                                            .foregroundStyle(Theme.Colors.textSecondary)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                    }
+                                }
+
+                                Spacer(minLength: Theme.Spacing.sm)
+
+                                VStack(alignment: .trailing, spacing: Theme.Spacing.xs) {
+                                    Text("Last workout")
+                                        .font(Theme.Typography.metricLabel)
+                                        .foregroundStyle(Theme.Colors.textTertiary)
+
+                                    Text(item.lastWorkoutDate.formatted(.dateTime.month(.abbreviated).day().year()))
+                                        .font(Theme.Typography.captionBold)
+                                        .foregroundStyle(Theme.Colors.textPrimary)
+                                        .multilineTextAlignment(.trailing)
+                                }
+                            }
+                            .padding(.vertical, Theme.Spacing.xs)
+                            .listRowBackground(Theme.Colors.elevated)
+                            .listRowSeparatorTint(Theme.Colors.border)
+                        }
+                    }
+                    .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
+                }
+            }
+            .navigationTitle("Locations")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    AppToolbarButton(title: "Done", systemImage: "xmark", variant: .subtle) {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+
+    private func workoutCountLabel(_ count: Int) -> String {
+        "\(count) workout" + (count == 1 ? "" : "s")
     }
 }
 

@@ -195,4 +195,3 @@ private struct ExerciseTaggingRow: View {
         .softCard(elevation: 2)
     }
 }
-

@@ -1,6 +1,67 @@
 import SwiftUI
 import UIKit
 
+private enum ThemeTextWeight {
+    case regular
+    case medium
+    case semibold
+    case bold
+
+    var fontName: String {
+        switch self {
+        case .regular:
+            return "InstrumentSans-Regular"
+        case .medium:
+            return "InstrumentSans-Regular_Medium"
+        case .semibold:
+            return "InstrumentSans-Regular_SemiBold"
+        case .bold:
+            return "InstrumentSans-Regular_Bold"
+        }
+    }
+
+    var fallback: UIFont.Weight {
+        switch self {
+        case .regular:
+            return .regular
+        case .medium:
+            return .medium
+        case .semibold:
+            return .semibold
+        case .bold:
+            return .bold
+        }
+    }
+}
+
+private enum ThemeDisplayWeight {
+    case regular
+    case semibold
+    case bold
+
+    var fontName: String {
+        switch self {
+        case .regular:
+            return "Sora-Regular"
+        case .semibold:
+            return "Sora-Regular_SemiBold"
+        case .bold:
+            return "Sora-Regular_Bold"
+        }
+    }
+
+    var fallback: UIFont.Weight {
+        switch self {
+        case .regular:
+            return .regular
+        case .semibold:
+            return .semibold
+        case .bold:
+            return .bold
+        }
+    }
+}
+
 /// Centralized theme system — Warm Precision.
 /// Refined surfaces, layered shadows, two-family typography, generous radii.
 /// Premium athletic aesthetic with warmth and depth.
@@ -72,12 +133,15 @@ enum Theme {
             switch group {
             case .chest: return chest
             case .back: return back
+            case .traps: return shoulders
             case .shoulders: return shoulders
             case .biceps: return biceps
             case .triceps: return triceps
+            case .forearms: return biceps
             case .quads: return quads
             case .hamstrings: return hamstrings
             case .glutes: return glutes
+            case .adductors: return glutes
             case .calves: return calves
             case .core: return core
             case .cardio: return cardio
@@ -191,72 +255,11 @@ enum Theme {
     // MARK: - Typography
 
     enum Typography {
-        enum TextWeight {
-            case regular
-            case medium
-            case semibold
-            case bold
-
-            fileprivate var fontName: String {
-                switch self {
-                case .regular:
-                    return "InstrumentSans-Regular"
-                case .medium:
-                    return "InstrumentSans-Regular_Medium"
-                case .semibold:
-                    return "InstrumentSans-Regular_SemiBold"
-                case .bold:
-                    return "InstrumentSans-Regular_Bold"
-                }
-            }
-
-            fileprivate var fallback: UIFont.Weight {
-                switch self {
-                case .regular:
-                    return .regular
-                case .medium:
-                    return .medium
-                case .semibold:
-                    return .semibold
-                case .bold:
-                    return .bold
-                }
-            }
-        }
-
-        enum DisplayWeight {
-            case regular
-            case semibold
-            case bold
-
-            fileprivate var fontName: String {
-                switch self {
-                case .regular:
-                    return "Sora-Regular"
-                case .semibold:
-                    return "Sora-Regular_SemiBold"
-                case .bold:
-                    return "Sora-Regular_Bold"
-                }
-            }
-
-            fileprivate var fallback: UIFont.Weight {
-                switch self {
-                case .regular:
-                    return .regular
-                case .semibold:
-                    return .semibold
-                case .bold:
-                    return .bold
-                }
-            }
-        }
-
-        private static func text(_ weight: TextWeight, size: CGFloat, relativeTo style: Font.TextStyle) -> Font {
+        private static func text(_ weight: ThemeTextWeight, size: CGFloat, relativeTo style: Font.TextStyle) -> Font {
             Font.custom(weight.fontName, size: size, relativeTo: style)
         }
 
-        private static func display(_ weight: DisplayWeight, size: CGFloat, relativeTo style: Font.TextStyle) -> Font {
+        private static func display(_ weight: ThemeDisplayWeight, size: CGFloat, relativeTo style: Font.TextStyle) -> Font {
             Font.custom(weight.fontName, size: size, relativeTo: style)
         }
 
@@ -270,11 +273,11 @@ enum Theme {
             return UIFontMetrics(forTextStyle: textStyle).scaledFont(for: base)
         }
 
-        static func uiKitText(size: CGFloat, textStyle: UIFont.TextStyle, weight: TextWeight) -> UIFont {
+        fileprivate static func uiKitText(size: CGFloat, textStyle: UIFont.TextStyle, weight: ThemeTextWeight) -> UIFont {
             scaledUIFont(named: weight.fontName, size: size, textStyle: textStyle, fallbackWeight: weight.fallback)
         }
 
-        static func uiKitDisplay(size: CGFloat, textStyle: UIFont.TextStyle, weight: DisplayWeight) -> UIFont {
+        fileprivate static func uiKitDisplay(size: CGFloat, textStyle: UIFont.TextStyle, weight: ThemeDisplayWeight) -> UIFont {
             scaledUIFont(named: weight.fontName, size: size, textStyle: textStyle, fallbackWeight: weight.fallback)
         }
 
@@ -791,12 +794,15 @@ extension MuscleGroup {
         switch self {
         case .chest: return Theme.Colors.chest
         case .back: return Theme.Colors.back
+        case .traps: return Theme.Colors.shoulders
         case .shoulders: return Theme.Colors.shoulders
         case .biceps: return Theme.Colors.biceps
         case .triceps: return Theme.Colors.triceps
+        case .forearms: return Theme.Colors.biceps
         case .quads: return Theme.Colors.quads
         case .hamstrings: return Theme.Colors.hamstrings
         case .glutes: return Theme.Colors.glutes
+        case .adductors: return Theme.Colors.glutes
         case .calves: return Theme.Colors.calves
         case .core: return Theme.Colors.core
         case .cardio: return Theme.Colors.cardio
@@ -807,12 +813,15 @@ extension MuscleGroup {
         switch self {
         case .chest: return "heart.fill"
         case .back: return "arrow.left.and.right"
+        case .traps: return "mountain.2.fill"
         case .shoulders: return "figure.arms.open"
         case .biceps: return "figure.strengthtraining.functional"
         case .triceps: return "arrow.up.right"
+        case .forearms: return "hand.raised.fill"
         case .quads: return "figure.walk"
         case .hamstrings: return "figure.run"
         case .glutes: return "figure.cooldown"
+        case .adductors: return "figure.flexibility"
         case .calves: return "shoeprints.fill"
         case .core: return "circle.hexagongrid"
         case .cardio: return "heart.text.square"
@@ -823,12 +832,15 @@ extension MuscleGroup {
         switch self {
         case .chest: return "Chest"
         case .back: return "Back"
+        case .traps: return "Traps"
         case .shoulders: return "Shoulders"
         case .biceps: return "Biceps"
         case .triceps: return "Triceps"
+        case .forearms: return "Forearms"
         case .quads: return "Quads"
         case .hamstrings: return "Hams"
         case .glutes: return "Glutes"
+        case .adductors: return "Adductors"
         case .calves: return "Calves"
         case .core: return "Core"
         case .cardio: return "Cardio"

@@ -1,6 +1,6 @@
 import Foundation
 
-struct DailyHealthData: Identifiable, Codable {
+nonisolated struct DailyHealthData: Identifiable, Codable {
     let dayStart: Date
 
     var steps: Double?

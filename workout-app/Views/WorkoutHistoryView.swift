@@ -10,6 +10,7 @@ struct WorkoutHistoryView: View {
     @State private var selectedExercises: Set<HistoryExerciseOption>?
     @State private var selectedDurationBands: Set<HistoryDurationBand>?
     @State private var presentedFilterSheet: HistoryFilterSheet?
+    @State private var presentedSummarySheet: HistorySummarySheet?
 
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var annotationsManager: WorkoutAnnotationsManager
@@ -18,6 +19,7 @@ struct WorkoutHistoryView: View {
     var body: some View {
         let filteredWorkouts = filteredWorkouts()
         let groupedWorkouts = buildGroupedWorkouts(from: filteredWorkouts)
+        let locationBreakdownItems = buildLocationBreakdownItems(from: filteredWorkouts)
 
         ZStack {
             AdaptiveBackground()
@@ -27,7 +29,10 @@ struct WorkoutHistoryView: View {
                     header
 
                     if !workouts.isEmpty {
-                        resultsOverviewCard(filteredWorkouts: filteredWorkouts)
+                        resultsOverviewCard(
+                            filteredWorkouts: filteredWorkouts,
+                            locationBreakdownItems: locationBreakdownItems
+                        )
                         filterDeck
                     }
 
@@ -66,6 +71,14 @@ struct WorkoutHistoryView: View {
                     itemTitle: { $0.title },
                     itemSubtitle: durationSubtitle(for:)
                 )
+            }
+        }
+        .sheet(item: $presentedSummarySheet) { sheet in
+            switch sheet {
+            case .locations:
+                HistoryLocationBreakdownSheet(items: locationBreakdownItems)
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
             }
         }
         .onAppear(perform: sanitizeSelections)
@@ -136,7 +149,10 @@ struct WorkoutHistoryView: View {
         .glassBackground(cornerRadius: Theme.CornerRadius.xlarge, elevation: 1)
     }
 
-    private func resultsOverviewCard(filteredWorkouts: [Workout]) -> some View {
+    private func resultsOverviewCard(
+        filteredWorkouts: [Workout],
+        locationBreakdownItems: [HistoryLocationBreakdownItem]
+    ) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             HStack(alignment: .top, spacing: Theme.Spacing.md) {
                 VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
@@ -187,7 +203,11 @@ struct WorkoutHistoryView: View {
                 HistorySummaryMetricTile(
                     title: "Locations",
                     value: "\(uniqueLocationCount(in: filteredWorkouts))",
-                    tint: Theme.Colors.accentSecondary
+                    tint: Theme.Colors.accentSecondary,
+                    action: {
+                        Haptics.selection()
+                        presentedSummarySheet = .locations
+                    }
                 )
 
                 HistorySummaryMetricTile(
@@ -632,6 +652,32 @@ struct WorkoutHistoryView: View {
 
     private func uniqueLocationCount(in workouts: [Workout]) -> Int {
         Set(workouts.map { locationOption(for: $0).id }).count
+    }
+
+    private func buildLocationBreakdownItems(from workouts: [Workout]) -> [HistoryLocationBreakdownItem] {
+        let grouped = Dictionary(grouping: workouts, by: locationOption(for:))
+
+        return grouped.compactMap { option, groupedWorkouts in
+            guard let lastWorkoutDate = groupedWorkouts.map(\.date).max() else { return nil }
+
+            return HistoryLocationBreakdownItem(
+                option: option,
+                workoutCount: groupedWorkouts.count,
+                lastWorkoutDate: lastWorkoutDate
+            )
+        }
+        .sorted { lhs, rhs in
+            if lhs.workoutCount != rhs.workoutCount {
+                return lhs.workoutCount > rhs.workoutCount
+            }
+            if lhs.lastWorkoutDate != rhs.lastWorkoutDate {
+                return lhs.lastWorkoutDate > rhs.lastWorkoutDate
+            }
+            if lhs.option.sortOrder != rhs.option.sortOrder {
+                return lhs.option.sortOrder < rhs.option.sortOrder
+            }
+            return lhs.option.title.localizedCaseInsensitiveCompare(rhs.option.title) == .orderedAscending
+        }
     }
 
     private func locationOption(for workout: Workout) -> HistoryLocationOption {

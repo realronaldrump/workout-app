@@ -1,6 +1,6 @@
 import Foundation
 
-struct LoggedWorkout: Codable, Identifiable, Hashable, Sendable {
+nonisolated struct LoggedWorkout: Codable, Identifiable, Hashable, Sendable {
     var id: UUID
     var startedAt: Date
     var endedAt: Date
@@ -34,7 +34,7 @@ struct LoggedWorkout: Codable, Identifiable, Hashable, Sendable {
     }
 }
 
-struct LoggedExercise: Codable, Identifiable, Hashable, Sendable {
+nonisolated struct LoggedExercise: Codable, Identifiable, Hashable, Sendable {
     var id: UUID
     var name: String
     var sets: [LoggedSet]
@@ -46,7 +46,7 @@ struct LoggedExercise: Codable, Identifiable, Hashable, Sendable {
     }
 }
 
-struct LoggedSet: Codable, Identifiable, Hashable, Sendable {
+nonisolated struct LoggedSet: Codable, Identifiable, Hashable, Sendable {
     var id: UUID
     var order: Int
     var weight: Double

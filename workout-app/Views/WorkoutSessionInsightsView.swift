@@ -213,7 +213,6 @@ struct WorkoutSessionInsightsView: View {
             }
         }
     }
-
 }
 
 private struct MetricStatPill: View {
@@ -234,5 +233,3 @@ private struct MetricStatPill: View {
         .softCard(elevation: 1)
     }
 }
-
-
