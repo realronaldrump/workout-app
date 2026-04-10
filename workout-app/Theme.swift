@@ -243,7 +243,7 @@ enum Theme {
         stacked.selected.iconColor = UIColors.accent
         stacked.selected.titleTextAttributes = [
             .foregroundColor: UIColors.accent,
-            .font: Typography.uiKitText(size: 11, textStyle: .caption2, weight: .medium)
+            .font: Typography.uiKitText(size: 11, textStyle: .caption2, weight: .bold)
         ]
 
         let tabBar = UITabBar.appearance()
@@ -400,9 +400,9 @@ enum Theme {
     // MARK: - Chart Heights
 
     enum ChartHeight {
-        static let compact: CGFloat = 120
-        static let standard: CGFloat = 200
-        static let expanded: CGFloat = 280
+        static let compact: CGFloat = 140
+        static let standard: CGFloat = 240
+        static let expanded: CGFloat = 300
     }
 
     // MARK: - Layout
@@ -759,6 +759,11 @@ extension View {
     func staggeredAppear(index: Int, baseDelay: Double = 0.05) -> some View {
         modifier(StaggeredAppearModifier(index: index, baseDelay: baseDelay))
     }
+
+    /// Adds a subtle swipe-hint chevron affordance to the trailing edge of a view.
+    func swipeHint(edge: HorizontalEdge = .trailing) -> some View {
+        modifier(SwipeHintModifier(edge: edge))
+    }
 }
 
 // MARK: - PR Marker View
@@ -845,5 +850,66 @@ extension MuscleGroup {
         case .core: return "Core"
         case .cardio: return "Cardio"
         }
+    }
+}
+
+// MARK: - Section Divider
+
+/// A subtle full-bleed divider for separating visual sections with breathing room.
+struct SectionDivider: View {
+    var tint: Color = Theme.Colors.border
+    var verticalPadding: CGFloat = Theme.Spacing.sm
+
+    var body: some View {
+        Rectangle()
+            .fill(tint.opacity(0.35))
+            .frame(height: 1)
+            .padding(.vertical, verticalPadding)
+    }
+}
+
+// MARK: - Swipe Hint Modifier
+
+struct SwipeHintModifier: ViewModifier {
+    let edge: HorizontalEdge
+    @State private var hintVisible = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content
+            .overlay(alignment: edge == .trailing ? .trailing : .leading) {
+                Image(systemName: edge == .trailing ? "chevron.right" : "chevron.left")
+                    .font(Theme.Typography.caption2Bold)
+                    .foregroundStyle(Theme.Colors.textTertiary.opacity(0.5))
+                    .padding(.horizontal, Theme.Spacing.xs)
+                    .opacity(hintVisible ? 1 : 0)
+                    .offset(x: hintVisible ? 0 : (edge == .trailing ? -4 : 4))
+                    .animation(reduceMotion ? .none : Theme.Animation.gentleSpring.repeatForever(autoreverses: true), value: hintVisible)
+            }
+            .onAppear {
+                if !reduceMotion {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                        hintVisible = true
+                    }
+                }
+            }
+    }
+}
+
+// MARK: - Inline Section Surface
+
+/// Alternating surface tint for visual rhythm between stacked full-bleed sections.
+struct InlineSectionSurface: ViewModifier {
+    var isAlternate: Bool = false
+
+    func body(content: Content) -> some View {
+        content
+            .padding(.horizontal, Theme.Spacing.lg)
+            .padding(.vertical, Theme.Spacing.lg)
+            .background(
+                isAlternate
+                    ? Theme.Colors.surfaceRaised
+                    : Color.clear
+            )
     }
 }

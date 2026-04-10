@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ExerciseRangeBreakdown: View {
+    let exerciseName: String
     let history: [(date: Date, sets: [WorkoutSet])]
 
     private struct RepRangeDescriptor {
@@ -160,7 +161,11 @@ struct ExerciseRangeBreakdown: View {
 
         var counts = Array(repeating: 0, count: intensityDescriptors.count)
         for set in allSets {
-            let intensity = set.weight / bestEstimatedOneRepMax
+            let intensity = ExerciseLoad.relativeIntensity(
+                weight: set.weight,
+                referenceWeight: bestEstimatedOneRepMax,
+                exerciseName: exerciseName
+            )
             if let index = intensityDescriptors.firstIndex(where: { $0.range.contains(intensity) }) {
                 counts[index] += 1
             }
@@ -216,13 +221,17 @@ struct ExerciseRangeBreakdown: View {
     }
 
     private var bestEstimatedOneRepMax: Double {
-        allSets.map { OneRepMax.estimate(weight: $0.weight, reps: $0.reps) }.max() ?? 0
+        OneRepMax.bestEstimate(in: allSets, exerciseName: exerciseName)
     }
 
     private var averageIntensity: Double? {
         guard bestEstimatedOneRepMax > 0, !allSets.isEmpty else { return nil }
         let total = allSets.reduce(0.0) { partial, set in
-            partial + (set.weight / bestEstimatedOneRepMax)
+            partial + ExerciseLoad.relativeIntensity(
+                weight: set.weight,
+                referenceWeight: bestEstimatedOneRepMax,
+                exerciseName: exerciseName
+            )
         }
         return total / Double(allSets.count)
     }

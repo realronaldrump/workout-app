@@ -20,15 +20,15 @@ struct ActiveSessionBar: View {
                     HStack(spacing: Theme.Spacing.md) {
                         ZStack {
                             Circle()
-                                .fill(Theme.Colors.accent.opacity(0.2))
+                                .fill(Theme.Colors.accentSecondary.opacity(0.2))
                                 .frame(width: 32, height: 32)
                                 .scaleEffect(pulseScale)
 
                             Image(systemName: "bolt.fill")
                                 .font(Theme.Typography.captionBold)
-                                .foregroundStyle(Theme.Colors.accent)
+                                .foregroundStyle(Theme.Colors.accentSecondary)
                                 .frame(width: 32, height: 32)
-                                .background(Theme.Colors.accentTint)
+                                .background(Theme.Colors.accentSecondary.opacity(0.12))
                                 .clipShape(Circle())
                         }
 
@@ -48,7 +48,7 @@ struct ActiveSessionBar: View {
 
                         Text("Resume")
                             .font(Theme.Typography.subheadlineStrong)
-                            .foregroundStyle(Theme.Colors.accent)
+                            .foregroundStyle(Theme.Colors.accentSecondary)
 
                         Image(systemName: "chevron.up")
                             .font(Theme.Typography.captionBold)

@@ -88,6 +88,7 @@ class InsightsEngine: ObservableObject {
         let exerciseGroups = Dictionary(grouping: allExercises) { $0.name }
 
         for (exerciseName, _) in exerciseGroups {
+            let isAssisted = ExerciseLoad.isAssistedExercise(exerciseName)
             // Re-implement simplified getExerciseHistory logic here to avoid actor isolation issues or dependency
             // OR ensure getExerciseHistory is nonisolated/safe.
             // Better to implement local logic using the snapshot.
@@ -105,58 +106,74 @@ class InsightsEngine: ObservableObject {
 
             // Find all-time max weight
             let allSets = history.flatMap { $0.sets }
-            guard let maxWeightSet = allSets.max(by: { $0.weight < $1.weight }) else { continue }
+            guard let maxWeightSet = ExerciseLoad.bestWeight(in: allSets.map(\.weight), exerciseName: exerciseName) else {
+                continue
+            }
 
             // Check if the PR was set recently
             if let recentSession = history.last,
                recentSession.date >= oneWeekAgo,
-               recentSession.sets.contains(where: { $0.weight == maxWeightSet.weight }) {
+               recentSession.sets.contains(where: { $0.weight == maxWeightSet }) {
 
                 // Calculate improvement from previous best
-                let previousMax = history.dropLast().flatMap { $0.sets }.map { $0.weight }.max() ?? 0
-                let improvement = maxWeightSet.weight - previousMax
+                let previousBest = ExerciseLoad.bestWeight(
+                    in: history.dropLast().flatMap { $0.sets }.map(\.weight),
+                    exerciseName: exerciseName
+                ) ?? 0
+                let improvement = ExerciseLoad.progressDelta(
+                    current: maxWeightSet,
+                    previous: previousBest,
+                    exerciseName: exerciseName
+                )
 
                 if improvement > 0 {
+                    let weightLabel = ExerciseLoad.formatWeight(maxWeightSet, exerciseName: exerciseName)
                     prInsights.append(Insight(
                         id: UUID(),
                         type: .personalRecord,
                         title: "PR",
-                        message: "\(exerciseName) \(Int(maxWeightSet.weight)) lbs | delta +\(Int(improvement))",
+                        message: "\(exerciseName) \(weightLabel) | delta \(ExerciseLoad.signedWeightDeltaLabel(improvement, exerciseName: exerciseName))",
                         exerciseName: exerciseName,
                         date: recentSession.date,
                         priority: 10,
                         actionLabel: "Trend",
-                        metric: maxWeightSet.weight
+                        metric: ExerciseLoad.comparisonValue(for: maxWeightSet, exerciseName: exerciseName)
                     ))
                 }
             }
 
             // Check for estimated 1RM PRs
             let best1RMs = history.map { session -> (date: Date, orm: Double) in
-                let bestSet = session.sets.max {
-                    self.calculateOneRepMax(weight: $0.weight, reps: $0.reps) <
-                    self.calculateOneRepMax(weight: $1.weight, reps: $1.reps)
-                }
-                let orm = bestSet.map { self.calculateOneRepMax(weight: $0.weight, reps: $0.reps) } ?? 0
+                let orm = OneRepMax.bestEstimate(in: session.sets, exerciseName: exerciseName)
                 return (date: session.date, orm: orm)
             }
 
             if let latestORM = best1RMs.last,
                latestORM.date >= oneWeekAgo,
-               let previousBest = best1RMs.dropLast().max(by: { $0.orm < $1.orm }),
-               latestORM.orm > previousBest.orm {
+               let previousBest = best1RMs.dropLast().max(by: { lhs, rhs in
+                   ExerciseLoad.comparisonValue(for: lhs.orm, exerciseName: exerciseName) <
+                   ExerciseLoad.comparisonValue(for: rhs.orm, exerciseName: exerciseName)
+               }) {
 
-                let improvement = latestORM.orm - previousBest.orm
+                let improvement = ExerciseLoad.progressDelta(
+                    current: latestORM.orm,
+                    previous: previousBest.orm,
+                    exerciseName: exerciseName
+                )
+                guard improvement > 0 else { continue }
                 prInsights.append(Insight(
                     id: UUID(),
                     type: .strengthGain,
-                    title: "1RM",
-                    message: "\(exerciseName) \(Int(latestORM.orm)) lbs | delta +\(Int(improvement))",
+                    title: isAssisted ? "Assist Score" : "1RM",
+                    message: """
+                    \(exerciseName) \(ExerciseLoad.formatWeight(latestORM.orm, exerciseName: exerciseName)) \
+                    | delta \(ExerciseLoad.signedWeightDeltaLabel(improvement, exerciseName: exerciseName))
+                    """,
                     exerciseName: exerciseName,
                     date: latestORM.date,
                     priority: 8,
                     actionLabel: "Trend",
-                    metric: latestORM.orm
+                    metric: ExerciseLoad.comparisonValue(for: latestORM.orm, exerciseName: exerciseName)
                 ))
             }
         }
@@ -214,13 +231,6 @@ class InsightsEngine: ObservableObject {
         return baselineInsights
     }
 
-    // MARK: - Helper Methods
-
-    private nonisolated func calculateOneRepMax(weight: Double, reps: Int) -> Double {
-        guard reps > 0 else { return weight }
-        return weight * (1 + 0.0333 * Double(reps))
-    }
-
     // MARK: - Progressive Overload Detection
 
     private nonisolated func detectProgressiveOverload(in workouts: [Workout]) -> [Insight] {
@@ -234,6 +244,7 @@ class InsightsEngine: ObservableObject {
         )
 
         for (name, dateExercises) in exerciseGroups {
+            guard !ExerciseLoad.isAssistedExercise(name) else { continue }
             let sorted = dateExercises.sorted { $0.0 < $1.0 }
             guard sorted.count >= 4 else { continue }
 

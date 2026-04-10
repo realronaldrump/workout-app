@@ -628,8 +628,13 @@ private struct HealthSummaryCard: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             HStack(spacing: Theme.Spacing.xs) {
                 Image(systemName: model.icon)
-                    .font(Theme.Typography.caption)
+                    .font(Theme.Iconography.medium)
                     .foregroundStyle(model.tint)
+                    .frame(width: 26, height: 26)
+                    .background(
+                        Circle()
+                            .fill(model.tint.opacity(Theme.Opacity.subtleFill))
+                    )
                 Text(model.title)
                     .font(Theme.Typography.metricLabel)
                     .foregroundStyle(Theme.Colors.textSecondary)
@@ -650,6 +655,14 @@ private struct HealthSummaryCard: View {
         .padding(Theme.Spacing.md)
         .frame(width: 160, alignment: .leading)
         .softCard(elevation: 1)
+        .overlay(alignment: .top) {
+            UnevenRoundedRectangle(
+                topLeadingRadius: Theme.CornerRadius.large,
+                topTrailingRadius: Theme.CornerRadius.large
+            )
+            .fill(model.tint)
+            .frame(height: 3)
+        }
     }
 }
 
@@ -662,7 +675,16 @@ private struct HealthCategoryCard: View {
                 Image(systemName: category.icon)
                     .font(Theme.Iconography.title3)
                     .foregroundStyle(category.tint)
+                    .frame(width: 40, height: 40)
+                    .background(
+                        RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                            .fill(category.tint.opacity(Theme.Opacity.subtleFill))
+                    )
                 Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(Theme.Typography.caption2Bold)
+                    .foregroundStyle(Theme.Colors.textTertiary)
             }
 
             Text(category.title)
@@ -695,37 +717,74 @@ private struct DailyTimelineRow: View {
         return HealthHubFormatters.mediumDate.string(from: day.dayStart)
     }
 
+    private var dayNumber: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "d"
+        return formatter.string(from: day.dayStart)
+    }
+
+    private var monthAbbrev: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM"
+        return formatter.string(from: day.dayStart).uppercased()
+    }
+
+    private var isToday: Bool {
+        Calendar.current.isDateInToday(day.dayStart)
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(Theme.Typography.subheadline)
-                        .foregroundStyle(Theme.Colors.textPrimary)
-                    Text(subtitle)
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                }
-
-                Spacer()
+        HStack(alignment: .top, spacing: Theme.Spacing.md) {
+            // Date badge
+            VStack(spacing: 1) {
+                Text(monthAbbrev)
+                    .font(Theme.Typography.microLabel)
+                    .foregroundStyle(isToday ? .white : Theme.Colors.textTertiary)
+                Text(dayNumber)
+                    .font(Theme.Typography.numberSmall)
+                    .foregroundStyle(isToday ? .white : Theme.Colors.textPrimary)
             }
+            .frame(width: 42, height: 42)
+            .background(
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                    .fill(isToday ? Theme.Colors.accent : Theme.Colors.accent.opacity(Theme.Opacity.subtleFill))
+            )
 
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: Theme.Spacing.md) {
-                    DailyTimelineStat(label: "Sleep", value: day.sleepSummary.map { String(format: "%.1f", $0.totalHours) } ?? "--", unit: "h")
-                    DailyTimelineStat(label: "Steps", value: day.steps.map { "\(Int($0))" } ?? "--", unit: "")
-                    DailyTimelineStat(label: "Energy", value: day.activeEnergy.map { "\(Int($0))" } ?? "--", unit: "cal")
-                    DailyTimelineStat(label: "Resting", value: day.restingHeartRate.map { "\(Int($0))" } ?? "--", unit: "bpm")
+            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                HStack(alignment: .firstTextBaseline) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(title)
+                            .font(Theme.Typography.subheadlineBold)
+                            .foregroundStyle(Theme.Colors.textPrimary)
+                        Text(subtitle)
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Colors.textSecondary)
+                    }
+
+                    Spacer()
+
+                    Image(systemName: "chevron.right")
+                        .font(Theme.Typography.caption2Bold)
+                        .foregroundStyle(Theme.Colors.textTertiary)
                 }
 
-                VStack(spacing: Theme.Spacing.sm) {
-                    HStack(spacing: Theme.Spacing.md) {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: Theme.Spacing.sm) {
                         DailyTimelineStat(label: "Sleep", value: day.sleepSummary.map { String(format: "%.1f", $0.totalHours) } ?? "--", unit: "h")
                         DailyTimelineStat(label: "Steps", value: day.steps.map { "\(Int($0))" } ?? "--", unit: "")
-                    }
-                    HStack(spacing: Theme.Spacing.md) {
                         DailyTimelineStat(label: "Energy", value: day.activeEnergy.map { "\(Int($0))" } ?? "--", unit: "cal")
                         DailyTimelineStat(label: "Resting", value: day.restingHeartRate.map { "\(Int($0))" } ?? "--", unit: "bpm")
+                    }
+
+                    VStack(spacing: Theme.Spacing.sm) {
+                        HStack(spacing: Theme.Spacing.sm) {
+                            DailyTimelineStat(label: "Sleep", value: day.sleepSummary.map { String(format: "%.1f", $0.totalHours) } ?? "--", unit: "h")
+                            DailyTimelineStat(label: "Steps", value: day.steps.map { "\(Int($0))" } ?? "--", unit: "")
+                        }
+                        HStack(spacing: Theme.Spacing.sm) {
+                            DailyTimelineStat(label: "Energy", value: day.activeEnergy.map { "\(Int($0))" } ?? "--", unit: "cal")
+                            DailyTimelineStat(label: "Resting", value: day.restingHeartRate.map { "\(Int($0))" } ?? "--", unit: "bpm")
+                        }
                     }
                 }
             }
@@ -762,11 +821,21 @@ private struct DailyTimelineStat: View {
     let value: String
     let unit: String
 
+    private var statColor: Color {
+        switch label {
+        case "Sleep": return Theme.Colors.accentTertiary
+        case "Steps": return Theme.Colors.success
+        case "Energy": return Theme.Colors.accentSecondary
+        case "Resting": return Theme.Colors.error
+        default: return Theme.Colors.accent
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(label)
                 .font(Theme.Typography.metricLabel)
-                .foregroundStyle(Theme.Colors.textTertiary)
+                .foregroundStyle(statColor)
                 .textCase(.uppercase)
                 .tracking(0.8)
             HStack(alignment: .lastTextBaseline, spacing: 2) {
@@ -781,5 +850,11 @@ private struct DailyTimelineStat: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 6)
+        .padding(.horizontal, Theme.Spacing.sm)
+        .background(
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                .fill(statColor.opacity(0.04))
+        )
     }
 }

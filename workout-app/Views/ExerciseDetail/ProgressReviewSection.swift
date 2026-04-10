@@ -8,6 +8,10 @@ struct ProgressReviewSection: View {
         review.comparison
     }
 
+    private var isAssisted: Bool {
+        ExerciseLoad.isAssistedExercise(review.exerciseName)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             HStack(alignment: .top) {
@@ -100,7 +104,7 @@ struct ProgressReviewSection: View {
             }
 
             HStack(spacing: Theme.Spacing.sm) {
-                metricPill(title: "Best", value: weightLabel(block.outcome.bestWeight))
+                metricPill(title: isAssisted ? "Least Assist" : "Best", value: weightLabel(block.outcome.bestWeight))
                 metricPill(title: "Sets", value: decimal(block.medianSetsPerSession))
                 metricPill(title: "Gym", value: resolvedGymLabel(for: block))
             }
@@ -204,7 +208,7 @@ struct ProgressReviewSection: View {
     }
 
     private func weightLabel(_ value: Double) -> String {
-        "\(Int(value.rounded())) lbs"
+        ExerciseLoad.formatWeight(value, exerciseName: review.exerciseName)
     }
 
     private func decimal(_ value: Double) -> String {
@@ -215,6 +219,10 @@ struct ProgressReviewSection: View {
 struct ProgressReviewView: View {
     let review: ExerciseProgressReview
     let gymNameProvider: (UUID?) -> String?
+
+    private var isAssisted: Bool {
+        ExerciseLoad.isAssistedExercise(review.exerciseName)
+    }
 
     var body: some View {
         ZStack {
@@ -371,7 +379,7 @@ struct ProgressReviewView: View {
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: Theme.Spacing.md) {
                 detailMetric(title: "Sessions / Week", value: "\(decimal(block.sessionsPerWeek))")
                 detailMetric(title: "Common Order", value: block.commonOrderBand.label)
-                detailMetric(title: "Best Weight", value: weightLabel(block.outcome.bestWeight))
+                detailMetric(title: isAssisted ? "Least Assistance" : "Best Weight", value: weightLabel(block.outcome.bestWeight))
                 detailMetric(title: "Median Sets", value: decimal(block.medianSetsPerSession))
                 detailMetric(title: "Median Volume", value: SharedFormatters.volumeWithUnit(block.medianVolumePerSession))
                 detailMetric(title: "Gym", value: resolvedGymLabel(for: block))
@@ -438,7 +446,7 @@ struct ProgressReviewView: View {
     }
 
     private func weightLabel(_ value: Double) -> String {
-        "\(Int(value.rounded())) lbs"
+        ExerciseLoad.formatWeight(value, exerciseName: review.exerciseName)
     }
 
     private func decimal(_ value: Double) -> String {

@@ -341,10 +341,13 @@ struct WeeklySummaryCarouselCard: View {
                     Text(bucket.rangeLabel)
                         .font(Theme.Typography.title3)
                         .foregroundColor(Theme.Colors.textPrimary)
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
                     Text(bucket.title)
                         .font(Theme.Typography.caption)
                         .foregroundColor(Theme.Colors.textSecondary)
                 }
+                .layoutPriority(1)
 
                 Spacer(minLength: 0)
 
@@ -396,14 +399,7 @@ struct WeeklySummaryCarouselCard: View {
                 }
                 .padding(Theme.Spacing.lg)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(
-                    RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
-                        .fill(Theme.Colors.surfaceRaised)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
-                        .strokeBorder(Theme.Colors.border.opacity(0.35), lineWidth: 1)
-                )
+                .softCard(elevation: 1)
             } else {
                 VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                     Text(bucket.sessionHeader)
@@ -427,7 +423,8 @@ struct WeeklySummaryCarouselCard: View {
             }
 
         }
-        .padding(.vertical, Theme.Spacing.sm)
+        .padding(.top, Theme.Spacing.md)
+        .padding(.bottom, Theme.Spacing.sm)
     }
 }
 
@@ -467,14 +464,7 @@ private struct WeeklySessionPreviewCard: View {
             .padding(.horizontal, Theme.Spacing.md)
             .padding(.vertical, Theme.Spacing.md)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
-                    .fill(Theme.Colors.surfaceRaised)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
-                    .strokeBorder(Theme.Colors.border.opacity(0.35), lineWidth: 1)
-            )
+            .softCard(elevation: 1)
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
@@ -511,14 +501,7 @@ struct SecondaryChip: View {
                 .padding(.horizontal, Theme.Spacing.lg)
                 .padding(.vertical, Theme.Spacing.md)
                 .frame(minHeight: 48)
-                .background(
-                    RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
-                        .fill(Theme.Colors.surfaceRaised)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
-                        .strokeBorder(Theme.Colors.border.opacity(0.4), lineWidth: 1)
-                )
+                .softCard(elevation: 1)
             }
         )
         .buttonStyle(.plain)

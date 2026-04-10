@@ -2,6 +2,7 @@ import SwiftUI
 import Charts
 
 struct ExerciseProgressChart: View {
+    let exerciseName: String
     let history: [(date: Date, sets: [WorkoutSet])]
     let chartType: ExerciseDetailView.ChartType
     var countLabel: String?
@@ -41,20 +42,27 @@ struct ExerciseProgressChart: View {
         case trend = "Trend"
     }
 
+    private var chartLabel: String {
+        switch chartType {
+        case .weight:
+            return ExerciseLoad.weightMetricTitle(for: exerciseName)
+        case .oneRepMax:
+            return ExerciseLoad.chartOneRepMaxTitle(for: exerciseName)
+        default:
+            return chartType.rawValue
+        }
+    }
+
     private var chartData: [ChartPoint] {
         history.compactMap { session in
             let value: Double
             switch chartType {
             case .weight:
-                value = session.sets.map { $0.weight }.max() ?? 0
+                value = ExerciseLoad.bestWeight(in: session.sets, exerciseName: exerciseName)
             case .volume:
                 value = session.sets.reduce(0) { $0 + ($1.weight * Double($1.reps)) }
             case .oneRepMax:
-                let bestSet = session.sets.max { set1, set2 in
-                    OneRepMax.estimate(weight: set1.weight, reps: set1.reps) <
-                    OneRepMax.estimate(weight: set2.weight, reps: set2.reps)
-                }
-                value = bestSet.map { OneRepMax.estimate(weight: $0.weight, reps: $0.reps) } ?? 0
+                value = OneRepMax.bestEstimate(in: session.sets, exerciseName: exerciseName)
             case .reps:
                 value = Double(session.sets.map { $0.reps }.max() ?? 0)
             case .distance:
@@ -105,7 +113,15 @@ struct ExerciseProgressChart: View {
     }
 
     private var prDate: Date? {
-        chartData.max(by: { $0.value < $1.value })?.date
+        switch chartType {
+        case .weight, .oneRepMax:
+            return chartData.max(by: { lhs, rhs in
+                ExerciseLoad.comparisonValue(for: lhs.value, exerciseName: exerciseName) <
+                ExerciseLoad.comparisonValue(for: rhs.value, exerciseName: exerciseName)
+            })?.date
+        default:
+            return chartData.max(by: { $0.value < $1.value })?.date
+        }
     }
 
     private var chartColor: Color {
@@ -330,7 +346,7 @@ struct ExerciseProgressChart: View {
             AreaMark(
                 x: .value("Date", dataPoint.date),
                 yStart: .value("Baseline", yDomain.lowerBound),
-                yEnd: .value(chartType.rawValue, isAppearing ? dataPoint.value : yDomain.lowerBound)
+                yEnd: .value(chartLabel, isAppearing ? dataPoint.value : yDomain.lowerBound)
             )
             .foregroundStyle(chartColor.opacity(0.15))
             .interpolationMethod(.catmullRom)
@@ -342,7 +358,7 @@ struct ExerciseProgressChart: View {
         ForEach(indexedChartData, id: \.id) { dataPoint in
             LineMark(
                 x: .value("Date", dataPoint.date),
-                y: .value(chartType.rawValue, isAppearing ? dataPoint.value : yDomain.lowerBound)
+                y: .value(chartLabel, isAppearing ? dataPoint.value : yDomain.lowerBound)
             )
             .foregroundStyle(by: .value("Series", ChartSeries.progress.rawValue))
             .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round))
@@ -356,7 +372,7 @@ struct ExerciseProgressChart: View {
             ForEach(indexedRollingAverageData, id: \.id) { dataPoint in
                 LineMark(
                     x: .value("Date", dataPoint.date),
-                    y: .value(chartType.rawValue, isAppearing ? dataPoint.value : yDomain.lowerBound)
+                    y: .value(chartLabel, isAppearing ? dataPoint.value : yDomain.lowerBound)
                 )
                 .foregroundStyle(by: .value("Series", ChartSeries.rollingAverage.rawValue))
                 .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, dash: [2, 3]))
@@ -370,7 +386,7 @@ struct ExerciseProgressChart: View {
         ForEach(indexedChartData, id: \.id) { dataPoint in
             PointMark(
                 x: .value("Date", dataPoint.date),
-                y: .value(chartType.rawValue, isAppearing ? dataPoint.value : yDomain.lowerBound)
+                y: .value(chartLabel, isAppearing ? dataPoint.value : yDomain.lowerBound)
             )
             .foregroundStyle(dataPoint.date == prDate ? Theme.Colors.gold : chartColor)
             .symbolSize(dataPoint.date == prDate ? 100 : 50)
@@ -416,7 +432,7 @@ struct ExerciseProgressChart: View {
     private func formatValue(_ value: Double) -> String {
         switch chartType {
         case .weight, .oneRepMax:
-            return "\(Int(value)) lbs"
+            return ExerciseLoad.formatWeight(value, exerciseName: exerciseName)
         case .volume:
             if value >= 1000 {
                 return String(format: "%.1fk lbs", value / 1000)

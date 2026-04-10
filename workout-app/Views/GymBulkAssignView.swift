@@ -83,10 +83,11 @@ struct GymBulkAssignView: View {
                     autoTagSection
 
                     if filteredWorkouts.isEmpty {
-                        ContentUnavailableView(
-                            "No workouts",
-                            systemImage: "magnifyingglass",
-                            description: Text("Adjust filters or date range.")
+                        EmptyStateCard(
+                            icon: "magnifyingglass",
+                            tint: Theme.Colors.textTertiary,
+                            title: "No Workouts",
+                            message: "Adjust filters or date range."
                         )
                         .padding(.top, Theme.Spacing.xl)
                     } else {

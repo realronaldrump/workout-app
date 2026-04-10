@@ -31,6 +31,10 @@ struct PersonalRecordsView: View {
         return metricManager.resolvedCardioConfiguration(for: exerciseName, historySets: sets)
     }
 
+    private var isAssisted: Bool {
+        ExerciseLoad.isAssistedExercise(exerciseName)
+    }
+
     private var records: [PersonalRecord] {
         if isCardio {
             let sessions: [CardioSessionMetrics] = history.map { session in
@@ -74,17 +78,22 @@ struct PersonalRecordsView: View {
 
             var records: [PersonalRecord] = []
 
-            if let maxWeightSet = allSets.max(by: { $0.set.weight < $1.set.weight }) {
+            let bestWeightSet = allSets.max(by: { lhs, rhs in
+                ExerciseLoad.comparisonValue(for: lhs.set.weight, exerciseName: exerciseName) <
+                ExerciseLoad.comparisonValue(for: rhs.set.weight, exerciseName: exerciseName)
+            })
+            if let bestWeightSet {
                 records.append(PersonalRecord(
-                    title: "Heaviest Weight",
-                    value: "\(Int(maxWeightSet.set.weight)) lbs × \(maxWeightSet.set.reps)",
-                    date: maxWeightSet.date
+                    title: ExerciseLoad.weightRecordTitle(for: exerciseName),
+                    value: "\(ExerciseLoad.formatWeight(bestWeightSet.set.weight, exerciseName: exerciseName)) × \(bestWeightSet.set.reps)",
+                    date: bestWeightSet.date
                 ))
             }
 
-            if let maxVolumeSet = allSets.max(by: {
-                $0.set.weight * Double($0.set.reps) < $1.set.weight * Double($1.set.reps)
-            }) {
+            if !isAssisted,
+               let maxVolumeSet = allSets.max(by: {
+                   $0.set.weight * Double($0.set.reps) < $1.set.weight * Double($1.set.reps)
+               }) {
                 let volume = maxVolumeSet.set.weight * Double(maxVolumeSet.set.reps)
                 records.append(PersonalRecord(title: "Max Volume (Single Set)", value: "\(Int(volume)) lbs", date: maxVolumeSet.date))
             }
@@ -92,17 +101,35 @@ struct PersonalRecordsView: View {
             if let maxRepsSet = allSets.max(by: { $0.set.reps < $1.set.reps }) {
                 records.append(PersonalRecord(
                     title: "Most Reps",
-                    value: "\(maxRepsSet.set.reps) @ \(Int(maxRepsSet.set.weight)) lbs",
+                    value: "\(maxRepsSet.set.reps) @ \(ExerciseLoad.formatWeight(maxRepsSet.set.weight, exerciseName: exerciseName))",
                     date: maxRepsSet.date
                 ))
             }
 
-            if let best1RM = allSets.max(by: {
-                OneRepMax.estimate(weight: $0.set.weight, reps: $0.set.reps) <
-                OneRepMax.estimate(weight: $1.set.weight, reps: $1.set.reps)
+            if let best1RM = allSets.max(by: { lhs, rhs in
+                OneRepMax.comparisonValue(
+                    weight: lhs.set.weight,
+                    reps: lhs.set.reps,
+                    exerciseName: exerciseName
+                ) <
+                OneRepMax.comparisonValue(
+                    weight: rhs.set.weight,
+                    reps: rhs.set.reps,
+                    exerciseName: exerciseName
+                )
             }) {
-                let orm = OneRepMax.estimate(weight: best1RM.set.weight, reps: best1RM.set.reps)
-                records.append(PersonalRecord(title: "Est. 1RM", value: "\(Int(orm)) lbs", date: best1RM.date))
+                let orm = OneRepMax.estimate(
+                    weight: best1RM.set.weight,
+                    reps: best1RM.set.reps,
+                    exerciseName: exerciseName
+                )
+                records.append(
+                    PersonalRecord(
+                        title: ExerciseLoad.oneRepMaxTitle(for: exerciseName),
+                        value: ExerciseLoad.formatWeight(orm, exerciseName: exerciseName),
+                        date: best1RM.date
+                    )
+                )
             }
 
             return records

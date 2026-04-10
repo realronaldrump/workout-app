@@ -35,6 +35,17 @@ struct ExerciseDetailView: View {
         case distance = "Distance"
         case duration = "Duration"
         case count = "Count"
+
+        func displayName(for exerciseName: String) -> String {
+            switch self {
+            case .weight:
+                return ExerciseLoad.weightMetricTitle(for: exerciseName)
+            case .oneRepMax:
+                return ExerciseLoad.chartOneRepMaxTitle(for: exerciseName)
+            default:
+                return rawValue
+            }
+        }
     }
 
     enum GymScope: Hashable {
@@ -100,6 +111,10 @@ struct ExerciseDetailView: View {
         metadataManager
             .resolvedTags(for: exerciseName)
             .contains(where: { $0.builtInGroup == .cardio })
+    }
+
+    private var isAssisted: Bool {
+        ExerciseLoad.isAssistedExercise(exerciseName)
     }
 
     private var cardioConfig: ResolvedCardioMetricConfiguration {
@@ -262,13 +277,14 @@ struct ExerciseDetailView: View {
                 progressChartPlaceholder(message: "No sessions in this range", showResetButton: selectedProgressRange != .allTime)
             } else {
                 ExerciseProgressChart(
+                    exerciseName: exerciseName,
                     history: progressChartHistory,
                     chartType: selectedChart,
                     countLabel: isCardio ? cardioConfig.countLabel : nil
                 )
             }
         }
-        .frame(height: 250)
+        .frame(height: Theme.ChartHeight.expanded)
         .padding(Theme.Spacing.lg)
         .softCard(elevation: 2)
     }
@@ -408,7 +424,7 @@ struct ExerciseDetailView: View {
             availableChartTypes = types.isEmpty ? [.duration] : types
         } else {
             cachedCardioConfig = nil
-            availableChartTypes = [.weight, .volume, .oneRepMax, .reps]
+            availableChartTypes = isAssisted ? [.weight, .oneRepMax, .reps] : [.weight, .volume, .oneRepMax, .reps]
         }
 
         if !availableChartTypes.contains(selectedChart) {
@@ -440,7 +456,7 @@ struct ExerciseDetailView: View {
 
                             Picker("Chart Type", selection: $selectedChart) {
                                 ForEach(availableChartTypes, id: \.self) { type in
-                                    Text(type.rawValue).tag(type)
+                                    Text(type.displayName(for: exerciseName)).tag(type)
                                 }
                             }
                             .pickerStyle(.menu)
@@ -458,7 +474,7 @@ struct ExerciseDetailView: View {
                     }
 
                     if !isCardio {
-                        ExerciseRangeBreakdown(history: scopedHistory)
+                        ExerciseRangeBreakdown(exerciseName: exerciseName, history: scopedHistory)
                     }
 
                     if !exerciseInsights.isEmpty {

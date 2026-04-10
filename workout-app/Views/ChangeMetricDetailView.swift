@@ -633,7 +633,7 @@ struct ChangeMetricDetailView: View {
                 .chartPlotStyle { plotArea in
                     plotArea.clipped()
                 }
-                .frame(height: 220)
+                .frame(height: Theme.ChartHeight.expanded)
                 .padding(Theme.Spacing.lg)
                 .softCard(elevation: 2)
             }

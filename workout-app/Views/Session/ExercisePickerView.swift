@@ -78,10 +78,11 @@ struct ExercisePickerView: View {
                             }
                         } else {
                             if filteredExercises.isEmpty {
-                                ContentUnavailableView(
-                                    "No matches",
-                                    systemImage: "magnifyingglass",
-                                    description: Text("Create a new exercise or adjust your search.")
+                                EmptyStateCard(
+                                    icon: "magnifyingglass",
+                                    tint: Theme.Colors.textTertiary,
+                                    title: "No Matches",
+                                    message: "Create a new exercise or adjust your search."
                                 )
                                 .padding(.top, Theme.Spacing.xl)
                             } else {

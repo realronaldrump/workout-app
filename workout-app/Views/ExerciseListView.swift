@@ -108,10 +108,11 @@ struct ExerciseListView: View {
                         }
 
                         if cachedExercises.isEmpty {
-                            ContentUnavailableView(
-                                "No matches",
-                                systemImage: "magnifyingglass",
-                                description: Text("Try a different exercise name.")
+                            EmptyStateCard(
+                                icon: "magnifyingglass",
+                                tint: Theme.Colors.textTertiary,
+                                title: "No Matches",
+                                message: "Try a different exercise name."
                             )
                             .padding(.top, Theme.Spacing.xl)
                         } else {
@@ -340,7 +341,7 @@ struct ExerciseRowView: View {
     }
 
     private func formatWeight(_ weight: Double) -> String {
-        return "\(Int(weight)) lbs"
+        ExerciseLoad.formatWeight(weight, exerciseName: name)
     }
 
     private func relativeDateString(for date: Date) -> String {

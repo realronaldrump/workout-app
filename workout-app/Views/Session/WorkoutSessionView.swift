@@ -74,10 +74,11 @@ struct WorkoutSessionView: View {
                                     .tracking(1.0)
 
                                 if session.exercises.isEmpty {
-                                    ContentUnavailableView(
-                                        "No exercises yet",
-                                        systemImage: "plus.circle",
-                                        description: Text("Add your first exercise to start logging sets.")
+                                    EmptyStateCard(
+                                        icon: "plus.circle",
+                                        tint: Theme.Colors.accent,
+                                        title: "No Exercises Yet",
+                                        message: "Add your first exercise to start logging sets."
                                     )
                                     .padding(.top, Theme.Spacing.sm)
                                 } else {
@@ -126,10 +127,11 @@ struct WorkoutSessionView: View {
                         .padding(Theme.Spacing.xl)
                     }
                 } else {
-                    ContentUnavailableView(
-                        "No active session",
-                        systemImage: "bolt.slash",
-                        description: Text("Start a session from Home to begin logging.")
+                    EmptyStateCard(
+                        icon: "bolt.slash",
+                        tint: Theme.Colors.textTertiary,
+                        title: "No Active Session",
+                        message: "Start a session from Home to begin logging."
                     )
                     .padding(.horizontal, Theme.Spacing.xl)
                 }
@@ -466,7 +468,7 @@ struct WorkoutSessionView: View {
                 initialSetPrefill: SetPrefill(weight: rec.suggestedWeight, reps: midReps)
             )
         }
-        Haptics.selection()
+        Haptics.added()
     }
 
     private func headerCard(_ session: ActiveWorkoutSession) -> some View {
@@ -585,7 +587,7 @@ struct WorkoutSessionView: View {
                     }
                 }
 
-                Haptics.notify(.success)
+                Haptics.workoutFinished()
                 finishDidSave = true
                 // Brief delay so the success overlay is visible before sheet dismisses
                 try? await Task.sleep(nanoseconds: 900_000_000)
@@ -832,7 +834,7 @@ private struct SessionExerciseCard: View {
                     } else {
                         sessionManager.addSet(exerciseId: exercise.id)
                     }
-                    Haptics.selection()
+                    Haptics.added()
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "plus")
@@ -963,8 +965,12 @@ private struct SessionSetRow: View {
                 Button {
                     commitImmediately()
                     switch sessionManager.toggleSetComplete(exerciseId: exerciseId, setId: set.id) {
-                    case .toggled:
-                        Haptics.selection()
+                    case .toggled(let isCompleted):
+                        if isCompleted {
+                            Haptics.setComplete()
+                        } else {
+                            Haptics.selection()
+                        }
                     case .invalid(let message):
                         completionValidationMessage = message
                         Haptics.notify(.warning)

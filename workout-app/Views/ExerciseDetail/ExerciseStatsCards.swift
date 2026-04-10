@@ -11,7 +11,6 @@ struct ExerciseStatsCards: View {
     private struct StatsSummary {
         let totalSets: Int
         let maxWeight: Double
-        let maxVolume: Double
         let avgReps: Double
     }
 
@@ -36,19 +35,18 @@ struct ExerciseStatsCards: View {
         return metricManager.resolvedCardioConfiguration(for: exerciseName, historySets: sets)
     }
 
+    private var isAssisted: Bool {
+        ExerciseLoad.isAssistedExercise(exerciseName)
+    }
+
     private var stats: StatsSummary {
         let allSets = history.flatMap { $0.sets }
-        let maxWeight = allSets.map { $0.weight }.max() ?? 0
-        let volumes = history.map { session in
-            session.sets.reduce(0) { $0 + ($1.weight * Double($1.reps)) }
-        }
-        let maxVolume = volumes.max() ?? 0
+        let maxWeight = ExerciseLoad.bestWeight(in: allSets, exerciseName: exerciseName)
         let avgReps = allSets.isEmpty ? 0 : Double(allSets.reduce(0) { $0 + $1.reps }) / Double(allSets.count)
 
         return StatsSummary(
             totalSets: allSets.count,
             maxWeight: maxWeight,
-            maxVolume: maxVolume,
             avgReps: avgReps
         )
     }
@@ -172,19 +170,11 @@ struct ExerciseStatsCards: View {
                 )
 
                 StatCard(
-                    title: "Max Weight",
-                    value: "\(Int(stats.maxWeight)) lbs",
+                    title: ExerciseLoad.weightMetricTitle(for: exerciseName),
+                    value: ExerciseLoad.formatWeight(stats.maxWeight, exerciseName: exerciseName),
                     icon: "scalemass.fill",
                     color: Theme.Colors.accentSecondary,
                     onTap: { selectedStat = .maxWeight }
-                )
-
-                StatCard(
-                    title: "Max Volume",
-                    value: SharedFormatters.volumeWithUnit(stats.maxVolume),
-                    icon: "chart.bar.fill",
-                    color: Theme.Colors.success,
-                    onTap: { selectedStat = .maxVolume }
                 )
 
                 StatCard(
@@ -194,6 +184,20 @@ struct ExerciseStatsCards: View {
                     color: Theme.Colors.accentTertiary,
                     onTap: { selectedStat = .avgReps }
                 )
+
+                if !isAssisted {
+                    StatCard(
+                        title: "Max Volume",
+                        value: SharedFormatters.volumeWithUnit(
+                            history.map { session in
+                                session.sets.reduce(0) { $0 + ($1.weight * Double($1.reps)) }
+                            }.max() ?? 0
+                        ),
+                        icon: "chart.bar.fill",
+                        color: Theme.Colors.success,
+                        onTap: { selectedStat = .maxVolume }
+                    )
+                }
             }
         }
         .navigationDestination(item: $selectedStat) { kind in

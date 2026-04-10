@@ -128,6 +128,7 @@ struct MainTabView: View {
             )
         }
         .onChange(of: selectedTab) { _, newValue in
+            Haptics.toggle()
             AppAnalytics.shared.track(
                 AnalyticsSignal.tabSelected,
                 payload: ["Navigation.tab": newValue.rawValue]

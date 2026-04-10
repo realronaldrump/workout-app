@@ -154,7 +154,7 @@ struct ConsistencyDetailView: View {
                     }
                 }
                 .chartXAxis(.hidden)
-                .frame(height: 120)
+                .frame(height: Theme.ChartHeight.compact)
             }
 
             LazyVGrid(

@@ -564,7 +564,7 @@ private enum WorkoutVariantAnalyzer {
             let baselineValues = baselineGroup.compactMap { $0.exerciseEstimatedMaxes[exerciseName] }
             guard let comparison = groupMetricComparison(
                 kind: .exerciseEstimatedMax,
-                label: "\(exerciseName) e1RM",
+                label: ExerciseLoad.isAssistedExercise(exerciseName) ? "\(exerciseName) strength score" : "\(exerciseName) e1RM",
                 exerciseName: exerciseName,
                 variantValues: variantValues,
                 baselineValues: baselineValues
@@ -599,10 +599,10 @@ private enum WorkoutVariantAnalyzer {
 
         let variantAverage = average(variantValues)
         let baselineAverage = average(baselineValues)
-        guard baselineAverage > 0 else { return nil }
+        guard abs(baselineAverage) > 0.0001 else { return nil }
 
         let deltaAbsolute = variantAverage - baselineAverage
-        let deltaPercent = (deltaAbsolute / baselineAverage) * 100
+        let deltaPercent = (deltaAbsolute / abs(baselineAverage)) * 100
         guard isMeaningful(kind: kind, deltaAbsolute: deltaAbsolute, deltaPercent: deltaPercent) else {
             return nil
         }
@@ -672,12 +672,12 @@ private enum WorkoutVariantAnalyzer {
 
         var exerciseEstimatedMaxes: [String: Double] = [:]
         for exercise in workout.exercises {
-            let estimated = exercise.sets
-                .filter { $0.weight > 0 && $0.reps > 0 }
-                .map { estimateOneRepMax(weight: $0.weight, reps: $0.reps) }
-                .max()
-            if let estimated, estimated > 0 {
-                exerciseEstimatedMaxes[exercise.name] = estimated
+            let estimated = OneRepMax.bestEstimate(in: exercise.sets, exerciseName: exercise.name)
+            if estimated > 0 {
+                exerciseEstimatedMaxes[exercise.name] = ExerciseLoad.comparisonValue(
+                    for: estimated,
+                    exerciseName: exercise.name
+                )
             }
         }
 
@@ -794,11 +794,6 @@ private enum WorkoutVariantAnalyzer {
     private nonisolated static func mostCommonExerciseName(in snapshots: [Snapshot]) -> String? {
         let counts = snapshots.flatMap { $0.exerciseNames.map { ($0, 1) } }
         return frequencyMap(counts).max(by: { $0.value < $1.value })?.key
-    }
-
-    private nonisolated static func estimateOneRepMax(weight: Double, reps: Int) -> Double {
-        guard reps > 0 else { return weight }
-        return weight * (1 + 0.0333 * Double(reps))
     }
 
     private nonisolated static func average(_ values: [Double]) -> Double {

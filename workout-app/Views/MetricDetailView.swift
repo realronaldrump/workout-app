@@ -523,7 +523,7 @@ struct MetricDetailView: View {
                 .chartPlotStyle { plotArea in
                     plotArea.clipped()
                 }
-                .frame(height: 190)
+                .frame(height: Theme.ChartHeight.standard)
             }
         }
         .padding(Theme.Spacing.md)
@@ -602,7 +602,7 @@ struct MetricDetailView: View {
                 .chartPlotStyle { plotArea in
                     plotArea.clipped()
                 }
-                .frame(height: 220)
+                .frame(height: Theme.ChartHeight.expanded)
             }
         }
         .padding(Theme.Spacing.md)

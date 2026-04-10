@@ -257,9 +257,16 @@ class WorkoutDataManager: ObservableObject {
 
         // Calculate strongest exercise
         let strongestExercise = exerciseGroups
-            .map { (name: $0.key, maxWeight: $0.value.map { $0.maxWeight }.max() ?? 0) }
-            .max { $0.maxWeight < $1.maxWeight }
-            .map { (name: $0.name, weight: $0.maxWeight) }
+            .compactMap { name, exercises -> (name: String, weight: Double, score: Double)? in
+                let allWeights = exercises.flatMap { $0.sets.map(\.weight) }
+                guard let bestWeight = ExerciseLoad.bestWeight(in: allWeights, exerciseName: name) else {
+                    return nil
+                }
+                let score = ExerciseLoad.comparisonValue(for: bestWeight, exerciseName: name)
+                return (name: name, weight: bestWeight, score: score)
+            }
+            .max { $0.score < $1.score }
+            .map { (name: $0.name, weight: $0.weight) }
 
         // Calculate improvement
         var mostImprovedExercise: (name: String, improvement: Double)?
@@ -271,9 +278,10 @@ class WorkoutDataManager: ObservableObject {
             }
 
             if let first = sortedByDate.first?.oneRepMax,
-               let last = sortedByDate.last?.oneRepMax,
-               first > 0 {
-                let improvement = ((last - first) / first) * 100
+               let last = sortedByDate.last?.oneRepMax {
+                let firstScore = ExerciseLoad.comparisonValue(for: first, exerciseName: exerciseName)
+                let lastScore = ExerciseLoad.comparisonValue(for: last, exerciseName: exerciseName)
+                let improvement = ExerciseLoad.performancePercentChange(current: lastScore, previous: firstScore)
                 if let current = mostImprovedExercise {
                     if improvement > current.improvement {
                         mostImprovedExercise = (name: exerciseName, improvement: improvement)
@@ -487,10 +495,22 @@ class WorkoutDataManager: ObservableObject {
 
                 var accumulator = summaryByExercise[exercise.name] ?? ExerciseStatsAccumulator()
                 accumulator.totalVolume += exercise.totalVolume
-                accumulator.maxWeight = max(accumulator.maxWeight, exercise.maxWeight)
+                if let currentBest = accumulator.maxWeight {
+                    if ExerciseLoad.isBetter(exercise.maxWeight, than: currentBest, exerciseName: exercise.name) {
+                        accumulator.maxWeight = exercise.maxWeight
+                    }
+                } else {
+                    accumulator.maxWeight = exercise.maxWeight
+                }
                 accumulator.frequency += 1
                 accumulator.lastPerformed = max(accumulator.lastPerformed ?? workout.date, workout.date)
-                accumulator.oneRepMax = max(accumulator.oneRepMax, exercise.oneRepMax)
+                if let currentBest = accumulator.oneRepMax {
+                    if ExerciseLoad.isBetter(exercise.oneRepMax, than: currentBest, exerciseName: exercise.name) {
+                        accumulator.oneRepMax = exercise.oneRepMax
+                    }
+                } else {
+                    accumulator.oneRepMax = exercise.oneRepMax
+                }
                 summaryByExercise[exercise.name] = accumulator
 
                 let trimmedName = exercise.name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -515,10 +535,10 @@ class WorkoutDataManager: ObservableObject {
                 name: name,
                 stats: ExerciseStats(
                     totalVolume: accumulator.totalVolume,
-                    maxWeight: accumulator.maxWeight,
+                    maxWeight: accumulator.maxWeight ?? 0,
                     frequency: accumulator.frequency,
                     lastPerformed: accumulator.lastPerformed,
-                    oneRepMax: accumulator.oneRepMax
+                    oneRepMax: accumulator.oneRepMax ?? 0
                 )
             )
         }
@@ -532,10 +552,10 @@ class WorkoutDataManager: ObservableObject {
 private extension WorkoutDataManager {
     struct ExerciseStatsAccumulator {
         var totalVolume: Double = 0
-        var maxWeight: Double = 0
+        var maxWeight: Double?
         var frequency: Int = 0
         var lastPerformed: Date?
-        var oneRepMax: Double = 0
+        var oneRepMax: Double?
     }
 
     struct ImportedWorkoutBuildResult {

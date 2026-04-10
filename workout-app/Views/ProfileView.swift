@@ -127,7 +127,7 @@ struct ProfileView: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             SectionLabel(text: "Preferences")
 
-            VStack(spacing: 1) {
+            VStack(spacing: 0) {
                 NavigationLink(destination: FeatureGuidesView()) {
                     ProfileLinkRow(
                         icon: "book.fill",
@@ -138,7 +138,7 @@ struct ProfileView: View {
                 }
                 .buttonStyle(PlainButtonStyle())
 
-                Divider().padding(.leading, 50)
+                Divider().padding(.leading, 62)
 
                 NavigationLink(destination: GymProfilesView()) {
                     ProfileLinkRow(
@@ -150,7 +150,7 @@ struct ProfileView: View {
                 }
                 .buttonStyle(PlainButtonStyle())
 
-                Divider().padding(.leading, 50)
+                Divider().padding(.leading, 62)
 
                 NavigationLink(destination: ExerciseTaggingView(dataManager: dataManager)) {
                     ProfileLinkRow(
@@ -162,7 +162,7 @@ struct ProfileView: View {
                 }
                 .buttonStyle(PlainButtonStyle())
 
-                Divider().padding(.leading, 50)
+                Divider().padding(.leading, 62)
 
                 NavigationLink(
                     destination: SettingsView(
@@ -180,6 +180,7 @@ struct ProfileView: View {
                 }
                 .buttonStyle(PlainButtonStyle())
             }
+            .softCard(elevation: 1)
         }
     }
 
@@ -275,8 +276,8 @@ private struct ProfileLinkRow: View {
                 .font(Theme.Typography.caption2Bold)
                 .foregroundStyle(Theme.Colors.textTertiary)
         }
-        .padding(Theme.Spacing.lg)
-        .softCard(elevation: 1)
+        .padding(.horizontal, Theme.Spacing.lg)
+        .padding(.vertical, Theme.Spacing.md)
     }
 }
 

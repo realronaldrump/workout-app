@@ -505,7 +505,7 @@ struct CalendarHeatmap: View {
                 }
             }
         }
-        .frame(height: 120) // Fixed height for the horizontal container
+        .frame(height: Theme.ChartHeight.compact) // Fixed height for the horizontal container
 
         // Legend
         HStack(spacing: 8) {

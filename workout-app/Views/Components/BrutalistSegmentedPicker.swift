@@ -16,7 +16,7 @@ struct BrutalistSegmentedPicker<SelectionValue: Hashable>: View {
                 Button {
                     guard selection != option.value else { return }
                     selection = option.value
-                    Haptics.selection()
+                    Haptics.toggle()
                 } label: {
                     Text(option.label)
                         .font(Theme.Typography.metricLabel)

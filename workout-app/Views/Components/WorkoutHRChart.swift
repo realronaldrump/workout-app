@@ -44,7 +44,7 @@ struct WorkoutHRChart: View {
             .chartPlotStyle { plotArea in
                 plotArea.clipped()
             }
-            .frame(height: 200)
+            .frame(height: Theme.ChartHeight.standard)
         }
     }
 }

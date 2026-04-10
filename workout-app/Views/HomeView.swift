@@ -61,7 +61,7 @@ struct HomeView: View {
             AdaptiveBackground()
 
             ScrollView(showsIndicators: false) {
-                LazyVStack(alignment: .leading, spacing: Theme.Spacing.xxl) {
+                LazyVStack(alignment: .leading, spacing: Theme.Spacing.lg) {
                     headerSection
 
                     quickActionsSection
@@ -107,10 +107,19 @@ struct HomeView: View {
                                 .padding(.horizontal, Theme.Spacing.lg)
                         }
 
+                        SectionDivider()
+                            .padding(.horizontal, Theme.Spacing.lg)
+
                         weeklySummarySection
                             .padding(.horizontal, Theme.Spacing.lg)
 
+                        SectionDivider()
+                            .padding(.horizontal, Theme.Spacing.lg)
+
                         consistencySection
+                            .padding(.horizontal, Theme.Spacing.lg)
+
+                        SectionDivider()
                             .padding(.horizontal, Theme.Spacing.lg)
 
                         // Change metrics — always visible (not collapsed)
@@ -119,9 +128,15 @@ struct HomeView: View {
 
                         // Highlights — always visible (not collapsed)
                         if !cachedHomeHighlights.isEmpty {
+                            SectionDivider()
+                                .padding(.horizontal, Theme.Spacing.lg)
+
                             HighlightsSectionView(title: "Highlights", items: cachedHomeHighlights)
                                 .padding(.horizontal, Theme.Spacing.lg)
                         }
+
+                        SectionDivider()
+                            .padding(.horizontal, Theme.Spacing.lg)
 
                         // Data Insights (frequency snapshots)
                         DataInsightCards(
@@ -132,15 +147,21 @@ struct HomeView: View {
                         )
                         .padding(.horizontal, Theme.Spacing.lg)
 
+                        SectionDivider()
+                            .padding(.horizontal, Theme.Spacing.lg)
+
                         // Recent workouts with repeat capability
                         recentWorkoutsSection
+                            .padding(.horizontal, Theme.Spacing.lg)
+
+                        SectionDivider()
                             .padding(.horizontal, Theme.Spacing.lg)
 
                         exploreSection
                             .padding(.horizontal, Theme.Spacing.lg)
                     }
                 }
-                .padding(.vertical, Theme.Spacing.xxl)
+                .padding(.vertical, Theme.Spacing.xl)
                 .frame(maxWidth: maxContentWidth, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .center)
             }
@@ -409,9 +430,9 @@ struct HomeView: View {
                         HStack(spacing: Theme.Spacing.md) {
                             Image(systemName: "arrow.counterclockwise")
                                 .font(Theme.Typography.footnoteBold)
-                                .foregroundStyle(Theme.Colors.accent)
+                                .foregroundStyle(Theme.Colors.accentSecondary)
                                 .frame(width: 32, height: 32)
-                                .background(Theme.Colors.accent.opacity(0.1))
+                                .background(Theme.Colors.accentSecondary.opacity(0.1))
                                 .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("Repeat Last")
@@ -507,6 +528,7 @@ struct HomeView: View {
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
                 .frame(height: weeklySummaryCardHeight(for: selectedBucket))
+                .swipeHint()
                 .animation(Theme.Animation.gentleSpring, value: selectedWeekBucketStart)
 
                 if buckets.count > 1 {
@@ -1051,13 +1073,13 @@ struct HomeView: View {
 
     private func weeklySummaryCardHeight(for bucket: HomeWeekBucket) -> CGFloat {
         let visibleSessionCount = min(bucket.workouts.count, 3)
-        let populatedBaseHeight: CGFloat = 188
-        let emptyWeekHeight: CGFloat = 224
+        let populatedBaseHeight: CGFloat = 194
+        let emptyWeekHeight: CGFloat = 230
         let sessionCardHeight: CGFloat = 76
         let baseHeight: CGFloat = bucket.workouts.isEmpty
             ? emptyWeekHeight
             : populatedBaseHeight + (CGFloat(visibleSessionCount) * sessionCardHeight)
-        return min(baseHeight, 416)
+        return min(baseHeight, 422)
     }
 
     private func visibleWeekIndicatorBuckets(from buckets: [HomeWeekBucket]) -> [HomeWeekBucket] {

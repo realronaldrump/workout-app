@@ -92,10 +92,11 @@ struct GymProfilesView: View {
                     discoverySection
 
                     if gymProfilesManager.gyms.isEmpty {
-                        ContentUnavailableView(
-                            "No gyms yet",
-                            systemImage: "mappin.and.ellipse",
-                            description: Text("Add your first gym profile.")
+                        EmptyStateCard(
+                            icon: "mappin.and.ellipse",
+                            tint: Theme.Colors.accentSecondary,
+                            title: "No Gyms Yet",
+                            message: "Add your first gym profile to track where you train."
                         )
                         .padding(.top, Theme.Spacing.xl)
                     } else {

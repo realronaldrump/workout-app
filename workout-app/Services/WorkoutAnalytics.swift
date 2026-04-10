@@ -195,7 +195,9 @@ struct WorkoutAnalytics {
         let allExercises = workouts.flatMap { $0.exercises }
         let best1RMByExercise = Dictionary(grouping: allExercises, by: { $0.name }).compactMapValues { exercises in
             let sets = exercises.flatMap { $0.sets }
-            return sets.map { estimateOneRepMax(weight: $0.weight, reps: $0.reps) }.max()
+            let exerciseName = exercises.first?.name ?? ""
+            let best = OneRepMax.bestEstimate(in: sets, exerciseName: exerciseName)
+            return best > 0 ? best : nil
         }
 
         let allSets = workouts.flatMap { $0.exercises }.flatMap { $0.sets }
@@ -212,7 +214,11 @@ struct WorkoutAnalytics {
 
         for set in allSets {
             guard let reference = best1RMByExercise[set.exerciseName], reference > 0 else { continue }
-            let intensity = set.weight / reference
+            let intensity = ExerciseLoad.relativeIntensity(
+                weight: set.weight,
+                referenceWeight: reference,
+                exerciseName: set.exerciseName
+            )
             if let index = zones.firstIndex(where: { $0.range.contains(intensity) }) {
                 zoneCounts[index] += 1
                 total += 1
@@ -377,11 +383,6 @@ struct WorkoutAnalytics {
 
     // MARK: - Helpers
 
-    private static func estimateOneRepMax(weight: Double, reps: Int) -> Double {
-        guard reps > 0 else { return weight }
-        return weight * (1 + 0.0333 * Double(reps))
-    }
-
     private static func progressDeltaByExercise(current: [Workout], previous: [Workout]) -> [String: Double] {
         let exercises = Set(current.flatMap { $0.exercises.map { $0.name } } + previous.flatMap { $0.exercises.map { $0.name } })
         var deltas: [String: Double] = [:]
@@ -455,8 +456,11 @@ struct WorkoutAnalytics {
         let sets = workouts.flatMap { workout in
             workout.exercises.filter { $0.name == exerciseName }.flatMap { $0.sets }
         }
-        // Use best lifted weight for progress comparisons so the metric is easy to understand.
-        return sets.map(\.weight).max() ?? 0
+        guard let bestWeight = ExerciseLoad.bestWeight(in: sets.map(\.weight), exerciseName: exerciseName) else {
+            return 0
+        }
+        // Return a comparison-space value so assisted lifts improve when assistance decreases.
+        return ExerciseLoad.comparisonValue(for: bestWeight, exerciseName: exerciseName)
     }
 
     private static func previousExerciseValue(_ workouts: [Workout], exerciseName: String) -> Double {
@@ -477,8 +481,7 @@ struct WorkoutAnalytics {
     }
 
     private static func percentChange(current: Double, previous: Double) -> Double {
-        guard previous != 0 else { return 0 }
-        return (current - previous) / previous * 100
+        ExerciseLoad.performancePercentChange(current: current, previous: previous)
     }
 
     private static func average(_ values: [Double]) -> Double {

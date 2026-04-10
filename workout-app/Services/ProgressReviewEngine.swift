@@ -173,7 +173,7 @@ enum ProgressReviewEngine {
 
         let outcome = ExerciseBlockOutcome(
             lane: lane,
-            bestWeight: laneSets.map(\.weight).max() ?? 0,
+            bestWeight: ExerciseLoad.bestWeight(in: laneSets, exerciseName: first.sets.first?.exerciseName ?? ""),
             repeatedLoad: nil,
             repsAtRepeatedLoad: nil,
             laneVolume: laneSets.reduce(0) { $0 + ($1.weight * Double($1.reps)) }
@@ -207,6 +207,7 @@ enum ProgressReviewEngine {
         current: DerivedBlock,
         exerciseName: String
     ) -> ExerciseBlockComparison {
+        let isAssisted = ExerciseLoad.isAssistedExercise(exerciseName)
         guard previous.block.dominantRepLane == current.block.dominantRepLane else {
             return ExerciseBlockComparison(
                 previousBlockId: previous.block.id,
@@ -222,27 +223,34 @@ enum ProgressReviewEngine {
         }
 
         let lane = current.block.dominantRepLane
-        let bestWeightDelta = current.block.outcome.bestWeight - previous.block.outcome.bestWeight
+        let bestWeightDelta = ExerciseLoad.progressDelta(
+            current: current.block.outcome.bestWeight,
+            previous: previous.block.outcome.bestWeight,
+            exerciseName: exerciseName
+        )
         if abs(bestWeightDelta) > 0.01 {
             return ExerciseBlockComparison(
                 previousBlockId: previous.block.id,
                 currentBlockId: current.block.id,
                 outcomeStatus: status(for: bestWeightDelta),
                 primaryMetricKind: .bestWeight,
-                primaryObservedMetric: "Best weight in \(lane.label)",
+                primaryObservedMetric: "\(isAssisted ? "Least assistance" : "Best weight") in \(lane.label)",
                 delta: bestWeightDelta,
-                deltaLabel: signedWeightLabel(bestWeightDelta),
+                deltaLabel: signedWeightLabel(bestWeightDelta, exerciseName: exerciseName),
                 summary: summary(
                     exerciseName: exerciseName,
                     lane: lane,
                     status: status(for: bestWeightDelta),
-                    metricDescription: "best weight moved \(signedWeightLabel(bestWeightDelta).lowercased())"
+                    metricDescription: "\(isAssisted ? "least assistance moved" : "best weight moved") \(signedWeightLabel(bestWeightDelta, exerciseName: exerciseName).lowercased())"
                 ),
                 supportingEvidence: supportingEvidence(previous: previous, current: current).prefix(3).map { $0.0 }
             )
         }
 
-        let sharedLoad = Set(previous.loadRepCounts.keys).intersection(current.loadRepCounts.keys).max()
+        let sharedLoad = ExerciseLoad.bestWeight(
+            in: Array(Set(previous.loadRepCounts.keys).intersection(current.loadRepCounts.keys)),
+            exerciseName: exerciseName
+        )
         if let sharedLoad {
             let previousReps = previous.loadRepCounts[sharedLoad] ?? 0
             let currentReps = current.loadRepCounts[sharedLoad] ?? 0
@@ -252,7 +260,7 @@ enum ProgressReviewEngine {
                 currentBlockId: current.block.id,
                 outcomeStatus: status(for: Double(repDelta)),
                 primaryMetricKind: .repsAtRepeatedLoad,
-                primaryObservedMetric: "Total reps at \(Int(sharedLoad.rounded())) lbs in \(lane.label)",
+                primaryObservedMetric: "Total reps at \(ExerciseLoad.formatWeight(sharedLoad, exerciseName: exerciseName)) in \(lane.label)",
                 delta: Double(repDelta),
                 deltaLabel: signedRepLabel(repDelta),
                 summary: summary(
@@ -450,10 +458,8 @@ enum ProgressReviewEngine {
         return block.commonGymId == nil ? "unassigned" : "a different assigned gym"
     }
 
-    private static func signedWeightLabel(_ value: Double) -> String {
-        let rounded = Int(value.rounded())
-        if rounded == 0 { return "0 lbs" }
-        return rounded > 0 ? "+\(rounded) lbs" : "\(rounded) lbs"
+    private static func signedWeightLabel(_ value: Double, exerciseName: String) -> String {
+        ExerciseLoad.signedWeightDeltaLabel(value, exerciseName: exerciseName)
     }
 
     private static func signedRepLabel(_ value: Int) -> String {

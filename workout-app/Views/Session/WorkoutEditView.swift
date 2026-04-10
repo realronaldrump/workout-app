@@ -114,10 +114,11 @@ struct WorkoutEditView: View {
                         .padding(Theme.Spacing.xl)
                     }
                 } else {
-                    ContentUnavailableView(
-                        "Workout not found",
-                        systemImage: "exclamationmark.triangle.fill",
-                        description: Text("This workout may have been deleted.")
+                    EmptyStateCard(
+                        icon: "exclamationmark.triangle.fill",
+                        tint: Theme.Colors.error,
+                        title: "Workout Not Found",
+                        message: "This workout may have been deleted."
                     )
                     .padding(.horizontal, Theme.Spacing.xl)
                 }

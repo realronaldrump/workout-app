@@ -895,16 +895,28 @@ private struct MetricSummaryCard: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             HStack {
                 Image(systemName: model.icon)
+                    .font(Theme.Iconography.medium)
                     .foregroundStyle(model.tint)
+                    .frame(width: 30, height: 30)
+                    .background(
+                        RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                            .fill(model.tint.opacity(Theme.Opacity.subtleFill))
+                    )
                 Spacer()
                 if let delta = model.delta {
                     HStack(spacing: 4) {
                         Image(systemName: delta.isPositive ? "arrow.up" : "arrow.down")
                             .font(Theme.Typography.caption2)
                         Text(delta.text)
-                            .font(Theme.Typography.caption)
+                            .font(Theme.Typography.captionBold)
                     }
                     .foregroundStyle(delta.isGood ? Theme.Colors.success : Theme.Colors.error)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(
+                        Capsule()
+                            .fill((delta.isGood ? Theme.Colors.success : Theme.Colors.error).opacity(Theme.Opacity.subtleFill))
+                    )
                 }
             }
 
@@ -971,6 +983,17 @@ private struct TrendCard: View {
         return "From \(formatCompact(start.value)) on \(startDateText) to \(formatCompact(end.value)) on \(endDateText). \(valueContext)"
     }
 
+    private var sparklineYDomain: ClosedRange<Double> {
+        guard let lo = minValue, let hi = maxValue else { return 0...1 }
+        if lo == hi {
+            let pad = max(abs(lo) * 0.05, 1)
+            return max(0, lo - pad)...(hi + pad)
+        }
+        let span = hi - lo
+        let padding = span * 0.12
+        return max(0, lo - padding)...(hi + padding)
+    }
+
     var body: some View {
         MetricTileButton(chevronPlacement: .bottomTrailing, action: onTap) {
             VStack(alignment: .leading, spacing: Theme.Spacing.md) {
@@ -987,6 +1010,12 @@ private struct TrendCard: View {
                     Text(value)
                         .font(Theme.Typography.title3)
                         .foregroundStyle(Theme.Colors.textPrimary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(
+                            Capsule()
+                                .fill(color.opacity(Theme.Opacity.subtleFill))
+                        )
                 }
 
                 Chart(points) { point in
@@ -997,6 +1026,7 @@ private struct TrendCard: View {
                     .foregroundStyle(color)
                     .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round))
                 }
+                .chartYScale(domain: sparklineYDomain)
                 .chartYAxis(.hidden)
                 .chartXAxis(.hidden)
                 .chartPlotStyle { plotArea in

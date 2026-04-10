@@ -6,6 +6,10 @@ struct ExerciseStatDetailView: View {
     let exerciseName: String
     let history: [(date: Date, sets: [WorkoutSet])]
 
+    private var isAssisted: Bool {
+        ExerciseLoad.isAssistedExercise(exerciseName)
+    }
+
     private struct SessionPoint: Identifiable {
         let id: Int
         let date: Date
@@ -33,7 +37,13 @@ struct ExerciseStatDetailView: View {
 
     private var topSessions: [SessionPoint] {
         points
-            .sorted { $0.value > $1.value }
+            .sorted { lhs, rhs in
+                if kind == .maxWeight {
+                    return ExerciseLoad.comparisonValue(for: lhs.value, exerciseName: exerciseName) >
+                    ExerciseLoad.comparisonValue(for: rhs.value, exerciseName: exerciseName)
+                }
+                return lhs.value > rhs.value
+            }
             .prefix(10)
             .map { $0 }
     }
@@ -67,7 +77,7 @@ struct ExerciseStatDetailView: View {
                 .padding(Theme.Spacing.xl)
             }
         }
-        .navigationTitle(kind.title)
+        .navigationTitle(navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
     }
 
@@ -149,7 +159,7 @@ struct ExerciseStatDetailView: View {
                     .chartPlotStyle { plotArea in
                         plotArea.clipped()
                     }
-                    .frame(height: 180)
+                    .frame(height: Theme.ChartHeight.standard)
                 }
                 .padding(Theme.Spacing.lg)
                 .softCard(elevation: 2)
@@ -159,12 +169,16 @@ struct ExerciseStatDetailView: View {
 
     private var summaryPills: some View {
         Group {
-            if let avg = average(values), let min = values.min(), let max = values.max() {
+            if let avg = average(values),
+               let min = values.min(),
+               let max = values.max(),
+               let best = bestSummaryValue(min: min, max: max),
+               let worst = worstSummaryValue(min: min, max: max) {
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: Theme.Spacing.md) {
                         StatPill(title: "Average", value: formatValue(avg))
-                        StatPill(title: "Min", value: formatValue(min))
-                        StatPill(title: "Max", value: formatValue(max))
+                        StatPill(title: summaryLeadingTitle, value: formatValue(best))
+                        StatPill(title: summaryTrailingTitle, value: formatValue(worst))
                     }
 
                     LazyVGrid(
@@ -172,8 +186,8 @@ struct ExerciseStatDetailView: View {
                         spacing: Theme.Spacing.md
                     ) {
                         StatPill(title: "Average", value: formatValue(avg))
-                        StatPill(title: "Min", value: formatValue(min))
-                        StatPill(title: "Max", value: formatValue(max))
+                        StatPill(title: summaryLeadingTitle, value: formatValue(best))
+                        StatPill(title: summaryTrailingTitle, value: formatValue(worst))
                     }
                 }
             }
@@ -186,16 +200,17 @@ struct ExerciseStatDetailView: View {
                 EmptyStatCard(title: "Top Sessions", message: "No sessions yet.")
             } else {
                 VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-                    Text("Top Sessions")
+                    Text(kind == .maxWeight && isAssisted ? "Best Sessions" : "Top Sessions")
                         .font(Theme.Typography.title3)
                         .foregroundColor(Theme.Colors.textPrimary)
 
-                    ForEach(topSessions) { session in
+                    ForEach(Array(topSessions.enumerated()), id: \.element.id) { index, session in
                         TopSessionRow(
                             title: session.sets.first?.workoutName ?? "Workout",
                             subtitle: session.date.formatted(date: .abbreviated, time: .omitted),
                             value: formatValue(session.value),
-                            snippet: setSnippet(for: session.sets)
+                            snippet: setSnippet(for: session.sets),
+                            rank: index + 1
                         )
                     }
                 }
@@ -208,7 +223,7 @@ struct ExerciseStatDetailView: View {
         case .totalSets:
             return "Sets per Session"
         case .maxWeight:
-            return "Max Weight"
+            return ExerciseLoad.weightMetricTitle(for: exerciseName)
         case .maxVolume:
             return "Volume per Session"
         case .avgReps:
@@ -222,7 +237,7 @@ struct ExerciseStatDetailView: View {
         case .totalSets:
             return Double(sets.count)
         case .maxWeight:
-            return sets.map(\.weight).max() ?? 0
+            return ExerciseLoad.bestWeight(in: sets, exerciseName: exerciseName)
         case .maxVolume:
             return sets.reduce(0) { $0 + ($1.weight * Double($1.reps)) }
         case .avgReps:
@@ -235,7 +250,7 @@ struct ExerciseStatDetailView: View {
         let sorted = sets.sorted { $0.setOrder < $1.setOrder }
         var parts: [String] = []
         for set in sorted.prefix(3) {
-            let weight = formatWeight(set.weight)
+            let weight = formatWeight(set.weight, includeUnit: false)
             parts.append("\(weight)x\(set.reps)")
         }
         if sets.count > 3 {
@@ -262,7 +277,7 @@ struct ExerciseStatDetailView: View {
         case .totalSets:
             return "\(Int(round(value)))"
         case .maxWeight:
-            return "\(formatWeight(value)) lbs"
+            return formatWeight(value)
         case .maxVolume:
             return "\(SharedFormatters.volumeCompact(value)) lbs"
         case .avgReps:
@@ -270,11 +285,40 @@ struct ExerciseStatDetailView: View {
         }
     }
 
-    private func formatWeight(_ value: Double) -> String {
-        if abs(value - value.rounded()) < 0.0001 {
-            return "\(Int(value.rounded()))"
+    private var navigationTitle: String {
+        kind == .maxWeight ? ExerciseLoad.weightMetricTitle(for: exerciseName) : kind.title
+    }
+
+    private var summaryLeadingTitle: String {
+        if kind == .maxWeight, isAssisted {
+            return "Best"
         }
-        return String(format: "%.1f", value)
+        return "Min"
+    }
+
+    private var summaryTrailingTitle: String {
+        if kind == .maxWeight, isAssisted {
+            return "Worst"
+        }
+        return "Max"
+    }
+
+    private func bestSummaryValue(min: Double, max: Double) -> Double? {
+        if kind == .maxWeight, isAssisted {
+            return min
+        }
+        return min
+    }
+
+    private func worstSummaryValue(min: Double, max: Double) -> Double? {
+        if kind == .maxWeight, isAssisted {
+            return max
+        }
+        return max
+    }
+
+    private func formatWeight(_ value: Double, includeUnit: Bool = true) -> String {
+        ExerciseLoad.formatWeight(value, exerciseName: exerciseName, includeUnit: includeUnit)
     }
 
     private func average(_ values: [Double]) -> Double? {
@@ -287,17 +331,54 @@ private struct StatPill: View {
     let title: String
     let value: String
 
+    private var icon: String {
+        switch title {
+        case "Average": return "equal.circle"
+        case "Best": return "checkmark.circle"
+        case "Min": return "arrow.down.circle"
+        case "Worst": return "exclamationmark.circle"
+        case "Max": return "arrow.up.circle"
+        default: return "number.circle"
+        }
+    }
+
+    private var pillColor: Color {
+        switch title {
+        case "Average": return Theme.Colors.accent
+        case "Best": return Theme.Colors.success
+        case "Min": return Theme.Colors.accentTertiary
+        case "Worst": return Theme.Colors.warning
+        case "Max": return Theme.Colors.accentSecondary
+        default: return Theme.Colors.accent
+        }
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(Theme.Typography.caption)
-                .foregroundColor(Theme.Colors.textSecondary)
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            HStack(spacing: Theme.Spacing.xs) {
+                Image(systemName: icon)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(pillColor)
+                Text(title)
+                    .font(Theme.Typography.metricLabel)
+                    .foregroundColor(pillColor)
+                    .textCase(.uppercase)
+                    .tracking(0.6)
+            }
             Text(value)
                 .font(Theme.Typography.headline)
                 .foregroundColor(Theme.Colors.textPrimary)
         }
         .padding(Theme.Spacing.md)
-        .softCard(elevation: 1)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
+                .fill(pillColor.opacity(Theme.Opacity.subtleFill))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
+                .strokeBorder(pillColor.opacity(0.12), lineWidth: 1)
+        )
     }
 }
 
@@ -306,30 +387,50 @@ private struct TopSessionRow: View {
     let subtitle: String
     let value: String
     let snippet: String
+    var rank: Int = 0
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: Theme.Spacing.md) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(Theme.Typography.headline)
-                        .foregroundColor(Theme.Colors.textPrimary)
-                    Text(subtitle)
-                        .font(Theme.Typography.caption)
-                        .foregroundColor(Theme.Colors.textSecondary)
-                }
-
-                Spacer()
-
-                Text(value)
+        HStack(alignment: .top, spacing: Theme.Spacing.md) {
+            if rank > 0 {
+                Text("\(rank)")
                     .font(Theme.Typography.captionBold)
-                    .foregroundColor(Theme.Colors.textPrimary)
+                    .foregroundStyle(rank <= 3 ? Theme.Colors.gold : Theme.Colors.textTertiary)
+                    .frame(width: 24, height: 24)
+                    .background(
+                        Circle()
+                            .fill(rank <= 3 ? Theme.Colors.gold.opacity(Theme.Opacity.subtleFill) : Theme.Colors.textTertiary.opacity(Theme.Opacity.subtleFill))
+                    )
             }
 
-            if !snippet.isEmpty {
-                Text(snippet)
-                    .font(Theme.Typography.caption)
-                    .foregroundColor(Theme.Colors.textTertiary)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: Theme.Spacing.md) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(title)
+                            .font(Theme.Typography.headline)
+                            .foregroundColor(Theme.Colors.textPrimary)
+                        Text(subtitle)
+                            .font(Theme.Typography.caption)
+                            .foregroundColor(Theme.Colors.textSecondary)
+                    }
+
+                    Spacer()
+
+                    Text(value)
+                        .font(Theme.Typography.numberSmall)
+                        .foregroundColor(Theme.Colors.textPrimary)
+                        .padding(.horizontal, Theme.Spacing.sm)
+                        .padding(.vertical, Theme.Spacing.xs)
+                        .background(
+                            Capsule()
+                                .fill(Theme.Colors.accent.opacity(Theme.Opacity.subtleFill))
+                        )
+                }
+
+                if !snippet.isEmpty {
+                    Text(snippet)
+                        .font(Theme.Typography.caption)
+                        .foregroundColor(Theme.Colors.textTertiary)
+                }
             }
         }
         .padding(Theme.Spacing.lg)

@@ -78,7 +78,7 @@ struct VolumeProgressChart: View {
                         .symbolSize(pointSymbolSize)
                     }
                 }
-                .frame(height: 200)
+                .frame(height: Theme.ChartHeight.standard)
                 .chartXAxis {
                     AxisMarks(values: .stride(by: xAxisComponent, count: xAxisStride)) { _ in
                         AxisGridLine()

@@ -2,6 +2,7 @@ import SwiftUI
 
 /// Unified empty-state card used throughout the app.
 /// Two display modes: icon variant (with colored icon box) and simple variant (text only).
+/// Uses brand typography for a polished, intentional look.
 struct EmptyStateCard: View {
     let title: String
     let message: String
@@ -42,35 +43,39 @@ struct EmptyStateCard: View {
     var body: some View {
         Group {
             if let icon {
-                HStack(alignment: .top, spacing: Theme.Spacing.md) {
-                    Image(systemName: icon)
-                        .foregroundStyle(.white)
-                        .frame(width: 36, height: 36)
-                        .background(tint)
-                        .cornerRadius(Theme.CornerRadius.large)
-                        .accessibilityHidden(true)
+                VStack(spacing: Theme.Spacing.lg) {
+                    ZStack {
+                        Circle()
+                            .fill(tint.opacity(0.08))
+                            .frame(width: 56, height: 56)
+                        Image(systemName: icon)
+                            .font(Theme.Iconography.title3Strong)
+                            .foregroundStyle(tint)
+                    }
+                    .accessibilityHidden(true)
 
                     textContent
-
-                    Spacer(minLength: 0)
+                        .multilineTextAlignment(.center)
                 }
+                .frame(maxWidth: .infinity)
             } else {
                 textContent
             }
         }
-        .padding(Theme.Spacing.lg)
+        .padding(Theme.Spacing.xl)
         .softCard(elevation: elevation)
         .accessibilityElement(children: .combine)
     }
 
     private var textContent: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+        VStack(alignment: icon != nil ? .center : .leading, spacing: Theme.Spacing.sm) {
             Text(title)
-                .font(Theme.Typography.headline)
+                .font(Theme.Typography.sectionHeader2)
                 .foregroundStyle(Theme.Colors.textPrimary)
             Text(message)
                 .font(Theme.Typography.body)
                 .foregroundStyle(Theme.Colors.textSecondary)
+                .lineSpacing(2)
         }
     }
 }

@@ -32,7 +32,7 @@ struct TimeRangePillPicker<T: Hashable>: View {
             } else {
                 selected = option
             }
-            Haptics.selection()
+            Haptics.toggle()
         } label: {
             Text(title)
                 .font(Theme.Typography.captionBold)

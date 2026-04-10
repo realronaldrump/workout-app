@@ -276,28 +276,17 @@ struct BodyCompositionView: View {
 
     private var chartSection: some View {
         let forecastEnd = model.forecastPoints.first(where: { $0.horizonDays == 90 })?.date
-        let latestMeasurementDate = model.representativeSeries.last?.date
-        // Keep the right edge anchored to real data unless Forecast is visible.
-        // This avoids showing an empty tail after the latest measurement.
+        // Extend to forecast end when visible, otherwise use full display range
+        // so the chart always reaches the current date.
         let domainEnd: Date = {
             if showForecast, let forecastEnd {
                 return max(displayRange.end, forecastEnd)
             }
-            if let latestMeasurementDate {
-                return min(displayRange.end, latestMeasurementDate)
-            }
             return displayRange.end
         }()
 
-        return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Trend Chart")
-                .font(Theme.Typography.sectionHeader)
-                .foregroundStyle(Theme.Colors.textPrimary)
-                .tracking(1.0)
-
-            VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-                overlayToggles
-
+        return VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
                 BodyCompositionTrendChart(
                     points: model.representativeSeries,
                     ma7: model.ma7Series,
@@ -320,8 +309,12 @@ struct BodyCompositionView: View {
                         }
                     }
                 )
+
+                overlayToggles
             }
-            .padding(Theme.Spacing.lg)
+            .padding(.horizontal, Theme.Spacing.lg)
+            .padding(.top, Theme.Spacing.lg)
+            .padding(.bottom, Theme.Spacing.md)
             .softCard(elevation: 1)
         }
     }
@@ -330,59 +323,49 @@ struct BodyCompositionView: View {
         let canShowTrend = model.trendSummary != nil
         let canShowForecast = !model.forecastPoints.isEmpty
 
-        return ViewThatFits(in: .horizontal) {
-            HStack(spacing: Theme.Spacing.md) {
-                overlayPill("7d MA", isOn: $showMA7, tint: Theme.Colors.accentSecondary)
-                overlayPill("30d RA", isOn: $showRA30, tint: Theme.Colors.accentTertiary)
-                overlayPill("Trend", isOn: $showTrend, tint: Theme.Colors.textSecondary, isEnabled: canShowTrend)
-                overlayPill("Forecast", isOn: $showForecast, tint: Theme.Colors.textTertiary, isEnabled: canShowForecast)
-            }
-
-            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                HStack(spacing: Theme.Spacing.md) {
-                    overlayPill("7d MA", isOn: $showMA7, tint: Theme.Colors.accentSecondary)
-                    overlayPill("30d RA", isOn: $showRA30, tint: Theme.Colors.accentTertiary)
-                }
-                HStack(spacing: Theme.Spacing.md) {
-                    overlayPill("Trend", isOn: $showTrend, tint: Theme.Colors.textSecondary, isEnabled: canShowTrend)
-                    overlayPill("Forecast", isOn: $showForecast, tint: Theme.Colors.textTertiary, isEnabled: canShowForecast)
-                }
+        return ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: Theme.Spacing.sm) {
+                overlayChip("7d MA", isOn: $showMA7, tint: Theme.Colors.accentSecondary)
+                overlayChip("30d RA", isOn: $showRA30, tint: Theme.Colors.accentTertiary)
+                overlayChip("Trend", isOn: $showTrend, tint: Theme.Colors.textSecondary, isEnabled: canShowTrend)
+                overlayChip("Forecast", isOn: $showForecast, tint: Theme.Colors.accent.opacity(0.6), isEnabled: canShowForecast)
             }
         }
     }
 
-    private func overlayPill(_ title: String, isOn: Binding<Bool>, tint: Color, isEnabled: Bool = true) -> some View {
-        Button {
+    private func overlayChip(_ title: String, isOn: Binding<Bool>, tint: Color, isEnabled: Bool = true) -> some View {
+        let active = isOn.wrappedValue && isEnabled
+        return Button {
             guard isEnabled else { return }
-            isOn.wrappedValue.toggle()
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isOn.wrappedValue.toggle()
+            }
             Haptics.selection()
         } label: {
             HStack(spacing: 6) {
-                if isOn.wrappedValue && isEnabled {
-                    Image(systemName: "checkmark")
-                        .font(Theme.Typography.caption2Bold)
-                }
+                // Color indicator dot
+                Circle()
+                    .fill(active ? tint : Theme.Colors.textTertiary.opacity(0.4))
+                    .frame(width: 7, height: 7)
 
                 Text(title)
-                    .font(Theme.Typography.metricLabel)
-                    .textCase(.uppercase)
-                    .tracking(0.8)
+                    .font(Theme.Typography.caption)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.8)
             }
-            .foregroundStyle(isOn.wrappedValue && isEnabled ? Color.white : Theme.Colors.textSecondary)
-            .padding(.horizontal, Theme.Spacing.md)
-            .padding(.vertical, Theme.Spacing.xs)
-            .frame(minHeight: 44)
-            .frame(maxWidth: .infinity)
-            .brutalistButtonChrome(
-                fill: isOn.wrappedValue && isEnabled ? tint : Theme.Colors.cardBackground,
-                border: Theme.Colors.border.opacity(isEnabled ? 1 : 0.35),
-                cornerRadius: Theme.CornerRadius.large
+            .foregroundStyle(active ? Theme.Colors.textPrimary : Theme.Colors.textTertiary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.pill)
+                    .fill(active ? tint.opacity(0.12) : Theme.Colors.surface.opacity(0.5))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.pill)
+                    .strokeBorder(active ? tint.opacity(0.3) : Theme.Colors.border.opacity(0.5), lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
-        .opacity(isEnabled ? 1 : 0.55)
+        .opacity(isEnabled ? 1 : 0.45)
         .disabled(!isEnabled)
         .accessibilityLabel(Text(title))
         .accessibilityValue(Text(isOn.wrappedValue ? "On" : "Off"))
@@ -542,7 +525,7 @@ struct BodyCompositionView: View {
                         .symbolSize(24)
                     }
                 }
-                .frame(height: 200)
+                .frame(height: Theme.ChartHeight.standard)
                 .chartYScale(domain: yDomain)
                 .chartXAxis {
                     AxisMarks(values: .stride(by: xAxisComponent, count: xAxisStride)) { _ in

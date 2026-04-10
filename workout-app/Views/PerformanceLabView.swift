@@ -72,7 +72,7 @@ struct PerformanceLabView: View {
     }
 
     private var latestSelectableDate: Date {
-        latestWorkoutDate ?? Date()
+        Date()
     }
 
     private var selectedWindowLabel: String {
@@ -113,17 +113,18 @@ struct PerformanceLabView: View {
     }
 
     private var selectedRangeInterval: DateInterval? {
-        guard let latestWorkoutDate else { return nil }
+        guard earliestWorkoutDate != nil else { return nil }
         let calendar = Calendar.current
+        let today = Date()
 
         if let days = selectedTimeFilter.days {
-            let start = calendar.date(byAdding: .day, value: -days, to: latestWorkoutDate) ?? latestWorkoutDate
-            return DateInterval(start: start, end: latestWorkoutDate)
+            let start = calendar.date(byAdding: .day, value: -days, to: today) ?? today
+            return DateInterval(start: start, end: today)
         }
 
-        let earliest = earliestWorkoutDate ?? latestWorkoutDate
+        let earliest = earliestWorkoutDate ?? today
         let clampedStart = max(calendar.startOfDay(for: customStartDate), calendar.startOfDay(for: earliest))
-        let clampedEndDay = min(calendar.startOfDay(for: customEndDate), calendar.startOfDay(for: latestWorkoutDate))
+        let clampedEndDay = calendar.startOfDay(for: customEndDate)
         let clampedEnd = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: clampedEndDay) ?? clampedEndDay
         return DateInterval(start: min(clampedStart, clampedEnd), end: max(clampedStart, clampedEnd))
     }
@@ -186,9 +187,7 @@ struct PerformanceLabView: View {
                         emptyState
                     } else {
                         timeRangeSection
-
                         atAGlanceSection
-
                         comparisonSection
 
                         PerformanceLabVariantSection(
@@ -197,9 +196,7 @@ struct PerformanceLabView: View {
                         )
 
                         strengthGainsSection
-
                         muscleBalanceSection
-
                         weeklyActivitySection
                     }
                 }
@@ -374,10 +371,23 @@ struct PerformanceLabView: View {
     }
 
     private func glanceTile(value: String, label: String, icon: String) -> some View {
-        VStack(spacing: Theme.Spacing.sm) {
+        let tileColor: Color = {
+            switch icon {
+            case "flame.fill": return Theme.Colors.accentSecondary
+            case "chart.bar.fill": return Theme.Colors.success
+            default: return Theme.Colors.accent
+            }
+        }()
+
+        return VStack(spacing: Theme.Spacing.sm) {
             Image(systemName: icon)
                 .font(Theme.Iconography.title3)
-                .foregroundColor(Theme.Colors.accent)
+                .foregroundColor(tileColor)
+                .frame(width: 40, height: 40)
+                .background(
+                    Circle()
+                        .fill(tileColor.opacity(Theme.Opacity.subtleFill))
+                )
             Text(value)
                 .font(Theme.Typography.number)
                 .foregroundColor(Theme.Colors.textPrimary)
@@ -454,7 +464,7 @@ struct PerformanceLabView: View {
                 .font(Theme.Typography.title2)
                 .foregroundColor(Theme.Colors.textPrimary)
 
-            Text("Best weight per exercise \u{2014} \(selectedWindowTrendSubtitle)")
+            Text("Best load per exercise \u{2014} \(selectedWindowTrendSubtitle)")
                 .font(Theme.Typography.caption)
                 .foregroundColor(Theme.Colors.textSecondary)
 
@@ -789,19 +799,18 @@ struct PerformanceLabView: View {
     }
 
     private func synchronizeCustomRange() {
-        guard let latestWorkoutDate else { return }
-        let earliest = earliestWorkoutDate ?? latestWorkoutDate
+        let today = Date()
+        let earliest = earliestWorkoutDate ?? today
         let calendar = Calendar.current
 
         if !didInitializeCustomRange {
-            customEndDate = calendar.startOfDay(for: latestWorkoutDate)
+            customEndDate = calendar.startOfDay(for: today)
             let suggestedStart = calendar.date(byAdding: .day, value: -27, to: customEndDate) ?? earliest
             customStartDate = max(calendar.startOfDay(for: earliest), calendar.startOfDay(for: suggestedStart))
             didInitializeCustomRange = true
             return
         }
 
-        customEndDate = min(calendar.startOfDay(for: customEndDate), calendar.startOfDay(for: latestWorkoutDate))
         customStartDate = max(calendar.startOfDay(for: customStartDate), calendar.startOfDay(for: earliest))
         if customStartDate > customEndDate {
             customStartDate = customEndDate
@@ -955,7 +964,7 @@ private struct PerformanceMuscleFocusChart: View {
                 .foregroundStyle(bucket.tint)
                 .cornerRadius(4)
             }
-            .frame(height: 200)
+            .frame(height: Theme.ChartHeight.standard)
             .chartLegend(.hidden)
 
             LazyVGrid(
@@ -984,8 +993,7 @@ private struct PerformanceMuscleFocusChart: View {
     private func percentLabel(for share: Double) -> String {
         let percent = share * 100
         if percent <= 0 { return "0%" }
-        if percent < 0.1 { return "<0.1%" }
-        if percent < 1 { return String(format: "%.1f%%", percent) }
+        if percent < 1 { return String(format: percent < 0.1 ? "<0.1%%" : "%.1f%%", percent) }
         return "\(Int(round(percent)))%"
     }
 }

@@ -163,10 +163,11 @@ private extension ExportWorkoutsView {
     }
 
     var emptyState: some View {
-        ContentUnavailableView(
-            "No Workouts",
-            systemImage: "square.and.arrow.up",
-            description: Text("Import workouts before exporting.")
+        EmptyStateCard(
+            icon: "square.and.arrow.up",
+            tint: Theme.Colors.accent,
+            title: "No Workouts",
+            message: "Import workouts before exporting."
         )
         .frame(maxWidth: .infinity)
         .padding(.top, Theme.Spacing.xl)

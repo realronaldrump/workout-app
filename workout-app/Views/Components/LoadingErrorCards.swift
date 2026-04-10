@@ -3,21 +3,35 @@ import SwiftUI
 // MARK: - Loading Card
 
 /// Displayed when initial data load is in progress.
-/// Matches the brutalist card style used throughout the app.
+/// Uses shimmer skeleton placeholders that match the app's card layout.
 struct LoadingCard: View {
     var body: some View {
-        VStack(spacing: Theme.Spacing.md) {
-            ProgressView()
-                .controlSize(.regular)
-                .tint(Theme.Colors.accent)
+        VStack(spacing: Theme.Spacing.lg) {
+            // Mimic a briefing card skeleton
+            VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+                SkeletonRect(width: 140, height: 16, cornerRadius: Theme.CornerRadius.small)
+                SkeletonRect(height: 12, cornerRadius: Theme.CornerRadius.small)
+                SkeletonRect(width: 200, height: 12, cornerRadius: Theme.CornerRadius.small)
+            }
+            .padding(Theme.Spacing.lg)
+            .softCard(elevation: 1)
 
-            Text("Loading workouts…")
-                .font(Theme.Typography.caption)
-                .foregroundColor(Theme.Colors.textSecondary)
+            // Mimic a metric row skeleton
+            HStack(spacing: Theme.Spacing.md) {
+                ForEach(0..<2, id: \.self) { _ in
+                    VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                        SkeletonRect(width: 60, height: 10, cornerRadius: Theme.CornerRadius.small)
+                        SkeletonRect(width: 80, height: 20, cornerRadius: Theme.CornerRadius.small)
+                    }
+                    .padding(Theme.Spacing.lg)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .softCard(elevation: 1)
+                }
+            }
+
+            // Mimic a chart skeleton
+            SkeletonChart(height: Theme.ChartHeight.standard)
         }
-        .frame(maxWidth: .infinity)
-        .padding(Theme.Spacing.xl)
-        .softCard(elevation: 1)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Loading workouts")
     }

@@ -219,10 +219,11 @@ struct HistoryLocationBreakdownSheet: View {
                 AdaptiveBackground()
 
                 if items.isEmpty {
-                    ContentUnavailableView(
-                        "No locations in view",
-                        systemImage: "mappin.slash",
-                        description: Text("Adjust the current filters or date window to see location history here.")
+                    EmptyStateCard(
+                        icon: "mappin.slash",
+                        tint: Theme.Colors.textTertiary,
+                        title: "No Locations in View",
+                        message: "Adjust the current filters or date window to see location history here."
                     )
                 } else {
                     List {

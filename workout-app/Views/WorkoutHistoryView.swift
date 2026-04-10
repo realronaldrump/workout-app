@@ -328,18 +328,20 @@ struct WorkoutHistoryView: View {
     ) -> some View {
         Group {
             if workouts.isEmpty {
-                ContentUnavailableView(
-                    "No history yet",
-                    systemImage: "clock.badge.exclamationmark",
-                    description: Text("Import from Strong or start a session to see workouts here.")
+                EmptyStateCard(
+                    icon: "clock.badge.exclamationmark",
+                    tint: Theme.Colors.accent,
+                    title: "No History Yet",
+                    message: "Import from Strong or start a session to see your workouts here."
                 )
                 .padding(.top, Theme.Spacing.xl)
             } else if groupedWorkouts.isEmpty {
                 VStack(alignment: .center, spacing: Theme.Spacing.md) {
-                    ContentUnavailableView(
-                        "No matches",
-                        systemImage: "line.3.horizontal.decrease.circle",
-                        description: Text("Try a wider date window, remove a few filters, or search with a broader term.")
+                    EmptyStateCard(
+                        icon: "line.3.horizontal.decrease.circle",
+                        tint: Theme.Colors.accentSecondary,
+                        title: "No Matches",
+                        message: "Try a wider date window, remove a few filters, or search with a broader term."
                     )
 
                     if hasActiveFilters {
@@ -449,7 +451,7 @@ struct WorkoutHistoryView: View {
             HStack(spacing: Theme.Spacing.sm) {
                 Image(systemName: "line.3.horizontal.decrease.circle.fill")
                     .font(Theme.Typography.captionBold)
-                    .foregroundStyle(Theme.Colors.accent)
+                    .foregroundStyle(Theme.Colors.accentSecondary)
 
                 if selectedTimeWindow != .allTime {
                     filterPill(selectedTimeWindow.title, tint: Theme.Colors.accentSecondary)
@@ -458,10 +460,10 @@ struct WorkoutHistoryView: View {
                     filterPill(locationSummary, tint: Theme.Colors.accentSecondary)
                 }
                 if selectedExercises != nil {
-                    filterPill(exerciseSummary, tint: Theme.Colors.accent)
+                    filterPill(exerciseSummary, tint: Theme.Colors.accentSecondary)
                 }
                 if selectedDurationBands != nil {
-                    filterPill(durationSummary, tint: Theme.Colors.success)
+                    filterPill(durationSummary, tint: Theme.Colors.accentSecondary)
                 }
                 if !searchText.isEmpty {
                     filterPill("\"\(searchText)\"", tint: Theme.Colors.textSecondary)

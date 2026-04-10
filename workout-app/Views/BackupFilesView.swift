@@ -12,10 +12,11 @@ struct BackupFilesView: View {
             ScrollView {
                 LazyVStack(spacing: Theme.Spacing.md) {
                     if files.isEmpty {
-                        ContentUnavailableView(
-                            "No Backup Files",
-                            systemImage: "icloud.slash",
-                            description: Text("Exported workout backups will appear here.")
+                        EmptyStateCard(
+                            icon: "icloud.slash",
+                            tint: Theme.Colors.textTertiary,
+                            title: "No Backup Files",
+                            message: "Exported workout backups will appear here."
                         )
                         .padding(.top, 50)
                     } else {

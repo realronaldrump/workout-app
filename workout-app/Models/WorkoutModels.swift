@@ -25,7 +25,7 @@ nonisolated struct Exercise: Identifiable, Hashable, Codable {
     }
 
     var maxWeight: Double {
-        sets.map { $0.weight }.max() ?? 0
+        ExerciseLoad.bestWeight(in: sets, exerciseName: name)
     }
 
     nonisolated var totalVolume: Double {
@@ -42,16 +42,7 @@ nonisolated struct Exercise: Identifiable, Hashable, Codable {
     }
 
     var oneRepMax: Double {
-        guard let bestSet = sets.max(by: {
-            calculateOneRepMax(weight: $0.weight, reps: $0.reps) < calculateOneRepMax(weight: $1.weight, reps: $1.reps)
-        }) else { return 0 }
-        return calculateOneRepMax(weight: bestSet.weight, reps: bestSet.reps)
-    }
-
-    private func calculateOneRepMax(weight: Double, reps: Int) -> Double {
-        // Epley formula
-        guard reps > 0 else { return weight }
-        return weight * (1 + 0.0333 * Double(reps))
+        OneRepMax.bestEstimate(in: sets, exerciseName: name)
     }
 }
 

@@ -65,7 +65,7 @@ struct PerformanceWeeklyChart: View {
             .chartPlotStyle { plotArea in
                 plotArea.clipped()
             }
-            .frame(height: 180)
+            .frame(height: Theme.ChartHeight.standard)
         }
     }
 }

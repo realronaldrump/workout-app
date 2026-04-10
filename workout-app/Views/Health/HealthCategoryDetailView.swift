@@ -245,11 +245,12 @@ struct HealthCategoryDetailView: View {
                     .foregroundStyle(Theme.Colors.textTertiary)
             }
         }
+        .chartYScale(domain: chartYDomain(for: points, baseline: baseline))
         .chartYAxis(.hidden)
         .chartPlotStyle { plotArea in
             plotArea.clipped()
         }
-        .frame(height: 160)
+        .frame(height: Theme.ChartHeight.standard)
     }
 
     // MARK: - Insight Banner
@@ -351,6 +352,14 @@ struct HealthCategoryDetailView: View {
         guard let minVal = values.min(), let maxVal = values.max() else { return 0 }
         let span = maxVal - minVal
         return Swift.max(0, minVal - span * 0.1)
+    }
+
+    private func chartYDomain(for points: [HealthTrendPoint], baseline: Double) -> ClosedRange<Double> {
+        let values = points.map(\.value)
+        guard let maxVal = values.max() else { return 0...1 }
+        let span = maxVal - baseline
+        let padding = span * 0.08
+        return baseline...(maxVal + padding)
     }
 
     private func generateInsight() -> String? {
@@ -533,6 +542,7 @@ private struct EnrichedMetricRow: View {
                     .interpolationMethod(.catmullRom)
                 }
                 .chartXAxis(.hidden)
+                .chartYScale(domain: areaBaseline...(points.map(\.value).max() ?? 1) * 1.05)
                 .chartYAxis(.hidden)
                 .chartPlotStyle { plotArea in
                     plotArea.clipped()
@@ -542,5 +552,13 @@ private struct EnrichedMetricRow: View {
         }
         .padding(Theme.Spacing.md)
         .softCard(elevation: 1)
+        .overlay(alignment: .leading) {
+            UnevenRoundedRectangle(
+                topLeadingRadius: Theme.CornerRadius.large,
+                bottomLeadingRadius: Theme.CornerRadius.large
+            )
+            .fill(metric.chartColor)
+            .frame(width: 3)
+        }
     }
 }

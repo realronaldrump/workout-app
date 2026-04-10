@@ -41,10 +41,11 @@ struct ExportExerciseSelectionSheet: View {
                     )
 
                     if filteredExerciseNames.isEmpty {
-                        ContentUnavailableView(
-                            "No exercises",
-                            systemImage: "dumbbell",
-                            description: Text("Try a different search term.")
+                        EmptyStateCard(
+                            icon: "dumbbell",
+                            tint: Theme.Colors.textTertiary,
+                            title: "No Exercises",
+                            message: "Try a different search term."
                         )
                     } else {
                         ScrollView(showsIndicators: false) {
@@ -123,10 +124,11 @@ struct ExportWorkoutDateSelectionSheet: View {
                     )
 
                     if dateOptions.isEmpty {
-                        ContentUnavailableView(
-                            "No dates",
-                            systemImage: "calendar",
-                            description: Text("No workouts are available for this range.")
+                        EmptyStateCard(
+                            icon: "calendar",
+                            tint: Theme.Colors.textTertiary,
+                            title: "No Dates",
+                            message: "No workouts are available for this range."
                         )
                     } else {
                         ScrollView(showsIndicators: false) {
@@ -222,10 +224,11 @@ struct ExportMuscleGroupSelectionSheet: View {
                     )
 
                     if filteredTags.isEmpty {
-                        ContentUnavailableView(
-                            "No muscle groups",
-                            systemImage: "figure.strengthtraining.functional",
-                            description: Text("Try a different search term.")
+                        EmptyStateCard(
+                            icon: "figure.strengthtraining.functional",
+                            tint: Theme.Colors.textTertiary,
+                            title: "No Muscle Groups",
+                            message: "Try a different search term."
                         )
                     } else {
                         ScrollView(showsIndicators: false) {
@@ -363,10 +366,11 @@ struct ExportHealthMetricSelectionSheet: View {
                     )
 
                     if filteredMetrics.isEmpty {
-                        ContentUnavailableView(
-                            "No metrics",
-                            systemImage: "heart.text.square",
-                            description: Text("Try a different search term.")
+                        EmptyStateCard(
+                            icon: "heart.text.square",
+                            tint: Theme.Colors.textTertiary,
+                            title: "No Metrics",
+                            message: "Try a different search term."
                         )
                     } else {
                         ScrollView(showsIndicators: false) {

@@ -77,10 +77,11 @@ struct GymSelectionSheet: View {
                                 }
                             }
                         } else if !showAddNew {
-                            ContentUnavailableView(
-                                "No gyms yet",
-                                systemImage: "mappin.and.ellipse",
-                                description: Text("Add a gym profile first.")
+                            EmptyStateCard(
+                                icon: "mappin.and.ellipse",
+                                tint: Theme.Colors.accentSecondary,
+                                title: "No Gyms Yet",
+                                message: "Add a gym profile first."
                             )
                         }
 

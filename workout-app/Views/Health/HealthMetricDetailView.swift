@@ -107,11 +107,40 @@ struct HealthMetricDetailView: View {
     }
 
     private var headerSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            Text(rangeLabel)
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Colors.textTertiary)
+        HStack(spacing: Theme.Spacing.md) {
+            Image(systemName: metric.icon)
+                .font(Theme.Iconography.title3)
+                .foregroundStyle(metric.chartColor)
+                .frame(width: 44, height: 44)
+                .background(
+                    Circle()
+                        .fill(metric.chartColor.opacity(Theme.Opacity.subtleFill))
+                )
+                .overlay(
+                    Circle()
+                        .strokeBorder(metric.chartColor.opacity(0.15), lineWidth: 1)
+                )
+
+            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                if let latest = values.last {
+                    HStack(alignment: .lastTextBaseline, spacing: 6) {
+                        Text(metric.format(latest))
+                            .font(Theme.Typography.title)
+                            .foregroundStyle(Theme.Colors.textPrimary)
+                        Text(metric.displayUnit)
+                            .font(Theme.Typography.subheadline)
+                            .foregroundStyle(Theme.Colors.textTertiary)
+                    }
+                }
+                Text(rangeLabel)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.textTertiary)
+            }
+
+            Spacer()
         }
+        .padding(Theme.Spacing.lg)
+        .tintedSection(metric.chartColor)
     }
 
     private var emptyState: some View {
@@ -151,33 +180,53 @@ struct HealthMetricDetailView: View {
 
 	        return ViewThatFits(in: .horizontal) {
 	            HStack(spacing: Theme.Spacing.md) {
-	                MetricStatCard(title: "Average", value: averageValue.map(metric.format) ?? "--", unit: metric.displayUnit)
+                MetricStatCard(
+                    title: "Average",
+                    value: averageValue.map(metric.format) ?? "--",
+                    unit: metric.displayUnit,
+                    tint: metric.chartColor,
+                    icon: "equal.circle"
+                )
 	                MetricStatCard(
 	                    title: "Min",
                     value: minValue.map(metric.format) ?? "--",
                     unit: metric.displayUnit,
+                    tint: Theme.Colors.accent,
+                    icon: "arrow.down.circle",
                     subtitle: includeDayForExtremes ? minPoint.map { formatDay($0.date) } : nil
                 )
                 MetricStatCard(
                     title: "Max",
                     value: maxValue.map(metric.format) ?? "--",
                     unit: metric.displayUnit,
+                    tint: Theme.Colors.accentSecondary,
+                    icon: "arrow.up.circle",
                     subtitle: includeDayForExtremes ? maxPoint.map { formatDay($0.date) } : nil
                 )
             }
 
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: Theme.Spacing.md) {
-                MetricStatCard(title: "Average", value: averageValue.map(metric.format) ?? "--", unit: metric.displayUnit)
+                MetricStatCard(
+                    title: "Average",
+                    value: averageValue.map(metric.format) ?? "--",
+                    unit: metric.displayUnit,
+                    tint: metric.chartColor,
+                    icon: "equal.circle"
+                )
                 MetricStatCard(
                     title: "Min",
                     value: minValue.map(metric.format) ?? "--",
                     unit: metric.displayUnit,
+                    tint: Theme.Colors.accent,
+                    icon: "arrow.down.circle",
                     subtitle: includeDayForExtremes ? minPoint.map { formatDay($0.date) } : nil
                 )
                 MetricStatCard(
                     title: "Max",
                     value: maxValue.map(metric.format) ?? "--",
                     unit: metric.displayUnit,
+                    tint: Theme.Colors.accentSecondary,
+                    icon: "arrow.up.circle",
                     subtitle: includeDayForExtremes ? maxPoint.map { formatDay($0.date) } : nil
                 )
             }
@@ -194,6 +243,7 @@ struct HealthMetricDetailView: View {
         let count = Double(summaries.count)
         let stageAverages = averageSleepStages(summaries: summaries)
         let fallbackCount = summaries.filter(\.usedFallbackSource).count
+        let maxHours = stageAverages.values.max() ?? 1
 
         return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             Text("Sleep Stages")
@@ -205,16 +255,28 @@ struct HealthMetricDetailView: View {
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Colors.textSecondary)
             } else {
-                ForEach(SleepStage.allCases.filter { $0 != .unknown }, id: \.self) { stage in
-                    if let hours = stageAverages[stage] {
-                        HStack {
-                            Text(stage.label)
-                                .font(Theme.Typography.subheadline)
-                                .foregroundStyle(Theme.Colors.textSecondary)
-                            Spacer()
-                            Text(String(format: "%.1f h", hours))
-                                .font(Theme.Typography.subheadline)
-                                .foregroundStyle(Theme.Colors.textPrimary)
+                VStack(spacing: Theme.Spacing.sm) {
+                    ForEach(SleepStage.allCases.filter { $0 != .unknown }, id: \.self) { stage in
+                        if let hours = stageAverages[stage] {
+                            HStack(spacing: Theme.Spacing.md) {
+                                Text(stage.label)
+                                    .font(Theme.Typography.subheadline)
+                                    .foregroundStyle(Theme.Colors.textSecondary)
+                                    .frame(width: 70, alignment: .leading)
+
+                                GeometryReader { geo in
+                                    let fraction = maxHours > 0 ? hours / maxHours : 0
+                                    RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                                        .fill(sleepStageColor(stage).opacity(0.7))
+                                        .frame(width: max(4, geo.size.width * fraction))
+                                }
+                                .frame(height: 18)
+
+                                Text(String(format: "%.1fh", hours))
+                                    .font(Theme.Typography.monoSmall)
+                                    .foregroundStyle(Theme.Colors.textPrimary)
+                                    .frame(width: 42, alignment: .trailing)
+                            }
                         }
                     }
                 }
@@ -231,6 +293,17 @@ struct HealthMetricDetailView: View {
         }
         .padding(Theme.Spacing.lg)
         .softCard(elevation: 1)
+    }
+
+    private func sleepStageColor(_ stage: SleepStage) -> Color {
+        switch stage {
+        case .deep: return Theme.Colors.accent
+        case .rem: return Theme.Colors.accentTertiary
+        case .core: return Theme.Colors.accentSecondary
+        case .awake: return Theme.Colors.error
+        case .inBed: return Theme.Colors.textSecondary
+        case .unknown: return Theme.Colors.textTertiary
+        }
     }
 
     private func tooltipValueText(displayValue: Double) -> String {
@@ -264,21 +337,32 @@ private struct MetricStatCard: View {
     let title: String
     let value: String
     let unit: String
+    var tint: Color = Theme.Colors.accent
+    var icon: String?
     let subtitle: String?
 
-    init(title: String, value: String, unit: String, subtitle: String? = nil) {
+    init(title: String, value: String, unit: String, tint: Color = Theme.Colors.accent, icon: String? = nil, subtitle: String? = nil) {
         self.title = title
         self.value = value
         self.unit = unit
+        self.tint = tint
+        self.icon = icon
         self.subtitle = subtitle
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.sm) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.xs) {
+                if let icon {
+                    Image(systemName: icon)
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(tint)
+                }
                 Text(title)
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textTertiary)
+                    .font(Theme.Typography.metricLabel)
+                    .foregroundStyle(tint)
+                    .textCase(.uppercase)
+                    .tracking(0.6)
 
                 Spacer(minLength: 0)
 
@@ -301,6 +385,13 @@ private struct MetricStatCard: View {
         }
         .padding(Theme.Spacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .softCard(elevation: 1)
+        .background(
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
+                .fill(tint.opacity(Theme.Opacity.subtleFill))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
+                .strokeBorder(tint.opacity(0.12), lineWidth: 1)
+        )
     }
 }

@@ -699,7 +699,7 @@ struct DemoChartSwitcher: View {
                             .frame(height: animateBars ? height : 4)
                     }
                 }
-                .frame(height: 120)
+                .frame(height: Theme.ChartHeight.compact)
                 .padding(.top, Theme.Spacing.sm)
 
                 // X axis labels
