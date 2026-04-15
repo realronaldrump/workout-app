@@ -323,6 +323,99 @@ private struct ExportSelectionSearchField: View {
     }
 }
 
+struct ExportWorkoutColumnSelectionSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    @Binding var selectedColumns: Set<WorkoutExportColumn>
+    let availableColumns: [WorkoutExportColumn]
+
+    private var selectedCount: Int {
+        selectedColumns.intersection(Set(availableColumns)).count
+    }
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                AdaptiveBackground()
+
+                VStack(spacing: Theme.Spacing.md) {
+                    ExportSelectionToolbar(
+                        selectedCount: selectedCount,
+                        totalCount: availableColumns.count,
+                        onSelectAll: {
+                            selectedColumns = Set(availableColumns)
+                            Haptics.selection()
+                        },
+                        onClear: {
+                            selectedColumns.removeAll()
+                            Haptics.selection()
+                        }
+                    )
+
+                    ScrollView(showsIndicators: false) {
+                        LazyVStack(spacing: Theme.Spacing.sm) {
+                            ForEach(availableColumns) { column in
+                                ExportSelectableRow(
+                                    isSelected: selectedColumns.contains(column),
+                                    accessibilityLabel: "\(column.title), \(column.subtitle)",
+                                    action: {
+                                        toggleColumn(column)
+                                    },
+                                    content: {
+                                        Image(systemName: column.systemImage)
+                                            .foregroundStyle(Theme.Colors.accent)
+                                            .font(Theme.Typography.calloutStrong)
+                                            .frame(width: 22, height: 22)
+                                            .background(Theme.Colors.accent.opacity(0.12))
+                                            .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
+
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(column.title)
+                                                .font(Theme.Typography.bodyBold)
+                                                .foregroundStyle(Theme.Colors.textPrimary)
+                                            Text(column.subtitle)
+                                                .font(Theme.Typography.caption)
+                                                .foregroundStyle(Theme.Colors.textSecondary)
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                        .padding(.bottom, Theme.Spacing.md)
+                    }
+
+                    if selectedColumns.isEmpty {
+                        Text("Select at least one column before exporting workout CSVs.")
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Colors.error)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .accessibilityLabel("Select at least one column before exporting workout CSVs")
+                    }
+                }
+                .padding(Theme.Spacing.xl)
+            }
+            .navigationTitle("Select Columns")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    AppToolbarButton(title: "Done", systemImage: "checkmark", variant: .accent) {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+
+    private func toggleColumn(_ column: WorkoutExportColumn) {
+        if selectedColumns.contains(column) {
+            selectedColumns.remove(column)
+        } else {
+            selectedColumns.insert(column)
+        }
+        Haptics.selection()
+    }
+}
+
 struct ExportHealthMetricSelectionSheet: View {
     @Environment(\.dismiss) private var dismiss
 

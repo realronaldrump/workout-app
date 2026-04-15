@@ -4,6 +4,7 @@ enum WorkoutExportError: LocalizedError {
     case invalidDateRange
     case noWorkoutsInRange
     case noExercisesInRange
+    case noColumnsSelected
 
     var errorDescription: String? {
         switch self {
@@ -13,8 +14,143 @@ enum WorkoutExportError: LocalizedError {
             return "No workouts found in that date range"
         case .noExercisesInRange:
             return "No exercises found in that date range"
+        case .noColumnsSelected:
+            return "Select at least one CSV column"
         }
     }
+}
+
+nonisolated enum WorkoutExportColumn: String, CaseIterable, Hashable, Identifiable, Sendable {
+    case workoutStart
+    case workoutName
+    case gymName
+    case duration
+    case exercise
+    case tags
+    case setNumber
+    case weight
+    case reps
+    case distance
+    case seconds
+
+    static let defaultColumns: [WorkoutExportColumn] = [
+        .workoutStart,
+        .workoutName,
+        .duration,
+        .exercise,
+        .tags,
+        .setNumber,
+        .weight,
+        .reps,
+        .distance,
+        .seconds
+    ]
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .workoutStart:
+            return "Workout Start"
+        case .workoutName:
+            return "Workout Name"
+        case .gymName:
+            return "Gym"
+        case .duration:
+            return "Duration"
+        case .exercise:
+            return "Exercise"
+        case .tags:
+            return "Tags"
+        case .setNumber:
+            return "Set"
+        case .weight:
+            return "Weight"
+        case .reps:
+            return "Reps"
+        case .distance:
+            return "Distance"
+        case .seconds:
+            return "Seconds"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .workoutStart:
+            return "Start date and time for the workout."
+        case .workoutName:
+            return "Workout title."
+        case .gymName:
+            return "Assigned gym profile name."
+        case .duration:
+            return "Logged workout duration."
+        case .exercise:
+            return "Exercise name."
+        case .tags:
+            return "Exercise muscle tags."
+        case .setNumber:
+            return "Set number."
+        case .weight:
+            return "Logged set weight."
+        case .reps:
+            return "Logged rep count."
+        case .distance:
+            return "Distance for cardio sets."
+        case .seconds:
+            return "Time for duration-based sets."
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .workoutStart:
+            return "calendar"
+        case .workoutName:
+            return "text.badge.checkmark"
+        case .gymName:
+            return "mappin.and.ellipse"
+        case .duration:
+            return "timer"
+        case .exercise:
+            return "dumbbell"
+        case .tags:
+            return "tag"
+        case .setNumber:
+            return "number"
+        case .weight:
+            return "scalemass"
+        case .reps:
+            return "repeat"
+        case .distance:
+            return "ruler"
+        case .seconds:
+            return "stopwatch"
+        }
+    }
+
+    func header(weightHeader: String) -> String {
+        switch self {
+        case .weight:
+            return weightHeader
+        default:
+            return title
+        }
+    }
+}
+
+private nonisolated struct WorkoutExportRowContext {
+    let workoutStart: String
+    let workoutName: String
+    let gymName: String
+    let duration: String
+    let exerciseName: String
+    let muscles: String
+    let setOrder: String
+    let weight: String
+    let reps: String
+    let distance: String
+    let seconds: String
 }
 
 struct WorkoutCSVExporter {
@@ -22,15 +158,23 @@ struct WorkoutCSVExporter {
     /// - One CSV header.
     /// - Workout-level fields are only populated on the first set row of each workout.
     /// - Exercise + muscle tags are only populated on the first set row of each exercise.
-    /// - Distance/Seconds columns are only included if any set uses them.
+    /// - Distance/Seconds columns are only included if selected and any set uses them.
+    /// - Columns are emitted in the selected order.
     nonisolated static func exportWorkoutHistoryCSV(
         workouts: [Workout],
         startDate: Date,
         endDateInclusive: Date,
         exerciseTagsByName: [String: String] = [:],
+        gymNamesByWorkoutID: [UUID: String] = [:],
+        selectedColumns: [WorkoutExportColumn] = WorkoutExportColumn.defaultColumns,
         weightUnit: String? = nil,
         calendar: Calendar = .current
     ) throws -> Data {
+        let requestedColumns = uniqueColumns(selectedColumns)
+        guard !requestedColumns.isEmpty else {
+            throw WorkoutExportError.noColumnsSelected
+        }
+
         let range = try normalizedDayRange(startDate: startDate, endDateInclusive: endDateInclusive, calendar: calendar)
 
         let filtered = workouts
@@ -43,14 +187,15 @@ struct WorkoutCSVExporter {
             throw WorkoutExportError.noWorkoutsInRange
         }
 
+        let columns = columnsWithAvailableData(requestedColumns, for: filtered)
+        guard !columns.isEmpty else {
+            throw WorkoutExportError.noColumnsSelected
+        }
+
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd HH:mm"
         dateFormatter.timeZone = TimeZone.current
         dateFormatter.locale = Locale(identifier: "en_US_POSIX")
-
-        let allSets = filtered.flatMap { $0.exercises.flatMap(\.sets) }
-        let includesDistance = allSets.contains { $0.distance > 0 }
-        let includesSeconds = allSets.contains { $0.seconds > 0 }
 
         let trimmedUnit = weightUnit?.trimmingCharacters(in: .whitespacesAndNewlines)
         let weightHeader: String
@@ -63,19 +208,7 @@ struct WorkoutCSVExporter {
         var lines: [String] = []
         lines.reserveCapacity(filtered.count * 8)
 
-        var header = [
-            "Workout Start",
-            "Workout Name",
-            "Duration",
-            "Exercise",
-            "Tags",
-            "Set",
-            weightHeader,
-            "Reps"
-        ]
-        if includesDistance { header.append("Distance") }
-        if includesSeconds { header.append("Seconds") }
-
+        let header = columns.map { $0.header(weightHeader: weightHeader) }
         lines.append(header.joined(separator: ","))
 
         for workout in filtered {
@@ -102,18 +235,20 @@ struct WorkoutCSVExporter {
                     let weight = formatCompactNumber(set.weight, decimals: 1)
                     let reps = String(set.reps)
 
-                    var row = [
-                        workoutStart,
-                        workoutName,
-                        duration,
-                        exerciseName,
-                        muscles,
-                        setOrder,
-                        weight,
-                        reps
-                    ]
-                    if includesDistance { row.append(set.distance > 0 ? formatCompactNumber(set.distance, decimals: 1) : "") }
-                    if includesSeconds { row.append(set.seconds > 0 ? formatCompactNumber(set.seconds, decimals: 1) : "") }
+                    let context = WorkoutExportRowContext(
+                        workoutStart: workoutStart,
+                        workoutName: workoutName,
+                        gymName: didPrintWorkoutInfo ? "" : (gymNamesByWorkoutID[workout.id] ?? ""),
+                        duration: duration,
+                        exerciseName: exerciseName,
+                        muscles: muscles,
+                        setOrder: setOrder,
+                        weight: weight,
+                        reps: reps,
+                        distance: set.distance > 0 ? formatCompactNumber(set.distance, decimals: 1) : "",
+                        seconds: set.seconds > 0 ? formatCompactNumber(set.seconds, decimals: 1) : ""
+                    )
+                    let row = columns.map { value(for: $0, context: context) }
 
                     let rowString = row
                         .map(csvEscape)
@@ -293,6 +428,60 @@ struct WorkoutCSVExporter {
         }
         let endExclusive = calendar.date(byAdding: .day, value: 1, to: endDay) ?? endDay
         return (startDay, endExclusive)
+    }
+
+    private nonisolated static func uniqueColumns(_ columns: [WorkoutExportColumn]) -> [WorkoutExportColumn] {
+        var seen = Set<WorkoutExportColumn>()
+        return columns.filter { column in
+            seen.insert(column).inserted
+        }
+    }
+
+    private nonisolated static func columnsWithAvailableData(
+        _ columns: [WorkoutExportColumn],
+        for workouts: [Workout]
+    ) -> [WorkoutExportColumn] {
+        let allSets = workouts.flatMap { $0.exercises.flatMap(\.sets) }
+        let includesDistance = allSets.contains { $0.distance > 0 }
+        let includesSeconds = allSets.contains { $0.seconds > 0 }
+
+        return columns.filter { column in
+            switch column {
+            case .distance:
+                return includesDistance
+            case .seconds:
+                return includesSeconds
+            default:
+                return true
+            }
+        }
+    }
+
+    private nonisolated static func value(for column: WorkoutExportColumn, context: WorkoutExportRowContext) -> String {
+        switch column {
+        case .workoutStart:
+            return context.workoutStart
+        case .workoutName:
+            return context.workoutName
+        case .gymName:
+            return context.gymName
+        case .duration:
+            return context.duration
+        case .exercise:
+            return context.exerciseName
+        case .tags:
+            return context.muscles
+        case .setNumber:
+            return context.setOrder
+        case .weight:
+            return context.weight
+        case .reps:
+            return context.reps
+        case .distance:
+            return context.distance
+        case .seconds:
+            return context.seconds
+        }
     }
 
     private nonisolated static func csvEscape(_ field: String) -> String {

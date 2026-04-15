@@ -8,6 +8,8 @@ struct ExportWorkoutsView: View {
     @ObservedObject var iCloudManager: iCloudDocumentManager
     @ObservedObject private var exerciseMetadataManager = ExerciseMetadataManager.shared
     @EnvironmentObject private var healthManager: HealthKitManager
+    @EnvironmentObject private var annotationsManager: WorkoutAnnotationsManager
+    @EnvironmentObject private var gymProfilesManager: GymProfilesManager
 
     private let weightUnit = "lbs"
     private let maxContentWidth: CGFloat = 820
@@ -22,6 +24,7 @@ struct ExportWorkoutsView: View {
     @State private var isExportingWorkouts = false
     @State private var workoutExportStatusMessage: String?
     @State private var workoutExportFileURL: URL?
+    @State private var selectedWorkoutColumns: Set<WorkoutExportColumn> = Set(WorkoutExportColumn.defaultColumns)
 
     @State private var includeExerciseTags = true
     @State private var isExportingExercises = false
@@ -183,6 +186,7 @@ private extension ExportWorkoutsView {
 
             rangeCard
             summaryCard
+            workoutColumnSelectionCard
         }
     }
 
@@ -364,6 +368,40 @@ private extension ExportWorkoutsView {
         .softCard(elevation: 2)
     }
 
+    var workoutColumnSelectionCard: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            HStack(spacing: Theme.Spacing.md) {
+                Image(systemName: "tablecells")
+                    .font(Theme.Typography.title4)
+                    .foregroundStyle(Theme.Colors.accentSecondary)
+                    .frame(width: 34, height: 34)
+                    .background(Theme.Colors.accentSecondary.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Workout CSV Columns")
+                        .font(Theme.Typography.headline)
+                        .foregroundStyle(Theme.Colors.textPrimary)
+
+                    Text("Choose the fields included in workout, exercise history, muscle group, and date CSVs.")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                }
+            }
+
+            ExportSelectionButton(
+                title: "Columns",
+                summary: selectedWorkoutColumns.isEmpty ? "Choose columns" : "\(selectedWorkoutColumns.count) selected",
+                previewText: selectedWorkoutColumnPreviewText,
+                action: {
+                    openSheet(.workoutColumns)
+                }
+            )
+        }
+        .padding(Theme.Spacing.lg)
+        .softCard(elevation: 2)
+    }
+
     var workoutExportCard: some View {
         ExportActionCard(
             descriptor: ExportCardDescriptor(
@@ -373,7 +411,7 @@ private extension ExportWorkoutsView {
             ),
             statusMessage: workoutExportStatusMessage,
             fileName: workoutExportFileURL?.lastPathComponent,
-            footnote: "Exports a compact CSV with workout and exercise details shown once per session. Muscle tags are included when available.",
+            footnote: "Exports a compact CSV with workout and exercise details shown once per session. Selected columns control which fields appear.",
             isRunning: isExportingWorkouts,
             isEnabled: workoutExportButtonEnabled,
             shareURL: workoutExportFileURL,
@@ -417,7 +455,7 @@ private extension ExportWorkoutsView {
             ),
             statusMessage: exerciseHistoryExportStatusMessage,
             fileName: exerciseHistoryExportFileURL?.lastPathComponent,
-            footnote: "Exports full set-level history, but only for the exercises you choose.",
+            footnote: "Exports selected workout CSV columns, but only for the exercises you choose.",
             isRunning: isExportingExerciseHistory,
             isEnabled: exerciseHistoryExportButtonEnabled,
             shareURL: exerciseHistoryExportFileURL,
@@ -445,7 +483,7 @@ private extension ExportWorkoutsView {
             ),
             statusMessage: muscleGroupExportStatusMessage,
             fileName: muscleGroupExportFileURL?.lastPathComponent,
-            footnote: "Choose one or more muscle groups to export workouts that include those tagged exercises.",
+            footnote: "Choose one or more muscle groups to export selected workout CSV columns for matching exercises.",
             isRunning: isExportingMuscleGroups,
             isEnabled: muscleGroupExportButtonEnabled,
             shareURL: muscleGroupExportFileURL,
@@ -473,7 +511,7 @@ private extension ExportWorkoutsView {
             ),
             statusMessage: workoutDatesExportStatusMessage,
             fileName: workoutDatesExportFileURL?.lastPathComponent,
-            footnote: "Choose one or more dates to export only those workout sessions.",
+            footnote: "Choose one or more dates to export selected workout CSV columns for those sessions.",
             isRunning: isExportingWorkoutDates,
             isEnabled: workoutDatesExportButtonEnabled,
             shareURL: workoutDatesExportFileURL,
@@ -667,6 +705,11 @@ private extension ExportWorkoutsView {
                 customEndDate = end
                 selectedRange = .custom
             }
+        case .workoutColumns:
+            ExportWorkoutColumnSelectionSheet(
+                selectedColumns: $selectedWorkoutColumns,
+                availableColumns: WorkoutExportColumn.allCases
+            )
         case .exerciseHistory:
             ExportExerciseSelectionSheet(
                 selectedExerciseNames: $selectedExerciseNames,
@@ -702,7 +745,7 @@ private extension ExportWorkoutsView {
 
 private extension ExportWorkoutsView {
     var workoutExportButtonEnabled: Bool {
-        !isExportingWorkouts && !workoutsInSelection.isEmpty
+        !isExportingWorkouts && !workoutsInSelection.isEmpty && !selectedWorkoutColumns.isEmpty
     }
 
     var exerciseExportButtonEnabled: Bool {
@@ -710,15 +753,15 @@ private extension ExportWorkoutsView {
     }
 
     var exerciseHistoryExportButtonEnabled: Bool {
-        !isExportingExerciseHistory && !selectedExerciseNamesInRange.isEmpty
+        !isExportingExerciseHistory && !selectedExerciseNamesInRange.isEmpty && !selectedWorkoutColumns.isEmpty
     }
 
     var muscleGroupExportButtonEnabled: Bool {
-        !isExportingMuscleGroups && !selectedMuscleTagIdsInRange.isEmpty
+        !isExportingMuscleGroups && !selectedMuscleTagIdsInRange.isEmpty && !selectedWorkoutColumns.isEmpty
     }
 
     var workoutDatesExportButtonEnabled: Bool {
-        !isExportingWorkoutDates && !selectedWorkoutDateIdsInRange.isEmpty
+        !isExportingWorkoutDates && !selectedWorkoutDateIdsInRange.isEmpty && !selectedWorkoutColumns.isEmpty
     }
 
     var healthDailySummaryExportButtonEnabled: Bool {
@@ -746,6 +789,10 @@ private extension ExportWorkoutsView {
     var availableExerciseNames: [String] {
         let names = Set(workoutsInSelection.flatMap { $0.exercises.map(\.name) })
         return names.sorted(by: localizedAscending)
+    }
+
+    var orderedSelectedWorkoutColumns: [WorkoutExportColumn] {
+        WorkoutExportColumn.allCases.filter { selectedWorkoutColumns.contains($0) }
     }
 
     var selectedExerciseNamesInRange: Set<String> {
@@ -822,6 +869,10 @@ private extension ExportWorkoutsView {
         let selectedDateMap = Dictionary(uniqueKeysWithValues: workoutDateOptions.map { ($0.id, formatDay($0.date)) })
         let labels = Array(selectedWorkoutDateIdsInRange.compactMap { selectedDateMap[$0] })
         return previewText(for: labels, itemMap: nil)
+    }
+
+    var selectedWorkoutColumnPreviewText: String? {
+        previewText(for: orderedSelectedWorkoutColumns.map(\.title), itemMap: nil)
     }
 
     var selectedHealthSummaryPreviewText: String? {
@@ -1198,7 +1249,8 @@ private extension ExportWorkoutsView {
     @MainActor
     func startWorkoutExport() {
         guard workoutExportButtonEnabled else { return }
-        trackExportStarted(kind: "workouts")
+        let selectedColumns = orderedSelectedWorkoutColumns
+        trackExportStarted(kind: "workouts", extra: workoutColumnAnalyticsPayload(for: selectedColumns))
 
         workoutExportStatusMessage = nil
         workoutExportFileURL = nil
@@ -1216,6 +1268,7 @@ private extension ExportWorkoutsView {
         }
 
         let exerciseTagsByName = exerciseTagsByName(for: workoutsSnapshot)
+        let gymNamesByWorkoutID = gymNamesByWorkoutID(for: workoutsSnapshot)
         let storageSnapshot = iCloudManager.storageSnapshot()
         let unit = weightUnit
 
@@ -1230,6 +1283,8 @@ private extension ExportWorkoutsView {
                     startDate: start,
                     endDateInclusive: end,
                     exerciseTagsByName: exerciseTagsByName,
+                    gymNamesByWorkoutID: gymNamesByWorkoutID,
+                    selectedColumns: selectedColumns,
                     weightUnit: unit
                 )
 
@@ -1247,7 +1302,11 @@ private extension ExportWorkoutsView {
                         ? "Saved on-device (iCloud unavailable)"
                         : "Saved to iCloud Drive"
                     isExportingWorkouts = false
-                    trackExportCompleted(kind: "workouts", itemCount: workoutsSnapshot.count)
+                    trackExportCompleted(
+                        kind: "workouts",
+                        itemCount: workoutsSnapshot.count,
+                        extra: workoutColumnAnalyticsPayload(for: selectedColumns)
+                    )
                     presentShare(fileURL)
                     Haptics.notify(.success)
                 }
@@ -1350,16 +1409,18 @@ private extension ExportWorkoutsView {
     @MainActor
     func startExerciseHistoryExport() {
         guard exerciseHistoryExportButtonEnabled else { return }
+        let selectedNames = selectedExerciseNamesInRange
+        let selectedColumns = orderedSelectedWorkoutColumns
         trackExportStarted(
             kind: "exerciseHistory",
-            extra: ["Export.selectionCount": "\(selectedExerciseNamesInRange.count)"]
+            extra: workoutColumnAnalyticsPayload(for: selectedColumns)
+                .merging(["Export.selectionCount": "\(selectedNames.count)"]) { _, new in new }
         )
 
         exerciseHistoryExportStatusMessage = nil
         exerciseHistoryExportFileURL = nil
         isExportingExerciseHistory = true
 
-        let selectedNames = selectedExerciseNamesInRange
         let workoutsSnapshot = workoutsInSelection.compactMap { workout -> Workout? in
             let filteredExercises = workout.exercises.filter { selectedNames.contains($0.name) }
             guard !filteredExercises.isEmpty else { return nil }
@@ -1379,6 +1440,7 @@ private extension ExportWorkoutsView {
         }
 
         let exerciseTagsByName = exerciseTagsByName(for: workoutsSnapshot)
+        let gymNamesByWorkoutID = gymNamesByWorkoutID(for: workoutsSnapshot)
         let storageSnapshot = iCloudManager.storageSnapshot()
         let unit = weightUnit
         let selectedExerciseCount = selectedNames.count
@@ -1394,6 +1456,8 @@ private extension ExportWorkoutsView {
                     startDate: bounds.start,
                     endDateInclusive: bounds.endInclusive,
                     exerciseTagsByName: exerciseTagsByName,
+                    gymNamesByWorkoutID: gymNamesByWorkoutID,
+                    selectedColumns: selectedColumns,
                     weightUnit: unit
                 )
 
@@ -1416,7 +1480,8 @@ private extension ExportWorkoutsView {
                     trackExportCompleted(
                         kind: "exerciseHistory",
                         itemCount: workoutsSnapshot.count,
-                        extra: ["Export.selectionCount": "\(selectedExerciseCount)"]
+                        extra: workoutColumnAnalyticsPayload(for: selectedColumns)
+                            .merging(["Export.selectionCount": "\(selectedExerciseCount)"]) { _, new in new }
                     )
                     presentShare(fileURL)
                     Haptics.notify(.success)
@@ -1434,16 +1499,18 @@ private extension ExportWorkoutsView {
     @MainActor
     func startMuscleGroupExport() {
         guard muscleGroupExportButtonEnabled else { return }
+        let selectedTagIds = selectedMuscleTagIdsInRange
+        let selectedColumns = orderedSelectedWorkoutColumns
         trackExportStarted(
             kind: "muscleGroup",
-            extra: ["Export.selectionCount": "\(selectedMuscleTagIdsInRange.count)"]
+            extra: workoutColumnAnalyticsPayload(for: selectedColumns)
+                .merging(["Export.selectionCount": "\(selectedTagIds.count)"]) { _, new in new }
         )
 
         muscleGroupExportStatusMessage = nil
         muscleGroupExportFileURL = nil
         isExportingMuscleGroups = true
 
-        let selectedTagIds = selectedMuscleTagIdsInRange
         let workoutsSnapshot = workoutsInSelection.compactMap { workout -> Workout? in
             let filteredExercises = workout.exercises.filter { exercise in
                 let resolvedTagIds = Set(exerciseMetadataManager.resolvedTags(for: exercise.name).map(\.id))
@@ -1467,6 +1534,7 @@ private extension ExportWorkoutsView {
         }
 
         let exerciseTagsByName = exerciseTagsByName(for: workoutsSnapshot)
+        let gymNamesByWorkoutID = gymNamesByWorkoutID(for: workoutsSnapshot)
         let storageSnapshot = iCloudManager.storageSnapshot()
         let unit = weightUnit
         let selectedGroupCount = selectedTagIds.count
@@ -1482,6 +1550,8 @@ private extension ExportWorkoutsView {
                     startDate: bounds.start,
                     endDateInclusive: bounds.endInclusive,
                     exerciseTagsByName: exerciseTagsByName,
+                    gymNamesByWorkoutID: gymNamesByWorkoutID,
+                    selectedColumns: selectedColumns,
                     weightUnit: unit
                 )
 
@@ -1504,7 +1574,8 @@ private extension ExportWorkoutsView {
                     trackExportCompleted(
                         kind: "muscleGroup",
                         itemCount: workoutsSnapshot.count,
-                        extra: ["Export.selectionCount": "\(selectedGroupCount)"]
+                        extra: workoutColumnAnalyticsPayload(for: selectedColumns)
+                            .merging(["Export.selectionCount": "\(selectedGroupCount)"]) { _, new in new }
                     )
                     presentShare(fileURL)
                     Haptics.notify(.success)
@@ -1522,16 +1593,18 @@ private extension ExportWorkoutsView {
     @MainActor
     func startWorkoutDatesExport() {
         guard workoutDatesExportButtonEnabled else { return }
+        let selectedIds = selectedWorkoutDateIdsInRange
+        let selectedColumns = orderedSelectedWorkoutColumns
         trackExportStarted(
             kind: "workoutDates",
-            extra: ["Export.selectionCount": "\(selectedWorkoutDateIdsInRange.count)"]
+            extra: workoutColumnAnalyticsPayload(for: selectedColumns)
+                .merging(["Export.selectionCount": "\(selectedIds.count)"]) { _, new in new }
         )
 
         workoutDatesExportStatusMessage = nil
         workoutDatesExportFileURL = nil
         isExportingWorkoutDates = true
 
-        let selectedIds = selectedWorkoutDateIdsInRange
         let workoutsSnapshot = workoutsInSelection.filter { workout in
             selectedIds.contains(dayIdentifier(for: workout.date))
         }
@@ -1543,6 +1616,7 @@ private extension ExportWorkoutsView {
         }
 
         let exerciseTagsByName = exerciseTagsByName(for: workoutsSnapshot)
+        let gymNamesByWorkoutID = gymNamesByWorkoutID(for: workoutsSnapshot)
         let storageSnapshot = iCloudManager.storageSnapshot()
         let unit = weightUnit
         let selectedDateCount = selectedIds.count
@@ -1558,6 +1632,8 @@ private extension ExportWorkoutsView {
                     startDate: bounds.start,
                     endDateInclusive: bounds.endInclusive,
                     exerciseTagsByName: exerciseTagsByName,
+                    gymNamesByWorkoutID: gymNamesByWorkoutID,
+                    selectedColumns: selectedColumns,
                     weightUnit: unit
                 )
 
@@ -1580,7 +1656,8 @@ private extension ExportWorkoutsView {
                     trackExportCompleted(
                         kind: "workoutDates",
                         itemCount: workoutsSnapshot.count,
-                        extra: ["Export.selectionCount": "\(selectedDateCount)"]
+                        extra: workoutColumnAnalyticsPayload(for: selectedColumns)
+                            .merging(["Export.selectionCount": "\(selectedDateCount)"]) { _, new in new }
                     )
                     presentShare(fileURL)
                     Haptics.notify(.success)
@@ -1731,6 +1808,29 @@ private extension ExportWorkoutsView {
         return mapping
     }
 
+    func gymNamesByWorkoutID(for workouts: [Workout]) -> [UUID: String] {
+        let annotations = annotationsManager.annotations
+        let gymNames = gymProfilesManager.gymNameSnapshot()
+        var mapping: [UUID: String] = [:]
+
+        for workout in workouts {
+            guard let gymId = annotations[workout.id]?.gymProfileId,
+                  let gymName = gymNames[gymId] else {
+                continue
+            }
+            mapping[workout.id] = gymName
+        }
+
+        return mapping
+    }
+
+    func workoutColumnAnalyticsPayload(for columns: [WorkoutExportColumn]) -> [String: String] {
+        [
+            "Export.columnCount": "\(columns.count)",
+            "Export.includesGym": columns.contains(.gymName) ? "true" : "false"
+        ]
+    }
+
     func formatDay(_ date: Date) -> String {
         date.formatted(date: .abbreviated, time: .omitted)
     }
@@ -1806,6 +1906,7 @@ private enum ExportTimeRange: String, CaseIterable, Hashable, Identifiable {
 
 private enum ExportSheet: String, Identifiable {
     case customRange
+    case workoutColumns
     case exerciseHistory
     case workoutDates
     case muscleGroups
