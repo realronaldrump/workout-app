@@ -163,6 +163,44 @@ final class GymProfilesManager: ObservableObject {
         removeLegacyFile()
     }
 
+    func mergeGymsFromBackup(_ backupGyms: [GymProfile]) -> (
+        idMap: [UUID: UUID],
+        inserted: Int,
+        skipped: Int
+    ) {
+        guard !backupGyms.isEmpty else {
+            return ([:], 0, 0)
+        }
+
+        var idMap: [UUID: UUID] = [:]
+        var inserted = 0
+        var skipped = 0
+
+        for backupGym in backupGyms {
+            if gyms.contains(where: { $0.id == backupGym.id }) {
+                idMap[backupGym.id] = backupGym.id
+                skipped += 1
+                continue
+            }
+
+            if let matching = gyms.first(where: { isDuplicateGym($0, backup: backupGym) }) {
+                idMap[backupGym.id] = matching.id
+                skipped += 1
+                continue
+            }
+
+            gyms.append(backupGym)
+            idMap[backupGym.id] = backupGym.id
+            inserted += 1
+        }
+
+        if inserted > 0 {
+            persist()
+        }
+
+        return (idMap, inserted, skipped)
+    }
+
     private func fileURL() -> URL {
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         return documents.appendingPathComponent(fileName)
@@ -171,13 +209,9 @@ final class GymProfilesManager: ObservableObject {
     private func persist() {
         let entries = gyms
         let database = database
-        let legacyURL = fileURL()
         Task.detached(priority: .utility) {
             do {
                 try database.saveGymProfiles(entries)
-                if FileManager.default.fileExists(atPath: legacyURL.path) {
-                    try? FileManager.default.removeItem(at: legacyURL)
-                }
             } catch {
                 print("Failed to persist gym profiles: \(error)")
             }
@@ -186,18 +220,7 @@ final class GymProfilesManager: ObservableObject {
 
     private func load() {
         do {
-            let stored = try database.loadGymProfiles()
-            if !stored.isEmpty || !FileManager.default.fileExists(atPath: fileURL().path) {
-                gyms = stored
-                removeLegacyFile()
-                return
-            }
-
-            let data = try Data(contentsOf: fileURL())
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-            gyms = try decoder.decode([GymProfile].self, from: data)
-            try database.saveGymProfiles(gyms)
+            gyms = try database.loadGymProfiles()
             removeLegacyFile()
         } catch {
             print("Failed to load gym profiles: \(error)")
@@ -277,5 +300,33 @@ final class GymProfilesManager: ObservableObject {
         return value
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
+    }
+
+    private func isDuplicateGym(_ local: GymProfile, backup: GymProfile) -> Bool {
+        let localName = normalizedLookupValue(local.name)
+        let backupName = normalizedLookupValue(backup.name)
+        let localAddress = normalizedLookupValue(local.address)
+        let backupAddress = normalizedLookupValue(backup.address)
+
+        if !localName.isEmpty, localName == backupName {
+            if localAddress.isEmpty || backupAddress.isEmpty || localAddress == backupAddress {
+                return true
+            }
+        }
+
+        if !localAddress.isEmpty, localAddress == backupAddress {
+            return true
+        }
+
+        guard let localLat = local.latitude,
+              let localLon = local.longitude,
+              let backupLat = backup.latitude,
+              let backupLon = backup.longitude else {
+            return false
+        }
+
+        let localLocation = CLLocation(latitude: localLat, longitude: localLon)
+        let backupLocation = CLLocation(latitude: backupLat, longitude: backupLon)
+        return localLocation.distance(from: backupLocation) <= 120
     }
 }

@@ -36,6 +36,17 @@ final class FeatureGuideManager: ObservableObject {
         persist()
     }
 
+    @discardableResult
+    func mergeCompletedGuideIDs(_ ids: [String]) -> Int {
+        let before = completedGuideIDs.count
+        completedGuideIDs.formUnion(ids)
+        let inserted = completedGuideIDs.count - before
+        if inserted > 0 {
+            persist()
+        }
+        return inserted
+    }
+
     var completionCount: Int { completedGuideIDs.count }
     var totalCount: Int { Self.allGuides.count }
 

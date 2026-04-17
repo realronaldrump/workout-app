@@ -355,6 +355,13 @@ final class IntentionalBreaksManager: ObservableObject {
         persistSavedBreaks()
     }
 
+    @discardableResult
+    func mergeBreaksFromBackup(_ ranges: [IntentionalBreakRange]) -> Int {
+        let before = savedBreaks.count
+        addBreaks(ranges)
+        return max(0, savedBreaks.count - before)
+    }
+
     func updateBreak(
         id: UUID,
         startDate: Date,
@@ -385,6 +392,18 @@ final class IntentionalBreaksManager: ObservableObject {
             dismissedSuggestionRanges + [suggestion.asRange()]
         )
         persistDismissedSuggestions()
+    }
+
+    @discardableResult
+    func mergeDismissedSuggestionsFromBackup(_ ranges: [IntentionalBreakRange]) -> Int {
+        guard !ranges.isEmpty else { return 0 }
+        let before = dismissedSuggestionRanges.count
+        dismissedSuggestionRanges = IntentionalBreaksAnalytics.mergedRanges(dismissedSuggestionRanges + ranges)
+        let inserted = max(0, dismissedSuggestionRanges.count - before)
+        if inserted > 0 {
+            persistDismissedSuggestions()
+        }
+        return inserted
     }
 
     func resetDismissedSuggestions() {

@@ -16,7 +16,7 @@ struct BackupFilesView: View {
                             icon: "icloud.slash",
                             tint: Theme.Colors.textTertiary,
                             title: "No Backup Files",
-                            message: "Exported workout backups will appear here."
+                            message: "Exported CSVs and master backups will appear here."
                         )
                         .padding(.top, 50)
                     } else {
@@ -37,7 +37,7 @@ struct BackupFilesView: View {
             Task { @MainActor in
                 let directoryURL = iCloudManager.storageSnapshot().url
                 let sorted = await Task.detached(priority: .userInitiated) { [directoryURL] in
-                    (directoryURL.map { iCloudDocumentManager.listWorkoutFiles(in: $0) } ?? [])
+                    (directoryURL.map { iCloudDocumentManager.listExportAndBackupFiles(in: $0) } ?? [])
                         .sorted { $0.lastPathComponent > $1.lastPathComponent }
                 }.value
                 files = sorted

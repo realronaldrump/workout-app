@@ -12,6 +12,8 @@ $(SRCROOT)/workout-app/Models/SampleData.swift
 $(SRCROOT)/workout-app/Models/WorkoutModels.swift
 $(SRCROOT)/workout-app/Models/WorkoutSessionModels.swift
 $(SRCROOT)/workout-app/Services/AdaptiveLuminanceManager.swift
+$(SRCROOT)/workout-app/Services/AppBackupService.swift
+$(SRCROOT)/workout-app/Services/AppDatabase.swift
 $(SRCROOT)/workout-app/Services/CSVParser.swift
 $(SRCROOT)/workout-app/Services/ExerciseMetadataManager.swift
 $(SRCROOT)/workout-app/Services/ExerciseMetricManager.swift
@@ -35,6 +37,7 @@ $(SRCROOT)/workout-app/Services/WorkoutCSVExporter.swift
 $(SRCROOT)/workout-app/Services/WorkoutDataManager.swift
 $(SRCROOT)/workout-app/Services/WorkoutIdentityStore.swift
 $(SRCROOT)/workout-app/Services/WorkoutLogStore.swift
+$(SRCROOT)/workout-app/Services/WorkoutRepository.swift
 $(SRCROOT)/workout-app/Services/WorkoutSessionManager.swift
 $(SRCROOT)/workout-app/Services/WorkoutValueFormatter.swift
 $(SRCROOT)/workout-app/Services/iCloudDocumentManager.swift

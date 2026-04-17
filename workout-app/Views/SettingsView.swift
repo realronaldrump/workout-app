@@ -87,7 +87,7 @@ struct SettingsView: View {
                             icon: "square.and.arrow.down",
                             color: Theme.Colors.accent,
                             title: "Import Data",
-                            subtitle: "Import CSV"
+                            subtitle: "CSV or app backup"
                         ) {
                             showingImportWizard = true
                         }
@@ -99,7 +99,7 @@ struct SettingsView: View {
                                 icon: "square.and.arrow.up",
                                 color: Theme.Colors.accentSecondary,
                                 title: "Export Data",
-                                subtitle: "CSV backup"
+                                subtitle: "Master backup & CSV"
                             )
                         }
                         .buttonStyle(PlainButtonStyle())

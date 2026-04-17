@@ -97,6 +97,15 @@ class WorkoutDataManager: ObservableObject {
             let persistedWorkouts = try await Task.detached(priority: .userInitiated) { [database] in
                 try database.loadImportedWorkouts()
             }.value
+
+            if iCloudDocumentManager.latestBackupFile(in: searchDirectories) != nil {
+                guard isCurrentImportedWorkoutRequest(requestID) else { return }
+                importedWorkouts = persistedWorkouts.sorted { $0.date > $1.date }
+                mergeSources()
+                isLoading = false
+                return
+            }
+
             let latestFile = Self.latestWorkoutFile(in: searchDirectories)
             let latestSignature = Self.importSourceSignature(for: latestFile)
             let cachedSignature = cachedImportSourceSignature()
@@ -441,6 +450,75 @@ class WorkoutDataManager: ObservableObject {
         try? database.clearImportedWorkouts()
     }
 
+    func mergeImportedWorkoutsFromBackup(_ backupWorkouts: [Workout]) -> (
+        idMap: [UUID: UUID],
+        inserted: Int,
+        skipped: Int
+    ) {
+        guard !backupWorkouts.isEmpty else {
+            return ([:], 0, 0)
+        }
+
+        let calendar = Calendar.current
+        var idMap: [UUID: UUID] = [:]
+        var inserted = 0
+        var skipped = 0
+        var mergedImported = importedWorkouts
+        var existingIds = Set(workouts.map(\.id))
+        var existingIdsByKey = Self.makeExistingIdsByKey(from: workouts, calendar: calendar)
+        var identityEntries: [String: UUID] = [:]
+
+        for backupWorkout in backupWorkouts {
+            let workoutKey = WorkoutIdentity.workoutKey(
+                date: backupWorkout.date,
+                workoutName: backupWorkout.name,
+                calendar: calendar
+            )
+
+            if existingIds.contains(backupWorkout.id) {
+                idMap[backupWorkout.id] = backupWorkout.id
+                identityEntries[workoutKey] = backupWorkout.id
+                skipped += 1
+                continue
+            }
+
+            if let existingId = existingIdsByKey[workoutKey] {
+                idMap[backupWorkout.id] = existingId
+                identityEntries[workoutKey] = existingId
+                skipped += 1
+                continue
+            }
+
+            mergedImported.append(backupWorkout)
+            existingIds.insert(backupWorkout.id)
+            existingIdsByKey[workoutKey] = backupWorkout.id
+            idMap[backupWorkout.id] = backupWorkout.id
+            identityEntries[workoutKey] = backupWorkout.id
+            inserted += 1
+        }
+
+        if inserted > 0 {
+            importedWorkouts = mergedImported.sorted { $0.date > $1.date }
+            mergeSources()
+            do {
+                try database.saveImportedWorkouts(importedWorkouts)
+            } catch {
+                print("Failed to persist imported backup workouts: \(error)")
+            }
+        }
+
+        identityStore.mergeMissing(identityEntries)
+        return (idMap, inserted, skipped)
+    }
+
+    func mergeWorkoutIdentitiesFromBackup(
+        _ entries: [String: UUID],
+        workoutIdMap: [UUID: UUID]
+    ) -> Int {
+        let remapped = entries.mapValues { workoutIdMap[$0] ?? $0 }
+        return identityStore.mergeMissing(remapped)
+    }
+
     private func cachedImportSourceSignature() -> String? {
         let path = userDefaults.string(forKey: Self.importedWorkoutsSourcePathKey)
         let timestamp = userDefaults.object(forKey: Self.importedWorkoutsSourceTimestampKey) as? Double
@@ -549,7 +627,7 @@ class WorkoutDataManager: ObservableObject {
     }
 }
 
-private extension WorkoutDataManager {
+extension WorkoutDataManager {
     struct ExerciseStatsAccumulator {
         var totalVolume: Double = 0
         var maxWeight: Double?

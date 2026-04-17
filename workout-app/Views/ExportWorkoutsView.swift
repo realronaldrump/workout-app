@@ -8,8 +8,10 @@ struct ExportWorkoutsView: View {
     @ObservedObject var iCloudManager: iCloudDocumentManager
     @ObservedObject private var exerciseMetadataManager = ExerciseMetadataManager.shared
     @EnvironmentObject private var healthManager: HealthKitManager
+    @EnvironmentObject private var logStore: WorkoutLogStore
     @EnvironmentObject private var annotationsManager: WorkoutAnnotationsManager
     @EnvironmentObject private var gymProfilesManager: GymProfilesManager
+    @EnvironmentObject private var intentionalBreaksManager: IntentionalBreaksManager
 
     private let weightUnit = "lbs"
     private let maxContentWidth: CGFloat = 820
@@ -49,6 +51,10 @@ struct ExportWorkoutsView: View {
     @State private var exportErrorMessage: String?
     @State private var shareItem: ExportShareItem?
 
+    @State private var isExportingFullBackup = false
+    @State private var fullBackupStatusMessage: String?
+    @State private var fullBackupFileURL: URL?
+
     @State private var selectedHealthSummaryMetrics: Set<HealthMetric> = Set(HealthMetric.allCases)
     @State private var selectedHealthSampleMetrics: Set<HealthMetric> = Set(HealthMetric.allCases.filter(\.supportsSamples))
     @State private var includeHealthWorkoutLocations = false
@@ -72,6 +78,7 @@ struct ExportWorkoutsView: View {
             ScrollView(showsIndicators: false) {
                 LazyVStack(alignment: .leading, spacing: Theme.Spacing.xxl) {
                     header
+                    fullBackupSection
 
                     if dataManager.workouts.isEmpty {
                         emptyState
@@ -174,6 +181,38 @@ private extension ExportWorkoutsView {
         )
         .frame(maxWidth: .infinity)
         .padding(.top, Theme.Spacing.xl)
+    }
+
+    var fullBackupSection: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            ExportSectionHeader(
+                eyebrow: "Master Backup",
+                title: "Everything Backup",
+                subtitle: "Save workouts, cached health data, gyms, tags, breaks, favorites, profile, and app settings."
+            )
+
+            fullBackupCard
+        }
+    }
+
+    var fullBackupCard: some View {
+        ExportActionCard(
+            descriptor: ExportCardDescriptor(
+                title: "Export Master Backup",
+                subtitle: "One native backup file for moving this app’s data to another device.",
+                systemImage: "archivebox.fill",
+                iconTint: Theme.Colors.accent
+            ),
+            statusMessage: fullBackupStatusMessage,
+            fileName: fullBackupFileURL?.lastPathComponent,
+            footnote: "Creates a Big Beautiful Workout backup. It does not include previous export files or unfinished workout drafts.",
+            actionTitle: "Export Backup",
+            isRunning: isExportingFullBackup,
+            isEnabled: !isExportingFullBackup,
+            shareURL: fullBackupFileURL,
+            onAction: startFullBackupExport,
+            onShare: presentShare
+        )
     }
 
     var overviewSection: some View {
@@ -990,6 +1029,66 @@ private extension ExportWorkoutsView {
     func showError(_ error: Error) {
         exportErrorMessage = error.localizedDescription
         Haptics.notify(.error)
+    }
+
+    @MainActor
+    func startFullBackupExport() {
+        guard !isExportingFullBackup else { return }
+        trackExportStarted(kind: "masterBackup")
+
+        fullBackupStatusMessage = nil
+        fullBackupFileURL = nil
+        isExportingFullBackup = true
+
+        do {
+            let backup = try AppBackupService.makeBackup(
+                dataManager: dataManager,
+                logStore: logStore,
+                healthManager: healthManager,
+                annotationsManager: annotationsManager,
+                gymProfilesManager: gymProfilesManager,
+                intentionalBreaksManager: intentionalBreaksManager
+            )
+            let data = try AppBackupService.exportBackup(backup)
+            let fileName = AppBackupService.makeBackupFileName(exportedAt: backup.exportedAt)
+            let storageSnapshot = iCloudManager.storageSnapshot()
+            let itemCount = backupItemCount(backup)
+
+            Task.detached(priority: .userInitiated) {
+                do {
+                    guard let directory = storageSnapshot.url else {
+                        throw iCloudError.containerNotAvailable
+                    }
+
+                    try iCloudDocumentManager.saveBackupFile(data: data, in: directory, fileName: fileName)
+                    let fileURL = directory.appendingPathComponent(fileName)
+
+                    await MainActor.run {
+                        fullBackupFileURL = fileURL
+                        fullBackupStatusMessage = storageSnapshot.isUsingLocalFallback
+                            ? "Saved on-device (iCloud unavailable)"
+                            : "Saved to iCloud Drive"
+                        isExportingFullBackup = false
+                        trackExportCompleted(
+                            kind: "masterBackup",
+                            itemCount: itemCount
+                        )
+                        presentShare(fileURL)
+                        Haptics.notify(.success)
+                    }
+                } catch {
+                    await MainActor.run {
+                        isExportingFullBackup = false
+                        trackExportFailed(kind: "masterBackup", error: error)
+                        showError(error)
+                    }
+                }
+            }
+        } catch {
+            isExportingFullBackup = false
+            trackExportFailed(kind: "masterBackup", error: error)
+            showError(error)
+        }
     }
 
     @MainActor
@@ -1829,6 +1928,18 @@ private extension ExportWorkoutsView {
             "Export.columnCount": "\(columns.count)",
             "Export.includesGym": columns.contains(.gymName) ? "true" : "false"
         ]
+    }
+
+    func backupItemCount(_ backup: BigBeautifulWorkoutBackup) -> Int {
+        backup.payload.importedWorkouts.count +
+        backup.payload.loggedWorkouts.count +
+        backup.payload.gymProfiles.count +
+        backup.payload.workoutAnnotations.count +
+        backup.payload.workoutHealthData.count +
+        backup.payload.dailyHealthData.count +
+        backup.payload.exerciseTagOverrides.count +
+        backup.payload.exerciseMetricPreferences.count +
+        backup.payload.intentionalBreakRanges.count
     }
 
     func formatDay(_ date: Date) -> String {

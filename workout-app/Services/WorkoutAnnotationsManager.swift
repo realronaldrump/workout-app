@@ -7,8 +7,6 @@ final class WorkoutAnnotationsManager: ObservableObject {
 
     private let database = AppDatabase.shared
     private let fileName = "workout_annotations.json"
-    private let userDefaults = UserDefaults.standard
-    private let migrationFlagKey = "workout_annotations_migrated_v2"
 
     init() {
         load()
@@ -73,6 +71,41 @@ final class WorkoutAnnotationsManager: ObservableObject {
         removeLegacyFile()
     }
 
+    func mergeAnnotationsFromBackup(
+        _ backupAnnotations: [WorkoutAnnotation],
+        workoutIdMap: [UUID: UUID],
+        gymIdMap: [UUID: UUID]
+    ) -> (inserted: Int, skipped: Int) {
+        guard !backupAnnotations.isEmpty else { return (0, 0) }
+
+        var inserted = 0
+        var skipped = 0
+
+        for annotation in backupAnnotations {
+            let workoutId = workoutIdMap[annotation.workoutId] ?? annotation.workoutId
+            let gymId = annotation.gymProfileId.map { gymIdMap[$0] ?? $0 }
+
+            guard gymId != nil else {
+                skipped += 1
+                continue
+            }
+
+            guard annotations[workoutId] == nil else {
+                skipped += 1
+                continue
+            }
+
+            annotations[workoutId] = WorkoutAnnotation(workoutId: workoutId, gymProfileId: gymId)
+            inserted += 1
+        }
+
+        if inserted > 0 {
+            persist()
+        }
+
+        return (inserted, skipped)
+    }
+
     private func fileURL() -> URL {
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         return documents.appendingPathComponent(fileName)
@@ -81,13 +114,9 @@ final class WorkoutAnnotationsManager: ObservableObject {
     private func persist() {
         let entries = Array(annotations.values)
         let database = database
-        let legacyURL = fileURL()
         Task.detached(priority: .utility) {
             do {
                 try database.replaceAnnotations(entries)
-                if FileManager.default.fileExists(atPath: legacyURL.path) {
-                    try? FileManager.default.removeItem(at: legacyURL)
-                }
             } catch {
                 print("Failed to persist annotations: \(error)")
             }
@@ -97,23 +126,8 @@ final class WorkoutAnnotationsManager: ObservableObject {
     private func load() {
         do {
             let stored = try database.loadAnnotations()
-            if !stored.isEmpty || !FileManager.default.fileExists(atPath: fileURL().path) {
-                annotations = Dictionary(uniqueKeysWithValues: stored.map { ($0.workoutId, $0) })
-                removeLegacyFile()
-                return
-            }
-
-            let data = try Data(contentsOf: fileURL())
-            let decoder = JSONDecoder()
-            let entries = try decoder.decode([WorkoutAnnotation].self, from: data)
-            let filtered = entries.filter { $0.gymProfileId != nil }
-            annotations = Dictionary(uniqueKeysWithValues: filtered.map { ($0.workoutId, $0) })
-            try database.replaceAnnotations(filtered)
+            annotations = Dictionary(uniqueKeysWithValues: stored.map { ($0.workoutId, $0) })
             removeLegacyFile()
-
-            if !userDefaults.bool(forKey: migrationFlagKey) {
-                userDefaults.set(true, forKey: migrationFlagKey)
-            }
         } catch {
             print("Failed to load annotations: \(error)")
         }

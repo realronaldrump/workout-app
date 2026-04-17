@@ -56,6 +56,20 @@ final class WorkoutIdentityStore {
         }
     }
 
+    @discardableResult
+    func mergeMissing(_ entries: [String: UUID]) -> Int {
+        guard !entries.isEmpty else { return 0 }
+        var inserted = 0
+        for (key, value) in entries where cache[key] == nil {
+            cache[key] = value.uuidString
+            inserted += 1
+        }
+        if inserted > 0 {
+            persist()
+        }
+        return inserted
+    }
+
     func clear() {
         cache.removeAll()
         try? database.clearWorkoutIdentities()
@@ -70,16 +84,7 @@ final class WorkoutIdentityStore {
     private func load() {
         do {
             let stored = try database.loadWorkoutIdentities()
-            if !stored.isEmpty || !FileManager.default.fileExists(atPath: fileURL().path) {
-                cache = Dictionary(uniqueKeysWithValues: stored.map { ($0.key, $0.value.uuidString) })
-                removeLegacyFile()
-                return
-            }
-
-            let data = try Data(contentsOf: fileURL())
-            cache = try JSONDecoder().decode([String: String].self, from: data)
-            let decoded = cache.compactMapValues(UUID.init(uuidString:))
-            try database.mergeWorkoutIdentities(decoded)
+            cache = Dictionary(uniqueKeysWithValues: stored.map { ($0.key, $0.value.uuidString) })
             removeLegacyFile()
         } catch {
             print("Failed to load workout identity map: \(error)")

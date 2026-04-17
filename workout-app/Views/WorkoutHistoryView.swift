@@ -11,15 +11,21 @@ struct WorkoutHistoryView: View {
     @State private var selectedDurationBands: Set<HistoryDurationBand>?
     @State private var presentedFilterSheet: HistoryFilterSheet?
     @State private var presentedSummarySheet: HistorySummarySheet?
+    @State private var cachedFilteredWorkouts: [Workout] = []
+    @State private var cachedGroupedWorkouts: [(month: String, workouts: [Workout])] = []
+    @State private var cachedLocationBreakdownItems: [HistoryLocationBreakdownItem] = []
+    @State private var cachedAvailableLocationOptions: [HistoryLocationOption] = []
+    @State private var cachedAvailableExerciseOptions: [HistoryExerciseOption] = []
+    @State private var derivedRefreshTask: Task<Void, Never>?
 
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var annotationsManager: WorkoutAnnotationsManager
     @EnvironmentObject private var gymProfilesManager: GymProfilesManager
 
     var body: some View {
-        let filteredWorkouts = filteredWorkouts()
-        let groupedWorkouts = buildGroupedWorkouts(from: filteredWorkouts)
-        let locationBreakdownItems = buildLocationBreakdownItems(from: filteredWorkouts)
+        let filteredWorkouts = cachedFilteredWorkouts
+        let groupedWorkouts = cachedGroupedWorkouts
+        let locationBreakdownItems = cachedLocationBreakdownItems
 
         ZStack {
             AdaptiveBackground()
@@ -81,15 +87,33 @@ struct WorkoutHistoryView: View {
                     .presentationDragIndicator(.visible)
             }
         }
-        .onAppear(perform: sanitizeSelections)
+        .onAppear(perform: refreshDerivedState)
+        .onChange(of: searchText) { _, _ in
+            scheduleDerivedStateRefresh()
+        }
+        .onChange(of: selectedTimeWindow) { _, _ in
+            scheduleDerivedStateRefresh()
+        }
+        .onChange(of: selectedLocations) { _, _ in
+            scheduleDerivedStateRefresh()
+        }
+        .onChange(of: selectedExercises) { _, _ in
+            scheduleDerivedStateRefresh()
+        }
+        .onChange(of: selectedDurationBands) { _, _ in
+            scheduleDerivedStateRefresh()
+        }
         .onChange(of: workouts) { _, _ in
-            sanitizeSelections()
+            scheduleDerivedStateRefresh(debounceNs: 0)
         }
         .onReceive(annotationsManager.$annotations) { _ in
-            sanitizeSelections()
+            scheduleDerivedStateRefresh(debounceNs: 0)
         }
         .onReceive(gymProfilesManager.$gyms) { _ in
-            sanitizeSelections()
+            scheduleDerivedStateRefresh(debounceNs: 0)
+        }
+        .onDisappear {
+            derivedRefreshTask?.cancel()
         }
     }
 
@@ -385,6 +409,10 @@ struct WorkoutHistoryView: View {
     }
 
     private var availableLocationOptions: [HistoryLocationOption] {
+        cachedAvailableLocationOptions
+    }
+
+    private func buildAvailableLocationOptions() -> [HistoryLocationOption] {
         var countsByID: [String: Int] = [:]
         var optionByID: [String: HistoryLocationOption] = [:]
 
@@ -415,6 +443,10 @@ struct WorkoutHistoryView: View {
     }
 
     private var availableExerciseOptions: [HistoryExerciseOption] {
+        cachedAvailableExerciseOptions
+    }
+
+    private func buildAvailableExerciseOptions() -> [HistoryExerciseOption] {
         var counts: [String: Int] = [:]
 
         for workout in workouts {
@@ -723,11 +755,33 @@ struct WorkoutHistoryView: View {
         selectedLocations = nil
         selectedExercises = nil
         selectedDurationBands = nil
+        refreshDerivedState()
     }
 
     private func sanitizeSelections() {
-        selectedLocations = sanitizedSelection(selectedLocations, validItems: availableLocationOptions)
-        selectedExercises = sanitizedSelection(selectedExercises, validItems: availableExerciseOptions)
+        selectedLocations = sanitizedSelection(selectedLocations, validItems: cachedAvailableLocationOptions)
+        selectedExercises = sanitizedSelection(selectedExercises, validItems: cachedAvailableExerciseOptions)
+    }
+
+    private func scheduleDerivedStateRefresh(debounceNs: UInt64 = 120_000_000) {
+        derivedRefreshTask?.cancel()
+        derivedRefreshTask = Task { @MainActor in
+            if debounceNs > 0 {
+                try? await Task.sleep(nanoseconds: debounceNs)
+            }
+            guard !Task.isCancelled else { return }
+            refreshDerivedState()
+        }
+    }
+
+    private func refreshDerivedState() {
+        cachedAvailableLocationOptions = buildAvailableLocationOptions()
+        cachedAvailableExerciseOptions = buildAvailableExerciseOptions()
+        sanitizeSelections()
+        let filtered = filteredWorkouts()
+        cachedFilteredWorkouts = filtered
+        cachedGroupedWorkouts = buildGroupedWorkouts(from: filtered)
+        cachedLocationBreakdownItems = buildLocationBreakdownItems(from: filtered)
     }
 
     private func sanitizedSelection<Item: Hashable>(

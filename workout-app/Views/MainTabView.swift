@@ -248,6 +248,7 @@ struct MainTabView: View {
             await logStore.load()
             dataManager.setLoggedWorkouts(logStore.workouts)
             await dataManager.loadPersistedImportedWorkouts()
+            await importLatestNativeBackupIfNeeded()
             await sessionManager.restoreDraft()
 
             // Detect existing users before evaluating onboarding. CSV-imported
@@ -266,6 +267,36 @@ struct MainTabView: View {
 
             hasCompletedInitialLoad = true
             refreshOnboardingState()
+        }
+    }
+
+    private func importLatestNativeBackupIfNeeded() async {
+        let directories = await iCloudManager.storageSearchDirectories()
+        guard let backupFile = iCloudDocumentManager.latestBackupFile(in: directories) else { return }
+
+        let signature = AppBackupService.importSourceSignature(for: backupFile)
+        guard signature != AppBackupService.cachedNativeBackupSourceSignature() else { return }
+
+        do {
+            let backupData = try await Task.detached(priority: .userInitiated) {
+                try Data(contentsOf: backupFile)
+            }.value
+            let backup = try AppBackupService.decodeBackup(from: backupData)
+            _ = try AppBackupImporter.importBackup(
+                backup,
+                dataManager: dataManager,
+                logStore: logStore,
+                healthManager: healthManager,
+                annotationsManager: annotationsManager,
+                gymProfilesManager: gymProfilesManager,
+                intentionalBreaksManager: intentionalBreaksManager
+            )
+            AppBackupService.persistNativeBackupSourceSignature(signature)
+            if !dataManager.workouts.isEmpty {
+                hasSeenOnboarding = true
+            }
+        } catch {
+            print("Failed to import native backup on launch: \(error)")
         }
     }
 

@@ -13,7 +13,7 @@ enum ImportPhase: Double {
         case .idle:
             return "Awaiting file"
         case .reading:
-            return "Reading CSV"
+            return "Reading file"
         case .parsing:
             return "Parsing"
         case .processing:

@@ -62,6 +62,34 @@ final class ExerciseMetricManager: ObservableObject {
         save()
     }
 
+    @discardableResult
+    func mergePreferencesFromBackup(
+        _ preferences: [String: ExerciseCardioMetricPreferences]
+    ) -> (inserted: Int, skipped: Int) {
+        guard !preferences.isEmpty else { return (0, 0) }
+
+        var inserted = 0
+        var skipped = 0
+        for (exerciseName, prefs) in preferences {
+            guard cardioOverrides[exerciseName] == nil else {
+                skipped += 1
+                continue
+            }
+
+            let canonical = canonicalize(prefs)
+            if canonical != .default {
+                cardioOverrides[exerciseName] = canonical
+            }
+            inserted += 1
+        }
+
+        if inserted > 0 {
+            save()
+        }
+
+        return (inserted, skipped)
+    }
+
     private func load() {
         guard let data = userDefaults.data(forKey: storageKey) else { return }
         if let saved = try? JSONDecoder().decode([String: ExerciseCardioMetricPreferences].self, from: data) {

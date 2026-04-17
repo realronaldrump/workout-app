@@ -421,7 +421,7 @@ struct OnboardingView: View {
             .padding(.horizontal, Theme.Spacing.xl)
 
             VStack(spacing: Theme.Spacing.md) {
-                // Import from Strong option
+                // Import saved data option
                 Button {
                     Haptics.selection()
                     AppAnalytics.shared.track(AnalyticsSignal.onboardingImportSelected)
@@ -438,10 +438,10 @@ struct OnboardingView: View {
                             )
 
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("Import from Strong")
+                            Text("Import Data")
                                 .font(Theme.Typography.bodyBold)
                                 .foregroundStyle(Theme.Colors.textPrimary)
-                            Text("Bring your Strong CSV workout history")
+                            Text("Bring a Strong CSV or app backup")
                                 .font(Theme.Typography.caption)
                                 .foregroundStyle(Theme.Colors.textSecondary)
                         }

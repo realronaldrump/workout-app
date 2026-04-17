@@ -105,6 +105,12 @@ final class iCloudDocumentManager: ObservableObject {
         return Self.listWorkoutFiles(in: containerURL)
     }
 
+    func listBackupFiles() -> [URL] {
+        guard let containerURL = documentsURL else { return [] }
+
+        return Self.listBackupFiles(in: containerURL)
+    }
+
     func deleteFile(at url: URL) throws {
         try FileManager.default.removeItem(at: url)
     }
@@ -192,6 +198,24 @@ final class iCloudDocumentManager: ObservableObject {
         }
     }
 
+    nonisolated static func listBackupFiles(in directory: URL) -> [URL] {
+        do {
+            let files = try FileManager.default.contentsOfDirectory(
+                at: directory,
+                includingPropertiesForKeys: [.nameKey, .creationDateKey],
+                options: .skipsHiddenFiles
+            )
+            return files.filter { $0.pathExtension.lowercased() == AppBackupService.backupFileExtension }
+        } catch {
+            print("Failed to list backup files: \(error)")
+            return []
+        }
+    }
+
+    nonisolated static func listExportAndBackupFiles(in directory: URL) -> [URL] {
+        listWorkoutFiles(in: directory) + listBackupFiles(in: directory)
+    }
+
     /// Strong imports are the canonical source the app auto-loads on launch.
     /// Exported CSVs share the same extension but may include partial ranges.
     nonisolated static func listStrongImportFiles(in directory: URL) -> [URL] {
@@ -199,7 +223,24 @@ final class iCloudDocumentManager: ObservableObject {
             .filter { $0.lastPathComponent.hasPrefix("strong_workouts_") }
     }
 
+    nonisolated static func latestBackupFile(in directories: [URL]) -> URL? {
+        for directory in directories {
+            let files = listNewestFirst(listBackupFiles(in: directory))
+            if let latest = files.first {
+                return latest
+            }
+        }
+
+        return nil
+    }
+
     nonisolated static func saveWorkoutFile(data: Data, in directory: URL, fileName: String) throws {
+        try ensureDirectoryExists(at: directory)
+        let fileURL = directory.appendingPathComponent(fileName)
+        try data.write(to: fileURL, options: [.atomic, .completeFileProtection])
+    }
+
+    nonisolated static func saveBackupFile(data: Data, in directory: URL, fileName: String) throws {
         try ensureDirectoryExists(at: directory)
         let fileURL = directory.appendingPathComponent(fileName)
         try data.write(to: fileURL, options: [.atomic, .completeFileProtection])
@@ -232,6 +273,14 @@ final class iCloudDocumentManager: ObservableObject {
 
         return migratedCount
     }
+
+    private nonisolated static func listNewestFirst(_ files: [URL]) -> [URL] {
+        files.sorted { url1, url2 in
+            let date1 = (try? url1.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? Date.distantPast
+            let date2 = (try? url2.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? Date.distantPast
+            return date1 > date2
+        }
+    }
 }
 
 // swiftlint:disable:next type_name
@@ -251,7 +300,10 @@ struct DocumentPicker: UIViewControllerRepresentable {
     var onImport: ((Data) -> Void)?
 
     func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
-        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [UTType.commaSeparatedText], asCopy: true)
+        let picker = UIDocumentPickerViewController(
+            forOpeningContentTypes: [UTType.commaSeparatedText, UTType.json, UTType.data],
+            asCopy: true
+        )
         picker.delegate = context.coordinator
         return picker
     }

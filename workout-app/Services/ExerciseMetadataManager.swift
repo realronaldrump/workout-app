@@ -267,6 +267,29 @@ class ExerciseMetadataManager: ObservableObject {
         }
     }
 
+    @discardableResult
+    func mergeOverridesFromBackup(_ overrides: [String: [MuscleTag]]) -> (inserted: Int, skipped: Int) {
+        guard !overrides.isEmpty else { return (0, 0) }
+
+        var inserted = 0
+        var skipped = 0
+        for (exerciseName, tags) in overrides {
+            guard muscleTagOverrides[exerciseName] == nil else {
+                skipped += 1
+                continue
+            }
+
+            muscleTagOverrides[exerciseName] = canonicalize(tags)
+            inserted += 1
+        }
+
+        if inserted > 0 {
+            saveMappings()
+        }
+
+        return (inserted, skipped)
+    }
+
     // MARK: - Persistence
 
     private func loadMappings() {

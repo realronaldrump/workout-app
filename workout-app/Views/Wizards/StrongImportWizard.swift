@@ -8,8 +8,10 @@ struct StrongImportWizard: View {
     @ObservedObject var iCloudManager: iCloudDocumentManager
     let source: String
     @EnvironmentObject var healthManager: HealthKitManager
+    @EnvironmentObject var logStore: WorkoutLogStore
     @EnvironmentObject var annotationsManager: WorkoutAnnotationsManager
     @EnvironmentObject var gymProfilesManager: GymProfilesManager
+    @EnvironmentObject var intentionalBreaksManager: IntentionalBreaksManager
 
     @State private var step = 0
     @State private var isImporting = false
@@ -56,7 +58,7 @@ struct StrongImportWizard: View {
             .navigationBarBackButtonHidden(true)
             .toolbar(.hidden, for: .navigationBar)
         }
-        .analyticsScreen("StrongImportWizard", source: source)
+        .analyticsScreen("ImportWizard", source: source)
         .onAppear {
             AppAnalytics.shared.track(
                 AnalyticsSignal.importWizardViewed,
@@ -81,7 +83,7 @@ struct StrongImportWizard: View {
         }
         .fileImporter(
             isPresented: $showingFileImporter,
-            allowedContentTypes: [UTType.commaSeparatedText],
+            allowedContentTypes: [UTType.commaSeparatedText, UTType.json, UTType.data],
             allowsMultipleSelection: false
         ) { result in
             handleFileImport(result)
@@ -142,11 +144,11 @@ struct StrongImportWizard: View {
                 )
 
             VStack(spacing: Theme.Spacing.md) {
-                Text("Import from Strong")
-                    .font(Theme.Typography.title)
-                    .foregroundStyle(Theme.Colors.textPrimary)
+                    Text("Import Data")
+                        .font(Theme.Typography.title)
+                        .foregroundStyle(Theme.Colors.textPrimary)
 
-                Text("CSV export (Strong)")
+                Text("Strong CSV or Big Beautiful Workout backup")
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Colors.textSecondary)
                     .multilineTextAlignment(.center)
@@ -193,7 +195,7 @@ struct StrongImportWizard: View {
                             VStack(spacing: Theme.Spacing.md) {
                                 Image(systemName: "doc.text.fill")
                                     .font(Theme.Iconography.largeTitle)
-                                Text("Select CSV File")
+                                Text("Select Import File")
                                     .font(Theme.Typography.headline)
                             }
                             .foregroundStyle(Theme.Colors.accent)
@@ -677,7 +679,8 @@ struct StrongImportWizard: View {
             autoGymTagErrorMessage = nil
             autoGymTagRoutePermissionUnavailable = false
             showingAutoGymTagReport = false
-            importedFileName = url.lastPathComponent
+            let selectedFileName = url.lastPathComponent
+            importedFileName = selectedFileName
             importPhase = .reading
             isImporting = true
 
@@ -712,63 +715,29 @@ struct StrongImportWizard: View {
                     let directoryURL = storageSnapshot.url
                     let isUsingLocalFallback = storageSnapshot.isUsingLocalFallback
 
-                    Task.detached(priority: .userInitiated) { [fileData, directoryURL, isUsingLocalFallback] in
+                    Task.detached(priority: .userInitiated) { [fileData, selectedFileName, directoryURL, isUsingLocalFallback] in
                         do {
-                            // Parse off the main thread to avoid UI hitches on large exports.
-                            let sets = try CSVParser.parseStrongWorkoutsCSV(from: fileData)
-                            await MainActor.run {
-                                importPhase = .saving
-                            }
-
-                            // Artificial delay for UX
-                            try await Task.sleep(nanoseconds: 1_000_000_000)
-
-                            // Save the original file data before presenting a successful import.
-                            let fileName = "strong_workouts_\(Date().timeIntervalSince1970).csv"
-                            let storageMessage: String
-                            guard let directory = directoryURL else {
-                                throw iCloudError.containerNotAvailable
-                            }
-                            try iCloudDocumentManager.saveWorkoutFile(data: fileData, in: directory, fileName: fileName)
-                            storageMessage = isUsingLocalFallback
-                                ? "Saved on-device only (iCloud unavailable)"
-                                : "Saved to iCloud Drive"
-
-                            await MainActor.run {
-                                storageStatusMessage = storageMessage
-                                importPhase = .processing
-                            }
-
-                            let healthIdentitySnapshot = await MainActor.run {
-                                healthManager.healthDataStore.values.map {
-                                    WorkoutHealthIdentitySnapshot(
-                                        workoutId: $0.workoutId,
-                                        workoutDate: $0.workoutDate
-                                    )
-                                }
-                            }
-                            let requestID = await MainActor.run {
-                                dataManager.beginImportedWorkoutRequest()
-                            }
-
-                            // Process workout sets on the shared data manager.
-                            await dataManager.processImportedWorkoutSets(
-                                sets,
-                                healthIdentitySnapshot: healthIdentitySnapshot,
-                                requestID: requestID
+                            let importKind = try AppBackupService.classifyImport(
+                                data: fileData,
+                                fileName: selectedFileName
                             )
 
-                            await MainActor.run {
-                                let stats = dataManager.calculateStats()
-                                importStats = (stats.totalWorkouts, stats.totalExercises)
-                                AppAnalytics.shared.track(
-                                    AnalyticsSignal.importCompleted,
-                                    payload: [
-                                        "Context.source": source,
-                                        "Import.workoutCount": "\(stats.totalWorkouts)",
-                                        "Import.exerciseCount": "\(stats.totalExercises)"
-                                    ]
+                            let shouldRunPostImportAutomation: Bool
+                            switch importKind {
+                            case .strongCSV(let data, _):
+                                try await importStrongCSV(
+                                    data: data,
+                                    directoryURL: directoryURL,
+                                    isUsingLocalFallback: isUsingLocalFallback
                                 )
+                                shouldRunPostImportAutomation = true
+                            case .nativeBackup(let backup, _):
+                                try await importNativeBackup(
+                                    backup,
+                                    directoryURL: directoryURL,
+                                    isUsingLocalFallback: isUsingLocalFallback
+                                )
+                                shouldRunPostImportAutomation = false
                             }
 
                             await MainActor.run {
@@ -781,8 +750,10 @@ struct StrongImportWizard: View {
                                 }
                                 Haptics.notify(.success)
 
-                                startAutoHealthSyncIfNeeded()
-                                startAutoGymTaggingIfNeeded()
+                                if shouldRunPostImportAutomation {
+                                    startAutoHealthSyncIfNeeded()
+                                    startAutoGymTaggingIfNeeded()
+                                }
                             }
                         } catch {
                             await MainActor.run {
@@ -813,6 +784,125 @@ struct StrongImportWizard: View {
                 ]
             )
         }
+    }
+
+    @MainActor
+    private func importStrongCSV(
+        data: Data,
+        directoryURL: URL?,
+        isUsingLocalFallback: Bool
+    ) async throws {
+        let sets = try await Task.detached(priority: .userInitiated) {
+            try CSVParser.parseStrongWorkoutsCSV(from: data)
+        }.value
+
+        importPhase = .saving
+        try await Task.sleep(nanoseconds: 1_000_000_000)
+
+        guard let directory = directoryURL else {
+            throw iCloudError.containerNotAvailable
+        }
+
+        let fileName = "strong_workouts_\(Date().timeIntervalSince1970).csv"
+        try await Task.detached(priority: .utility) {
+            try iCloudDocumentManager.saveWorkoutFile(data: data, in: directory, fileName: fileName)
+        }.value
+
+        storageStatusMessage = isUsingLocalFallback
+            ? "Saved on-device only (iCloud unavailable)"
+            : "Saved to iCloud Drive"
+        importPhase = .processing
+
+        let healthIdentitySnapshot = healthManager.healthDataStore.values.map {
+            WorkoutHealthIdentitySnapshot(
+                workoutId: $0.workoutId,
+                workoutDate: $0.workoutDate
+            )
+        }
+        let requestID = dataManager.beginImportedWorkoutRequest()
+
+        await dataManager.processImportedWorkoutSets(
+            sets,
+            healthIdentitySnapshot: healthIdentitySnapshot,
+            requestID: requestID
+        )
+
+        let stats = dataManager.calculateStats()
+        importStats = (stats.totalWorkouts, stats.totalExercises)
+        AppAnalytics.shared.track(
+            AnalyticsSignal.importCompleted,
+            payload: [
+                "Context.source": source,
+                "Import.kind": "strongCSV",
+                "Import.workoutCount": "\(stats.totalWorkouts)",
+                "Import.exerciseCount": "\(stats.totalExercises)"
+            ]
+        )
+    }
+
+    @MainActor
+    private func importNativeBackup(
+        _ backup: BigBeautifulWorkoutBackup,
+        directoryURL: URL?,
+        isUsingLocalFallback: Bool
+    ) async throws {
+        importPhase = .saving
+        try await Task.sleep(nanoseconds: 350_000_000)
+
+        guard let directory = directoryURL else {
+            throw iCloudError.containerNotAvailable
+        }
+
+        let backupData = try AppBackupService.exportBackup(backup)
+        let fileName = AppBackupService.makeBackupFileName()
+        try await Task.detached(priority: .utility) {
+            try iCloudDocumentManager.saveBackupFile(data: backupData, in: directory, fileName: fileName)
+        }.value
+        let savedURL = directory.appendingPathComponent(fileName)
+        AppBackupService.persistNativeBackupSourceSignature(
+            AppBackupService.importSourceSignature(for: savedURL)
+        )
+
+        storageStatusMessage = isUsingLocalFallback
+            ? "Saved on-device only (iCloud unavailable)"
+            : "Saved to iCloud Drive"
+        importPhase = .processing
+
+        let result = try AppBackupImporter.importBackup(
+            backup,
+            dataManager: dataManager,
+            logStore: logStore,
+            healthManager: healthManager,
+            annotationsManager: annotationsManager,
+            gymProfilesManager: gymProfilesManager,
+            intentionalBreaksManager: intentionalBreaksManager
+        )
+
+        healthSyncState = .synced(Date())
+        healthSyncNote = "Cached health data restored from backup. No Apple Health write was attempted."
+        autoGymTagState = .complete
+        autoGymTagReport = AutoGymTaggingReport(
+            attempted: 0,
+            assigned: 0,
+            skippedNoMatchingWorkout: 0,
+            skippedNoRoute: 0,
+            skippedNoGymMatch: 0,
+            skippedGymsMissingLocation: 0,
+            items: []
+        )
+
+        let stats = dataManager.calculateStats()
+        importStats = (stats.totalWorkouts, stats.totalExercises)
+        AppAnalytics.shared.track(
+            AnalyticsSignal.importCompleted,
+            payload: [
+                "Context.source": source,
+                "Import.kind": "nativeBackup",
+                "Import.workoutCount": "\(stats.totalWorkouts)",
+                "Import.exerciseCount": "\(stats.totalExercises)",
+                "Import.insertedCount": "\(result.insertedTotal)"
+            ]
+        )
     }
 
     @MainActor

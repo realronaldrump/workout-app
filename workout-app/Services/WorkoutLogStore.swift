@@ -9,20 +9,9 @@ final class WorkoutLogStore: ObservableObject {
     private let fileName = "logged_workouts_v1.json"
 
     func load() async {
-        let legacyURL = fileURL()
         do {
-            let loaded = try await Task.detached(priority: .userInitiated) { [database, legacyURL] in
-                let stored = try database.loadLoggedWorkouts()
-                if !stored.isEmpty || !FileManager.default.fileExists(atPath: legacyURL.path) {
-                    return stored
-                }
-
-                let data = try Data(contentsOf: legacyURL)
-                let decoder = JSONDecoder()
-                decoder.dateDecodingStrategy = .iso8601
-                let decoded = try decoder.decode([LoggedWorkout].self, from: data)
-                try database.replaceLoggedWorkouts(decoded)
-                return decoded
+            let loaded = try await Task.detached(priority: .userInitiated) { [database] in
+                try database.loadLoggedWorkouts()
             }.value
             workouts = loaded.sorted { $0.startedAt > $1.startedAt }
             removeLegacyFile()
@@ -71,6 +60,32 @@ final class WorkoutLogStore: ObservableObject {
         }
     }
 
+    func mergeWorkoutsFromBackup(_ backupWorkouts: [LoggedWorkout]) -> (inserted: Int, skipped: Int) {
+        guard !backupWorkouts.isEmpty else { return (0, 0) }
+
+        var existingIds = Set(workouts.map(\.id))
+        var inserted = 0
+        var skipped = 0
+
+        for workout in backupWorkouts {
+            guard !existingIds.contains(workout.id) else {
+                skipped += 1
+                continue
+            }
+
+            workouts.append(workout)
+            existingIds.insert(workout.id)
+            inserted += 1
+        }
+
+        if inserted > 0 {
+            workouts.sort { $0.startedAt > $1.startedAt }
+            persist()
+        }
+
+        return (inserted, skipped)
+    }
+
     private func fileURL() -> URL {
         Self.staticFileURL(fileName: fileName)
     }
@@ -83,13 +98,9 @@ final class WorkoutLogStore: ObservableObject {
     private func persist() {
         let snapshot = workouts
         let database = database
-        let legacyURL = fileURL()
         Task.detached(priority: .utility) {
             do {
                 try database.replaceLoggedWorkouts(snapshot)
-                if FileManager.default.fileExists(atPath: legacyURL.path) {
-                    try? FileManager.default.removeItem(at: legacyURL)
-                }
             } catch {
                 print("Failed to persist logged workouts: \(error)")
             }
