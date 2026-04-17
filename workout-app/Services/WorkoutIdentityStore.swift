@@ -76,6 +76,10 @@ final class WorkoutIdentityStore {
         removeLegacyFile()
     }
 
+    func reload() {
+        load()
+    }
+
     private func fileURL() -> URL {
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         return documents.appendingPathComponent(fileName)

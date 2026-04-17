@@ -6,6 +6,74 @@ nonisolated enum WorkoutStoreSource: String, Codable, Sendable {
     case logged
 }
 
+nonisolated enum LegacyMigrationPlanStatus: Equatable, Sendable {
+    case ready
+    case notNeeded
+    case alreadyCompleted
+    case noMigratableRecords
+}
+
+nonisolated struct LegacyMigrationSummary: Equatable, Sendable {
+    var importedWorkoutCount: Int
+    var loggedWorkoutCount: Int
+    var workoutIdentityCount: Int
+    var annotationCount: Int
+    var workoutHealthCount: Int
+    var dailyHealthCount: Int
+    var dailyCoverageCount: Int
+    var gymProfileCount: Int
+    var hasLegacySources: Bool
+    var hasStoredV2Data: Bool
+    var wasPreviouslyCompleted: Bool
+
+    var workoutCount: Int { importedWorkoutCount + loggedWorkoutCount }
+
+    var totalMigratableItems: Int {
+        importedWorkoutCount +
+        loggedWorkoutCount +
+        workoutIdentityCount +
+        annotationCount +
+        workoutHealthCount +
+        dailyHealthCount +
+        dailyCoverageCount +
+        gymProfileCount
+    }
+
+    var hasMigratableData: Bool {
+        totalMigratableItems > 0
+    }
+}
+
+nonisolated struct LegacyMigrationPlan: Equatable, Sendable {
+    var status: LegacyMigrationPlanStatus
+    var summary: LegacyMigrationSummary
+
+    var shouldPresentWizard: Bool {
+        switch status {
+        case .ready, .noMigratableRecords:
+            return true
+        case .notNeeded, .alreadyCompleted:
+            return false
+        }
+    }
+}
+
+nonisolated struct LegacyMigrationResult: Equatable, Sendable {
+    var summary: LegacyMigrationSummary
+    var migrated: Bool
+}
+
+nonisolated enum LegacyMigrationError: LocalizedError {
+    case noMigratableRecords
+
+    var errorDescription: String? {
+        switch self {
+        case .noMigratableRecords:
+            return "Saved data files were found, but no records could be read from them."
+        }
+    }
+}
+
 nonisolated final class AppDatabase: @unchecked Sendable {
     static let shared = AppDatabase()
 
@@ -25,7 +93,8 @@ nonisolated final class AppDatabase: @unchecked Sendable {
     private static let sqliteFileName = "WorkoutAppStoreV2.sqlite"
     private static let legacyStoreName = "WorkoutAppStore"
     private static let legacySqliteFileName = "WorkoutAppStore.sqlite"
-    private static let legacyMigrationCompleteKey = "WorkoutAppStoreV2LegacyMigrationComplete"
+    private static let legacyMigrationCompleteKey = "WorkoutAppStoreV2LegacyMigrationComplete.v2"
+    private static let previousLegacyMigrationCompleteKey = "WorkoutAppStoreV2LegacyMigrationComplete"
 
     private let container: NSPersistentContainer
     private let inMemory: Bool
@@ -59,9 +128,6 @@ nonisolated final class AppDatabase: @unchecked Sendable {
         container.viewContext.automaticallyMergesChangesFromParent = true
         container.viewContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
 
-        if !inMemory {
-            migrateLegacyDataIfNeeded()
-        }
     }
 
     // MARK: - Clean Store
@@ -89,20 +155,85 @@ nonisolated final class AppDatabase: @unchecked Sendable {
 
     // MARK: - Legacy Migration
 
-    private nonisolated func migrateLegacyDataIfNeeded() {
+    nonisolated func legacyMigrationPlan() throws -> LegacyMigrationPlan {
         let userDefaults = UserDefaults.standard
-        guard !userDefaults.bool(forKey: Self.legacyMigrationCompleteKey) else { return }
+        let snapshot = try Self.loadLegacySnapshot()
+        let summary = Self.legacyMigrationSummary(
+            for: snapshot,
+            hasLegacySources: Self.hasLegacySources(),
+            hasStoredV2Data: try hasStoredData(),
+            wasPreviouslyCompleted: Self.isLegacyMigrationMarkedComplete(userDefaults: userDefaults)
+        )
 
-        do {
-            let snapshot = try Self.loadLegacySnapshot()
-            if !snapshot.isEmpty {
-                try importLegacySnapshot(snapshot)
-                Self.removeLegacyFileStores()
-                print("Migrated legacy app data into \(Self.storeName)")
+        if summary.wasPreviouslyCompleted {
+            return LegacyMigrationPlan(status: .alreadyCompleted, summary: summary)
+        }
+
+        if summary.hasMigratableData {
+            return LegacyMigrationPlan(status: .ready, summary: summary)
+        }
+
+        if summary.hasLegacySources {
+            return LegacyMigrationPlan(status: .noMigratableRecords, summary: summary)
+        }
+
+        userDefaults.set(true, forKey: Self.legacyMigrationCompleteKey)
+        return LegacyMigrationPlan(status: .notNeeded, summary: summary)
+    }
+
+    nonisolated func canSkipLegacyMigrationPresentation() -> Bool {
+        let userDefaults = UserDefaults.standard
+        if userDefaults.bool(forKey: Self.legacyMigrationCompleteKey) {
+            return true
+        }
+
+        if userDefaults.bool(forKey: Self.previousLegacyMigrationCompleteKey),
+           (try? hasStoredData()) == true {
+            return true
+        }
+
+        return !Self.hasLegacySources()
+    }
+
+    nonisolated func performLegacyMigration() throws -> LegacyMigrationResult {
+        let snapshot = try Self.loadLegacySnapshot()
+        let summary = Self.legacyMigrationSummary(
+            for: snapshot,
+            hasLegacySources: Self.hasLegacySources(),
+            hasStoredV2Data: try hasStoredData(),
+            wasPreviouslyCompleted: Self.isLegacyMigrationMarkedComplete(userDefaults: .standard)
+        )
+
+        guard summary.hasMigratableData else {
+            if !summary.hasLegacySources {
+                UserDefaults.standard.set(true, forKey: Self.legacyMigrationCompleteKey)
+                return LegacyMigrationResult(summary: summary, migrated: false)
             }
-            userDefaults.set(true, forKey: Self.legacyMigrationCompleteKey)
-        } catch {
-            print("Failed to migrate legacy app data: \(error)")
+            throw LegacyMigrationError.noMigratableRecords
+        }
+
+        try importLegacySnapshot(snapshot)
+        Self.removeLegacyFileStores()
+        UserDefaults.standard.set(true, forKey: Self.legacyMigrationCompleteKey)
+
+        return LegacyMigrationResult(summary: summary, migrated: true)
+    }
+
+    private nonisolated static func isLegacyMigrationMarkedComplete(userDefaults: UserDefaults) -> Bool {
+        userDefaults.bool(forKey: legacyMigrationCompleteKey) ||
+        userDefaults.bool(forKey: previousLegacyMigrationCompleteKey)
+    }
+
+    nonisolated func hasStoredData() throws -> Bool {
+        try performRead { context in
+            for entityName in Self.allEntityNames {
+                let request = NSFetchRequest<NSFetchRequestResult>(entityName: entityName)
+                request.fetchLimit = 1
+                if try context.count(for: request) > 0 {
+                    return true
+                }
+            }
+            return false
         }
     }
 
@@ -1133,6 +1264,27 @@ private extension AppDatabase {
         return snapshot
     }
 
+    nonisolated static func legacyMigrationSummary(
+        for snapshot: LegacySnapshot,
+        hasLegacySources: Bool,
+        hasStoredV2Data: Bool,
+        wasPreviouslyCompleted: Bool
+    ) -> LegacyMigrationSummary {
+        LegacyMigrationSummary(
+            importedWorkoutCount: snapshot.importedWorkouts.count,
+            loggedWorkoutCount: snapshot.loggedWorkouts.count,
+            workoutIdentityCount: snapshot.workoutIdentities.count,
+            annotationCount: snapshot.annotations.count,
+            workoutHealthCount: snapshot.workoutHealthData.count,
+            dailyHealthCount: snapshot.dailyHealthData.count,
+            dailyCoverageCount: snapshot.dailyHealthCoverage.count,
+            gymProfileCount: snapshot.gymProfiles.count,
+            hasLegacySources: hasLegacySources,
+            hasStoredV2Data: hasStoredV2Data,
+            wasPreviouslyCompleted: wasPreviouslyCompleted
+        )
+    }
+
     nonisolated static func loadLegacyDatabaseSnapshot() throws -> LegacySnapshot {
         let storeURL = storeDirectory().appendingPathComponent(legacySqliteFileName)
         guard FileManager.default.fileExists(atPath: storeURL.path) else {
@@ -1145,7 +1297,6 @@ private extension AppDatabase {
         )
         let description = NSPersistentStoreDescription(url: storeURL)
         description.shouldAddStoreAsynchronously = false
-        description.setOption(true as NSNumber, forKey: NSReadOnlyPersistentStoreOption)
         legacyContainer.persistentStoreDescriptions = [description]
 
         var loadError: Error?
@@ -1345,6 +1496,26 @@ private extension AppDatabase {
         if FileManager.default.fileExists(atPath: workoutHealthDirectory.path) {
             try? FileManager.default.removeItem(at: workoutHealthDirectory)
         }
+    }
+
+    nonisolated static func hasLegacySources() -> Bool {
+        let storeURL = storeDirectory().appendingPathComponent(legacySqliteFileName)
+        if FileManager.default.fileExists(atPath: storeURL.path) {
+            return true
+        }
+
+        let documents = documentDirectory()
+        let urls = [
+            documents.appendingPathComponent("logged_workouts_v1.json"),
+            documents.appendingPathComponent("gym_profiles.json"),
+            documents.appendingPathComponent("workout_annotations.json"),
+            documents.appendingPathComponent("workout_identity_map.json"),
+            documents.appendingPathComponent("health_data_store.json"),
+            documents.appendingPathComponent("daily_health_store.json"),
+            documents.appendingPathComponent("daily_health_coverage.json"),
+            documents.appendingPathComponent("health_data_store", isDirectory: true)
+        ]
+        return urls.contains { FileManager.default.fileExists(atPath: $0.path) }
     }
 
     nonisolated static func documentDirectory() -> URL {

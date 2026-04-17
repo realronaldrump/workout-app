@@ -18,12 +18,15 @@ struct MainTabView: View {
     @StateObject private var healthDateRangeContext = HealthDateRangeContext()
     @StateObject private var variantEngine = WorkoutVariantEngine()
     @StateObject private var similarityEngine = WorkoutSimilarityEngine()
+    @StateObject private var migrationManager = LegacyDataMigrationManager()
     @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
     @State private var showingOnboarding = false
     @State private var pendingOnboarding = false
     @State private var selectedTab: AppTab = .today
     @State private var showSplash = true
     @State private var hasCompletedInitialLoad = false
+    @State private var hasStartedLaunchFlow = false
+    @State private var hasBootstrappedStores = false
     @State private var insightsRefreshTask: Task<Void, Never>?
     @State private var variantAnalysisTask: Task<Void, Never>?
     @State private var similarityAnalysisTask: Task<Void, Never>?
@@ -115,10 +118,20 @@ struct MainTabView: View {
                     .contentShape(Rectangle())
             }
         }
+        .overlay {
+            if migrationManager.blocksLaunch {
+                LegacyMigrationWizardView(
+                    manager: migrationManager,
+                    onContinue: continueAfterMigration
+                )
+                .transition(.opacity)
+                .zIndex(20)
+            }
+        }
         .onAppear {
             beginSplashIfNeeded()
             refreshOnboardingState()
-            bootstrapStoresIfNeeded()
+            startLaunchFlowIfNeeded()
             scheduleVariantAnalysis()
             scheduleSimilarityAnalysis()
             schedulePendingSleepSummaryRefresh()
@@ -242,12 +255,35 @@ struct MainTabView: View {
         }
     }
 
+    private func startLaunchFlowIfNeeded() {
+        guard !hasStartedLaunchFlow else { return }
+        hasStartedLaunchFlow = true
+
+        Task { @MainActor in
+            await migrationManager.prepare()
+            guard !migrationManager.blocksLaunch else { return }
+            bootstrapStoresIfNeeded()
+        }
+    }
+
+    private func continueAfterMigration() {
+        migrationManager.dismiss()
+        bootstrapStoresIfNeeded()
+    }
+
     private func bootstrapStoresIfNeeded() {
+        guard !hasBootstrappedStores else { return }
+        hasBootstrappedStores = true
+
         Task { @MainActor in
             LegacyProgramCleanup.runIfNeeded()
+            annotationsManager.reloadPersistedAnnotations()
+            gymProfilesManager.reloadPersistedGyms()
+            healthManager.loadPersistedData()
+            healthManager.loadPersistedDailyHealthData()
             await logStore.load()
             dataManager.setLoggedWorkouts(logStore.workouts)
-            await dataManager.loadPersistedImportedWorkouts()
+            await dataManager.reloadPersistedMigrationState()
             await importLatestNativeBackupIfNeeded()
             await sessionManager.restoreDraft()
 

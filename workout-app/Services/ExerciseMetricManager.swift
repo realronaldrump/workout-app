@@ -90,6 +90,11 @@ final class ExerciseMetricManager: ObservableObject {
         return (inserted, skipped)
     }
 
+    func clearOverrides() {
+        cardioOverrides = [:]
+        userDefaults.removeObject(forKey: storageKey)
+    }
+
     private func load() {
         guard let data = userDefaults.data(forKey: storageKey) else { return }
         if let saved = try? JSONDecoder().decode([String: ExerciseCardioMetricPreferences].self, from: data) {

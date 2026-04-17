@@ -15,7 +15,7 @@ struct SettingsView: View {
 
     @State private var showingImportWizard = false
     @State private var showingHealthWizard = false
-    @State private var showingDeleteAlert = false
+    @State private var dataClearSheet: DataClearSheetRoute?
 
     @AppStorage("weightIncrement") private var weightIncrement: Double = 2.5
     @AppStorage("intentionalRestDays") private var intentionalRestDays: Int = 1
@@ -350,7 +350,7 @@ struct SettingsView: View {
                     SettingsSectionLabel("DANGER ZONE")
 
                     Button(
-                        action: { showingDeleteAlert = true },
+                        action: { dataClearSheet = DataClearSheetRoute() },
                         label: {
                             HStack(spacing: Theme.Spacing.sm) {
                                 Image(systemName: "trash.fill")
@@ -360,7 +360,7 @@ struct SettingsView: View {
                                     .background(Theme.Colors.error)
                                     .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
 
-                                Text("Clear All Data")
+                                Text("Clear App Data")
                                     .font(Theme.Typography.bodyBold)
                                     .foregroundStyle(Theme.Colors.error)
 
@@ -415,28 +415,17 @@ struct SettingsView: View {
                 source: "settings"
             )
         }
-        .alert("Clear All Data", isPresented: $showingDeleteAlert) {
-            Button("Cancel", role: .cancel) {}
-            Button("Clear", role: .destructive) {
-                Task {
-                    await iCloudManager.deleteAllWorkoutFiles()
-                    await logStore.clearAll()
-                    await sessionManager.discardDraft()
-                    await MainActor.run {
-                        healthManager.clearAllData()
-                        intentionalBreaksManager.clearAll()
-                        annotationsManager.clearAll()
-                        gymProfilesManager.clearAll()
-                        dataManager.clearAllData()
-                        hasSeenOnboarding = false
-                    }
-                }
-            }
-        } message: {
-            Text(
-                "WARNING: This will permanently delete all data — imported CSVs, logged workouts, " +
-                "gym profiles, annotations, break dates, session drafts, and health data. " +
-                "You will be returned to onboarding as a new user. This cannot be undone."
+        .sheet(item: $dataClearSheet) { _ in
+            SelectiveDataClearSheet(
+                dataManager: dataManager,
+                iCloudManager: iCloudManager,
+                logStore: logStore,
+                sessionManager: sessionManager,
+                healthManager: healthManager,
+                intentionalBreaksManager: intentionalBreaksManager,
+                annotationsManager: annotationsManager,
+                gymProfilesManager: gymProfilesManager,
+                hasSeenOnboarding: $hasSeenOnboarding
             )
         }
         .onAppear {

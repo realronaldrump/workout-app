@@ -116,10 +116,29 @@ final class iCloudDocumentManager: ObservableObject {
     }
 
     func deleteAllWorkoutFiles() async {
-        let directories = await storageSearchDirectories()
-        guard !directories.isEmpty else { return }
+        await deleteFiles(matchingExtensions: ["csv"])
+    }
 
-        await Task.detached(priority: .utility) { [directories] in
+    func deleteAllExportAndBackupFiles() async {
+        await deleteFiles(matchingExtensions: ["csv", AppBackupService.backupFileExtension])
+    }
+
+    func countWorkoutFiles() async -> Int {
+        await countFiles(matchingExtensions: ["csv"])
+    }
+
+    func countExportAndBackupFiles() async -> Int {
+        await countFiles(matchingExtensions: ["csv", AppBackupService.backupFileExtension])
+    }
+
+    private func countFiles(matchingExtensions extensions: Set<String>) async -> Int {
+        let directories = await storageSearchDirectories()
+        guard !directories.isEmpty else { return 0 }
+
+        let lowercasedExtensions = Set(extensions.map { $0.lowercased() })
+
+        return await Task.detached(priority: .utility) { [directories, lowercasedExtensions] in
+            var count = 0
             for containerURL in directories {
                 do {
                     let files = try FileManager.default.contentsOfDirectory(
@@ -127,7 +146,30 @@ final class iCloudDocumentManager: ObservableObject {
                         includingPropertiesForKeys: [.nameKey],
                         options: .skipsHiddenFiles
                     )
-                    for file in files where file.pathExtension == "csv" {
+                    count += files.filter { lowercasedExtensions.contains($0.pathExtension.lowercased()) }.count
+                } catch {
+                    print("Failed to list files for count: \(error)")
+                }
+            }
+            return count
+        }.value
+    }
+
+    private func deleteFiles(matchingExtensions extensions: Set<String>) async {
+        let directories = await storageSearchDirectories()
+        guard !directories.isEmpty else { return }
+
+        let lowercasedExtensions = Set(extensions.map { $0.lowercased() })
+
+        await Task.detached(priority: .utility) { [directories, lowercasedExtensions] in
+            for containerURL in directories {
+                do {
+                    let files = try FileManager.default.contentsOfDirectory(
+                        at: containerURL,
+                        includingPropertiesForKeys: [.nameKey],
+                        options: .skipsHiddenFiles
+                    )
+                    for file in files where lowercasedExtensions.contains(file.pathExtension.lowercased()) {
                         do {
                             try FileManager.default.removeItem(at: file)
                             print("Deleted file: \(file.lastPathComponent)")

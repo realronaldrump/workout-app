@@ -71,6 +71,10 @@ final class WorkoutAnnotationsManager: ObservableObject {
         removeLegacyFile()
     }
 
+    func reloadPersistedAnnotations() {
+        load()
+    }
+
     func mergeAnnotationsFromBackup(
         _ backupAnnotations: [WorkoutAnnotation],
         workoutIdMap: [UUID: UUID],

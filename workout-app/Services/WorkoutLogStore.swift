@@ -21,6 +21,10 @@ final class WorkoutLogStore: ObservableObject {
         }
     }
 
+    func reloadPersistedWorkouts() async {
+        await load()
+    }
+
     func workout(id: UUID) -> LoggedWorkout? {
         workouts.first { $0.id == id }
     }

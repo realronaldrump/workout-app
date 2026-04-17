@@ -163,6 +163,10 @@ final class GymProfilesManager: ObservableObject {
         removeLegacyFile()
     }
 
+    func reloadPersistedGyms() {
+        load()
+    }
+
     func mergeGymsFromBackup(_ backupGyms: [GymProfile]) -> (
         idMap: [UUID: UUID],
         inserted: Int,

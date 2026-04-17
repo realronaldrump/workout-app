@@ -55,11 +55,13 @@ class ExerciseMetadataManager: ObservableObject {
         .init(name: "Front Raise (Dumbbell)", groups: [.shoulders]),
         .init(name: "Glute Bridge (Dumbbell) - 20lb", groups: [.glutes, .hamstrings]),
         .init(name: "Glute Kickback (Machine)", groups: [.glutes]),
+        .init(name: "Goblet Squat (Kettlebell)", groups: [.quads, .glutes, .hamstrings]),
         .init(name: "Hack Squat", groups: [.quads, .glutes]),
         .init(name: "Hammer Curl (Cable)", groups: [.biceps, .forearms]),
         .init(name: "Hammer Curl (Dumbbell)", groups: [.biceps, .forearms]),
         .init(name: "Hip Abductor (Cable)", groups: [.glutes]),
         .init(name: "Hip Abductor (Machine)", groups: [.glutes]),
+        .init(name: "Hip Adductor (Cable)", groups: [.adductors]),
         .init(name: "Hip Adductor (Machine)", groups: [.adductors]),
         .init(name: "Hip Thrust (Bodyweight)", groups: [.glutes, .hamstrings]),
         .init(name: "Hip Thrust Machine", groups: [.glutes, .hamstrings]),
@@ -288,6 +290,11 @@ class ExerciseMetadataManager: ObservableObject {
         }
 
         return (inserted, skipped)
+    }
+
+    func clearOverrides() {
+        muscleTagOverrides = [:]
+        userDefaults.removeObject(forKey: metadataKey)
     }
 
     // MARK: - Persistence

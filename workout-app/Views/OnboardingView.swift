@@ -291,7 +291,59 @@ struct OnboardingView: View {
     }
 
     private func splashPreviewPanel(compact: Bool) -> some View {
-        ZStack(alignment: .bottomTrailing) {
+        VStack(alignment: .leading, spacing: compact ? Theme.Spacing.md : Theme.Spacing.lg) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("TODAY")
+                    .font(Theme.Typography.captionBold)
+                    .foregroundStyle(Color.white.opacity(0.72))
+                    .tracking(1.0)
+
+                Spacer()
+
+                Text("CLEAR NEXT STEP")
+                    .font(Theme.Typography.captionBold)
+                    .foregroundStyle(Color.white.opacity(0.88))
+                    .padding(.horizontal, Theme.Spacing.sm)
+                    .padding(.vertical, 6)
+                    .background(
+                        Capsule()
+                            .fill(Color.white.opacity(0.12))
+                    )
+            }
+
+            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                Text("One focused briefing before you train.")
+                    .font(Theme.Typography.cardHeader)
+                    .foregroundStyle(.white)
+
+                Text("Spot workload shifts, recovery context, and the muscles that actually need attention.")
+                    .font(compact ? Theme.Typography.caption : Theme.Typography.subheadline)
+                    .foregroundStyle(Color.white.opacity(0.76))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            VStack(alignment: .leading, spacing: compact ? Theme.Spacing.sm : Theme.Spacing.md) {
+                splashSignalRow(
+                    systemImage: "chart.bar.doc.horizontal",
+                    title: "See what moved",
+                    detail: "Volume, frequency, and exercise trends"
+                )
+                splashSignalRow(
+                    systemImage: "bolt.heart",
+                    title: "Train with context",
+                    detail: "Sleep and recovery alongside your sessions"
+                )
+                if !compact {
+                    splashSignalRow(
+                        systemImage: "target",
+                        title: "Get one next move",
+                        detail: "Know where to push instead of guessing"
+                    )
+                }
+            }
+        }
+        .padding(compact ? Theme.Spacing.lg : Theme.Spacing.xl)
+        .background(
             RoundedRectangle(cornerRadius: 28, style: .continuous)
                 .fill(Color.white.opacity(0.14))
                 .overlay(
@@ -299,60 +351,8 @@ struct OnboardingView: View {
                         .strokeBorder(Color.white.opacity(0.18), lineWidth: 1)
                 )
                 .shadow(color: Color.black.opacity(0.12), radius: 22, y: 12)
-
-            VStack(alignment: .leading, spacing: compact ? Theme.Spacing.md : Theme.Spacing.lg) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text("TODAY")
-                        .font(Theme.Typography.captionBold)
-                        .foregroundStyle(Color.white.opacity(0.72))
-                        .tracking(1.0)
-
-                    Spacer()
-
-                    Text("CLEAR NEXT STEP")
-                        .font(Theme.Typography.captionBold)
-                        .foregroundStyle(Color.white.opacity(0.88))
-                        .padding(.horizontal, Theme.Spacing.sm)
-                        .padding(.vertical, 6)
-                        .background(
-                            Capsule()
-                                .fill(Color.white.opacity(0.12))
-                        )
-                }
-
-                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                    Text("One focused briefing before you train.")
-                        .font(Theme.Typography.cardHeader)
-                        .foregroundStyle(.white)
-
-                    Text("Spot workload shifts, recovery context, and the muscles that actually need attention.")
-                        .font(compact ? Theme.Typography.caption : Theme.Typography.subheadline)
-                        .foregroundStyle(Color.white.opacity(0.76))
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                VStack(alignment: .leading, spacing: compact ? Theme.Spacing.sm : Theme.Spacing.md) {
-                    splashSignalRow(
-                        systemImage: "chart.bar.doc.horizontal",
-                        title: "See what moved",
-                        detail: "Volume, frequency, and exercise trends"
-                    )
-                    splashSignalRow(
-                        systemImage: "bolt.heart",
-                        title: "Train with context",
-                        detail: "Sleep and recovery alongside your sessions"
-                    )
-                    if !compact {
-                        splashSignalRow(
-                            systemImage: "target",
-                            title: "Get one next move",
-                            detail: "Know where to push instead of guessing"
-                        )
-                    }
-                }
-            }
-            .padding(compact ? Theme.Spacing.lg : Theme.Spacing.xl)
-
+        )
+        .overlay(alignment: .bottomTrailing) {
             HStack(spacing: 10) {
                 Image(systemName: "flame.fill")
                     .font(Theme.Typography.captionBold)

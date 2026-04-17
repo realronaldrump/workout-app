@@ -165,10 +165,55 @@ final class AppBackupServiceTests: XCTestCase {
         XCTAssertFalse(allFiles.contains(ignoredFile.lastPathComponent))
     }
 
+    func testBackupFileSectionsGroupFilesInLogicalOrder() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let files = try makeFiles(
+            in: directory,
+            named: [
+                "health_daily_3_20260101_20260131_1700000000.csv",
+                "notes.csv",
+                "workout_export_20260101_20260131_1700000001.csv",
+                "bbworkout_backup_20260131_090000.bbworkoutbackup",
+                "strong_workouts_1700000002.csv"
+            ]
+        )
+
+        let sections = BackupFileSection.sections(from: files.shuffled())
+
+        XCTAssertEqual(
+            sections.map(\.kind),
+            [.fullBackup, .strongImport, .workoutExport, .healthDaily, .otherCSV]
+        )
+    }
+
+    func testBackupFileSectionsSortNewestFirstWithinGroup() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let oldWorkoutExport = "workout_export_20260101_20260131_1700000001.csv"
+        let newWorkoutExport = "workout_export_20260201_20260228_1800000001.csv"
+        let files = try makeFiles(in: directory, named: [oldWorkoutExport, newWorkoutExport])
+
+        let section = try XCTUnwrap(BackupFileSection.sections(from: files).first)
+
+        XCTAssertEqual(section.kind, .workoutExport)
+        XCTAssertEqual(section.files.map(\.fileName), [newWorkoutExport, oldWorkoutExport])
+    }
+
     private func makeTemporaryDirectory() throws -> URL {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         return directory
+    }
+
+    private func makeFiles(in directory: URL, named names: [String]) throws -> [URL] {
+        try names.map { name in
+            let url = directory.appendingPathComponent(name)
+            try Data(name.utf8).write(to: url)
+            return url
+        }
     }
 
     private func date(day: Int, hour: Int) -> Date {

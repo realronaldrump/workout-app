@@ -13,6 +13,7 @@ $(SRCROOT)/workout-app/Models/WorkoutModels.swift
 $(SRCROOT)/workout-app/Models/WorkoutSessionModels.swift
 $(SRCROOT)/workout-app/Services/AdaptiveLuminanceManager.swift
 $(SRCROOT)/workout-app/Services/AppBackupService.swift
+$(SRCROOT)/workout-app/Services/AppDataClearService.swift
 $(SRCROOT)/workout-app/Services/AppDatabase.swift
 $(SRCROOT)/workout-app/Services/CSVParser.swift
 $(SRCROOT)/workout-app/Services/ExerciseMetadataManager.swift
@@ -21,6 +22,7 @@ $(SRCROOT)/workout-app/Services/ExerciseRecommendationEngine.swift
 $(SRCROOT)/workout-app/Services/FontRegistrar.swift
 $(SRCROOT)/workout-app/Services/GymProfilesManager.swift
 $(SRCROOT)/workout-app/Services/Haptics.swift
+$(SRCROOT)/workout-app/Services/LegacyDataMigrationManager.swift
 $(SRCROOT)/workout-app/Services/LegacyProgramCleanup.swift
 $(SRCROOT)/workout-app/Services/HealthKitManager+Authorization.swift
 $(SRCROOT)/workout-app/Services/HealthKitManager+DailySync.swift
@@ -83,6 +85,7 @@ $(SRCROOT)/workout-app/Views/Health/WorkoutsInRangeView.swift
 $(SRCROOT)/workout-app/Views/HealthDashboardView.swift
 $(SRCROOT)/workout-app/Views/HomeView.swift
 $(SRCROOT)/workout-app/Views/InAppSplashView.swift
+$(SRCROOT)/workout-app/Views/LegacyMigrationWizardView.swift
 $(SRCROOT)/workout-app/Views/MainTabView.swift
 $(SRCROOT)/workout-app/Views/MetricDetailView.swift
 $(SRCROOT)/workout-app/Views/MuscleBalanceDetailView.swift
@@ -95,6 +98,7 @@ $(SRCROOT)/workout-app/Views/Session/ExercisePickerView.swift
 $(SRCROOT)/workout-app/Views/Session/WorkoutEditView.swift
 $(SRCROOT)/workout-app/Views/Session/WorkoutSessionView.swift
 $(SRCROOT)/workout-app/Views/SettingsView.swift
+$(SRCROOT)/workout-app/Views/SelectiveDataClearSheet.swift
 $(SRCROOT)/workout-app/Views/Wizards/HealthSyncWizard.swift
 $(SRCROOT)/workout-app/Views/Wizards/StrongImportWizard.swift
 $(SRCROOT)/workout-app/Views/WorkoutDetailView.swift

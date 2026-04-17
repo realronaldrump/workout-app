@@ -110,11 +110,14 @@ class WorkoutDataManager: ObservableObject {
             let latestSignature = Self.importSourceSignature(for: latestFile)
             let cachedSignature = cachedImportSourceSignature()
 
-            if !persistedWorkouts.isEmpty, latestSignature == cachedSignature {
+            if !persistedWorkouts.isEmpty, latestSignature == cachedSignature || cachedSignature == nil {
                 guard isCurrentImportedWorkoutRequest(requestID) else { return }
                 importedWorkouts = persistedWorkouts.sorted { $0.date > $1.date }
                 mergeSources()
                 isLoading = false
+                if cachedSignature == nil {
+                    persistImportSourceSignature(latestSignature)
+                }
                 return
             }
 
@@ -185,6 +188,11 @@ class WorkoutDataManager: ObservableObject {
         } catch {
             print("Failed to load persisted imported workouts: \(error)")
         }
+    }
+
+    func reloadPersistedMigrationState() async {
+        identityStore.reload()
+        await loadPersistedImportedWorkouts()
     }
 
     nonisolated static func latestWorkoutFile(in directories: [URL]) -> URL? {
@@ -434,20 +442,24 @@ class WorkoutDataManager: ObservableObject {
         return max(0, defaults.integer(forKey: Self.intentionalRestDaysKey))
     }
 
-    func clearAllData() {
-        self.workouts = []
-        self.importedWorkouts = []
-        self.loggedWorkouts = []
-        self.loggedWorkoutIds = []
-        self.isLoading = false
-        self.error = nil
-        self.exerciseHistoryCache = [:]
-        self.exerciseSummariesCache = []
-        self.allExerciseNamesCache = []
-        self.recentExerciseNamesCache = []
-        self.identityStore.clear()
+    func clearWorkoutHistory() {
+        workouts = []
+        importedWorkouts = []
+        loggedWorkouts = []
+        loggedWorkoutIds = []
+        isLoading = false
+        error = nil
+        exerciseHistoryCache = [:]
+        exerciseSummariesCache = []
+        allExerciseNamesCache = []
+        recentExerciseNamesCache = []
+        identityStore.clear()
         clearImportSourceSignature()
         try? database.clearImportedWorkouts()
+    }
+
+    func clearAllData() {
+        clearWorkoutHistory()
     }
 
     func mergeImportedWorkoutsFromBackup(_ backupWorkouts: [Workout]) -> (
