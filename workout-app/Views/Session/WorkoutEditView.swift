@@ -248,7 +248,7 @@ struct WorkoutEditView: View {
 
         Task { @MainActor in
             await logStore.upsert(workout)
-            dataManager.setLoggedWorkouts(logStore.workouts)
+            await dataManager.setLoggedWorkoutsOffMain(logStore.workouts)
             isSaving = false
             Haptics.notify(.success)
             dismiss()
@@ -258,7 +258,7 @@ struct WorkoutEditView: View {
     private func deleteWorkout() {
         Task { @MainActor in
             await logStore.delete(id: workoutId)
-            dataManager.setLoggedWorkouts(logStore.workouts)
+            await dataManager.setLoggedWorkoutsOffMain(logStore.workouts)
             Haptics.notify(.success)
             dismiss()
         }

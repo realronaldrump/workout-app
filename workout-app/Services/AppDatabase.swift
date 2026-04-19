@@ -327,6 +327,32 @@ nonisolated final class AppDatabase: @unchecked Sendable {
         }
     }
 
+    nonisolated func loadWorkouts(containingExerciseNamed exerciseName: String, range: DateInterval? = nil) throws -> [Workout] {
+        let normalizedName = Self.normalizedName(exerciseName)
+        guard !normalizedName.isEmpty else { return [] }
+
+        return try performRead { context in
+            let exerciseRequest = NSFetchRequest<NSDictionary>(entityName: EntityName.exercise)
+            exerciseRequest.resultType = .dictionaryResultType
+            exerciseRequest.propertiesToFetch = ["workoutId"]
+            exerciseRequest.returnsDistinctResults = true
+            exerciseRequest.predicate = NSPredicate(format: "normalizedName == %@", normalizedName)
+            exerciseRequest.fetchBatchSize = 256
+
+            let workoutIds = Set(try context.fetch(exerciseRequest).compactMap { row in
+                row["workoutId"] as? String
+            })
+            guard !workoutIds.isEmpty else { return [] }
+
+            let snapshots = try self.loadWorkoutSnapshots(
+                workoutIds: Array(workoutIds),
+                range: range,
+                in: context
+            )
+            return snapshots.compactMap(Self.workout(from:))
+        }
+    }
+
     nonisolated func saveLoggedWorkout(_ workout: LoggedWorkout) throws {
         try performWrite { context in
             try self.deleteWorkout(id: workout.id, source: .logged, in: context)
@@ -798,17 +824,59 @@ nonisolated final class AppDatabase: @unchecked Sendable {
         source: WorkoutStoreSource,
         in context: NSManagedObjectContext
     ) throws -> [WorkoutSnapshot] {
+        try loadWorkoutSnapshots(
+            workoutPredicate: NSPredicate(format: "source == %@", source.rawValue),
+            childPredicates: [NSPredicate(format: "source == %@", source.rawValue)],
+            in: context
+        )
+    }
+
+    private nonisolated func loadWorkoutSnapshots(
+        workoutIds: [String],
+        range: DateInterval?,
+        in context: NSManagedObjectContext
+    ) throws -> [WorkoutSnapshot] {
+        guard !workoutIds.isEmpty else { return [] }
+
+        var predicates = [NSPredicate(format: "workoutId IN %@", workoutIds)]
+        if let range {
+            predicates.append(
+                NSPredicate(
+                    format: "workoutDate >= %@ AND workoutDate < %@",
+                    range.start as NSDate,
+                    range.end as NSDate
+                )
+            )
+        }
+
+        return try loadWorkoutSnapshots(
+            workoutPredicate: NSCompoundPredicate(andPredicateWithSubpredicates: predicates),
+            childPredicates: [NSPredicate(format: "workoutId IN %@", workoutIds)],
+            in: context
+        )
+    }
+
+    private nonisolated func loadWorkoutSnapshots(
+        workoutPredicate: NSPredicate,
+        childPredicates: [NSPredicate],
+        in context: NSManagedObjectContext
+    ) throws -> [WorkoutSnapshot] {
         let workoutRequest = NSFetchRequest<NSManagedObject>(entityName: EntityName.workout)
-        workoutRequest.predicate = NSPredicate(format: "source == %@", source.rawValue)
+        workoutRequest.predicate = workoutPredicate
         workoutRequest.sortDescriptors = [NSSortDescriptor(key: "workoutDate", ascending: false)]
         workoutRequest.fetchBatchSize = 128
 
         let workoutObjects = try context.fetch(workoutRequest)
         let workoutIds = workoutObjects.compactMap { $0.value(forKey: "workoutId") as? String }
         guard !workoutIds.isEmpty else { return [] }
+        let childPredicate = NSCompoundPredicate(
+            andPredicateWithSubpredicates: childPredicates + [
+                NSPredicate(format: "workoutId IN %@", workoutIds)
+            ]
+        )
 
         let exerciseRequest = NSFetchRequest<NSManagedObject>(entityName: EntityName.exercise)
-        exerciseRequest.predicate = NSPredicate(format: "source == %@ AND workoutId IN %@", source.rawValue, workoutIds)
+        exerciseRequest.predicate = childPredicate
         exerciseRequest.sortDescriptors = [
             NSSortDescriptor(key: "workoutId", ascending: true),
             NSSortDescriptor(key: "exerciseOrder", ascending: true)
@@ -816,7 +884,7 @@ nonisolated final class AppDatabase: @unchecked Sendable {
         exerciseRequest.fetchBatchSize = 512
 
         let setRequest = NSFetchRequest<NSManagedObject>(entityName: EntityName.set)
-        setRequest.predicate = NSPredicate(format: "source == %@ AND workoutId IN %@", source.rawValue, workoutIds)
+        setRequest.predicate = childPredicate
         setRequest.sortDescriptors = [
             NSSortDescriptor(key: "workoutId", ascending: true),
             NSSortDescriptor(key: "exerciseId", ascending: true),
@@ -839,7 +907,9 @@ nonisolated final class AppDatabase: @unchecked Sendable {
 
         return workoutObjects.compactMap { workoutObject in
             guard let workoutIdString = workoutObject.value(forKey: "workoutId") as? String,
-                  let workoutId = UUID(uuidString: workoutIdString) else {
+                  let workoutId = UUID(uuidString: workoutIdString),
+                  let sourceRawValue = workoutObject.value(forKey: "source") as? String,
+                  let source = WorkoutStoreSource(rawValue: sourceRawValue) else {
                 return nil
             }
 

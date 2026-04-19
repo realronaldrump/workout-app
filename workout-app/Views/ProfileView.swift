@@ -128,7 +128,7 @@ struct ProfileView: View {
             SectionLabel(text: "Preferences")
 
             VStack(spacing: 0) {
-                NavigationLink(destination: FeatureGuidesView()) {
+                NavigationLink(destination: FeatureGuidesView(iCloudManager: iCloudManager)) {
                     ProfileLinkRow(
                         icon: "book.fill",
                         color: Theme.Colors.accent,

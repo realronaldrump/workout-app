@@ -282,7 +282,7 @@ struct MainTabView: View {
             healthManager.loadPersistedData()
             healthManager.loadPersistedDailyHealthData()
             await logStore.load()
-            dataManager.setLoggedWorkouts(logStore.workouts)
+            await dataManager.setLoggedWorkoutsOffMain(logStore.workouts)
             await dataManager.reloadPersistedMigrationState()
             await importLatestNativeBackupIfNeeded()
             await sessionManager.restoreDraft()

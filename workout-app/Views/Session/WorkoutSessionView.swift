@@ -570,7 +570,7 @@ struct WorkoutSessionView: View {
             do {
                 let logged = try await sessionManager.finish()
                 await logStore.upsert(logged)
-                dataManager.setLoggedWorkouts(logStore.workouts)
+                await dataManager.setLoggedWorkoutsOffMain(logStore.workouts)
 
                 annotationsManager.setGym(for: logged.id, gymProfileId: logged.gymProfileId)
                 gymProfilesManager.setLastUsedGymProfileId(logged.gymProfileId)

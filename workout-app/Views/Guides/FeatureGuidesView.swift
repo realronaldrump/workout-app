@@ -1,8 +1,12 @@
 import SwiftUI
 
 struct FeatureGuidesView: View {
+    @ObservedObject var iCloudManager: iCloudDocumentManager
+    @EnvironmentObject private var dataManager: WorkoutDataManager
     @StateObject private var guideManager = FeatureGuideManager.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
+    @State private var showingOnboarding = false
 
     private var groupedGuides: [(GuideCategory, [FeatureGuide])] {
         GuideCategory.allCases
@@ -28,10 +32,20 @@ struct FeatureGuidesView: View {
                     ForEach(Array(groupedGuides.enumerated()), id: \.element.0) { groupIndex, group in
                         categorySection(group.0, guides: group.1, startIndex: groupIndex * 3)
                     }
+
+                    replayOnboardingSection
                 }
                 .padding(Theme.Spacing.lg)
             }
             .scrollIndicators(.hidden)
+        }
+        .fullScreenCover(isPresented: $showingOnboarding) {
+            OnboardingView(
+                isPresented: $showingOnboarding,
+                dataManager: dataManager,
+                iCloudManager: iCloudManager,
+                hasSeenOnboarding: $hasSeenOnboarding
+            )
         }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -197,6 +211,64 @@ struct FeatureGuidesView: View {
         }
         .padding(Theme.Spacing.lg)
         .softCard()
+    }
+
+    // MARK: - Replay Onboarding
+
+    private var replayOnboardingSection: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            HStack(spacing: Theme.Spacing.sm) {
+                Image(systemName: "arrow.counterclockwise")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.textTertiary)
+
+                Text("GETTING STARTED")
+                    .font(Theme.Typography.metricLabel)
+                    .foregroundStyle(Theme.Colors.textTertiary)
+                    .tracking(1.2)
+            }
+            .padding(.horizontal, Theme.Spacing.sm)
+
+            Button {
+                showingOnboarding = true
+            } label: {
+                HStack(spacing: Theme.Spacing.md) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                            .fill(Theme.Colors.accent.opacity(0.1))
+                            .frame(width: 52, height: 52)
+
+                        RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                            .strokeBorder(Theme.Colors.accent.opacity(0.2), lineWidth: 1)
+                            .frame(width: 52, height: 52)
+
+                        Image(systemName: "arrow.counterclockwise.circle.fill")
+                            .font(Theme.Iconography.title3Strong)
+                            .foregroundStyle(Theme.Colors.accent)
+                    }
+
+                    VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                        Text("Replay Onboarding")
+                            .font(Theme.Typography.bodyBold)
+                            .foregroundStyle(Theme.Colors.textPrimary)
+
+                        Text("Walk through the welcome wizard again")
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Colors.textSecondary)
+                            .lineLimit(2)
+                    }
+
+                    Spacer()
+
+                    Image(systemName: "chevron.right")
+                        .font(Theme.Typography.caption2Bold)
+                        .foregroundStyle(Theme.Colors.textTertiary)
+                }
+                .padding(Theme.Spacing.lg)
+                .softCard()
+            }
+            .buttonStyle(.plain)
+        }
     }
 
     // MARK: - Helpers

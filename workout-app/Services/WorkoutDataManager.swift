@@ -40,6 +40,16 @@ class WorkoutDataManager: ObservableObject {
     private var recentExerciseNamesCache: [String] = []
     private var importedWorkoutRequestID: UInt64 = 0
 
+    private struct DerivedWorkoutState {
+        let workouts: [Workout]
+        let importedWorkouts: [Workout]
+        let loggedWorkouts: [Workout]
+        let exerciseHistory: [String: [ExerciseHistorySession]]
+        let exerciseSummaries: [ExerciseSummary]
+        let allExerciseNames: [String]
+        let recentExerciseNames: [String]
+    }
+
     func processImportedWorkoutSets(
         _ sets: [WorkoutSet],
         healthIdentitySnapshot: [WorkoutHealthIdentitySnapshot] = [],
@@ -62,8 +72,7 @@ class WorkoutDataManager: ObservableObject {
 
         guard requestID.map(isCurrentImportedWorkoutRequest) ?? true else { return }
 
-        importedWorkouts = processedWorkouts
-        mergeSources()
+        await applyImportedWorkouts(processedWorkouts)
         isLoading = false
         identityStore.merge(newIdentityEntries)
 
@@ -79,6 +88,20 @@ class WorkoutDataManager: ObservableObject {
         loggedWorkouts = mapped.sorted { $0.date > $1.date }
         loggedWorkoutIds = Set(logged.map(\.id))
         mergeSources()
+    }
+
+    func setLoggedWorkoutsOffMain(_ logged: [LoggedWorkout]) async {
+        let importedSnapshot = importedWorkouts
+        let loggedIds = Set(logged.map(\.id))
+        let state = await Task.detached(priority: .userInitiated) {
+            let mapped = logged.map(Self.mapLoggedWorkoutToAnalyticsWorkout)
+            return Self.makeDerivedWorkoutState(
+                importedWorkouts: importedSnapshot,
+                loggedWorkouts: mapped
+            )
+        }.value
+        loggedWorkoutIds = loggedIds
+        applyDerivedState(state)
     }
 
     /// Centralized method for loading workout data from iCloud storage.
@@ -100,8 +123,7 @@ class WorkoutDataManager: ObservableObject {
 
             if iCloudDocumentManager.latestBackupFile(in: searchDirectories) != nil {
                 guard isCurrentImportedWorkoutRequest(requestID) else { return }
-                importedWorkouts = persistedWorkouts.sorted { $0.date > $1.date }
-                mergeSources()
+                await applyImportedWorkouts(persistedWorkouts)
                 isLoading = false
                 return
             }
@@ -112,8 +134,7 @@ class WorkoutDataManager: ObservableObject {
 
             if !persistedWorkouts.isEmpty, latestSignature == cachedSignature || cachedSignature == nil {
                 guard isCurrentImportedWorkoutRequest(requestID) else { return }
-                importedWorkouts = persistedWorkouts.sorted { $0.date > $1.date }
-                mergeSources()
+                await applyImportedWorkouts(persistedWorkouts)
                 isLoading = false
                 if cachedSignature == nil {
                     persistImportSourceSignature(latestSignature)
@@ -123,8 +144,7 @@ class WorkoutDataManager: ObservableObject {
 
             if latestFile == nil {
                 guard isCurrentImportedWorkoutRequest(requestID) else { return }
-                importedWorkouts = persistedWorkouts.sorted { $0.date > $1.date }
-                mergeSources()
+                await applyImportedWorkouts(persistedWorkouts)
                 isLoading = false
                 return
             }
@@ -149,8 +169,7 @@ class WorkoutDataManager: ObservableObject {
         case .success(let sets):
             guard !sets.isEmpty else {
                 guard isCurrentImportedWorkoutRequest(requestID) else { return }
-                importedWorkouts = []
-                mergeSources()
+                await applyImportedWorkouts([])
                 isLoading = false
                 clearImportSourceSignature()
                 do {
@@ -183,8 +202,7 @@ class WorkoutDataManager: ObservableObject {
                 try database.loadImportedWorkouts()
             }.value
             guard requestID == importedWorkoutRequestID else { return }
-            importedWorkouts = persisted.sorted { $0.date > $1.date }
-            mergeSources()
+            await applyImportedWorkouts(persisted)
         } catch {
             print("Failed to load persisted imported workouts: \(error)")
         }
@@ -228,8 +246,33 @@ class WorkoutDataManager: ObservableObject {
     }
 
     private func mergeSources() {
-        workouts = (importedWorkouts + loggedWorkouts).sorted { $0.date > $1.date }
-        rebuildDerivedCaches()
+        applyDerivedState(
+            Self.makeDerivedWorkoutState(
+                importedWorkouts: importedWorkouts,
+                loggedWorkouts: loggedWorkouts
+            )
+        )
+    }
+
+    private func applyImportedWorkouts(_ imported: [Workout]) async {
+        let loggedSnapshot = loggedWorkouts
+        let state = await Task.detached(priority: .userInitiated) {
+            Self.makeDerivedWorkoutState(
+                importedWorkouts: imported,
+                loggedWorkouts: loggedSnapshot
+            )
+        }.value
+        applyDerivedState(state)
+    }
+
+    private func applyDerivedState(_ state: DerivedWorkoutState) {
+        workouts = state.workouts
+        importedWorkouts = state.importedWorkouts
+        loggedWorkouts = state.loggedWorkouts
+        exerciseHistoryCache = state.exerciseHistory
+        exerciseSummariesCache = state.exerciseSummaries
+        allExerciseNamesCache = state.allExerciseNames
+        recentExerciseNamesCache = state.recentExerciseNames
     }
 
     func getExerciseHistory(for exerciseName: String) -> [(date: Date, sets: [WorkoutSet])] {
@@ -568,7 +611,13 @@ class WorkoutDataManager: ObservableObject {
         requestID == importedWorkoutRequestID
     }
 
-    private func rebuildDerivedCaches() {
+    private nonisolated static func makeDerivedWorkoutState(
+        importedWorkouts: [Workout],
+        loggedWorkouts: [Workout]
+    ) -> DerivedWorkoutState {
+        let sortedImported = importedWorkouts.sorted { $0.date > $1.date }
+        let sortedLogged = loggedWorkouts.sorted { $0.date > $1.date }
+        let workouts = (sortedImported + sortedLogged).sorted { $0.date > $1.date }
         var historyByExercise: [String: [ExerciseHistorySession]] = [:]
         var summaryByExercise: [String: ExerciseStatsAccumulator] = [:]
         var allExerciseNames = Set<String>()
@@ -619,23 +668,28 @@ class WorkoutDataManager: ObservableObject {
             historyByExercise[name]?.sort { $0.date < $1.date }
         }
 
-        exerciseHistoryCache = historyByExercise
-        exerciseSummariesCache = summaryByExercise.map { name, accumulator in
-            ExerciseSummary(
-                name: name,
-                stats: ExerciseStats(
-                    totalVolume: accumulator.totalVolume,
-                    maxWeight: accumulator.maxWeight ?? 0,
-                    frequency: accumulator.frequency,
-                    lastPerformed: accumulator.lastPerformed,
-                    oneRepMax: accumulator.oneRepMax ?? 0
+        return DerivedWorkoutState(
+            workouts: workouts,
+            importedWorkouts: sortedImported,
+            loggedWorkouts: sortedLogged,
+            exerciseHistory: historyByExercise,
+            exerciseSummaries: summaryByExercise.map { name, accumulator in
+                ExerciseSummary(
+                    name: name,
+                    stats: ExerciseStats(
+                        totalVolume: accumulator.totalVolume,
+                        maxWeight: accumulator.maxWeight ?? 0,
+                        frequency: accumulator.frequency,
+                        lastPerformed: accumulator.lastPerformed,
+                        oneRepMax: accumulator.oneRepMax ?? 0
+                    )
                 )
-            )
-        }
-        .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-        allExerciseNamesCache = Array(allExerciseNames)
-            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
-        recentExerciseNamesCache = recentExerciseNames
+            }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending },
+            allExerciseNames: Array(allExerciseNames)
+                .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending },
+            recentExerciseNames: recentExerciseNames
+        )
     }
 }
 

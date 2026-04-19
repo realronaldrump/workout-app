@@ -181,13 +181,15 @@ actor WorkoutRepository {
         range: DateInterval? = nil
     ) async throws -> ExerciseDetailSnapshot {
         let annotations = Dictionary(uniqueKeysWithValues: try database.loadAnnotations().map { ($0.workoutId, $0) })
-        let workouts = try loadAllWorkouts().filter { workout in
-            guard workout.exercises.contains(where: { $0.name == name }) else { return false }
+        let workouts = try database.loadWorkouts(containingExerciseNamed: name, range: range).filter { workout in
             if let range, !range.contains(workout.date) { return false }
             return Self.matchesScope(workoutId: workout.id, scope: scope, annotations: annotations)
         }
         let history = workouts.compactMap { workout -> ExerciseHistorySession? in
-            guard let exercise = workout.exercises.first(where: { $0.name == name }) else { return nil }
+            guard let exercise = workout.exercises.first(where: {
+                $0.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                    .localizedCaseInsensitiveCompare(name.trimmingCharacters(in: .whitespacesAndNewlines)) == .orderedSame
+            }) else { return nil }
             return ExerciseHistorySession(workoutId: workout.id, date: workout.date, sets: exercise.sets)
         }
         .sorted { $0.date < $1.date }

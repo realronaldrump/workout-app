@@ -21,6 +21,10 @@ struct ExerciseDetailView: View {
     @State private var didInitializeProgressRange = false
     @State private var selectedVariantWorkout: Workout?
     @State private var scopedHistory: [(date: Date, sets: [WorkoutSet])] = []
+    @State private var exerciseWorkouts: [Workout] = []
+    @State private var isLoadingExerciseDetail = false
+    @State private var exerciseDetailError: String?
+    @State private var exerciseDetailTask: Task<Void, Never>?
     @State private var cachedCardioConfig: ResolvedCardioMetricConfiguration?
     @State private var availableChartTypes: [ChartType] = [.weight, .volume, .oneRepMax, .reps]
     @State private var progressReview: ExerciseProgressReview?
@@ -160,19 +164,7 @@ struct ExerciseDetailView: View {
     }
 
     private var scopedProgressReviewWorkouts: [Workout] {
-        dataManager.workouts.filter { workout in
-            guard workout.exercises.contains(where: { $0.name == exerciseName }) else { return false }
-
-            let gymId = annotationsManager.annotation(for: workout.id)?.gymProfileId
-            switch selectedGymScope {
-            case .all:
-                return true
-            case .unassigned:
-                return gymId == nil
-            case .gym(let targetId):
-                return gymId == targetId
-            }
-        }
+        exerciseWorkouts.filter { matchesSelectedGymScope(workoutId: $0.id) }
     }
 
     private var progressRangeDetailLabel: String? {
@@ -394,17 +386,38 @@ struct ExerciseDetailView: View {
         customProgressEndDate = today
     }
 
+    private func exerciseMatches(_ name: String) -> Bool {
+        name.trimmingCharacters(in: .whitespacesAndNewlines)
+            .localizedCaseInsensitiveCompare(exerciseName.trimmingCharacters(in: .whitespacesAndNewlines)) == .orderedSame
+    }
+
+    private func historySessions(from workouts: [Workout]) -> [ExerciseHistorySession] {
+        workouts.compactMap { workout in
+            guard let exercise = workout.exercises.first(where: { exerciseMatches($0.name) }) else { return nil }
+            return ExerciseHistorySession(workoutId: workout.id, date: workout.date, sets: exercise.sets)
+        }
+        .sorted { $0.date < $1.date }
+    }
+
+    private func matchesSelectedGymScope(workoutId: UUID) -> Bool {
+        let gymId = annotationsManager.annotation(for: workoutId)?.gymProfileId
+        switch selectedGymScope {
+        case .all:
+            return true
+        case .unassigned:
+            return gymId == nil
+        case .gym(let targetId):
+            return gymId == targetId
+        }
+    }
+
     private func refreshScopedHistory() {
-        let historySessions = dataManager.exerciseHistorySessions(for: exerciseName).filter { session in
-            let gymId = annotationsManager.annotation(for: session.workoutId)?.gymProfileId
-            switch selectedGymScope {
-            case .all:
-                return true
-            case .unassigned:
-                return gymId == nil
-            case .gym(let targetId):
-                return gymId == targetId
-            }
+        let sourceHistory = exerciseWorkouts.isEmpty
+            ? dataManager.exerciseHistorySessions(for: exerciseName)
+            : historySessions(from: exerciseWorkouts)
+
+        let historySessions = sourceHistory.filter { session in
+            matchesSelectedGymScope(workoutId: session.workoutId)
         }
 
         scopedHistory = historySessions.map { (date: $0.date, sets: $0.sets) }
@@ -436,12 +449,55 @@ struct ExerciseDetailView: View {
         }
     }
 
+    private func scheduleExerciseDetailRefresh(debounceNs: UInt64 = 0) {
+        exerciseDetailTask?.cancel()
+        exerciseDetailTask = Task { @MainActor in
+            if debounceNs > 0 {
+                try? await Task.sleep(nanoseconds: debounceNs)
+            }
+            guard !Task.isCancelled else { return }
+
+            isLoadingExerciseDetail = true
+            exerciseDetailError = nil
+
+            do {
+                let snapshot = try await WorkoutRepository.shared.exerciseDetail(name: exerciseName, scope: .all)
+                guard !Task.isCancelled else { return }
+
+                exerciseWorkouts = snapshot.workouts
+                refreshScopedHistory()
+                initializeProgressRangeIfNeeded()
+                isLoadingExerciseDetail = false
+                scheduleProgressReviewRefresh(debounceNs: 0)
+            } catch {
+                guard !Task.isCancelled else { return }
+                exerciseDetailError = error.localizedDescription
+                isLoadingExerciseDetail = false
+            }
+        }
+    }
+
     var body: some View {
         ZStack {
             AdaptiveBackground()
 
             ScrollView {
                 VStack(spacing: Theme.Spacing.xl) {
+                    if isLoadingExerciseDetail && scopedHistory.isEmpty {
+                        HStack(spacing: Theme.Spacing.sm) {
+                            ProgressView()
+                            Text("Loading exercise history")
+                                .font(Theme.Typography.caption)
+                                .foregroundColor(Theme.Colors.textSecondary)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    } else if let exerciseDetailError, scopedHistory.isEmpty {
+                        Text("Unable to load exercise history: \(exerciseDetailError)")
+                            .font(Theme.Typography.caption)
+                            .foregroundColor(Theme.Colors.warning)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+
                     ExerciseStatsCards(exerciseName: exerciseName, history: scopedHistory)
 
                     VStack(alignment: .leading, spacing: 16) {
@@ -568,6 +624,7 @@ struct ExerciseDetailView: View {
         .onAppear {
             refreshScopedHistory()
             initializeProgressRangeIfNeeded()
+            scheduleExerciseDetailRefresh()
             if !availableChartTypes.contains(selectedChart) {
                 selectedChart = availableChartTypes.first ?? (isCardio ? .duration : .weight)
             }
@@ -584,6 +641,7 @@ struct ExerciseDetailView: View {
         }
         .onChange(of: dataManager.workouts) { _, _ in
             refreshScopedHistory()
+            scheduleExerciseDetailRefresh(debounceNs: 150_000_000)
             scheduleProgressReviewRefresh()
         }
         .onReceive(annotationsManager.$annotations) { _ in
@@ -603,6 +661,7 @@ struct ExerciseDetailView: View {
             Haptics.selection()
         }
         .onDisappear {
+            exerciseDetailTask?.cancel()
             progressReviewTask?.cancel()
         }
     }
