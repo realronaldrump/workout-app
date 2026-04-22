@@ -7,14 +7,17 @@ struct ExerciseStatsCards: View {
     @ObservedObject private var metricManager = ExerciseMetricManager.shared
 
     @State private var selectedStat: ExerciseStatKind?
+    @State private var derived: DerivedStats = .empty
+    @State private var derivedCacheKey: Int?
 
-    private struct StatsSummary {
+    fileprivate struct StatsSummary {
         let totalSets: Int
         let maxWeight: Double
         let avgReps: Double
+        let maxVolume: Double
     }
 
-    private struct CardioSummary {
+    fileprivate struct CardioSummary {
         let sessions: Int
         let totalDistance: Double
         let totalSeconds: Double
@@ -24,6 +27,18 @@ struct ExerciseStatsCards: View {
         let bestCount: Int
     }
 
+    fileprivate struct DerivedStats {
+        let stats: StatsSummary
+        let cardioStats: CardioSummary
+        let cardioConfig: ResolvedCardioMetricConfiguration?
+
+        static let empty = DerivedStats(
+            stats: StatsSummary(totalSets: 0, maxWeight: 0, avgReps: 0, maxVolume: 0),
+            cardioStats: CardioSummary(sessions: 0, totalDistance: 0, totalSeconds: 0, totalCount: 0, bestDistance: 0, bestSeconds: 0, bestCount: 0),
+            cardioConfig: nil
+        )
+    }
+
     private var isCardio: Bool {
         metadataManager
             .resolvedTags(for: exerciseName)
@@ -31,58 +46,96 @@ struct ExerciseStatsCards: View {
     }
 
     private var cardioConfig: ResolvedCardioMetricConfiguration {
-        let sets = history.flatMap(\.sets)
-        return metricManager.resolvedCardioConfiguration(for: exerciseName, historySets: sets)
+        derived.cardioConfig ?? metricManager.resolvedCardioConfiguration(for: exerciseName, historySets: [])
     }
 
     private var isAssisted: Bool {
         ExerciseLoad.isAssistedExercise(exerciseName)
     }
 
-    private var stats: StatsSummary {
-        let allSets = history.flatMap { $0.sets }
-        let maxWeight = ExerciseLoad.bestWeight(in: allSets, exerciseName: exerciseName)
-        let avgReps = allSets.isEmpty ? 0 : Double(allSets.reduce(0) { $0 + $1.reps }) / Double(allSets.count)
+    private var stats: StatsSummary { derived.stats }
+    private var cardioStats: CardioSummary { derived.cardioStats }
 
-        return StatsSummary(
-            totalSets: allSets.count,
-            maxWeight: maxWeight,
-            avgReps: avgReps
-        )
+    private var historyFingerprint: Int {
+        var hasher = Hasher()
+        hasher.combine(exerciseName)
+        hasher.combine(isCardio)
+        hasher.combine(metricManager.preferences(for: exerciseName))
+        for session in history {
+            hasher.combine(session.date.timeIntervalSinceReferenceDate)
+            hasher.combine(session.sets)
+        }
+        return hasher.finalize()
     }
 
-    private var cardioStats: CardioSummary {
-        let sessions = history.count
-        let totalDistance = history.reduce(0.0) { sum, session in
-            sum + session.sets.reduce(0.0) { $0 + $1.distance }
+    private func recomputeIfNeeded() {
+        let key = historyFingerprint
+        guard key != derivedCacheKey else { return }
+        derived = computeDerived()
+        derivedCacheKey = key
+    }
+
+    private func computeDerived() -> DerivedStats {
+        var totalSets = 0
+        var maxWeight: Double = 0
+        var totalReps = 0
+        var maxVolume: Double = 0
+
+        var totalDistance: Double = 0
+        var totalSeconds: Double = 0
+        var totalCount = 0
+        var bestDistance: Double = 0
+        var bestSeconds: Double = 0
+        var bestCount = 0
+
+        for session in history {
+            var sessionVolume: Double = 0
+            var sessionDistance: Double = 0
+            var sessionSeconds: Double = 0
+            var sessionCount = 0
+            for set in session.sets {
+                totalSets += 1
+                totalReps += set.reps
+                let v = set.weight * Double(set.reps)
+                sessionVolume += v
+                sessionDistance += set.distance
+                sessionSeconds += set.seconds
+                sessionCount += set.reps
+            }
+            if sessionVolume > maxVolume { maxVolume = sessionVolume }
+            totalDistance += sessionDistance
+            totalSeconds += sessionSeconds
+            totalCount += sessionCount
+            if sessionDistance > bestDistance { bestDistance = sessionDistance }
+            if sessionSeconds > bestSeconds { bestSeconds = sessionSeconds }
+            if sessionCount > bestCount { bestCount = sessionCount }
         }
-        let totalSeconds = history.reduce(0.0) { sum, session in
-            sum + session.sets.reduce(0.0) { $0 + $1.seconds }
-        }
-        let totalCount = history.reduce(0) { sum, session in
-            sum + session.sets.reduce(0) { $0 + $1.reps }
-        }
 
-        let bestDistance = history.map { session in
-            session.sets.reduce(0.0) { $0 + $1.distance }
-        }.max() ?? 0
+        let allSets = history.flatMap { $0.sets }
+        maxWeight = ExerciseLoad.bestWeight(in: allSets, exerciseName: exerciseName)
+        let avgReps = totalSets == 0 ? 0 : Double(totalReps) / Double(totalSets)
 
-        let bestSeconds = history.map { session in
-            session.sets.reduce(0.0) { $0 + $1.seconds }
-        }.max() ?? 0
+        let cardioCfg: ResolvedCardioMetricConfiguration? = isCardio
+            ? metricManager.resolvedCardioConfiguration(for: exerciseName, historySets: allSets)
+            : nil
 
-        let bestCount = history.map { session in
-            session.sets.reduce(0) { $0 + $1.reps }
-        }.max() ?? 0
-
-        return CardioSummary(
-            sessions: sessions,
-            totalDistance: totalDistance,
-            totalSeconds: totalSeconds,
-            totalCount: totalCount,
-            bestDistance: bestDistance,
-            bestSeconds: bestSeconds,
-            bestCount: bestCount
+        return DerivedStats(
+            stats: StatsSummary(
+                totalSets: totalSets,
+                maxWeight: maxWeight,
+                avgReps: avgReps,
+                maxVolume: maxVolume
+            ),
+            cardioStats: CardioSummary(
+                sessions: history.count,
+                totalDistance: totalDistance,
+                totalSeconds: totalSeconds,
+                totalCount: totalCount,
+                bestDistance: bestDistance,
+                bestSeconds: bestSeconds,
+                bestCount: bestCount
+            ),
+            cardioConfig: cardioCfg
         )
     }
 
@@ -188,11 +241,7 @@ struct ExerciseStatsCards: View {
                 if !isAssisted {
                     StatCard(
                         title: "Max Volume",
-                        value: SharedFormatters.volumeWithUnit(
-                            history.map { session in
-                                session.sets.reduce(0) { $0 + ($1.weight * Double($1.reps)) }
-                            }.max() ?? 0
-                        ),
+                        value: SharedFormatters.volumeWithUnit(stats.maxVolume),
                         icon: "chart.bar.fill",
                         color: Theme.Colors.success,
                         onTap: { selectedStat = .maxVolume }
@@ -200,6 +249,8 @@ struct ExerciseStatsCards: View {
                 }
             }
         }
+        .onAppear { recomputeIfNeeded() }
+        .onChange(of: historyFingerprint) { _, _ in recomputeIfNeeded() }
         .navigationDestination(item: $selectedStat) { kind in
             ExerciseStatDetailView(kind: kind, exerciseName: exerciseName, history: history)
         }

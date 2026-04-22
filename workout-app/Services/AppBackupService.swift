@@ -230,10 +230,19 @@ enum AppBackupService {
     }
 
     nonisolated static func exportBackup(_ backup: BigBeautifulWorkoutBackup) throws -> Data {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        encoder.outputFormatting = [.sortedKeys]
-        return try encoder.encode(backup)
+        try makeBackupJSONEncoder().encode(backup)
+    }
+
+    nonisolated static func exportBackup(
+        to destinationURL: URL,
+        backup: BigBeautifulWorkoutBackup
+    ) throws {
+        let encoder = makeBackupJSONEncoder()
+
+        try iCloudDocumentManager.writeFileAtomically(to: destinationURL) { handle in
+            let writer = BackupJSONStreamWriter(handle: handle, encoder: encoder)
+            try writer.writeBackup(backup)
+        }
     }
 
     nonisolated static func decodeBackup(from data: Data) throws -> BigBeautifulWorkoutBackup {
@@ -267,6 +276,156 @@ enum AppBackupService {
         formatter.timeZone = TimeZone.current
         formatter.locale = Locale(identifier: "en_US_POSIX")
         return "bbworkout_backup_\(formatter.string(from: exportedAt)).\(backupFileExtension)"
+    }
+
+    private nonisolated static func makeBackupJSONEncoder() -> JSONEncoder {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.sortedKeys]
+        return encoder
+    }
+
+    private nonisolated struct BackupJSONStreamWriter {
+        let handle: FileHandle
+        let encoder: JSONEncoder
+
+        func writeBackup(_ backup: BigBeautifulWorkoutBackup) throws {
+            try writeObject {
+                try $0.field("appBuild") {
+                    try writeEncoded(backup.appBuild)
+                }
+                try $0.field("appVersion") {
+                    try writeEncoded(backup.appVersion)
+                }
+                try $0.field("exportedAt") {
+                    try writeEncoded(backup.exportedAt)
+                }
+                try $0.field("formatIdentifier") {
+                    try writeEncoded(backup.formatIdentifier)
+                }
+                try $0.field("payload") {
+                    try writePayload(backup.payload)
+                }
+                try $0.field("schemaVersion") {
+                    try writeEncoded(backup.schemaVersion)
+                }
+            }
+        }
+
+        private func writePayload(_ payload: AppBackupPayload) throws {
+            try writeObject {
+                try $0.field("completedFeatureGuideIDs") {
+                    try writeArray(payload.completedFeatureGuideIDs)
+                }
+                try $0.field("dailyHealthCoverage") {
+                    try writeArray(payload.dailyHealthCoverage)
+                }
+                try $0.field("dailyHealthData") {
+                    try writeArray(payload.dailyHealthData)
+                }
+                try $0.field("dismissedIntentionalBreakSuggestions") {
+                    try writeArray(payload.dismissedIntentionalBreakSuggestions)
+                }
+                try $0.field("exerciseMetricPreferences") {
+                    try writeDictionary(payload.exerciseMetricPreferences)
+                }
+                try $0.field("exerciseTagOverrides") {
+                    try writeDictionary(payload.exerciseTagOverrides)
+                }
+                try $0.field("favoriteExercises") {
+                    try writeArray(payload.favoriteExercises)
+                }
+                try $0.field("gymProfiles") {
+                    try writeArray(payload.gymProfiles)
+                }
+                try $0.field("importedWorkouts") {
+                    try writeArray(payload.importedWorkouts)
+                }
+                try $0.field("intentionalBreakRanges") {
+                    try writeArray(payload.intentionalBreakRanges)
+                }
+                try $0.field("loggedWorkouts") {
+                    try writeArray(payload.loggedWorkouts)
+                }
+                try $0.field("settings") {
+                    try writeEncoded(payload.settings)
+                }
+                try $0.field("workoutAnnotations") {
+                    try writeArray(payload.workoutAnnotations)
+                }
+                try $0.field("workoutHealthData") {
+                    try writeArray(payload.workoutHealthData)
+                }
+                try $0.field("workoutIdentities") {
+                    try writeDictionary(payload.workoutIdentities)
+                }
+            }
+        }
+
+        private func writeObject(
+            _ body: (_ writer: inout ObjectWriter) throws -> Void
+        ) throws {
+            try writeRaw("{")
+            var writer = ObjectWriter(owner: self)
+            try body(&writer)
+            try writeRaw("}")
+        }
+
+        private func writeArray<Element: Encodable>(_ values: [Element]) throws {
+            try writeRaw("[")
+            for (index, value) in values.enumerated() {
+                if index > 0 {
+                    try writeRaw(",")
+                }
+                try writeEncoded(value)
+            }
+            try writeRaw("]")
+        }
+
+        private func writeDictionary<Value: Encodable>(_ values: [String: Value]) throws {
+            try writeRaw("{")
+            let sortedKeys = values.keys.sorted()
+            for (index, key) in sortedKeys.enumerated() {
+                if index > 0 {
+                    try writeRaw(",")
+                }
+                try writeEncoded(key)
+                try writeRaw(":")
+                if let value = values[key] {
+                    try writeEncoded(value)
+                } else {
+                    try writeRaw("null")
+                }
+            }
+            try writeRaw("}")
+        }
+
+        private func writeEncoded<Value: Encodable>(_ value: Value) throws {
+            try handle.write(contentsOf: try encoder.encode(value))
+        }
+
+        private func writeRaw(_ string: String) throws {
+            try handle.write(contentsOf: Data(string.utf8))
+        }
+
+        struct ObjectWriter {
+            private let owner: BackupJSONStreamWriter
+            private var wroteField = false
+
+            fileprivate init(owner: BackupJSONStreamWriter) {
+                self.owner = owner
+            }
+
+            mutating func field(_ name: String, valueWriter: () throws -> Void) throws {
+                if wroteField {
+                    try owner.writeRaw(",")
+                }
+                try owner.writeEncoded(name)
+                try owner.writeRaw(":")
+                try valueWriter()
+                wroteField = true
+            }
+        }
     }
 
     nonisolated static func importSourceSignature(for fileURL: URL?) -> String? {

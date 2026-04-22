@@ -69,6 +69,50 @@ final class WorkoutCSVExporterTests: XCTestCase {
         }
     }
 
+    func testWorkoutHistoryFileExportMatchesDataExport() throws {
+        let workoutDate = date(year: 2026, month: 4, day: 10, hour: 8)
+        let workout = Workout(
+            date: workoutDate,
+            name: "Upper A",
+            duration: "45m",
+            exercises: [
+                Exercise(
+                    name: "Bench Press",
+                    sets: [
+                        makeSet(date: workoutDate, setOrder: 1, weight: 185, reps: 5),
+                        makeSet(date: workoutDate.addingTimeInterval(60), setOrder: 2, weight: 190, reps: 3)
+                    ]
+                )
+            ]
+        )
+
+        let expected = try WorkoutCSVExporter.exportWorkoutHistoryCSV(
+            workouts: [workout],
+            startDate: workoutDate,
+            endDateInclusive: workoutDate,
+            selectedColumns: [.workoutName, .exercise, .weight, .reps],
+            weightUnit: "lbs",
+            calendar: calendar
+        )
+
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let fileURL = directory.appendingPathComponent("history.csv")
+        try WorkoutCSVExporter.exportWorkoutHistoryCSV(
+            to: fileURL,
+            workouts: [workout],
+            startDate: workoutDate,
+            endDateInclusive: workoutDate,
+            selectedColumns: [.workoutName, .exercise, .weight, .reps],
+            weightUnit: "lbs",
+            calendar: calendar
+        )
+
+        let actual = try Data(contentsOf: fileURL)
+        XCTAssertEqual(actual, expected)
+    }
+
     private var calendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "America/Denver") ?? .current
@@ -99,5 +143,11 @@ final class WorkoutCSVExporterTests: XCTestCase {
             distance: 0,
             seconds: 0
         )
+    }
+
+    private func makeTemporaryDirectory() throws -> URL {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory
     }
 }

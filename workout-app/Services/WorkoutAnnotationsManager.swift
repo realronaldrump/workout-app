@@ -8,8 +8,10 @@ final class WorkoutAnnotationsManager: ObservableObject {
     private let database = AppDatabase.shared
     private let fileName = "workout_annotations.json"
 
-    init() {
-        load()
+    init(loadOnInit: Bool = true) {
+        if loadOnInit {
+            load()
+        }
     }
 
     func annotation(for workoutId: UUID) -> WorkoutAnnotation? {

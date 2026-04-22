@@ -132,6 +132,29 @@ final class AppBackupServiceTests: XCTestCase {
         XCTAssertEqual(fileName, "backup.json")
     }
 
+    func testStreamingBackupExportRoundTripPreservesPayloadSections() throws {
+        let backup = BigBeautifulWorkoutBackup(
+            appVersion: "1.0.0",
+            appBuild: "7",
+            payload: AppBackupPayload(
+                favoriteExercises: ["Bench Press", "Row"],
+                settings: AppBackupSettings(profileName: "Streamed")
+            )
+        )
+
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let fileURL = directory.appendingPathComponent("backup.\(AppBackupService.backupFileExtension)")
+        try AppBackupService.exportBackup(to: fileURL, backup: backup)
+
+        let decoded = try AppBackupService.decodeBackup(from: try Data(contentsOf: fileURL))
+        XCTAssertEqual(decoded.appVersion, backup.appVersion)
+        XCTAssertEqual(decoded.appBuild, backup.appBuild)
+        XCTAssertEqual(decoded.payload.favoriteExercises, backup.payload.favoriteExercises)
+        XCTAssertEqual(decoded.payload.settings.profileName, "Streamed")
+    }
+
     func testClassifyImportTreatsCSVAsStrong() throws {
         let csv = Data("Date,Workout Name,Duration,Exercise Name,Set Order,Weight,Reps,Distance,Seconds\n".utf8)
 

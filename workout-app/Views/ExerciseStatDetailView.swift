@@ -6,49 +6,104 @@ struct ExerciseStatDetailView: View {
     let exerciseName: String
     let history: [(date: Date, sets: [WorkoutSet])]
 
+    @State private var derived: DerivedStatData = .empty
+    @State private var derivedCacheKey: Int?
+
     private var isAssisted: Bool {
         ExerciseLoad.isAssistedExercise(exerciseName)
     }
 
-    private struct SessionPoint: Identifiable {
+    fileprivate struct SessionPoint: Identifiable {
         let id: Int
         let date: Date
         let value: Double
         let sets: [WorkoutSet]
     }
 
-    private var points: [SessionPoint] {
-        history
-            .sorted { $0.date < $1.date }
-            .enumerated()
-            .compactMap { index, session in
-                let pointValue = value(for: session.sets)
-                if kind == .maxVolume, pointValue <= 0 {
-                    return nil
-                }
-                return SessionPoint(
+    fileprivate struct DerivedStatData {
+        let points: [SessionPoint]
+        let topSessions: [SessionPoint]
+        let values: [Double]
+        let average: Double?
+        let minValue: Double?
+        let maxValue: Double?
+
+        static let empty = DerivedStatData(
+            points: [], topSessions: [], values: [],
+            average: nil, minValue: nil, maxValue: nil
+        )
+
+        static func compute(
+            history: [(date: Date, sets: [WorkoutSet])],
+            kind: ExerciseStatKind,
+            exerciseName: String
+        ) -> DerivedStatData {
+            let sortedHistory = history.sorted { $0.date < $1.date }
+            var points: [SessionPoint] = []
+            points.reserveCapacity(sortedHistory.count)
+            for (index, session) in sortedHistory.enumerated() {
+                let pointValue = computeValue(for: session.sets, kind: kind, exerciseName: exerciseName)
+                if kind == .maxVolume, pointValue <= 0 { continue }
+                points.append(SessionPoint(
                     id: index,
                     date: session.date,
                     value: pointValue,
                     sets: session.sets
-                )
+                ))
             }
-    }
 
-    private var topSessions: [SessionPoint] {
-        points
-            .sorted { lhs, rhs in
-                if kind == .maxWeight {
-                    return ExerciseLoad.comparisonValue(for: lhs.value, exerciseName: exerciseName) >
-                    ExerciseLoad.comparisonValue(for: rhs.value, exerciseName: exerciseName)
+            let top = points
+                .sorted { lhs, rhs in
+                    if kind == .maxWeight {
+                        return ExerciseLoad.comparisonValue(for: lhs.value, exerciseName: exerciseName) >
+                        ExerciseLoad.comparisonValue(for: rhs.value, exerciseName: exerciseName)
+                    }
+                    return lhs.value > rhs.value
                 }
-                return lhs.value > rhs.value
+                .prefix(10)
+                .map { $0 }
+
+            let values = points.map(\.value)
+            let avg: Double? = values.isEmpty ? nil : values.reduce(0, +) / Double(values.count)
+            return DerivedStatData(
+                points: points,
+                topSessions: top,
+                values: values,
+                average: avg,
+                minValue: values.min(),
+                maxValue: values.max()
+            )
+        }
+
+        private static func computeValue(for sets: [WorkoutSet], kind: ExerciseStatKind, exerciseName: String) -> Double {
+            guard !sets.isEmpty else { return 0 }
+            switch kind {
+            case .totalSets:
+                return Double(sets.count)
+            case .maxWeight:
+                return ExerciseLoad.bestWeight(in: sets, exerciseName: exerciseName)
+            case .maxVolume:
+                return sets.reduce(0) { $0 + ($1.weight * Double($1.reps)) }
+            case .avgReps:
+                return Double(sets.reduce(0) { $0 + $1.reps }) / Double(sets.count)
             }
-            .prefix(10)
-            .map { $0 }
+        }
     }
 
-    private var values: [Double] { points.map(\.value) }
+    private var historyFingerprint: Int {
+        var hasher = Hasher()
+        hasher.combine(kind.rawValue)
+        hasher.combine(exerciseName)
+        for session in history {
+            hasher.combine(session.date.timeIntervalSinceReferenceDate)
+            hasher.combine(session.sets)
+        }
+        return hasher.finalize()
+    }
+
+    private var points: [SessionPoint] { derived.points }
+    private var topSessions: [SessionPoint] { derived.topSessions }
+    private var values: [Double] { derived.values }
 
     private var tint: Color {
         switch kind {
@@ -79,6 +134,15 @@ struct ExerciseStatDetailView: View {
         }
         .navigationTitle(navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear { recomputeIfNeeded() }
+        .onChange(of: historyFingerprint) { _, _ in recomputeIfNeeded() }
+    }
+
+    private func recomputeIfNeeded() {
+        let key = historyFingerprint
+        guard key != derivedCacheKey else { return }
+        derived = DerivedStatData.compute(history: history, kind: kind, exerciseName: exerciseName)
+        derivedCacheKey = key
     }
 
     private var header: some View {
@@ -169,9 +233,9 @@ struct ExerciseStatDetailView: View {
 
     private var summaryPills: some View {
         Group {
-            if let avg = average(values),
-               let min = values.min(),
-               let max = values.max(),
+            if let avg = derived.average,
+               let min = derived.minValue,
+               let max = derived.maxValue,
                let best = bestSummaryValue(min: min, max: max),
                let worst = worstSummaryValue(min: min, max: max) {
                 ViewThatFits(in: .horizontal) {
@@ -228,20 +292,6 @@ struct ExerciseStatDetailView: View {
             return "Volume per Session"
         case .avgReps:
             return "Avg Reps per Set"
-        }
-    }
-
-    private func value(for sets: [WorkoutSet]) -> Double {
-        guard !sets.isEmpty else { return 0 }
-        switch kind {
-        case .totalSets:
-            return Double(sets.count)
-        case .maxWeight:
-            return ExerciseLoad.bestWeight(in: sets, exerciseName: exerciseName)
-        case .maxVolume:
-            return sets.reduce(0) { $0 + ($1.weight * Double($1.reps)) }
-        case .avgReps:
-            return Double(sets.reduce(0) { $0 + $1.reps }) / Double(sets.count)
         }
     }
 

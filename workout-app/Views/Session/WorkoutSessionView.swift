@@ -27,13 +27,16 @@ struct WorkoutSessionView: View {
     @State private var showingExercisePicker = false
     @State private var showingFinishSheet = false
     @State private var showingDiscardAlert = false
+    @State private var showingUncheckedSetAlert = false
     @State private var showingRestSettings = false
     @State private var finishErrorMessage: String?
     @State private var isFinishing = false
     @State private var finishDidSave = false
+    @State private var pendingUncheckedSetCount = 0
     @State private var exerciseCardContexts: [String: SessionExerciseContext] = [:]
     @State private var cachedMuscleSuggestions: [MuscleGroupSuggestion] = []
     @State private var cachedCanFinishSession = false
+    @State private var cachedUncheckedSetCount = 0
     @State private var cachedSummary = FinishSessionSummary(
         startedAt: Date(),
         exerciseCount: 0,
@@ -100,7 +103,7 @@ struct WorkoutSessionView: View {
                             }
 
                             Button {
-                                showingFinishSheet = true
+                                presentFinishFlow()
                                 Haptics.selection()
                             } label: {
                                 HStack {
@@ -168,6 +171,21 @@ struct WorkoutSessionView: View {
                 }
             } message: {
                 Text("This will permanently delete your in-progress session and all sets.")
+            }
+            .alert("Uncompleted Sets?", isPresented: $showingUncheckedSetAlert) {
+                Button("Keep Editing", role: .cancel) {}
+                Button("Discard Uncompleted", role: .destructive) {
+                    showingFinishSheet = true
+                    Haptics.selection()
+                }
+                Button("Mark as Complete") {
+                    sessionManager.markIncompleteSetsWithEnteredDataCompleted()
+                    refreshDerivedSessionState()
+                    showingFinishSheet = true
+                    Haptics.selection()
+                }
+            } message: {
+                Text(uncheckedSetAlertMessage)
             }
             .sheet(isPresented: $showingRestSettings) {
                 restTimerSettingsSheet
@@ -345,7 +363,7 @@ struct WorkoutSessionView: View {
             HStack(spacing: Theme.Spacing.sm) {
                 Button {
                     sessionManager.setRestTimerDuration(sessionManager.restTimerDuration + 30)
-                    sessionManager.restTimerSecondsRemaining += 30
+                    sessionManager.extendRestTimer(by: 30)
                     Haptics.selection()
                 } label: {
                     Text("+30s")
@@ -492,7 +510,7 @@ struct WorkoutSessionView: View {
                     Spacer()
 
                     Button {
-                        showingFinishSheet = true
+                        presentFinishFlow()
                         Haptics.selection()
                     } label: {
                         Image(systemName: "checkmark.circle.fill")
@@ -603,6 +621,39 @@ struct WorkoutSessionView: View {
         }
     }
 
+    private func presentFinishFlow() {
+        let uncheckedSetCount = cachedUncheckedSetCount
+        if uncheckedSetCount > 0 {
+            pendingUncheckedSetCount = uncheckedSetCount
+            showingUncheckedSetAlert = true
+            return
+        }
+
+        showingFinishSheet = true
+    }
+
+    private var uncheckedSetAlertMessage: String {
+        if pendingUncheckedSetCount == 1 {
+            return "You have 1 set with data entered but not marked complete. Mark it as complete before saving, or discard it from the finished workout."
+        }
+
+        return "You have \(pendingUncheckedSetCount) sets with data entered but not marked complete. Mark them as complete before saving, or discard them from the finished workout."
+    }
+
+    private func hasEnteredData(_ set: ActiveSet, isCardio: Bool) -> Bool {
+        if isCardio {
+            let reps = max(set.reps ?? 0, 0)
+            let distance = max(set.distance ?? 0, 0)
+            let seconds = max(set.seconds ?? 0, 0)
+            return reps > 0 || distance > 0 || seconds > 0
+        }
+
+        guard let weight = set.weight, let reps = set.reps else {
+            return false
+        }
+        return weight >= 0 && reps > 0
+    }
+
     private func gymLabel(for gymId: UUID?) -> String {
         if let name = gymProfilesManager.gymName(for: gymId) {
             return name
@@ -615,6 +666,7 @@ struct WorkoutSessionView: View {
             exerciseCardContexts = [:]
             cachedMuscleSuggestions = []
             cachedCanFinishSession = false
+            cachedUncheckedSetCount = 0
             cachedSummary = FinishSessionSummary(
                 startedAt: Date(),
                 exerciseCount: 0,
@@ -641,6 +693,7 @@ struct WorkoutSessionView: View {
         var cardioDistance = 0.0
         var cardioSeconds = 0.0
         var cardioCount = 0
+        var uncheckedSetCount = 0
         var canFinish = true
 
         for exercise in session.exercises {
@@ -666,6 +719,12 @@ struct WorkoutSessionView: View {
                 recommendation: recommendation
             )
 
+            for set in exercise.sets where !set.isCompleted {
+                if hasEnteredData(set, isCardio: isCardio) {
+                    uncheckedSetCount += 1
+                }
+            }
+
             for set in exercise.sets where set.isCompleted {
                 if isCardio {
                     let reps = max(set.reps ?? 0, 0)
@@ -690,7 +749,8 @@ struct WorkoutSessionView: View {
 
         exerciseCardContexts = contexts
         cachedMuscleSuggestions = buildMuscleSuggestions(for: session, groupMappings: groupMappings)
-        cachedCanFinishSession = canFinish && completedSetCount > 0
+        cachedUncheckedSetCount = uncheckedSetCount
+        cachedCanFinishSession = canFinish && (completedSetCount > 0 || uncheckedSetCount > 0)
         cachedSummary = FinishSessionSummary(
             startedAt: session.startedAt,
             exerciseCount: session.exercises.count,

@@ -4,6 +4,31 @@ struct ExerciseRangeBreakdown: View {
     let exerciseName: String
     let history: [(date: Date, sets: [WorkoutSet])]
 
+    @State private var derived: DerivedBreakdown = .empty
+    @State private var derivedCacheKey: Int?
+
+    fileprivate struct DerivedBreakdown {
+        let allSetsCount: Int
+        let isEmpty: Bool
+        let totalSets: Int
+        let averageReps: Double
+        let bestEstimatedOneRepMax: Double
+        let averageIntensity: Double?
+        let repBucketCounts: [Int]
+        let intensityBucketCounts: [Int]
+
+        static let empty = DerivedBreakdown(
+            allSetsCount: 0,
+            isEmpty: true,
+            totalSets: 0,
+            averageReps: 0,
+            bestEstimatedOneRepMax: 0,
+            averageIntensity: nil,
+            repBucketCounts: [],
+            intensityBucketCounts: []
+        )
+    }
+
     private struct RepRangeDescriptor {
         let label: String
         let range: ClosedRange<Int>
@@ -138,14 +163,16 @@ struct ExerciseRangeBreakdown: View {
         ]
     }
 
-    private var allSets: [WorkoutSet] {
-        history.flatMap { $0.sets }
+    private var allSetsIsEmpty: Bool {
+        derived.isEmpty
     }
 
     private var repBuckets: [RepRangeBucket] {
-        let total = max(allSets.count, 1)
-        return repDescriptors.map { descriptor in
-            let count = allSets.filter { descriptor.range.contains($0.reps) }.count
+        let descriptors = repDescriptors
+        let counts = derived.repBucketCounts
+        let total = max(derived.allSetsCount, 1)
+        return descriptors.enumerated().map { index, descriptor in
+            let count = index < counts.count ? counts[index] : 0
             return RepRangeBucket(
                 label: descriptor.label,
                 range: descriptor.range,
@@ -157,30 +184,96 @@ struct ExerciseRangeBreakdown: View {
     }
 
     private var intensityBuckets: [IntensityZoneBucket] {
-        guard bestEstimatedOneRepMax > 0 else { return [] }
-
-        var counts = Array(repeating: 0, count: intensityDescriptors.count)
-        for set in allSets {
-            let intensity = ExerciseLoad.relativeIntensity(
-                weight: set.weight,
-                referenceWeight: bestEstimatedOneRepMax,
-                exerciseName: exerciseName
-            )
-            if let index = intensityDescriptors.firstIndex(where: { $0.range.contains(intensity) }) {
-                counts[index] += 1
-            }
-        }
-
+        guard derived.bestEstimatedOneRepMax > 0 else { return [] }
+        let descriptors = intensityDescriptors
+        let counts = derived.intensityBucketCounts
         let total = max(counts.reduce(0, +), 1)
-        return intensityDescriptors.enumerated().map { index, descriptor in
-            IntensityZoneBucket(
+        return descriptors.enumerated().map { index, descriptor in
+            let count = index < counts.count ? counts[index] : 0
+            return IntensityZoneBucket(
                 label: descriptor.label,
                 range: descriptor.range,
-                count: counts[index],
-                percent: Double(counts[index]) / Double(total),
+                count: count,
+                percent: Double(count) / Double(total),
                 tint: descriptor.tint
             )
         }
+    }
+
+    private var historyFingerprint: Int {
+        var hasher = Hasher()
+        hasher.combine(exerciseName)
+        for session in history {
+            hasher.combine(session.date.timeIntervalSinceReferenceDate)
+            hasher.combine(session.sets)
+        }
+        return hasher.finalize()
+    }
+
+    private func recomputeIfNeeded() {
+        let key = historyFingerprint
+        guard key != derivedCacheKey else { return }
+        derived = computeDerived()
+        derivedCacheKey = key
+    }
+
+    private func computeDerived() -> DerivedBreakdown {
+        let allSets = history.flatMap { $0.sets }
+        let totalSets = allSets.count
+        guard totalSets > 0 else { return .empty }
+
+        var totalReps = 0
+        for set in allSets { totalReps += set.reps }
+        let averageReps = Double(totalReps) / Double(totalSets)
+
+        let bestOneRM = OneRepMax.bestEstimate(in: allSets, exerciseName: exerciseName)
+
+        let repDescs = repDescriptors
+        var repCounts = Array(repeating: 0, count: repDescs.count)
+        for set in allSets {
+            for (i, descriptor) in repDescs.enumerated() {
+                if descriptor.range.contains(set.reps) {
+                    repCounts[i] += 1
+                    break
+                }
+            }
+        }
+
+        let intensityDescs = intensityDescriptors
+        var intensityCounts = Array(repeating: 0, count: intensityDescs.count)
+        var intensitySum: Double = 0
+        var intensityCount = 0
+        if bestOneRM > 0 {
+            for set in allSets {
+                let intensity = ExerciseLoad.relativeIntensity(
+                    weight: set.weight,
+                    referenceWeight: bestOneRM,
+                    exerciseName: exerciseName
+                )
+                intensitySum += intensity
+                intensityCount += 1
+                for (i, descriptor) in intensityDescs.enumerated() {
+                    if descriptor.range.contains(intensity) {
+                        intensityCounts[i] += 1
+                        break
+                    }
+                }
+            }
+        }
+        let avgIntensity: Double? = (bestOneRM > 0 && intensityCount > 0)
+            ? intensitySum / Double(intensityCount)
+            : nil
+
+        return DerivedBreakdown(
+            allSetsCount: totalSets,
+            isEmpty: false,
+            totalSets: totalSets,
+            averageReps: averageReps,
+            bestEstimatedOneRepMax: bestOneRM,
+            averageIntensity: avgIntensity,
+            repBucketCounts: repCounts,
+            intensityBucketCounts: intensityCounts
+        )
     }
 
     private var repDisplayBuckets: [BreakdownBucket] {
@@ -211,30 +304,10 @@ struct ExerciseRangeBreakdown: View {
         }
     }
 
-    private var totalSets: Int {
-        allSets.count
-    }
-
-    private var averageReps: Double {
-        guard !allSets.isEmpty else { return 0 }
-        return Double(allSets.reduce(0) { $0 + $1.reps }) / Double(allSets.count)
-    }
-
-    private var bestEstimatedOneRepMax: Double {
-        OneRepMax.bestEstimate(in: allSets, exerciseName: exerciseName)
-    }
-
-    private var averageIntensity: Double? {
-        guard bestEstimatedOneRepMax > 0, !allSets.isEmpty else { return nil }
-        let total = allSets.reduce(0.0) { partial, set in
-            partial + ExerciseLoad.relativeIntensity(
-                weight: set.weight,
-                referenceWeight: bestEstimatedOneRepMax,
-                exerciseName: exerciseName
-            )
-        }
-        return total / Double(allSets.count)
-    }
+    private var totalSets: Int { derived.totalSets }
+    private var averageReps: Double { derived.averageReps }
+    private var bestEstimatedOneRepMax: Double { derived.bestEstimatedOneRepMax }
+    private var averageIntensity: Double? { derived.averageIntensity }
 
     private var hardIntensityShare: Double {
         let hardSetCount = intensityBuckets
@@ -337,7 +410,7 @@ struct ExerciseRangeBreakdown: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             sectionHeader
 
-            if allSets.isEmpty {
+            if allSetsIsEmpty {
                 emptyStateCard
             } else {
                 snapshotStrip
@@ -372,6 +445,12 @@ struct ExerciseRangeBreakdown: View {
         .overlay(sectionOutline)
         .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge))
         .softCard(cornerRadius: Theme.CornerRadius.xlarge, elevation: 2)
+        .onAppear {
+            recomputeIfNeeded()
+        }
+        .onChange(of: historyFingerprint) { _, _ in
+            recomputeIfNeeded()
+        }
     }
 
     private var sectionHeader: some View {

@@ -11,13 +11,15 @@ struct ExerciseProgressChart: View {
     @State private var selectedDataPoint: ChartPoint?
     @State private var lastPRHapticDate: Date?
     @State private var selectionClearTask: Task<Void, Never>?
+    @State private var derived: DerivedChartData = .empty
+    @State private var derivedCacheKey: Int?
 
-    private struct ChartPoint: Equatable {
+    fileprivate struct ChartPoint: Equatable {
         let date: Date
         let value: Double
     }
 
-    private struct IndexedChartPoint: Identifiable {
+    fileprivate struct IndexedChartPoint: Identifiable {
         let id: Int
         let point: ChartPoint
 
@@ -25,15 +27,195 @@ struct ExerciseProgressChart: View {
         var value: Double { point.value }
     }
 
-    private struct TrendLine {
+    fileprivate struct TrendLine {
         let start: ChartPoint
         let end: ChartPoint
     }
 
-    private struct VariabilityBandPoint {
+    fileprivate struct VariabilityBandPoint {
         let date: Date
         let lower: Double
         let upper: Double
+    }
+
+    fileprivate struct DerivedChartData {
+        let chartData: [ChartPoint]
+        let indexedChartData: [IndexedChartPoint]
+        let rollingAverageWindow: Int?
+        let indexedRollingAverageData: [IndexedChartPoint]
+        let prDate: Date?
+        let trendLine: TrendLine?
+        let variabilityBand: [VariabilityBandPoint]
+        let yDomain: ClosedRange<Double>
+
+        static let empty = DerivedChartData(
+            chartData: [],
+            indexedChartData: [],
+            rollingAverageWindow: nil,
+            indexedRollingAverageData: [],
+            prDate: nil,
+            trendLine: nil,
+            variabilityBand: [],
+            yDomain: 0...1
+        )
+
+        static func compute(
+            history: [(date: Date, sets: [WorkoutSet])],
+            chartType: ExerciseDetailView.ChartType,
+            exerciseName: String
+        ) -> DerivedChartData {
+            let chartData: [ChartPoint] = history.compactMap { session in
+                let value: Double
+                switch chartType {
+                case .weight:
+                    value = ExerciseLoad.bestWeight(in: session.sets, exerciseName: exerciseName)
+                case .volume:
+                    value = session.sets.reduce(0) { $0 + ($1.weight * Double($1.reps)) }
+                case .oneRepMax:
+                    value = OneRepMax.bestEstimate(in: session.sets, exerciseName: exerciseName)
+                case .reps:
+                    value = Double(session.sets.map { $0.reps }.max() ?? 0)
+                case .distance:
+                    value = session.sets.reduce(0) { $0 + $1.distance }
+                case .duration:
+                    value = session.sets.reduce(0) { $0 + $1.seconds }
+                case .count:
+                    value = Double(session.sets.reduce(0) { $0 + $1.reps })
+                }
+                if chartType == .volume, value <= 0 { return nil }
+                return ChartPoint(date: session.date, value: value)
+            }
+
+            let indexed = chartData.enumerated().map { IndexedChartPoint(id: $0.offset, point: $0.element) }
+
+            let rollingWindow: Int? = {
+                let count = chartData.count
+                guard count >= 8 else { return nil }
+                if count >= 60 { return 10 }
+                if count >= 30 { return 7 }
+                if count >= 14 { return 5 }
+                return 3
+            }()
+
+            let indexedRolling: [IndexedChartPoint]
+            if let window = rollingWindow, !chartData.isEmpty {
+                let values = chartData.map(\.value)
+                var rollingPoints: [ChartPoint] = []
+                rollingPoints.reserveCapacity(chartData.count)
+                var runningSum: Double = 0
+                for index in chartData.indices {
+                    runningSum += values[index]
+                    if index >= window {
+                        runningSum -= values[index - window]
+                    }
+                    let denom = Double(min(window, index + 1))
+                    let mean = runningSum / denom
+                    rollingPoints.append(ChartPoint(date: chartData[index].date, value: mean))
+                }
+                indexedRolling = rollingPoints.enumerated().map {
+                    IndexedChartPoint(id: $0.offset, point: $0.element)
+                }
+            } else {
+                indexedRolling = []
+            }
+
+            let prDate: Date?
+            switch chartType {
+            case .weight, .oneRepMax:
+                prDate = chartData.max(by: { lhs, rhs in
+                    ExerciseLoad.comparisonValue(for: lhs.value, exerciseName: exerciseName) <
+                    ExerciseLoad.comparisonValue(for: rhs.value, exerciseName: exerciseName)
+                })?.date
+            default:
+                prDate = chartData.max(by: { $0.value < $1.value })?.date
+            }
+
+            let trendLine: TrendLine? = {
+                guard chartData.count >= 2 else { return nil }
+                let pointCount = Double(chartData.count)
+                var sumX: Double = 0
+                var sumY: Double = 0
+                var sumXY: Double = 0
+                var sumXX: Double = 0
+                for (offset, point) in chartData.enumerated() {
+                    let x = Double(offset)
+                    sumX += x
+                    sumY += point.value
+                    sumXY += x * point.value
+                    sumXX += x * x
+                }
+                let denominator = pointCount * sumXX - sumX * sumX
+                guard denominator != 0 else { return nil }
+                let slope = (pointCount * sumXY - sumX * sumY) / denominator
+                let intercept = (sumY - slope * sumX) / pointCount
+                let startValue = intercept
+                let endValue = slope * (pointCount - 1) + intercept
+                return TrendLine(
+                    start: ChartPoint(date: chartData[0].date, value: startValue),
+                    end: ChartPoint(date: chartData[chartData.count - 1].date, value: endValue)
+                )
+            }()
+
+            let variabilityBand: [VariabilityBandPoint]
+            if chartType == .oneRepMax, chartData.count >= 2 {
+                let values = chartData.map(\.value)
+                let window = 3
+                var band: [VariabilityBandPoint] = []
+                band.reserveCapacity(chartData.count)
+                for index in chartData.indices {
+                    let start = max(0, index - (window - 1))
+                    let slice = values[start...index]
+                    let mean = slice.reduce(0, +) / Double(slice.count)
+                    let variance = slice.reduce(0) { $0 + pow($1 - mean, 2) } / Double(slice.count)
+                    let std = sqrt(variance)
+                    band.append(VariabilityBandPoint(
+                        date: chartData[index].date,
+                        lower: max(0, mean - std),
+                        upper: mean + std
+                    ))
+                }
+                variabilityBand = band
+            } else {
+                variabilityBand = []
+            }
+
+            let yDomain: ClosedRange<Double> = {
+                var values = chartData.map(\.value)
+                if let trend = trendLine {
+                    values.append(trend.start.value)
+                    values.append(trend.end.value)
+                }
+                if chartType == .oneRepMax {
+                    for point in variabilityBand {
+                        values.append(point.lower)
+                        values.append(point.upper)
+                    }
+                }
+                guard let minValue = values.min(), let maxValue = values.max() else {
+                    return 0...1
+                }
+                if minValue == maxValue {
+                    let padding = max(abs(minValue) * 0.05, 1)
+                    let lower = max(0, minValue - padding)
+                    return lower...(maxValue + padding)
+                }
+                let span = maxValue - minValue
+                let padding = span * 0.12
+                let lower = max(0, minValue - padding)
+                return lower...(maxValue + padding)
+            }()
+
+            return DerivedChartData(
+                chartData: chartData,
+                indexedChartData: indexed,
+                rollingAverageWindow: rollingWindow,
+                indexedRollingAverageData: indexedRolling,
+                prDate: prDate,
+                trendLine: trendLine,
+                variabilityBand: variabilityBand,
+                yDomain: yDomain
+            )
+        }
     }
 
     private enum ChartSeries: String {
@@ -53,75 +235,15 @@ struct ExerciseProgressChart: View {
         }
     }
 
-    private var chartData: [ChartPoint] {
-        history.compactMap { session in
-            let value: Double
-            switch chartType {
-            case .weight:
-                value = ExerciseLoad.bestWeight(in: session.sets, exerciseName: exerciseName)
-            case .volume:
-                value = session.sets.reduce(0) { $0 + ($1.weight * Double($1.reps)) }
-            case .oneRepMax:
-                value = OneRepMax.bestEstimate(in: session.sets, exerciseName: exerciseName)
-            case .reps:
-                value = Double(session.sets.map { $0.reps }.max() ?? 0)
-            case .distance:
-                value = session.sets.reduce(0) { $0 + $1.distance }
-            case .duration:
-                value = session.sets.reduce(0) { $0 + $1.seconds }
-            case .count:
-                value = Double(session.sets.reduce(0) { $0 + $1.reps })
-            }
-            if chartType == .volume, value <= 0 {
-                return nil
-            }
-            return ChartPoint(date: session.date, value: value)
+    private var historyFingerprint: Int {
+        var hasher = Hasher()
+        hasher.combine(exerciseName)
+        hasher.combine(chartType.rawValue)
+        for session in history {
+            hasher.combine(session.date.timeIntervalSinceReferenceDate)
+            hasher.combine(session.sets)
         }
-    }
-
-    private var indexedChartData: [IndexedChartPoint] {
-        chartData.enumerated().map { index, point in
-            IndexedChartPoint(id: index, point: point)
-        }
-    }
-
-    private var rollingAverageWindow: Int? {
-        let count = chartData.count
-        guard count >= 8 else { return nil }
-
-        if count >= 60 { return 10 }
-        if count >= 30 { return 7 }
-        if count >= 14 { return 5 }
-        return 3
-    }
-
-    private var indexedRollingAverageData: [IndexedChartPoint] {
-        guard let window = rollingAverageWindow else { return [] }
-        guard !chartData.isEmpty else { return [] }
-
-        let values = chartData.map(\.value)
-        let points: [ChartPoint] = chartData.indices.map { index in
-            let start = max(0, index - (window - 1))
-            let slice = values[start...index]
-            let mean = slice.reduce(0, +) / Double(slice.count)
-            return ChartPoint(date: chartData[index].date, value: mean)
-        }
-
-        return points.enumerated().map { index, point in
-            IndexedChartPoint(id: index, point: point)
-        }
-    }
-
-    private var prDate: Date? {
-        switch chartType {
-        case .weight, .oneRepMax:
-            return chartData.max(by: { lhs, rhs in
-                ExerciseLoad.comparisonValue(for: lhs.value, exerciseName: exerciseName) <
-                ExerciseLoad.comparisonValue(for: rhs.value, exerciseName: exerciseName)
-            })?.date
-        default:
-            return chartData.max(by: { $0.value < $1.value })?.date
-        }
+        return hasher.finalize()
     }
 
     private var chartColor: Color {
@@ -144,39 +266,6 @@ struct ExerciseProgressChart: View {
         ]
     }
 
-    private var yDomain: ClosedRange<Double> {
-        var values = chartData.map(\.value)
-
-        if let trend = calculateTrendLine() {
-            values.append(trend.start.value)
-            values.append(trend.end.value)
-        }
-
-        if chartType == .oneRepMax {
-            for point in variabilityBand {
-                values.append(point.lower)
-                values.append(point.upper)
-            }
-        }
-
-        guard let minValue = values.min(), let maxValue = values.max() else {
-            return 0...1
-        }
-
-        if minValue == maxValue {
-            let padding = max(abs(minValue) * 0.05, 1)
-            let lowerRaw = minValue - padding
-            let lower = max(0, lowerRaw)
-            return lower...(maxValue + padding)
-        }
-
-        let span = maxValue - minValue
-        let padding = span * 0.12
-        let lowerRaw = minValue - padding
-        let lower = max(0, lowerRaw)
-        return lower...(maxValue + padding)
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if let selected = selectedDataPoint {
@@ -186,6 +275,7 @@ struct ExerciseProgressChart: View {
             chartView
         }
         .onAppear {
+            recomputeIfNeeded()
             withAnimation(Theme.Animation.chartAppear) {
                 isAppearing = true
             }
@@ -193,18 +283,22 @@ struct ExerciseProgressChart: View {
         .onDisappear {
             selectionClearTask?.cancel()
         }
-        .onChange(of: history.first?.date) { _, _ in
+        .onChange(of: historyFingerprint) { _, _ in
+            recomputeIfNeeded()
             selectedDataPoint = nil
             lastPRHapticDate = nil
         }
-        .onChange(of: history.last?.date) { _, _ in
-            selectedDataPoint = nil
-            lastPRHapticDate = nil
-        }
-        .onChange(of: chartType) { _, _ in
-            selectedDataPoint = nil
-            lastPRHapticDate = nil
-        }
+    }
+
+    private func recomputeIfNeeded() {
+        let key = historyFingerprint
+        guard key != derivedCacheKey else { return }
+        derived = DerivedChartData.compute(
+            history: history,
+            chartType: chartType,
+            exerciseName: exerciseName
+        )
+        derivedCacheKey = key
     }
 
     @ViewBuilder
@@ -221,7 +315,7 @@ struct ExerciseProgressChart: View {
 
             Spacer()
 
-            if selected.date == prDate {
+            if selected.date == derived.prDate {
                 PRMarkerView(date: selected.date)
             }
         }
@@ -240,7 +334,7 @@ struct ExerciseProgressChart: View {
             selectionRuleMark
         }
         .chartForegroundStyleScale(seriesColors)
-        .chartYScale(domain: yDomain)
+        .chartYScale(domain: derived.yDomain)
         .chartPlotStyle { plotArea in
             plotArea.clipped()
         }
@@ -292,11 +386,11 @@ struct ExerciseProgressChart: View {
         let x = location.x - frame.origin.x
         guard let date: Date = proxy.value(atX: x) else { return }
 
-        if let closest = chartData.min(by: {
+        if let closest = derived.chartData.min(by: {
             abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date))
         }) {
             selectedDataPoint = closest
-            if let prDate, prDate == closest.date, lastPRHapticDate != prDate {
+            if let prDate = derived.prDate, prDate == closest.date, lastPRHapticDate != prDate {
                 Haptics.notify(.success)
                 lastPRHapticDate = prDate
             }
@@ -328,7 +422,7 @@ struct ExerciseProgressChart: View {
     @ChartContentBuilder
     private var variabilityBandMarks: some ChartContent {
         if chartType == .oneRepMax {
-            ForEach(variabilityBand, id: \.date) { point in
+            ForEach(derived.variabilityBand, id: \.date) { point in
                 AreaMark(
                     x: .value("Date", point.date),
                     yStart: .value("Lower", point.lower),
@@ -342,11 +436,11 @@ struct ExerciseProgressChart: View {
 
     @ChartContentBuilder
     private var areaMarks: some ChartContent {
-        ForEach(indexedChartData, id: \.id) { dataPoint in
+        ForEach(derived.indexedChartData, id: \.id) { dataPoint in
             AreaMark(
                 x: .value("Date", dataPoint.date),
-                yStart: .value("Baseline", yDomain.lowerBound),
-                yEnd: .value(chartLabel, isAppearing ? dataPoint.value : yDomain.lowerBound)
+                yStart: .value("Baseline", derived.yDomain.lowerBound),
+                yEnd: .value(chartLabel, isAppearing ? dataPoint.value : derived.yDomain.lowerBound)
             )
             .foregroundStyle(chartColor.opacity(0.15))
             .interpolationMethod(.catmullRom)
@@ -355,10 +449,10 @@ struct ExerciseProgressChart: View {
 
     @ChartContentBuilder
     private var lineMarks: some ChartContent {
-        ForEach(indexedChartData, id: \.id) { dataPoint in
+        ForEach(derived.indexedChartData, id: \.id) { dataPoint in
             LineMark(
                 x: .value("Date", dataPoint.date),
-                y: .value(chartLabel, isAppearing ? dataPoint.value : yDomain.lowerBound)
+                y: .value(chartLabel, isAppearing ? dataPoint.value : derived.yDomain.lowerBound)
             )
             .foregroundStyle(by: .value("Series", ChartSeries.progress.rawValue))
             .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round))
@@ -368,11 +462,11 @@ struct ExerciseProgressChart: View {
 
     @ChartContentBuilder
     private var rollingAverageMarks: some ChartContent {
-        if rollingAverageWindow != nil {
-            ForEach(indexedRollingAverageData, id: \.id) { dataPoint in
+        if derived.rollingAverageWindow != nil {
+            ForEach(derived.indexedRollingAverageData, id: \.id) { dataPoint in
                 LineMark(
                     x: .value("Date", dataPoint.date),
-                    y: .value(chartLabel, isAppearing ? dataPoint.value : yDomain.lowerBound)
+                    y: .value(chartLabel, isAppearing ? dataPoint.value : derived.yDomain.lowerBound)
                 )
                 .foregroundStyle(by: .value("Series", ChartSeries.rollingAverage.rawValue))
                 .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, dash: [2, 3]))
@@ -383,15 +477,15 @@ struct ExerciseProgressChart: View {
 
     @ChartContentBuilder
     private var pointMarks: some ChartContent {
-        ForEach(indexedChartData, id: \.id) { dataPoint in
+        ForEach(derived.indexedChartData, id: \.id) { dataPoint in
             PointMark(
                 x: .value("Date", dataPoint.date),
-                y: .value(chartLabel, isAppearing ? dataPoint.value : yDomain.lowerBound)
+                y: .value(chartLabel, isAppearing ? dataPoint.value : derived.yDomain.lowerBound)
             )
-            .foregroundStyle(dataPoint.date == prDate ? Theme.Colors.gold : chartColor)
-            .symbolSize(dataPoint.date == prDate ? 100 : 50)
+            .foregroundStyle(dataPoint.date == derived.prDate ? Theme.Colors.gold : chartColor)
+            .symbolSize(dataPoint.date == derived.prDate ? 100 : 50)
             .annotation(position: .top) {
-                if dataPoint.date == prDate {
+                if dataPoint.date == derived.prDate {
                     Image(systemName: "trophy.fill")
                         .font(Theme.Typography.caption2)
                         .foregroundColor(Theme.Colors.gold)
@@ -403,7 +497,7 @@ struct ExerciseProgressChart: View {
 
     @ChartContentBuilder
     private var trendLineMarks: some ChartContent {
-        if let trend = calculateTrendLine(), isAppearing {
+        if let trend = derived.trendLine, isAppearing {
             LineMark(
                 x: .value("Date", trend.start.date),
                 y: .value("Trend", trend.start.value)
@@ -458,43 +552,6 @@ struct ExerciseProgressChart: View {
             return WorkoutValueFormatter.durationText(seconds: value)
         default:
             return formatValue(value)
-        }
-    }
-
-    private func calculateTrendLine() -> TrendLine? {
-        guard chartData.count >= 2 else { return nil }
-
-        let pointCount = Double(chartData.count)
-        let sumX = chartData.enumerated().reduce(0.0) { $0 + Double($1.offset) }
-        let sumY = chartData.reduce(0.0) { $0 + $1.value }
-        let sumXY = chartData.enumerated().reduce(0.0) { $0 + (Double($1.offset) * $1.element.value) }
-        let sumXX = chartData.enumerated().reduce(0.0) { $0 + (Double($1.offset) * Double($1.offset)) }
-
-        let slope = (pointCount * sumXY - sumX * sumY) / (pointCount * sumXX - sumX * sumX)
-        let intercept = (sumY - slope * sumX) / pointCount
-
-        let startValue = intercept
-        let endValue = slope * (pointCount - 1) + intercept
-
-        let startDate = chartData[0].date
-        let endDate = chartData[chartData.count - 1].date
-        return TrendLine(
-            start: ChartPoint(date: startDate, value: startValue),
-            end: ChartPoint(date: endDate, value: endValue)
-        )
-    }
-
-    private var variabilityBand: [VariabilityBandPoint] {
-        guard chartData.count >= 2 else { return [] }
-        let values = chartData.map { $0.value }
-        let window = 3
-        return chartData.indices.map { index in
-            let start = max(0, index - (window - 1))
-            let slice = values[start...index]
-            let mean = slice.reduce(0, +) / Double(slice.count)
-            let variance = slice.reduce(0) { $0 + pow($1 - mean, 2) } / Double(slice.count)
-            let std = sqrt(variance)
-            return VariabilityBandPoint(date: chartData[index].date, lower: max(0, mean - std), upper: mean + std)
         }
     }
 }

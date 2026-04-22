@@ -12,58 +12,54 @@ struct HealthDashboardView: View {
     @State private var selectedDetailKind: HealthMetricKind?
     @State private var selectedWorkout: Workout?
     @State private var showingWorkoutsInRange = false
+    @State private var derived: DerivedDashboardData = .empty
+    @State private var derivedCacheKey: Int?
 
-    private var allHealthData: [WorkoutHealthData] {
-        healthManager.healthDataStore.values.sorted { $0.workoutDate > $1.workoutDate }
+    fileprivate struct DerivedDashboardData {
+        let allHealthData: [WorkoutHealthData]
+        let allWorkouts: [Workout]
+        let workoutStore: [UUID: Workout]
+        let earliestDate: Date?
+        let currentRange: DateInterval
+        let previousRange: DateInterval?
+        let currentHealthData: [WorkoutHealthData]
+        let previousHealthData: [WorkoutHealthData]
+        let currentWorkouts: [Workout]
+        let previousWorkouts: [Workout]
+        let rangeLabel: String
+        let highlightCards: [HighlightCardModel]
+        let summaryCards: [MetricSummaryModel]
+        let details: [HealthMetricKind: HealthMetricDetail]
+
+        static let empty = DerivedDashboardData(
+            allHealthData: [],
+            allWorkouts: [],
+            workoutStore: [:],
+            earliestDate: nil,
+            currentRange: DateInterval(start: Date(), duration: 0),
+            previousRange: nil,
+            currentHealthData: [],
+            previousHealthData: [],
+            currentWorkouts: [],
+            previousWorkouts: [],
+            rangeLabel: "",
+            highlightCards: [],
+            summaryCards: [],
+            details: [:]
+        )
     }
 
-    private var allWorkouts: [Workout] {
-        dataManager.workouts
-    }
-
-    private var workoutStore: [UUID: Workout] {
-        Dictionary(uniqueKeysWithValues: allWorkouts.map { ($0.id, $0) })
-    }
-
-    private var earliestDate: Date? {
-        let workoutDates = allWorkouts.map { $0.date }
-        let healthDates = allHealthData.map { $0.workoutDate }
-        return (workoutDates + healthDates).min()
-    }
-
-    private var currentRange: DateInterval {
-        dateRangeContext.resolvedRange(earliest: earliestDate)
-    }
-
-    private var previousRange: DateInterval? {
-        guard dateRangeContext.selectedRange != .allTime else { return nil }
-        let duration = currentRange.duration
-        let end = currentRange.start
-        let start = end.addingTimeInterval(-duration)
-        return DateInterval(start: start, end: end)
-    }
-
-    private var currentHealthData: [WorkoutHealthData] {
-        allHealthData.filter { currentRange.contains($0.workoutDate) }
-    }
-
-    private var previousHealthData: [WorkoutHealthData] {
-        guard let previousRange else { return [] }
-        return allHealthData.filter { previousRange.contains($0.workoutDate) }
-    }
-
-    private var currentWorkouts: [Workout] {
-        allWorkouts.filter { currentRange.contains($0.date) }
-    }
-
-    private var previousWorkouts: [Workout] {
-        guard let previousRange else { return [] }
-        return allWorkouts.filter { previousRange.contains($0.date) }
-    }
-
-    private var rangeLabel: String {
-        dateRangeContext.rangeLabel(earliest: earliestDate)
-    }
+    private var allHealthData: [WorkoutHealthData] { derived.allHealthData }
+    private var allWorkouts: [Workout] { derived.allWorkouts }
+    private var workoutStore: [UUID: Workout] { derived.workoutStore }
+    private var earliestDate: Date? { derived.earliestDate }
+    private var currentRange: DateInterval { derived.currentRange }
+    private var previousRange: DateInterval? { derived.previousRange }
+    private var currentHealthData: [WorkoutHealthData] { derived.currentHealthData }
+    private var previousHealthData: [WorkoutHealthData] { derived.previousHealthData }
+    private var currentWorkouts: [Workout] { derived.currentWorkouts }
+    private var previousWorkouts: [Workout] { derived.previousWorkouts }
+    private var rangeLabel: String { derived.rangeLabel }
 
     private var headerSubtitle: String {
         let workoutCount = currentWorkouts.count
@@ -137,7 +133,62 @@ struct HealthDashboardView: View {
             .navigationDestination(isPresented: $showingWorkoutsInRange) {
                 WorkoutsInRangeView(workouts: currentWorkouts, rangeLabel: rangeLabel)
             }
+            .onAppear { recomputeIfNeeded() }
+            .onChange(of: dashboardCacheKey) { _, _ in recomputeIfNeeded() }
         }
+    }
+
+    private var dashboardCacheKey: Int {
+        Self.makeDashboardCacheKey(
+            healthDataStore: healthManager.healthDataStore,
+            workouts: dataManager.workouts,
+            dateRangeContext: dateRangeContext
+        )
+    }
+
+    private func recomputeIfNeeded() {
+        let key = dashboardCacheKey
+        guard key != derivedCacheKey else { return }
+        derived = Self.computeDerived(
+            healthDataStore: healthManager.healthDataStore,
+            workouts: dataManager.workouts,
+            dateRangeContext: dateRangeContext
+        )
+        derivedCacheKey = key
+    }
+
+    private static func makeDashboardCacheKey(
+        healthDataStore: [UUID: WorkoutHealthData],
+        workouts: [Workout],
+        dateRangeContext: HealthDateRangeContext
+    ) -> Int {
+        var hasher = Hasher()
+        hasher.combine(workouts)
+        hasher.combine(dateRangeContext.selectedRange.rawValue)
+        hasher.combine(dateRangeContext.customRange.start.timeIntervalSinceReferenceDate)
+        hasher.combine(dateRangeContext.customRange.end.timeIntervalSinceReferenceDate)
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+
+        let sortedHealthEntries = healthDataStore.values.sorted { lhs, rhs in
+            if lhs.workoutDate != rhs.workoutDate {
+                return lhs.workoutDate < rhs.workoutDate
+            }
+            return lhs.id.uuidString < rhs.id.uuidString
+        }
+
+        for entry in sortedHealthEntries {
+            if let data = try? encoder.encode(entry) {
+                hasher.combine(data)
+            } else {
+                hasher.combine(entry.id)
+                hasher.combine(entry.syncedAt.timeIntervalSinceReferenceDate)
+            }
+        }
+
+        return hasher.finalize()
     }
 
     // MARK: - Sections
@@ -427,94 +478,21 @@ struct HealthDashboardView: View {
 
     // MARK: - Models
 
-    private var highlightCards: [HighlightCardModel] {
-        let avgWorkoutHR = average(currentHealthData.compactMap { $0.avgHeartRate })
-        let avgSleep = average(currentHealthData.compactMap { $0.sleepSummary?.totalHours })
-        let avgEnergy = average(currentHealthData.compactMap { $0.dailyActiveEnergy })
+    private var highlightCards: [HighlightCardModel] { derived.highlightCards }
+    private var summaryCards: [MetricSummaryModel] { derived.summaryCards }
 
-        return [
-            HighlightCardModel(
-                title: "Avg Workout HR",
-                value: avgWorkoutHR.map { "\(Int($0)) bpm" } ?? "--",
-                subtitle: "Average workout heart rate in this range",
-                icon: "heart.fill",
-                tint: Theme.Colors.error,
-                category: .heart
-            ),
-            HighlightCardModel(
-                title: "Avg Sleep",
-                value: avgSleep.map { String(format: "%.1fh", $0) } ?? "--",
-                subtitle: "Average sleep duration in this range",
-                icon: "moon.zzz.fill",
-                tint: Theme.Colors.accentSecondary,
-                category: .sleep
-            ),
-            HighlightCardModel(
-                title: "Daily Energy",
-                value: avgEnergy.map { "\(Int($0)) cal" } ?? "--",
-                subtitle: "Average active energy in this range",
-                icon: "flame.fill",
-                tint: Theme.Colors.warning,
-                category: .activity
-            )
-        ]
-    }
-
-    private var summaryCards: [MetricSummaryModel] {
-        let workoutCount = currentWorkouts.count
-        let previousWorkoutCount = previousRange == nil ? nil : Double(previousWorkouts.count)
-
-        let avgHR = average(currentHealthData.compactMap { $0.avgHeartRate })
-        let prevAvgHR = average(previousHealthData.compactMap { $0.avgHeartRate })
-
-        let calories = currentHealthData.compactMap { $0.activeCalories }.reduce(0, +)
-        let prevCalories = previousRange == nil ? nil : previousHealthData.compactMap { $0.activeCalories }.reduce(0, +)
-
-        let peakHR = currentHealthData.compactMap { $0.maxHeartRate }.max()
-        let prevPeakHR = previousHealthData.compactMap { $0.maxHeartRate }.max()
-
-        return [
-            MetricSummaryModel(
-                title: "Workouts",
-                value: "\(workoutCount)",
-                subtitle: "Sessions in range",
-                icon: "figure.run",
-                tint: Theme.Colors.success,
-                delta: deltaText(current: Double(workoutCount), previous: previousWorkoutCount),
-                category: .sessions
-            ),
-            MetricSummaryModel(
-                title: "Avg Workout HR",
-                value: avgHR.map { "\(Int($0)) bpm" } ?? "--",
-                subtitle: "Average heart rate during workouts",
-                icon: "heart.fill",
-                tint: Theme.Colors.error,
-                delta: deltaText(current: avgHR, previous: prevAvgHR, lowerIsBetter: true),
-                category: .heart
-            ),
-            MetricSummaryModel(
-                title: "Calories Burned",
-                value: calories > 0 ? "\(formatNumber(calories)) cal" : "--",
-                subtitle: "Active calories from workouts",
-                icon: "flame.fill",
-                tint: Theme.Colors.warning,
-                delta: deltaText(current: calories, previous: prevCalories),
-                category: .activity
-            ),
-            MetricSummaryModel(
-                title: "Peak HR",
-                value: peakHR.map { "\(Int($0)) bpm" } ?? "--",
-                subtitle: "Highest workout heart rate",
-                icon: "bolt.heart.fill",
-                tint: Theme.Colors.accentSecondary,
-                delta: deltaText(current: peakHR, previous: prevPeakHR, lowerIsBetter: true),
-                category: .heart
-            )
-        ]
-    }
-
-    // swiftlint:disable:next cyclomatic_complexity
     private func detailFor(_ kind: HealthMetricKind) -> HealthMetricDetail? {
+        derived.details[kind]
+    }
+
+    // swiftlint:disable:next cyclomatic_complexity function_body_length
+    private static func detailFor(
+        _ kind: HealthMetricKind,
+        currentHealthData: [WorkoutHealthData],
+        previousHealthData: [WorkoutHealthData],
+        currentWorkouts: [Workout],
+        previousWorkouts: [Workout]
+    ) -> HealthMetricDetail? {
         switch kind {
         case .heartRate:
             let avgPoints = makePoints(currentHealthData, value: { $0.avgHeartRate }, label: "Avg HR")
@@ -559,16 +537,18 @@ struct HealthDashboardView: View {
                 ]
             )
         case .activity:
+            let currentWorkoutsByID = Dictionary(uniqueKeysWithValues: currentWorkouts.map { ($0.id, $0) })
+            let previousWorkoutsByID = Dictionary(uniqueKeysWithValues: previousWorkouts.map { ($0.id, $0) })
             let energyPoints = makePoints(currentHealthData, value: { $0.dailyActiveEnergy }, label: "Active Energy")
             let ratioPoints = makePoints(currentHealthData, value: { data in
                 guard let energy = data.dailyActiveEnergy else { return nil }
-                guard let workout = currentWorkouts.first(where: { $0.id == data.workoutId }) else { return nil }
+                guard let workout = currentWorkoutsByID[data.workoutId] else { return nil }
                 return workout.totalVolume / max(energy, 1)
             }, label: "Load Ratio")
             let previousEnergyPoints = makePoints(previousHealthData, value: { $0.dailyActiveEnergy }, label: "Active Energy")
             let previousRatioPoints = makePoints(previousHealthData, value: { data in
                 guard let energy = data.dailyActiveEnergy else { return nil }
-                guard let workout = previousWorkouts.first(where: { $0.id == data.workoutId }) else { return nil }
+                guard let workout = previousWorkoutsByID[data.workoutId] else { return nil }
                 return workout.totalVolume / max(energy, 1)
             }, label: "Load Ratio")
 
@@ -672,15 +652,15 @@ struct HealthDashboardView: View {
     private func trendSummary(for detail: HealthMetricDetail) -> TrendSummarySnapshot? {
         guard let primarySeries = detail.series.first(where: { !$0.points.isEmpty }) else { return nil }
         let latest = primarySeries.points.max(by: { $0.date < $1.date })
-        let average = average(primarySeries.points.map { $0.value })
-        let primaryValue = latest.map { formatValue($0.value, unit: primarySeries.unit) } ?? "--"
-        let secondaryValue = average.map { "Avg \(formatValue($0, unit: primarySeries.unit))" } ?? "No average"
+        let avg = Self.average(primarySeries.points.map { $0.value })
+        let primaryValue = latest.map { Self.formatValue($0.value, unit: primarySeries.unit) } ?? "--"
+        let secondaryValue = avg.map { "Avg \(Self.formatValue($0, unit: primarySeries.unit))" } ?? "No average"
         return TrendSummarySnapshot(primary: primaryValue, secondary: secondaryValue, points: primarySeries.points)
     }
 
     // MARK: - Helpers
 
-    private func makePoints(_ data: [WorkoutHealthData], value: (WorkoutHealthData) -> Double?, label: String) -> [HealthTrendPoint] {
+    private static func makePoints(_ data: [WorkoutHealthData], value: (WorkoutHealthData) -> Double?, label: String) -> [HealthTrendPoint] {
         data.compactMap { item in
             guard let value = value(item) else { return nil }
             return HealthTrendPoint(date: item.workoutDate, value: value, label: label)
@@ -688,19 +668,19 @@ struct HealthDashboardView: View {
         .sorted { $0.date < $1.date }
     }
 
-    private func average(_ values: [Double]) -> Double? {
+    private static func average(_ values: [Double]) -> Double? {
         guard !values.isEmpty else { return nil }
         return values.reduce(0, +) / Double(values.count)
     }
 
-    private func formatNumber(_ num: Double) -> String {
+    private static func formatNumber(_ num: Double) -> String {
         if num > 10000 {
             return String(format: "%.1fk", num / 1000)
         }
         return "\(Int(num))"
     }
 
-    private func deltaText(current: Double?, previous: Double?, lowerIsBetter: Bool = false) -> MetricDelta? {
+    private static func deltaText(current: Double?, previous: Double?, lowerIsBetter: Bool = false) -> MetricDelta? {
         guard let current, let previous else { return nil }
         let diff = current - previous
         if abs(diff) < 0.01 { return nil }
@@ -713,7 +693,7 @@ struct HealthDashboardView: View {
         )
     }
 
-    private func formatValue(_ value: Double, unit: String) -> String {
+    private static func formatValue(_ value: Double, unit: String) -> String {
         switch unit {
         case "bpm":
             return "\(Int(value)) bpm"
@@ -732,6 +712,161 @@ struct HealthDashboardView: View {
         default:
             return String(format: "%.1f", value)
         }
+    }
+
+    // MARK: - Compute
+
+    private static func computeDerived(
+        healthDataStore: [UUID: WorkoutHealthData],
+        workouts: [Workout],
+        dateRangeContext: HealthDateRangeContext
+    ) -> DerivedDashboardData {
+        let allHealthData = healthDataStore.values.sorted { $0.workoutDate > $1.workoutDate }
+        let allWorkouts = workouts
+        let workoutStore = Dictionary(uniqueKeysWithValues: allWorkouts.map { ($0.id, $0) })
+
+        var earliestDate: Date?
+        for workout in allWorkouts {
+            if earliestDate == nil || workout.date < earliestDate! { earliestDate = workout.date }
+        }
+        for entry in allHealthData {
+            if earliestDate == nil || entry.workoutDate < earliestDate! { earliestDate = entry.workoutDate }
+        }
+
+        let currentRange = dateRangeContext.resolvedRange(earliest: earliestDate)
+        let previousRange: DateInterval?
+        if dateRangeContext.selectedRange == .allTime {
+            previousRange = nil
+        } else {
+            let duration = currentRange.duration
+            let end = currentRange.start
+            let start = end.addingTimeInterval(-duration)
+            previousRange = DateInterval(start: start, end: end)
+        }
+
+        let currentHealthData = allHealthData.filter { currentRange.contains($0.workoutDate) }
+        let previousHealthData: [WorkoutHealthData]
+        if let previousRange {
+            previousHealthData = allHealthData.filter { previousRange.contains($0.workoutDate) }
+        } else {
+            previousHealthData = []
+        }
+        let currentWorkouts = allWorkouts.filter { currentRange.contains($0.date) }
+        let previousWorkouts: [Workout]
+        if let previousRange {
+            previousWorkouts = allWorkouts.filter { previousRange.contains($0.date) }
+        } else {
+            previousWorkouts = []
+        }
+
+        let rangeLabel = dateRangeContext.rangeLabel(earliest: earliestDate)
+
+        let avgWorkoutHR = average(currentHealthData.compactMap { $0.avgHeartRate })
+        let avgSleep = average(currentHealthData.compactMap { $0.sleepSummary?.totalHours })
+        let avgEnergy = average(currentHealthData.compactMap { $0.dailyActiveEnergy })
+        let highlightCards: [HighlightCardModel] = [
+            HighlightCardModel(
+                title: "Avg Workout HR",
+                value: avgWorkoutHR.map { "\(Int($0)) bpm" } ?? "--",
+                subtitle: "Average workout heart rate in this range",
+                icon: "heart.fill",
+                tint: Theme.Colors.error,
+                category: .heart
+            ),
+            HighlightCardModel(
+                title: "Avg Sleep",
+                value: avgSleep.map { String(format: "%.1fh", $0) } ?? "--",
+                subtitle: "Average sleep duration in this range",
+                icon: "moon.zzz.fill",
+                tint: Theme.Colors.accentSecondary,
+                category: .sleep
+            ),
+            HighlightCardModel(
+                title: "Daily Energy",
+                value: avgEnergy.map { "\(Int($0)) cal" } ?? "--",
+                subtitle: "Average active energy in this range",
+                icon: "flame.fill",
+                tint: Theme.Colors.warning,
+                category: .activity
+            )
+        ]
+
+        let workoutCount = currentWorkouts.count
+        let previousWorkoutCount: Double? = previousRange == nil ? nil : Double(previousWorkouts.count)
+        let avgHR = average(currentHealthData.compactMap { $0.avgHeartRate })
+        let prevAvgHR = average(previousHealthData.compactMap { $0.avgHeartRate })
+        let calories = currentHealthData.compactMap { $0.activeCalories }.reduce(0, +)
+        let prevCalories: Double? = previousRange == nil ? nil : previousHealthData.compactMap { $0.activeCalories }.reduce(0, +)
+        let peakHR = currentHealthData.compactMap { $0.maxHeartRate }.max()
+        let prevPeakHR = previousHealthData.compactMap { $0.maxHeartRate }.max()
+        let summaryCards: [MetricSummaryModel] = [
+            MetricSummaryModel(
+                title: "Workouts",
+                value: "\(workoutCount)",
+                subtitle: "Sessions in range",
+                icon: "figure.run",
+                tint: Theme.Colors.success,
+                delta: deltaText(current: Double(workoutCount), previous: previousWorkoutCount),
+                category: .sessions
+            ),
+            MetricSummaryModel(
+                title: "Avg Workout HR",
+                value: avgHR.map { "\(Int($0)) bpm" } ?? "--",
+                subtitle: "Average heart rate during workouts",
+                icon: "heart.fill",
+                tint: Theme.Colors.error,
+                delta: deltaText(current: avgHR, previous: prevAvgHR, lowerIsBetter: true),
+                category: .heart
+            ),
+            MetricSummaryModel(
+                title: "Calories Burned",
+                value: calories > 0 ? "\(formatNumber(calories)) cal" : "--",
+                subtitle: "Active calories from workouts",
+                icon: "flame.fill",
+                tint: Theme.Colors.warning,
+                delta: deltaText(current: calories, previous: prevCalories),
+                category: .activity
+            ),
+            MetricSummaryModel(
+                title: "Peak HR",
+                value: peakHR.map { "\(Int($0)) bpm" } ?? "--",
+                subtitle: "Highest workout heart rate",
+                icon: "bolt.heart.fill",
+                tint: Theme.Colors.accentSecondary,
+                delta: deltaText(current: peakHR, previous: prevPeakHR, lowerIsBetter: true),
+                category: .heart
+            )
+        ]
+
+        var details: [HealthMetricKind: HealthMetricDetail] = [:]
+        for kind in [HealthMetricKind.heartRate, .sleep, .activity, .cardio, .body] {
+            if let detail = detailFor(
+                kind,
+                currentHealthData: currentHealthData,
+                previousHealthData: previousHealthData,
+                currentWorkouts: currentWorkouts,
+                previousWorkouts: previousWorkouts
+            ) {
+                details[kind] = detail
+            }
+        }
+
+        return DerivedDashboardData(
+            allHealthData: allHealthData,
+            allWorkouts: allWorkouts,
+            workoutStore: workoutStore,
+            earliestDate: earliestDate,
+            currentRange: currentRange,
+            previousRange: previousRange,
+            currentHealthData: currentHealthData,
+            previousHealthData: previousHealthData,
+            currentWorkouts: currentWorkouts,
+            previousWorkouts: previousWorkouts,
+            rangeLabel: rangeLabel,
+            highlightCards: highlightCards,
+            summaryCards: summaryCards,
+            details: details
+        )
     }
 }
 

@@ -329,7 +329,12 @@ final class IntentionalBreaksManager: ObservableObject {
     @Published private(set) var savedBreaks: [IntentionalBreakRange] = []
     @Published private(set) var dismissedSuggestionRanges: [IntentionalBreakRange] = []
 
-    init() {
+    init(loadOnInit: Bool = true) {
+        guard loadOnInit else { return }
+        reloadPersistedBreaks()
+    }
+
+    func reloadPersistedBreaks() {
         savedBreaks = IntentionalBreaksStore.load(key: IntentionalBreaksStore.savedBreaksKey)
         dismissedSuggestionRanges = IntentionalBreaksStore.load(key: IntentionalBreaksStore.dismissedSuggestionsKey)
     }

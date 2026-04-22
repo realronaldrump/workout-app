@@ -288,6 +288,45 @@ final class iCloudDocumentManager: ObservableObject {
         try data.write(to: fileURL, options: [.atomic, .completeFileProtection])
     }
 
+    nonisolated static func writeFileAtomically(
+        to fileURL: URL,
+        protection: FileProtectionType = .complete,
+        writer: (FileHandle) throws -> Void
+    ) throws {
+        try ensureDirectoryExists(at: fileURL.deletingLastPathComponent())
+
+        let tempURL = fileURL
+            .deletingLastPathComponent()
+            .appendingPathComponent(".\(UUID().uuidString).tmp")
+
+        let created = FileManager.default.createFile(
+            atPath: tempURL.path,
+            contents: nil,
+            attributes: [.protectionKey: protection]
+        )
+        guard created else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+
+        let handle = try FileHandle(forWritingTo: tempURL)
+        do {
+            try writer(handle)
+            try handle.close()
+
+            if FileManager.default.fileExists(atPath: fileURL.path) {
+                _ = try FileManager.default.replaceItemAt(fileURL, withItemAt: tempURL)
+            } else {
+                try FileManager.default.moveItem(at: tempURL, to: fileURL)
+            }
+
+            try FileManager.default.setAttributes([.protectionKey: protection], ofItemAtPath: fileURL.path)
+        } catch {
+            try? handle.close()
+            try? FileManager.default.removeItem(at: tempURL)
+            throw error
+        }
+    }
+
     nonisolated static func ensureDirectoryExists(at directory: URL) throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     }

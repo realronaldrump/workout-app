@@ -57,6 +57,7 @@ final class WorkoutSessionManager: ObservableObject {
     private let draftStore = ActiveSessionDraftStore()
     private var persistTask: Task<Void, Never>?
     private var restTimerTask: Task<Void, Never>?
+    private var restTimerEndTime: Date?
 
     func restoreDraft() async {
         let url = fileURL()
@@ -79,6 +80,8 @@ final class WorkoutSessionManager: ObservableObject {
         preselectedExercise: String? = nil,
         initialSetPrefill: SetPrefill? = nil
     ) {
+        cancelRestTimer()
+
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let preselected = preselectedExercise?.trimmingCharacters(in: .whitespacesAndNewlines)
         let sessionName = !trimmedName.isEmpty ? trimmedName
@@ -299,20 +302,66 @@ final class WorkoutSessionManager: ObservableObject {
     // MARK: - Rest Timer
 
     func startRestTimer() {
-        restTimerSecondsRemaining = restTimerDuration
-        restTimerIsActive = true
+        beginRestTimer(until: Date().addingTimeInterval(TimeInterval(restTimerDuration)))
+    }
+
+    func extendRestTimer(by seconds: Int) {
+        let clampedSeconds = max(0, seconds)
+        guard clampedSeconds > 0 else { return }
+
+        let anchor = max(restTimerEndTime ?? Date(), Date())
+        beginRestTimer(until: anchor.addingTimeInterval(TimeInterval(clampedSeconds)))
+    }
+
+    func incompleteSetsWithEnteredDataCount() -> Int {
+        guard let session = activeSession else { return 0 }
+
+        return session.exercises.reduce(into: 0) { count, exercise in
+            let isCardio = isCardioExercise(exercise.name)
+            count += exercise.sets.filter { !$0.isCompleted && hasEnteredData($0, isCardio: isCardio) }.count
+        }
+    }
+
+    @discardableResult
+    func markIncompleteSetsWithEnteredDataCompleted() -> Int {
+        guard var session = activeSession else { return 0 }
+
+        var markedCount = 0
+        for exerciseIndex in session.exercises.indices {
+            let isCardio = isCardioExercise(session.exercises[exerciseIndex].name)
+
+            for setIndex in session.exercises[exerciseIndex].sets.indices {
+                guard !session.exercises[exerciseIndex].sets[setIndex].isCompleted else { continue }
+                guard hasEnteredData(session.exercises[exerciseIndex].sets[setIndex], isCardio: isCardio) else { continue }
+
+                session.exercises[exerciseIndex].sets[setIndex].isCompleted = true
+                session.exercises[exerciseIndex].sets[setIndex].completedAt = Date()
+                markedCount += 1
+            }
+        }
+
+        guard markedCount > 0 else { return 0 }
+
+        touch(&session)
+        activeSession = session
+        schedulePersistDraft()
+        return markedCount
+    }
+
+    private func beginRestTimer(until endTime: Date) {
+        restTimerEndTime = endTime
         restTimerTask?.cancel()
         restTimerTask = Task { [weak self] in
-            while let self, self.restTimerSecondsRemaining > 0, !Task.isCancelled {
+            guard let self else { return }
+
+            self.updateRestTimerState(notifyOnCompletion: false)
+
+            while !Task.isCancelled {
+                guard self.restTimerIsActive else { return }
                 do {
-                    try await Task.sleep(nanoseconds: 1_000_000_000)
+                    try await Task.sleep(nanoseconds: 250_000_000)
                 } catch { return }
-                guard !Task.isCancelled else { return }
-                self.restTimerSecondsRemaining -= 1
-                if self.restTimerSecondsRemaining <= 0 {
-                    self.restTimerIsActive = false
-                    Haptics.notify(.success)
-                }
+                self.updateRestTimerState(notifyOnCompletion: true)
             }
         }
     }
@@ -320,6 +369,7 @@ final class WorkoutSessionManager: ObservableObject {
     func cancelRestTimer() {
         restTimerTask?.cancel()
         restTimerTask = nil
+        restTimerEndTime = nil
         restTimerIsActive = false
         restTimerSecondsRemaining = 0
     }
@@ -396,6 +446,7 @@ final class WorkoutSessionManager: ObservableObject {
             updatedAt: endedAt
         )
 
+        cancelRestTimer()
         activeSession = nil
         isPresentingSessionUI = false
         await deleteDraftFile()
@@ -412,6 +463,7 @@ final class WorkoutSessionManager: ObservableObject {
 
     func discardDraft() async {
         let didHaveActiveSession = activeSession != nil
+        cancelRestTimer()
         activeSession = nil
         isPresentingSessionUI = false
         await deleteDraftFile()
@@ -508,19 +560,56 @@ final class WorkoutSessionManager: ObservableObject {
 
     private func validationMessageForSetCompletion(_ set: ActiveSet, isCardio: Bool) -> String? {
         if isCardio {
-            let reps = max(set.reps ?? 0, 0)
-            let distance = max(set.distance ?? 0, 0)
-            let seconds = max(set.seconds ?? 0, 0)
-            return (reps > 0 || distance > 0 || seconds > 0)
+            return hasEnteredData(set, isCardio: true)
                 ? nil
                 : "Enter at least one cardio metric before marking this set complete."
         }
 
-        guard let weight = set.weight, let reps = set.reps, weight >= 0, reps > 0 else {
+        guard hasEnteredData(set, isCardio: false) else {
             return "Enter weight and reps before marking this set complete."
         }
 
         return nil
+    }
+
+    private func hasEnteredData(_ set: ActiveSet, isCardio: Bool) -> Bool {
+        if isCardio {
+            let reps = max(set.reps ?? 0, 0)
+            let distance = max(set.distance ?? 0, 0)
+            let seconds = max(set.seconds ?? 0, 0)
+            return reps > 0 || distance > 0 || seconds > 0
+        }
+
+        guard let weight = set.weight, let reps = set.reps else {
+            return false
+        }
+        return weight >= 0 && reps > 0
+    }
+
+    private func updateRestTimerState(notifyOnCompletion: Bool) {
+        guard let endTime = restTimerEndTime else {
+            restTimerTask?.cancel()
+            restTimerTask = nil
+            restTimerIsActive = false
+            restTimerSecondsRemaining = 0
+            return
+        }
+
+        let remainingInterval = endTime.timeIntervalSinceNow
+        if remainingInterval <= 0 {
+            restTimerTask?.cancel()
+            restTimerTask = nil
+            restTimerEndTime = nil
+            restTimerIsActive = false
+            restTimerSecondsRemaining = 0
+            if notifyOnCompletion {
+                Haptics.notify(.success)
+            }
+            return
+        }
+
+        restTimerIsActive = true
+        restTimerSecondsRemaining = Int(ceil(remainingInterval))
     }
 
     private func normalizedExerciseName(_ name: String) -> String {

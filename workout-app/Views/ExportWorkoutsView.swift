@@ -1049,7 +1049,6 @@ private extension ExportWorkoutsView {
                 gymProfilesManager: gymProfilesManager,
                 intentionalBreaksManager: intentionalBreaksManager
             )
-            let data = try AppBackupService.exportBackup(backup)
             let fileName = AppBackupService.makeBackupFileName(exportedAt: backup.exportedAt)
             let storageSnapshot = iCloudManager.storageSnapshot()
             let itemCount = backupItemCount(backup)
@@ -1060,8 +1059,8 @@ private extension ExportWorkoutsView {
                         throw iCloudError.containerNotAvailable
                     }
 
-                    try iCloudDocumentManager.saveBackupFile(data: data, in: directory, fileName: fileName)
                     let fileURL = directory.appendingPathComponent(fileName)
+                    try AppBackupService.exportBackup(to: fileURL, backup: backup)
 
                     await MainActor.run {
                         fullBackupFileURL = fileURL
@@ -1377,7 +1376,14 @@ private extension ExportWorkoutsView {
                     throw iCloudError.containerNotAvailable
                 }
 
-                let data = try WorkoutCSVExporter.exportWorkoutHistoryCSV(
+                let fileName = try WorkoutCSVExporter.makeWorkoutExportFileName(
+                    startDate: start,
+                    endDateInclusive: end
+                )
+                let fileURL = directory.appendingPathComponent(fileName)
+
+                try WorkoutCSVExporter.exportWorkoutHistoryCSV(
+                    to: fileURL,
                     workouts: workoutsSnapshot,
                     startDate: start,
                     endDateInclusive: end,
@@ -1386,14 +1392,6 @@ private extension ExportWorkoutsView {
                     selectedColumns: selectedColumns,
                     weightUnit: unit
                 )
-
-                let fileName = try WorkoutCSVExporter.makeWorkoutExportFileName(
-                    startDate: start,
-                    endDateInclusive: end
-                )
-
-                try iCloudDocumentManager.saveWorkoutFile(data: data, in: directory, fileName: fileName)
-                let fileURL = directory.appendingPathComponent(fileName)
 
                 await MainActor.run {
                     workoutExportFileURL = fileURL
@@ -1464,22 +1462,21 @@ private extension ExportWorkoutsView {
                     throw iCloudError.containerNotAvailable
                 }
 
-                let data = try WorkoutCSVExporter.exportExerciseListCSV(
+                let fileName = try WorkoutCSVExporter.makeExerciseListExportFileName(
+                    startDate: start,
+                    endDateInclusive: end,
+                    includeTags: includeTags
+                )
+                let fileURL = directory.appendingPathComponent(fileName)
+
+                try WorkoutCSVExporter.exportExerciseListCSV(
+                    to: fileURL,
                     workouts: workoutsSnapshot,
                     startDate: start,
                     endDateInclusive: end,
                     includeTags: includeTags,
                     exerciseTagsByName: exerciseTagsByName
                 )
-
-                let fileName = try WorkoutCSVExporter.makeExerciseListExportFileName(
-                    startDate: start,
-                    endDateInclusive: end,
-                    includeTags: includeTags
-                )
-
-                try iCloudDocumentManager.saveWorkoutFile(data: data, in: directory, fileName: fileName)
-                let fileURL = directory.appendingPathComponent(fileName)
 
                 await MainActor.run {
                     exerciseExportFileURL = fileURL
@@ -1550,7 +1547,15 @@ private extension ExportWorkoutsView {
                     throw iCloudError.containerNotAvailable
                 }
 
-                let data = try WorkoutCSVExporter.exportWorkoutHistoryCSV(
+                let fileName = try WorkoutCSVExporter.makeExerciseHistoryExportFileName(
+                    startDate: bounds.start,
+                    endDateInclusive: bounds.endInclusive,
+                    selectedExerciseCount: selectedExerciseCount
+                )
+                let fileURL = directory.appendingPathComponent(fileName)
+
+                try WorkoutCSVExporter.exportWorkoutHistoryCSV(
+                    to: fileURL,
                     workouts: workoutsSnapshot,
                     startDate: bounds.start,
                     endDateInclusive: bounds.endInclusive,
@@ -1559,15 +1564,6 @@ private extension ExportWorkoutsView {
                     selectedColumns: selectedColumns,
                     weightUnit: unit
                 )
-
-                let fileName = try WorkoutCSVExporter.makeExerciseHistoryExportFileName(
-                    startDate: bounds.start,
-                    endDateInclusive: bounds.endInclusive,
-                    selectedExerciseCount: selectedExerciseCount
-                )
-
-                try iCloudDocumentManager.saveWorkoutFile(data: data, in: directory, fileName: fileName)
-                let fileURL = directory.appendingPathComponent(fileName)
 
                 await MainActor.run {
                     exerciseHistoryExportFileURL = fileURL
@@ -1644,7 +1640,15 @@ private extension ExportWorkoutsView {
                     throw iCloudError.containerNotAvailable
                 }
 
-                let data = try WorkoutCSVExporter.exportWorkoutHistoryCSV(
+                let fileName = try WorkoutCSVExporter.makeMuscleGroupExportFileName(
+                    startDate: bounds.start,
+                    endDateInclusive: bounds.endInclusive,
+                    selectedGroupCount: selectedGroupCount
+                )
+                let fileURL = directory.appendingPathComponent(fileName)
+
+                try WorkoutCSVExporter.exportWorkoutHistoryCSV(
+                    to: fileURL,
                     workouts: workoutsSnapshot,
                     startDate: bounds.start,
                     endDateInclusive: bounds.endInclusive,
@@ -1653,15 +1657,6 @@ private extension ExportWorkoutsView {
                     selectedColumns: selectedColumns,
                     weightUnit: unit
                 )
-
-                let fileName = try WorkoutCSVExporter.makeMuscleGroupExportFileName(
-                    startDate: bounds.start,
-                    endDateInclusive: bounds.endInclusive,
-                    selectedGroupCount: selectedGroupCount
-                )
-
-                try iCloudDocumentManager.saveWorkoutFile(data: data, in: directory, fileName: fileName)
-                let fileURL = directory.appendingPathComponent(fileName)
 
                 await MainActor.run {
                     muscleGroupExportFileURL = fileURL
@@ -1726,7 +1721,15 @@ private extension ExportWorkoutsView {
                     throw iCloudError.containerNotAvailable
                 }
 
-                let data = try WorkoutCSVExporter.exportWorkoutHistoryCSV(
+                let fileName = try WorkoutCSVExporter.makeWorkoutDatesExportFileName(
+                    startDate: bounds.start,
+                    endDateInclusive: bounds.endInclusive,
+                    selectedDateCount: selectedDateCount
+                )
+                let fileURL = directory.appendingPathComponent(fileName)
+
+                try WorkoutCSVExporter.exportWorkoutHistoryCSV(
+                    to: fileURL,
                     workouts: workoutsSnapshot,
                     startDate: bounds.start,
                     endDateInclusive: bounds.endInclusive,
@@ -1735,15 +1738,6 @@ private extension ExportWorkoutsView {
                     selectedColumns: selectedColumns,
                     weightUnit: unit
                 )
-
-                let fileName = try WorkoutCSVExporter.makeWorkoutDatesExportFileName(
-                    startDate: bounds.start,
-                    endDateInclusive: bounds.endInclusive,
-                    selectedDateCount: selectedDateCount
-                )
-
-                try iCloudDocumentManager.saveWorkoutFile(data: data, in: directory, fileName: fileName)
-                let fileURL = directory.appendingPathComponent(fileName)
 
                 await MainActor.run {
                     workoutDatesExportFileURL = fileURL

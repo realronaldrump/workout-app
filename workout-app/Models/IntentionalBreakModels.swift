@@ -1,6 +1,6 @@
 import Foundation
 
-struct IntentionalBreakRange: Identifiable, Codable, Hashable {
+nonisolated struct IntentionalBreakRange: Identifiable, Codable, Hashable {
     let id: UUID
     let startDate: Date
     let endDate: Date
@@ -38,7 +38,7 @@ struct IntentionalBreakRange: Identifiable, Codable, Hashable {
     }
 }
 
-struct IntentionalBreakSuggestion: Identifiable, Hashable {
+nonisolated struct IntentionalBreakSuggestion: Identifiable, Hashable {
     let startDate: Date
     let endDate: Date
 

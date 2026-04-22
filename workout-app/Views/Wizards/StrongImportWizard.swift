@@ -853,12 +853,11 @@ struct StrongImportWizard: View {
             throw iCloudError.containerNotAvailable
         }
 
-        let backupData = try AppBackupService.exportBackup(backup)
         let fileName = AppBackupService.makeBackupFileName()
-        try await Task.detached(priority: .utility) {
-            try iCloudDocumentManager.saveBackupFile(data: backupData, in: directory, fileName: fileName)
-        }.value
         let savedURL = directory.appendingPathComponent(fileName)
+        try await Task.detached(priority: .utility) {
+            try AppBackupService.exportBackup(to: savedURL, backup: backup)
+        }.value
         AppBackupService.persistNativeBackupSourceSignature(
             AppBackupService.importSourceSignature(for: savedURL)
         )

@@ -33,10 +33,12 @@ struct HomeView: View {
     @State private var cachedCurrentWeekStreak = 0
     @State private var cachedWeeklyChangeMetrics: [ChangeMetric] = []
     @State private var cachedMuscleSuggestions: [MuscleGroupSuggestion] = []
+    @State private var cachedUntaggedExerciseNames: [String] = []
     @State private var cachedHomeHighlights: [HighlightItem] = []
     @State private var selectedWeekBucketStart: Date?
     @State private var derivedStateTask: Task<Void, Never>?
     @State private var recoveryCoverageTask: Task<Void, Never>?
+    @State private var homeDerivedCacheKey: Int?
     @State private var hasScheduledInitialWorkoutRefresh = false
     @State private var showingTagging = false
     @AppStorage("dismissedUntaggedCount") private var dismissedUntaggedCount: Int = -1
@@ -300,8 +302,7 @@ struct HomeView: View {
     // MARK: - Untagged Exercises Banner
 
     private var untaggedExerciseNames: [String] {
-        dataManager.allExerciseNames()
-            .filter { metadataManager.resolvedTags(for: $0).isEmpty }
+        cachedUntaggedExerciseNames
     }
 
     private var shouldShowUntaggedBanner: Bool {
@@ -875,7 +876,24 @@ struct HomeView: View {
         }
     }
 
+    private var homeDerivedFingerprint: Int {
+        var hasher = Hasher()
+        hasher.combine(dataManager.workouts)
+        hasher.combine(intentionalBreaksManager.savedBreaks)
+        hasher.combine(Calendar.current.startOfDay(for: Date()))
+
+        for key in metadataManager.muscleTagOverrides.keys.sorted() {
+            hasher.combine(key)
+            hasher.combine(metadataManager.muscleTagOverrides[key] ?? [])
+        }
+
+        return hasher.finalize()
+    }
+
     private func refreshHomeDerivedState() {
+        let fingerprint = homeDerivedFingerprint
+        guard fingerprint != homeDerivedCacheKey else { return }
+
         let workouts = dataManager.workouts
         let breaks = intentionalBreaksManager.savedBreaks
         let weekBuckets = buildWeekBuckets(workouts: workouts, intentionalBreakRanges: breaks)
@@ -895,13 +913,18 @@ struct HomeView: View {
         }
         cachedWeeklyChangeMetrics = Array((preferredMetrics.isEmpty ? allMetrics : preferredMetrics).prefix(3))
 
+        let allExerciseNames = dataManager.allExerciseNames()
+        let exerciseNames = Set(allExerciseNames)
+        let tagMappings = metadataManager.resolvedMappings(for: exerciseNames)
+        cachedUntaggedExerciseNames = allExerciseNames.filter { tagMappings[$0]?.isEmpty ?? true }
+
         guard !workouts.isEmpty else {
             cachedMuscleSuggestions = []
+            syncSelectedWeekBucket()
+            homeDerivedCacheKey = fingerprint
             return
         }
 
-        let exerciseNames = Set(dataManager.allExerciseNames())
-        let tagMappings = metadataManager.resolvedMappings(for: exerciseNames)
         let groupMappings: [String: [MuscleGroup]] = tagMappings.mapValues { tags in
             tags.compactMap(\.builtInGroup)
         }
@@ -910,6 +933,7 @@ struct HomeView: View {
             muscleGroupsByExerciseName: groupMappings
         )
         syncSelectedWeekBucket()
+        homeDerivedCacheKey = fingerprint
     }
 
     private func scheduleHomeDerivedStateRefresh(debounceNs: UInt64 = 150_000_000) {

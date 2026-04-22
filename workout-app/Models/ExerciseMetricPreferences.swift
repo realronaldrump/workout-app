@@ -3,8 +3,8 @@
 /// Cardio vs strength classification is driven by the exercise's `.cardio` muscle tag
 /// (see `ExerciseMetadataManager`). These preferences only control which cardio fields
 /// to emphasize and how to label count-based cardio (e.g. "floors" for a stair stepper).
-struct ExerciseCardioMetricPreferences: Codable, Hashable, Sendable {
-    enum PrimaryMetricSelection: String, Codable, CaseIterable, Sendable {
+nonisolated struct ExerciseCardioMetricPreferences: Codable, Hashable, Sendable {
+    nonisolated enum PrimaryMetricSelection: String, Codable, CaseIterable, Sendable {
         case auto
         case distance
         case duration
@@ -38,7 +38,7 @@ struct ExerciseCardioMetricPreferences: Codable, Hashable, Sendable {
 }
 
 /// Concrete cardio metric kinds after resolving `.auto`.
-enum CardioMetricKind: String, CaseIterable, Sendable {
+nonisolated enum CardioMetricKind: String, CaseIterable, Sendable {
     case distance
     case duration
     case count
@@ -52,7 +52,7 @@ enum CardioMetricKind: String, CaseIterable, Sendable {
     }
 }
 
-struct ResolvedCardioMetricConfiguration: Hashable, Sendable {
+nonisolated struct ResolvedCardioMetricConfiguration: Hashable, Sendable {
     let primary: CardioMetricKind
     let secondary: CardioMetricKind
     let countLabel: String

@@ -170,102 +170,60 @@ struct WorkoutCSVExporter {
         weightUnit: String? = nil,
         calendar: Calendar = .current
     ) throws -> Data {
-        let requestedColumns = uniqueColumns(selectedColumns)
-        guard !requestedColumns.isEmpty else {
-            throw WorkoutExportError.noColumnsSelected
-        }
+        var data = Data()
+        var wroteAnyLine = false
 
-        let range = try normalizedDayRange(startDate: startDate, endDateInclusive: endDateInclusive, calendar: calendar)
-
-        let filtered = workouts
-            .filter { workout in
-                workout.date >= range.start && workout.date < range.endExclusive
+        try writeWorkoutHistoryCSVLines(
+            workouts: workouts,
+            startDate: startDate,
+            endDateInclusive: endDateInclusive,
+            exerciseTagsByName: exerciseTagsByName,
+            gymNamesByWorkoutID: gymNamesByWorkoutID,
+            selectedColumns: selectedColumns,
+            weightUnit: weightUnit,
+            calendar: calendar
+        ) { line in
+            if wroteAnyLine {
+                data.append(0x0A)
             }
-            .sorted { $0.date < $1.date }
-
-        guard !filtered.isEmpty else {
-            throw WorkoutExportError.noWorkoutsInRange
+            data.append(contentsOf: line.utf8)
+            wroteAnyLine = true
         }
 
-        let columns = columnsWithAvailableData(requestedColumns, for: filtered)
-        guard !columns.isEmpty else {
-            throw WorkoutExportError.noColumnsSelected
-        }
-
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd HH:mm"
-        dateFormatter.timeZone = TimeZone.current
-        dateFormatter.locale = Locale(identifier: "en_US_POSIX")
-
-        let trimmedUnit = weightUnit?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let weightHeader: String
-        if let unit = trimmedUnit, !unit.isEmpty {
-            weightHeader = "Weight (\(unit))"
-        } else {
-            weightHeader = "Weight"
-        }
-
-        var lines: [String] = []
-        lines.reserveCapacity(filtered.count * 8)
-
-        let header = columns.map { $0.header(weightHeader: weightHeader) }
-        lines.append(header.joined(separator: ","))
-
-        for workout in filtered {
-            var didPrintWorkoutInfo = false
-            // Preserve the order exercises were logged/recorded in the workout model.
-            // (Some previous versions alphabetized here, which made exports differ from what users logged.)
-            let exercises = workout.exercises
-            for exercise in exercises {
-                var didPrintExerciseInfo = false
-                let sets = exercise.sets.sorted { lhs, rhs in
-                    if lhs.setOrder != rhs.setOrder { return lhs.setOrder < rhs.setOrder }
-                    return lhs.date < rhs.date
-                }
-
-                for set in sets {
-                    let workoutStart = didPrintWorkoutInfo ? "" : dateFormatter.string(from: workout.date)
-                    let workoutName = didPrintWorkoutInfo ? "" : workout.name
-                    let duration = didPrintWorkoutInfo ? "" : workout.duration
-
-                    let exerciseName = didPrintExerciseInfo ? "" : exercise.name
-                    let muscles = didPrintExerciseInfo ? "" : (exerciseTagsByName[exercise.name] ?? "")
-
-                    let setOrder = String(set.setOrder)
-                    let weight = formatCompactNumber(set.weight, decimals: 1)
-                    let reps = String(set.reps)
-
-                    let context = WorkoutExportRowContext(
-                        workoutStart: workoutStart,
-                        workoutName: workoutName,
-                        gymName: didPrintWorkoutInfo ? "" : (gymNamesByWorkoutID[workout.id] ?? ""),
-                        duration: duration,
-                        exerciseName: exerciseName,
-                        muscles: muscles,
-                        setOrder: setOrder,
-                        weight: weight,
-                        reps: reps,
-                        distance: set.distance > 0 ? formatCompactNumber(set.distance, decimals: 1) : "",
-                        seconds: set.seconds > 0 ? formatCompactNumber(set.seconds, decimals: 1) : ""
-                    )
-                    let row = columns.map { value(for: $0, context: context) }
-
-                    let rowString = row
-                        .map(csvEscape)
-                        .joined(separator: ",")
-                    lines.append(rowString)
-                    didPrintWorkoutInfo = true
-                    didPrintExerciseInfo = true
-                }
-            }
-        }
-
-        let csvString = lines.joined(separator: "\n")
-        guard let data = csvString.data(using: .utf8) else {
-            // Should never fail for ASCII-ish content; use a generic message if it does.
-            throw CocoaError(.fileWriteInapplicableStringEncoding)
-        }
         return data
+    }
+
+    nonisolated static func exportWorkoutHistoryCSV(
+        to destinationURL: URL,
+        workouts: [Workout],
+        startDate: Date,
+        endDateInclusive: Date,
+        exerciseTagsByName: [String: String] = [:],
+        gymNamesByWorkoutID: [UUID: String] = [:],
+        selectedColumns: [WorkoutExportColumn] = WorkoutExportColumn.defaultColumns,
+        weightUnit: String? = nil,
+        calendar: Calendar = .current
+    ) throws {
+        try iCloudDocumentManager.writeFileAtomically(to: destinationURL) { handle in
+            var wroteAnyLine = false
+
+            try writeWorkoutHistoryCSVLines(
+                workouts: workouts,
+                startDate: startDate,
+                endDateInclusive: endDateInclusive,
+                exerciseTagsByName: exerciseTagsByName,
+                gymNamesByWorkoutID: gymNamesByWorkoutID,
+                selectedColumns: selectedColumns,
+                weightUnit: weightUnit,
+                calendar: calendar
+            ) { line in
+                if wroteAnyLine {
+                    try handle.write(contentsOf: Data([0x0A]))
+                }
+                try handle.write(contentsOf: Data(line.utf8))
+                wroteAnyLine = true
+            }
+        }
     }
 
     nonisolated static func makeWorkoutExportFileName(
@@ -296,45 +254,54 @@ struct WorkoutCSVExporter {
         exerciseTagsByName: [String: String] = [:],
         calendar: Calendar = .current
     ) throws -> Data {
-        let range = try normalizedDayRange(startDate: startDate, endDateInclusive: endDateInclusive, calendar: calendar)
+        var data = Data()
+        var wroteAnyLine = false
 
-        let filtered = workouts
-            .filter { workout in
-                workout.date >= range.start && workout.date < range.endExclusive
+        try writeExerciseListCSVLines(
+            workouts: workouts,
+            startDate: startDate,
+            endDateInclusive: endDateInclusive,
+            includeTags: includeTags,
+            exerciseTagsByName: exerciseTagsByName,
+            calendar: calendar
+        ) { line in
+            if wroteAnyLine {
+                data.append(0x0A)
             }
-
-        let exerciseNames = Set(filtered.flatMap { $0.exercises.map(\.name) })
-        let sortedNames = exerciseNames.sorted { lhs, rhs in
-            let insensitive = lhs.localizedCaseInsensitiveCompare(rhs)
-            if insensitive != .orderedSame { return insensitive == .orderedAscending }
-            return lhs.localizedCompare(rhs) == .orderedAscending
+            data.append(contentsOf: line.utf8)
+            wroteAnyLine = true
         }
 
-        guard !sortedNames.isEmpty else {
-            throw WorkoutExportError.noExercisesInRange
-        }
-
-        var lines: [String] = []
-        lines.reserveCapacity(sortedNames.count + 1)
-
-        if includeTags {
-            lines.append(["Exercise", "Tags"].joined(separator: ","))
-            for name in sortedNames {
-                let tags = exerciseTagsByName[name] ?? ""
-                lines.append([csvEscape(name), csvEscape(tags)].joined(separator: ","))
-            }
-        } else {
-            lines.append("Exercise")
-            for name in sortedNames {
-                lines.append(csvEscape(name))
-            }
-        }
-
-        let csvString = lines.joined(separator: "\n")
-        guard let data = csvString.data(using: .utf8) else {
-            throw CocoaError(.fileWriteInapplicableStringEncoding)
-        }
         return data
+    }
+
+    nonisolated static func exportExerciseListCSV(
+        to destinationURL: URL,
+        workouts: [Workout],
+        startDate: Date,
+        endDateInclusive: Date,
+        includeTags: Bool,
+        exerciseTagsByName: [String: String] = [:],
+        calendar: Calendar = .current
+    ) throws {
+        try iCloudDocumentManager.writeFileAtomically(to: destinationURL) { handle in
+            var wroteAnyLine = false
+
+            try writeExerciseListCSVLines(
+                workouts: workouts,
+                startDate: startDate,
+                endDateInclusive: endDateInclusive,
+                includeTags: includeTags,
+                exerciseTagsByName: exerciseTagsByName,
+                calendar: calendar
+            ) { line in
+                if wroteAnyLine {
+                    try handle.write(contentsOf: Data([0x0A]))
+                }
+                try handle.write(contentsOf: Data(line.utf8))
+                wroteAnyLine = true
+            }
+        }
     }
 
     nonisolated static func makeExerciseListExportFileName(
@@ -428,6 +395,143 @@ struct WorkoutCSVExporter {
         }
         let endExclusive = calendar.date(byAdding: .day, value: 1, to: endDay) ?? endDay
         return (startDay, endExclusive)
+    }
+
+    // swiftlint:disable:next function_parameter_count
+    private nonisolated static func writeWorkoutHistoryCSVLines(
+        workouts: [Workout],
+        startDate: Date,
+        endDateInclusive: Date,
+        exerciseTagsByName: [String: String],
+        gymNamesByWorkoutID: [UUID: String],
+        selectedColumns: [WorkoutExportColumn],
+        weightUnit: String?,
+        calendar: Calendar,
+        writeLine: (String) throws -> Void
+    ) throws {
+        let requestedColumns = uniqueColumns(selectedColumns)
+        guard !requestedColumns.isEmpty else {
+            throw WorkoutExportError.noColumnsSelected
+        }
+
+        let range = try normalizedDayRange(startDate: startDate, endDateInclusive: endDateInclusive, calendar: calendar)
+
+        let filtered = workouts
+            .filter { workout in
+                workout.date >= range.start && workout.date < range.endExclusive
+            }
+            .sorted { $0.date < $1.date }
+
+        guard !filtered.isEmpty else {
+            throw WorkoutExportError.noWorkoutsInRange
+        }
+
+        let columns = columnsWithAvailableData(requestedColumns, for: filtered)
+        guard !columns.isEmpty else {
+            throw WorkoutExportError.noColumnsSelected
+        }
+
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd HH:mm"
+        dateFormatter.timeZone = TimeZone.current
+        dateFormatter.locale = Locale(identifier: "en_US_POSIX")
+
+        let trimmedUnit = weightUnit?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let weightHeader: String
+        if let unit = trimmedUnit, !unit.isEmpty {
+            weightHeader = "Weight (\(unit))"
+        } else {
+            weightHeader = "Weight"
+        }
+
+        try writeLine(columns.map { $0.header(weightHeader: weightHeader) }.joined(separator: ","))
+
+        for workout in filtered {
+            var didPrintWorkoutInfo = false
+            // Preserve the order exercises were logged/recorded in the workout model.
+            // (Some previous versions alphabetized here, which made exports differ from what users logged.)
+            let exercises = workout.exercises
+            for exercise in exercises {
+                var didPrintExerciseInfo = false
+                let sets = exercise.sets.sorted { lhs, rhs in
+                    if lhs.setOrder != rhs.setOrder { return lhs.setOrder < rhs.setOrder }
+                    return lhs.date < rhs.date
+                }
+
+                for set in sets {
+                    let workoutStart = didPrintWorkoutInfo ? "" : dateFormatter.string(from: workout.date)
+                    let workoutName = didPrintWorkoutInfo ? "" : workout.name
+                    let duration = didPrintWorkoutInfo ? "" : workout.duration
+
+                    let exerciseName = didPrintExerciseInfo ? "" : exercise.name
+                    let muscles = didPrintExerciseInfo ? "" : (exerciseTagsByName[exercise.name] ?? "")
+
+                    let context = WorkoutExportRowContext(
+                        workoutStart: workoutStart,
+                        workoutName: workoutName,
+                        gymName: didPrintWorkoutInfo ? "" : (gymNamesByWorkoutID[workout.id] ?? ""),
+                        duration: duration,
+                        exerciseName: exerciseName,
+                        muscles: muscles,
+                        setOrder: String(set.setOrder),
+                        weight: formatCompactNumber(set.weight, decimals: 1),
+                        reps: String(set.reps),
+                        distance: set.distance > 0 ? formatCompactNumber(set.distance, decimals: 1) : "",
+                        seconds: set.seconds > 0 ? formatCompactNumber(set.seconds, decimals: 1) : ""
+                    )
+
+                    let rowString = columns
+                        .map { value(for: $0, context: context) }
+                        .map(csvEscape)
+                        .joined(separator: ",")
+
+                    try writeLine(rowString)
+                    didPrintWorkoutInfo = true
+                    didPrintExerciseInfo = true
+                }
+            }
+        }
+    }
+
+    private nonisolated static func writeExerciseListCSVLines(
+        workouts: [Workout],
+        startDate: Date,
+        endDateInclusive: Date,
+        includeTags: Bool,
+        exerciseTagsByName: [String: String],
+        calendar: Calendar,
+        writeLine: (String) throws -> Void
+    ) throws {
+        let range = try normalizedDayRange(startDate: startDate, endDateInclusive: endDateInclusive, calendar: calendar)
+
+        let filtered = workouts
+            .filter { workout in
+                workout.date >= range.start && workout.date < range.endExclusive
+            }
+
+        let exerciseNames = Set(filtered.flatMap { $0.exercises.map(\.name) })
+        let sortedNames = exerciseNames.sorted { lhs, rhs in
+            let insensitive = lhs.localizedCaseInsensitiveCompare(rhs)
+            if insensitive != .orderedSame { return insensitive == .orderedAscending }
+            return lhs.localizedCompare(rhs) == .orderedAscending
+        }
+
+        guard !sortedNames.isEmpty else {
+            throw WorkoutExportError.noExercisesInRange
+        }
+
+        if includeTags {
+            try writeLine(["Exercise", "Tags"].joined(separator: ","))
+            for name in sortedNames {
+                let tags = exerciseTagsByName[name] ?? ""
+                try writeLine([csvEscape(name), csvEscape(tags)].joined(separator: ","))
+            }
+        } else {
+            try writeLine("Exercise")
+            for name in sortedNames {
+                try writeLine(csvEscape(name))
+            }
+        }
     }
 
     private nonisolated static func uniqueColumns(_ columns: [WorkoutExportColumn]) -> [WorkoutExportColumn] {

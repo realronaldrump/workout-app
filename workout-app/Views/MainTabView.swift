@@ -1,4 +1,70 @@
+import Combine
 import SwiftUI
+
+@MainActor
+private final class MainTabServices: ObservableObject {
+    let objectWillChange = ObservableObjectPublisher()
+    let dataManager: WorkoutDataManager
+    let annotationsManager: WorkoutAnnotationsManager
+    let intentionalBreaksManager: IntentionalBreaksManager
+    let gymProfilesManager: GymProfilesManager
+    let insightsEngine: InsightsEngine
+    private var childStoreCancellables: Set<AnyCancellable> = []
+
+    init() {
+        let annotationsManager = WorkoutAnnotationsManager(loadOnInit: false)
+        let intentionalBreaksManager = IntentionalBreaksManager(loadOnInit: false)
+        let dataManager = WorkoutDataManager()
+        let gymProfilesManager = GymProfilesManager(
+            annotationsManager: annotationsManager,
+            loadOnInit: false
+        )
+
+        self.dataManager = dataManager
+        self.annotationsManager = annotationsManager
+        self.intentionalBreaksManager = intentionalBreaksManager
+        self.gymProfilesManager = gymProfilesManager
+        self.insightsEngine = InsightsEngine(
+            dataManager: dataManager,
+            annotationsProvider: { annotationsManager.annotations },
+            gymNameProvider: { gymProfilesManager.gymNameSnapshot() }
+        )
+
+        relayChildStoreUpdates()
+    }
+
+    private func relayChildStoreUpdates() {
+        dataManager.objectWillChange
+            .sink { [weak self] in
+                self?.objectWillChange.send()
+            }
+            .store(in: &childStoreCancellables)
+
+        annotationsManager.objectWillChange
+            .sink { [weak self] in
+                self?.objectWillChange.send()
+            }
+            .store(in: &childStoreCancellables)
+
+        intentionalBreaksManager.objectWillChange
+            .sink { [weak self] in
+                self?.objectWillChange.send()
+            }
+            .store(in: &childStoreCancellables)
+
+        gymProfilesManager.objectWillChange
+            .sink { [weak self] in
+                self?.objectWillChange.send()
+            }
+            .store(in: &childStoreCancellables)
+
+        insightsEngine.objectWillChange
+            .sink { [weak self] in
+                self?.objectWillChange.send()
+            }
+            .store(in: &childStoreCancellables)
+    }
+}
 
 enum AppTab: String, CaseIterable, Hashable {
     case today
@@ -8,13 +74,9 @@ enum AppTab: String, CaseIterable, Hashable {
 }
 
 struct MainTabView: View {
-    @StateObject private var dataManager = WorkoutDataManager()
+    @StateObject private var services = MainTabServices()
     @StateObject private var iCloudManager = iCloudDocumentManager()
     @StateObject private var logStore = WorkoutLogStore()
-    @StateObject private var annotationsManager: WorkoutAnnotationsManager
-    @StateObject private var intentionalBreaksManager: IntentionalBreaksManager
-    @StateObject private var gymProfilesManager: GymProfilesManager
-    @StateObject private var insightsEngine: InsightsEngine
     @StateObject private var healthDateRangeContext = HealthDateRangeContext()
     @StateObject private var variantEngine = WorkoutVariantEngine()
     @StateObject private var similarityEngine = WorkoutSimilarityEngine()
@@ -35,23 +97,11 @@ struct MainTabView: View {
     @EnvironmentObject private var healthManager: HealthKitManager
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    init() {
-        let annotations = WorkoutAnnotationsManager()
-        let intentionalBreaks = IntentionalBreaksManager()
-        let gyms = GymProfilesManager(annotationsManager: annotations)
-        let dataManager = WorkoutDataManager()
-        _annotationsManager = StateObject(wrappedValue: annotations)
-        _intentionalBreaksManager = StateObject(wrappedValue: intentionalBreaks)
-        _gymProfilesManager = StateObject(wrappedValue: gyms)
-        _dataManager = StateObject(wrappedValue: dataManager)
-        _insightsEngine = StateObject(
-            wrappedValue: InsightsEngine(
-                dataManager: dataManager,
-                annotationsProvider: { annotations.annotations },
-                gymNameProvider: { gyms.gymNameSnapshot() }
-            )
-        )
-    }
+    private var dataManager: WorkoutDataManager { services.dataManager }
+    private var annotationsManager: WorkoutAnnotationsManager { services.annotationsManager }
+    private var intentionalBreaksManager: IntentionalBreaksManager { services.intentionalBreaksManager }
+    private var gymProfilesManager: GymProfilesManager { services.gymProfilesManager }
+    private var insightsEngine: InsightsEngine { services.insightsEngine }
 
     var body: some View {
         ZStack {
@@ -278,6 +328,7 @@ struct MainTabView: View {
         Task { @MainActor in
             LegacyProgramCleanup.runIfNeeded()
             annotationsManager.reloadPersistedAnnotations()
+            intentionalBreaksManager.reloadPersistedBreaks()
             gymProfilesManager.reloadPersistedGyms()
             healthManager.loadPersistedData()
             healthManager.loadPersistedDailyHealthData()

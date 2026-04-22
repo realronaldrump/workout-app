@@ -13,9 +13,11 @@ final class GymProfilesManager: ObservableObject {
     private let fileName = "gym_profiles.json"
     private let annotationsManager: WorkoutAnnotationsManager
 
-    init(annotationsManager: WorkoutAnnotationsManager) {
+    init(annotationsManager: WorkoutAnnotationsManager, loadOnInit: Bool = true) {
         self.annotationsManager = annotationsManager
-        load()
+        if loadOnInit {
+            load()
+        }
     }
 
     var sortedGyms: [GymProfile] {
