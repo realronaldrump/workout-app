@@ -3,13 +3,11 @@ import SwiftUI
 
 @MainActor
 private final class MainTabServices: ObservableObject {
-    let objectWillChange = ObservableObjectPublisher()
     let dataManager: WorkoutDataManager
     let annotationsManager: WorkoutAnnotationsManager
     let intentionalBreaksManager: IntentionalBreaksManager
     let gymProfilesManager: GymProfilesManager
     let insightsEngine: InsightsEngine
-    private var childStoreCancellables: Set<AnyCancellable> = []
 
     init() {
         let annotationsManager = WorkoutAnnotationsManager(loadOnInit: false)
@@ -29,40 +27,6 @@ private final class MainTabServices: ObservableObject {
             annotationsProvider: { annotationsManager.annotations },
             gymNameProvider: { gymProfilesManager.gymNameSnapshot() }
         )
-
-        relayChildStoreUpdates()
-    }
-
-    private func relayChildStoreUpdates() {
-        dataManager.objectWillChange
-            .sink { [weak self] in
-                self?.objectWillChange.send()
-            }
-            .store(in: &childStoreCancellables)
-
-        annotationsManager.objectWillChange
-            .sink { [weak self] in
-                self?.objectWillChange.send()
-            }
-            .store(in: &childStoreCancellables)
-
-        intentionalBreaksManager.objectWillChange
-            .sink { [weak self] in
-                self?.objectWillChange.send()
-            }
-            .store(in: &childStoreCancellables)
-
-        gymProfilesManager.objectWillChange
-            .sink { [weak self] in
-                self?.objectWillChange.send()
-            }
-            .store(in: &childStoreCancellables)
-
-        insightsEngine.objectWillChange
-            .sink { [weak self] in
-                self?.objectWillChange.send()
-            }
-            .store(in: &childStoreCancellables)
     }
 }
 
@@ -73,7 +37,68 @@ enum AppTab: String, CaseIterable, Hashable {
     case profile
 }
 
+private struct HistoryTabView: View {
+    @ObservedObject var dataManager: WorkoutDataManager
+
+    var body: some View {
+        WorkoutHistoryView(workouts: dataManager.workouts, showsBackButton: false)
+    }
+}
+
+private struct ActiveSessionInset: View {
+    @ObservedObject var sessionManager: WorkoutSessionManager
+
+    var body: some View {
+        if sessionManager.activeSession != nil && !sessionManager.isPresentingSessionUI {
+            ActiveSessionBar()
+                .environmentObject(sessionManager)
+                .padding(.horizontal, Theme.Spacing.lg)
+                .padding(.bottom, Theme.Spacing.lg)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .zIndex(9)
+        }
+    }
+}
+
+private struct SessionPresentationHost: View {
+    @ObservedObject var sessionManager: WorkoutSessionManager
+    let healthManager: HealthKitManager
+    let dataManager: WorkoutDataManager
+    let logStore: WorkoutLogStore
+    let annotationsManager: WorkoutAnnotationsManager
+    let intentionalBreaksManager: IntentionalBreaksManager
+    let gymProfilesManager: GymProfilesManager
+    let insightsEngine: InsightsEngine
+    let variantEngine: WorkoutVariantEngine
+    let similarityEngine: WorkoutSimilarityEngine
+
+    var body: some View {
+        Color.clear
+            .frame(width: 0, height: 0)
+            .allowsHitTesting(false)
+            .fullScreenCover(isPresented: $sessionManager.isPresentingSessionUI) {
+                // Explicitly re-inject shared ObservableObjects so session UI is robust to
+                // SwiftUI presentation/environment propagation quirks (e.g. presenting
+                // the session UI while another sheet is currently displayed).
+                WorkoutSessionView()
+                    .environmentObject(sessionManager)
+                    .environmentObject(healthManager)
+                    .environmentObject(dataManager)
+                    .environmentObject(logStore)
+                    .environmentObject(annotationsManager)
+                    .environmentObject(intentionalBreaksManager)
+                    .environmentObject(gymProfilesManager)
+                    .environmentObject(insightsEngine)
+                    .environmentObject(variantEngine)
+                    .environmentObject(similarityEngine)
+            }
+    }
+}
+
 struct MainTabView: View {
+    let sessionManager: WorkoutSessionManager
+    let healthManager: HealthKitManager
+
     @StateObject private var services = MainTabServices()
     @StateObject private var iCloudManager = iCloudDocumentManager()
     @StateObject private var logStore = WorkoutLogStore()
@@ -93,8 +118,6 @@ struct MainTabView: View {
     @State private var variantAnalysisTask: Task<Void, Never>?
     @State private var similarityAnalysisTask: Task<Void, Never>?
     @State private var sleepSummaryRefreshTask: Task<Void, Never>?
-    @EnvironmentObject private var sessionManager: WorkoutSessionManager
-    @EnvironmentObject private var healthManager: HealthKitManager
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var dataManager: WorkoutDataManager { services.dataManager }
@@ -129,7 +152,7 @@ struct MainTabView: View {
             .tag(AppTab.health)
 
             NavigationStack {
-                WorkoutHistoryView(workouts: dataManager.workouts, showsBackButton: false)
+                HistoryTabView(dataManager: dataManager)
             }
             .tabItem {
                 Label("History", systemImage: "clock.fill")
@@ -178,6 +201,20 @@ struct MainTabView: View {
                 .zIndex(20)
             }
         }
+        .overlay {
+            SessionPresentationHost(
+                sessionManager: sessionManager,
+                healthManager: healthManager,
+                dataManager: dataManager,
+                logStore: logStore,
+                annotationsManager: annotationsManager,
+                intentionalBreaksManager: intentionalBreaksManager,
+                gymProfilesManager: gymProfilesManager,
+                insightsEngine: insightsEngine,
+                variantEngine: variantEngine,
+                similarityEngine: similarityEngine
+            )
+        }
         .onAppear {
             beginSplashIfNeeded()
             refreshOnboardingState()
@@ -197,19 +234,19 @@ struct MainTabView: View {
                 payload: ["Navigation.tab": newValue.rawValue]
             )
         }
-        .onChange(of: dataManager.workouts) { _, _ in
+        .onReceive(dataManager.$workouts.dropFirst()) { _ in
             refreshOnboardingState()
             scheduleInsightsRefresh()
             scheduleVariantAnalysis()
             scheduleSimilarityAnalysis()
             schedulePendingSleepSummaryRefresh()
         }
-        .onChange(of: dataManager.isLoading) { _, isLoading in
+        .onReceive(dataManager.$isLoading.dropFirst()) { isLoading in
             if !isLoading {
                 refreshOnboardingState()
             }
         }
-        .onChange(of: healthManager.authorizationStatus) { _, newValue in
+        .onReceive(healthManager.$authorizationStatus.dropFirst()) { newValue in
             guard newValue == .authorized else { return }
             schedulePendingSleepSummaryRefresh()
         }
@@ -231,29 +268,7 @@ struct MainTabView: View {
             )
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if sessionManager.activeSession != nil && !sessionManager.isPresentingSessionUI {
-                ActiveSessionBar()
-                    .padding(.horizontal, Theme.Spacing.lg)
-                    .padding(.bottom, Theme.Spacing.lg)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                    .zIndex(9)
-            }
-        }
-        .fullScreenCover(isPresented: $sessionManager.isPresentingSessionUI) {
-            // Explicitly re-inject shared ObservableObjects so session UI is robust to
-            // SwiftUI presentation/environment propagation quirks (e.g. presenting
-            // the session UI while another sheet is currently displayed).
-            WorkoutSessionView()
-                .environmentObject(sessionManager)
-                .environmentObject(healthManager)
-                .environmentObject(dataManager)
-                .environmentObject(logStore)
-                .environmentObject(annotationsManager)
-                .environmentObject(intentionalBreaksManager)
-                .environmentObject(gymProfilesManager)
-                .environmentObject(insightsEngine)
-                .environmentObject(variantEngine)
-                .environmentObject(similarityEngine)
+            ActiveSessionInset(sessionManager: sessionManager)
         }
     }
 

@@ -60,9 +60,22 @@ struct WorkoutSessionView: View {
                             headerCard(session)
 
                             // Rest timer
-                            if sessionManager.restTimerIsActive {
-                                restTimerCard
-                            }
+                            RestTimerCard(
+                                timer: sessionManager.restTimer,
+                                onExtendThirtySeconds: {
+                                    sessionManager.setRestTimerDuration(sessionManager.restTimerDuration + 30)
+                                    sessionManager.extendRestTimer(by: 30)
+                                    Haptics.selection()
+                                },
+                                onShowSettings: {
+                                    showingRestSettings = true
+                                    Haptics.selection()
+                                },
+                                onCancel: {
+                                    sessionManager.cancelRestTimer()
+                                    Haptics.selection()
+                                }
+                            )
 
                             if !cachedMuscleSuggestions.isEmpty {
                                 muscleSuggestionSection(cachedMuscleSuggestions)
@@ -188,7 +201,13 @@ struct WorkoutSessionView: View {
                 Text(uncheckedSetAlertMessage)
             }
             .sheet(isPresented: $showingRestSettings) {
-                restTimerSettingsSheet
+                RestTimerSettingsSheet(
+                    timer: sessionManager.restTimer,
+                    onSelectDuration: { seconds in
+                        sessionManager.setRestTimerDuration(seconds)
+                        Haptics.selection()
+                    }
+                )
                     .presentationDetents([.height(280)])
                     .presentationDragIndicator(.visible)
             }
@@ -320,149 +339,6 @@ struct WorkoutSessionView: View {
             .softCard(elevation: 1)
         }
         .buttonStyle(.plain)
-    }
-
-    // MARK: - Rest Timer Card
-
-    private var restTimerCard: some View {
-        let remaining = sessionManager.restTimerSecondsRemaining
-        let total = sessionManager.restTimerDuration
-        let progress = total > 0 ? Double(remaining) / Double(total) : 0
-
-        return HStack(spacing: Theme.Spacing.md) {
-            ZStack {
-                Circle()
-                    .stroke(Theme.Colors.border, lineWidth: 3)
-                    .frame(width: 48, height: 48)
-                Circle()
-                    .trim(from: 0, to: progress)
-                    .stroke(
-                        remaining <= 10 ? Theme.Colors.accentSecondary : Theme.Colors.accent,
-                        style: StrokeStyle(lineWidth: 3, lineCap: .round)
-                    )
-                    .frame(width: 48, height: 48)
-                    .rotationEffect(.degrees(-90))
-                    .animation(.linear(duration: 1), value: remaining)
-                Text("\(remaining)")
-                    .font(Theme.Typography.monoMedium)
-                    .foregroundColor(remaining <= 10 ? Theme.Colors.accentSecondary : Theme.Colors.accent)
-            }
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text("REST")
-                    .font(Theme.Typography.captionBold)
-                    .foregroundColor(Theme.Colors.textSecondary)
-                    .tracking(1.2)
-                Text(restTimerFormatted(remaining))
-                    .font(Theme.Typography.monoMedium)
-                    .foregroundColor(Theme.Colors.textPrimary)
-            }
-
-            Spacer()
-
-            HStack(spacing: Theme.Spacing.sm) {
-                Button {
-                    sessionManager.setRestTimerDuration(sessionManager.restTimerDuration + 30)
-                    sessionManager.extendRestTimer(by: 30)
-                    Haptics.selection()
-                } label: {
-                    Text("+30s")
-                        .font(Theme.Typography.captionBold)
-                        .foregroundColor(Theme.Colors.accent)
-                        .padding(.horizontal, Theme.Spacing.sm)
-                        .padding(.vertical, 6)
-                        .background(Theme.Colors.surface.opacity(0.35))
-                        .cornerRadius(Theme.CornerRadius.large)
-                }
-                .buttonStyle(.plain)
-
-                Button {
-                    showingRestSettings = true
-                    Haptics.selection()
-                } label: {
-                    Image(systemName: "gear")
-                        .font(Theme.Typography.subheadlineStrong)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                        .frame(width: 28, height: 28)
-                        .background(Theme.Colors.surface.opacity(0.35))
-                        .cornerRadius(Theme.CornerRadius.small)
-                }
-                .buttonStyle(.plain)
-
-                Button {
-                    sessionManager.cancelRestTimer()
-                    Haptics.selection()
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(Theme.Iconography.title3)
-                        .foregroundStyle(Theme.Colors.textTertiary)
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(Theme.Spacing.lg)
-        .softCard(elevation: 2)
-    }
-
-    private var restTimerSettingsSheet: some View {
-        let presets = [30, 60, 90, 120, 180, 300]
-
-        return VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
-            Text("Rest Timer")
-                .font(Theme.Typography.title3)
-                .foregroundColor(Theme.Colors.textPrimary)
-
-            Text("Default rest between sets")
-                .font(Theme.Typography.caption)
-                .foregroundColor(Theme.Colors.textSecondary)
-
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: Theme.Spacing.sm), count: 3), spacing: Theme.Spacing.sm) {
-                ForEach(presets, id: \.self) { seconds in
-                    Button {
-                        sessionManager.setRestTimerDuration(seconds)
-                        Haptics.selection()
-                    } label: {
-                        Text(restTimerFormatted(seconds))
-                            .font(Theme.Typography.headline)
-                            .foregroundColor(
-                                sessionManager.restTimerDuration == seconds
-                                    ? .white
-                                    : Theme.Colors.textPrimary
-                            )
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, Theme.Spacing.md)
-                            .background(
-                                RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
-                                    .fill(
-                                        sessionManager.restTimerDuration == seconds
-                                            ? Theme.Colors.accent
-                                            : Theme.Colors.surface.opacity(0.35)
-                                    )
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
-                                    .strokeBorder(
-                                        sessionManager.restTimerDuration == seconds
-                                            ? Theme.Colors.accent
-                                            : Theme.Colors.border.opacity(0.4),
-                                        lineWidth: 1
-                                    )
-                            )
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-        .padding(Theme.Spacing.xl)
-        .background(Theme.Colors.background)
-    }
-
-    private func restTimerFormatted(_ seconds: Int) -> String {
-        let minutes = seconds / 60
-        let remainingSeconds = seconds % 60
-        return remainingSeconds > 0
-            ? "\(minutes):\(String(format: "%02d", remainingSeconds))"
-            : "\(minutes):00"
     }
 
     // MARK: - Auto-Prefill Helper
@@ -783,6 +659,151 @@ struct WorkoutSessionView: View {
         )
     }
 
+}
+
+// MARK: - Rest Timer UI
+
+private struct RestTimerCard: View {
+    @ObservedObject var timer: RestTimerState
+    let onExtendThirtySeconds: () -> Void
+    let onShowSettings: () -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        if timer.isActive {
+            let remaining = timer.secondsRemaining
+            let progress = timer.duration > 0 ? Double(remaining) / Double(timer.duration) : 0
+
+            HStack(spacing: Theme.Spacing.md) {
+                ZStack {
+                    Circle()
+                        .stroke(Theme.Colors.border, lineWidth: 3)
+                        .frame(width: 48, height: 48)
+                    Circle()
+                        .trim(from: 0, to: progress)
+                        .stroke(
+                            remaining <= 10 ? Theme.Colors.accentSecondary : Theme.Colors.accent,
+                            style: StrokeStyle(lineWidth: 3, lineCap: .round)
+                        )
+                        .frame(width: 48, height: 48)
+                        .rotationEffect(.degrees(-90))
+                        .animation(.linear(duration: 1), value: remaining)
+                    Text("\(remaining)")
+                        .font(Theme.Typography.monoMedium)
+                        .foregroundColor(remaining <= 10 ? Theme.Colors.accentSecondary : Theme.Colors.accent)
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("REST")
+                        .font(Theme.Typography.captionBold)
+                        .foregroundColor(Theme.Colors.textSecondary)
+                        .tracking(1.2)
+                    Text(restTimerFormatted(remaining))
+                        .font(Theme.Typography.monoMedium)
+                        .foregroundColor(Theme.Colors.textPrimary)
+                }
+
+                Spacer()
+
+                HStack(spacing: Theme.Spacing.sm) {
+                    Button(action: onExtendThirtySeconds) {
+                        Text("+30s")
+                            .font(Theme.Typography.captionBold)
+                            .foregroundColor(Theme.Colors.accent)
+                            .padding(.horizontal, Theme.Spacing.sm)
+                            .padding(.vertical, 6)
+                            .background(Theme.Colors.surface.opacity(0.35))
+                            .cornerRadius(Theme.CornerRadius.large)
+                    }
+                    .buttonStyle(.plain)
+
+                    Button(action: onShowSettings) {
+                        Image(systemName: "gear")
+                            .font(Theme.Typography.subheadlineStrong)
+                            .foregroundStyle(Theme.Colors.textSecondary)
+                            .frame(width: 28, height: 28)
+                            .background(Theme.Colors.surface.opacity(0.35))
+                            .cornerRadius(Theme.CornerRadius.small)
+                    }
+                    .buttonStyle(.plain)
+
+                    Button(action: onCancel) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(Theme.Iconography.title3)
+                            .foregroundStyle(Theme.Colors.textTertiary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(Theme.Spacing.lg)
+            .softCard(elevation: 2)
+        }
+    }
+}
+
+private struct RestTimerSettingsSheet: View {
+    @ObservedObject var timer: RestTimerState
+    let onSelectDuration: (Int) -> Void
+
+    private let presets = [30, 60, 90, 120, 180, 300]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
+            Text("Rest Timer")
+                .font(Theme.Typography.title3)
+                .foregroundColor(Theme.Colors.textPrimary)
+
+            Text("Default rest between sets")
+                .font(Theme.Typography.caption)
+                .foregroundColor(Theme.Colors.textSecondary)
+
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: Theme.Spacing.sm), count: 3), spacing: Theme.Spacing.sm) {
+                ForEach(presets, id: \.self) { seconds in
+                    Button {
+                        onSelectDuration(seconds)
+                    } label: {
+                        Text(restTimerFormatted(seconds))
+                            .font(Theme.Typography.headline)
+                            .foregroundColor(
+                                timer.duration == seconds
+                                    ? .white
+                                    : Theme.Colors.textPrimary
+                            )
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, Theme.Spacing.md)
+                            .background(
+                                RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
+                                    .fill(
+                                        timer.duration == seconds
+                                            ? Theme.Colors.accent
+                                            : Theme.Colors.surface.opacity(0.35)
+                                    )
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
+                                    .strokeBorder(
+                                        timer.duration == seconds
+                                            ? Theme.Colors.accent
+                                            : Theme.Colors.border.opacity(0.4),
+                                        lineWidth: 1
+                                    )
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(Theme.Spacing.xl)
+        .background(Theme.Colors.background)
+    }
+}
+
+private func restTimerFormatted(_ seconds: Int) -> String {
+    let minutes = seconds / 60
+    let remainingSeconds = seconds % 60
+    return remainingSeconds > 0
+        ? "\(minutes):\(String(format: "%02d", remainingSeconds))"
+        : "\(minutes):00"
 }
 
 // MARK: - Exercise Card

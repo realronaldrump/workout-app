@@ -13,7 +13,7 @@ struct HealthDashboardView: View {
     @State private var selectedWorkout: Workout?
     @State private var showingWorkoutsInRange = false
     @State private var derived: DerivedDashboardData = .empty
-    @State private var derivedCacheKey: Int?
+    @State private var derivedRefreshTask: Task<Void, Never>?
 
     fileprivate struct DerivedDashboardData {
         let allHealthData: [WorkoutHealthData]
@@ -133,62 +133,50 @@ struct HealthDashboardView: View {
             .navigationDestination(isPresented: $showingWorkoutsInRange) {
                 WorkoutsInRangeView(workouts: currentWorkouts, rangeLabel: rangeLabel)
             }
-            .onAppear { recomputeIfNeeded() }
-            .onChange(of: dashboardCacheKey) { _, _ in recomputeIfNeeded() }
+            .onAppear { refreshDerivedDataImmediately() }
+            .onDisappear {
+                derivedRefreshTask?.cancel()
+                derivedRefreshTask = nil
+            }
+            .onReceive(healthManager.$healthDataStore) { _ in
+                scheduleDerivedDataRefresh()
+            }
+            .onReceive(dataManager.$workouts) { _ in
+                scheduleDerivedDataRefresh()
+            }
+            .onChange(of: dateRangeContext.selectedRange) { _, _ in
+                refreshDerivedDataImmediately()
+            }
+            .onChange(of: dateRangeContext.customRange) { _, _ in
+                if dateRangeContext.selectedRange == .custom {
+                    refreshDerivedDataImmediately()
+                }
+            }
         }
     }
 
-    private var dashboardCacheKey: Int {
-        Self.makeDashboardCacheKey(
-            healthDataStore: healthManager.healthDataStore,
-            workouts: dataManager.workouts,
-            dateRangeContext: dateRangeContext
-        )
+    private func refreshDerivedDataImmediately() {
+        derivedRefreshTask?.cancel()
+        derivedRefreshTask = nil
+        refreshDerivedData()
     }
 
-    private func recomputeIfNeeded() {
-        let key = dashboardCacheKey
-        guard key != derivedCacheKey else { return }
+    private func scheduleDerivedDataRefresh(debounceNs: UInt64 = 120_000_000) {
+        derivedRefreshTask?.cancel()
+        derivedRefreshTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: debounceNs)
+            guard !Task.isCancelled else { return }
+            refreshDerivedData()
+            derivedRefreshTask = nil
+        }
+    }
+
+    private func refreshDerivedData() {
         derived = Self.computeDerived(
             healthDataStore: healthManager.healthDataStore,
             workouts: dataManager.workouts,
             dateRangeContext: dateRangeContext
         )
-        derivedCacheKey = key
-    }
-
-    private static func makeDashboardCacheKey(
-        healthDataStore: [UUID: WorkoutHealthData],
-        workouts: [Workout],
-        dateRangeContext: HealthDateRangeContext
-    ) -> Int {
-        var hasher = Hasher()
-        hasher.combine(workouts)
-        hasher.combine(dateRangeContext.selectedRange.rawValue)
-        hasher.combine(dateRangeContext.customRange.start.timeIntervalSinceReferenceDate)
-        hasher.combine(dateRangeContext.customRange.end.timeIntervalSinceReferenceDate)
-
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        encoder.dateEncodingStrategy = .iso8601
-
-        let sortedHealthEntries = healthDataStore.values.sorted { lhs, rhs in
-            if lhs.workoutDate != rhs.workoutDate {
-                return lhs.workoutDate < rhs.workoutDate
-            }
-            return lhs.id.uuidString < rhs.id.uuidString
-        }
-
-        for entry in sortedHealthEntries {
-            if let data = try? encoder.encode(entry) {
-                hasher.combine(data)
-            } else {
-                hasher.combine(entry.id)
-                hasher.combine(entry.syncedAt.timeIntervalSinceReferenceDate)
-            }
-        }
-
-        return hasher.finalize()
     }
 
     // MARK: - Sections
@@ -485,7 +473,7 @@ struct HealthDashboardView: View {
         derived.details[kind]
     }
 
-    // swiftlint:disable:next cyclomatic_complexity function_body_length
+    // swiftlint:disable:next cyclomatic_complexity
     private static func detailFor(
         _ kind: HealthMetricKind,
         currentHealthData: [WorkoutHealthData],
@@ -949,30 +937,33 @@ enum HealthMetricKind: String, Identifiable, Hashable {
 }
 
 struct HealthMetricSeries: Identifiable {
-    let id = UUID()
     let label: String
     let unit: String
     let color: Color
     let points: [HealthTrendPoint]
+
+    var id: String { "\(label)-\(unit)" }
 }
 
 struct HealthMetricDetail: Identifiable {
-    let id = UUID()
     let kind: HealthMetricKind
     let summary: String
     let explanation: String
     let series: [HealthMetricSeries]
     let comparisonSeries: [HealthMetricSeries]
+
+    var id: HealthMetricKind { kind }
 }
 
 struct HighlightCardModel: Identifiable {
-    let id = UUID()
     let title: String
     let value: String
     let subtitle: String
     let icon: String
     let tint: Color
     let category: HealthCategory
+
+    var id: String { "\(category.rawValue)-\(title)" }
 }
 
 struct MetricDelta {
@@ -982,7 +973,6 @@ struct MetricDelta {
 }
 
 struct MetricSummaryModel: Identifiable {
-    let id = UUID()
     let title: String
     let value: String
     let subtitle: String
@@ -990,6 +980,8 @@ struct MetricSummaryModel: Identifiable {
     let tint: Color
     let delta: MetricDelta?
     let category: HealthCategory
+
+    var id: String { "\(category.rawValue)-\(title)" }
 }
 
 // MARK: - Components

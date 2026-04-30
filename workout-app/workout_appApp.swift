@@ -61,7 +61,7 @@ struct WorkoutApp: App {
 
     var body: some Scene {
         WindowGroup {
-            MainTabView()
+            MainTabView(sessionManager: sessionManager, healthManager: healthManager)
                 .font(Theme.Typography.body)
                 .environmentObject(healthManager)
                 .environmentObject(sessionManager)

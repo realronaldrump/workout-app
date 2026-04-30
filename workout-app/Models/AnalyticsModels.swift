@@ -171,8 +171,11 @@ nonisolated enum SleepStage: String, Codable, CaseIterable {
 }
 
 struct HealthTrendPoint: Identifiable {
-    let id = UUID()
     let date: Date
     let value: Double
     let label: String
+
+    var id: String {
+        "\(label)-\(date.timeIntervalSinceReferenceDate)"
+    }
 }

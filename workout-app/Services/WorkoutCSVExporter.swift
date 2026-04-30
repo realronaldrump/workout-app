@@ -153,6 +153,13 @@ private nonisolated struct WorkoutExportRowContext {
     let seconds: String
 }
 
+private nonisolated struct WorkoutExportBreakContext {
+    let startDate: Date
+    let endDate: Date
+    let name: String
+    let dayCount: Int
+}
+
 struct WorkoutCSVExporter {
     /// A compact, human-friendly export:
     /// - One CSV header.
@@ -167,6 +174,8 @@ struct WorkoutCSVExporter {
         exerciseTagsByName: [String: String] = [:],
         gymNamesByWorkoutID: [UUID: String] = [:],
         selectedColumns: [WorkoutExportColumn] = WorkoutExportColumn.defaultColumns,
+        intentionalBreaks: [IntentionalBreakRange] = [],
+        includeIntentionalBreaks: Bool = false,
         weightUnit: String? = nil,
         calendar: Calendar = .current
     ) throws -> Data {
@@ -180,6 +189,8 @@ struct WorkoutCSVExporter {
             exerciseTagsByName: exerciseTagsByName,
             gymNamesByWorkoutID: gymNamesByWorkoutID,
             selectedColumns: selectedColumns,
+            intentionalBreaks: intentionalBreaks,
+            includeIntentionalBreaks: includeIntentionalBreaks,
             weightUnit: weightUnit,
             calendar: calendar
         ) { line in
@@ -201,6 +212,8 @@ struct WorkoutCSVExporter {
         exerciseTagsByName: [String: String] = [:],
         gymNamesByWorkoutID: [UUID: String] = [:],
         selectedColumns: [WorkoutExportColumn] = WorkoutExportColumn.defaultColumns,
+        intentionalBreaks: [IntentionalBreakRange] = [],
+        includeIntentionalBreaks: Bool = false,
         weightUnit: String? = nil,
         calendar: Calendar = .current
     ) throws {
@@ -214,6 +227,8 @@ struct WorkoutCSVExporter {
                 exerciseTagsByName: exerciseTagsByName,
                 gymNamesByWorkoutID: gymNamesByWorkoutID,
                 selectedColumns: selectedColumns,
+                intentionalBreaks: intentionalBreaks,
+                includeIntentionalBreaks: includeIntentionalBreaks,
                 weightUnit: weightUnit,
                 calendar: calendar
             ) { line in
@@ -405,6 +420,8 @@ struct WorkoutCSVExporter {
         exerciseTagsByName: [String: String],
         gymNamesByWorkoutID: [UUID: String],
         selectedColumns: [WorkoutExportColumn],
+        intentionalBreaks: [IntentionalBreakRange],
+        includeIntentionalBreaks: Bool,
         weightUnit: String?,
         calendar: Calendar,
         writeLine: (String) throws -> Void
@@ -444,9 +461,22 @@ struct WorkoutCSVExporter {
             weightHeader = "Weight"
         }
 
-        try writeLine(columns.map { $0.header(weightHeader: weightHeader) }.joined(separator: ","))
+        let breakContexts = includeIntentionalBreaks
+            ? breakContextsOverlapping(intentionalBreaks, range: range, calendar: calendar)
+            : []
 
-        for workout in filtered {
+        let headers: [String]
+        if includeIntentionalBreaks {
+            headers = ["Record Type"] +
+                columns.map { $0.header(weightHeader: weightHeader) } +
+                ["Break Start", "Break End", "Break Name", "Break Days"]
+        } else {
+            headers = columns.map { $0.header(weightHeader: weightHeader) }
+        }
+
+        try writeLine(headers.map(csvEscape).joined(separator: ","))
+
+        func writeWorkoutRows(for workout: Workout) throws {
             var didPrintWorkoutInfo = false
             // Preserve the order exercises were logged/recorded in the workout model.
             // (Some previous versions alphabetized here, which made exports differ from what users logged.)
@@ -480,15 +510,59 @@ struct WorkoutCSVExporter {
                         seconds: set.seconds > 0 ? formatCompactNumber(set.seconds, decimals: 1) : ""
                     )
 
-                    let rowString = columns
+                    var rowValues = columns
                         .map { value(for: $0, context: context) }
-                        .map(csvEscape)
-                        .joined(separator: ",")
 
-                    try writeLine(rowString)
+                    if includeIntentionalBreaks {
+                        rowValues = ["Workout"] + rowValues + Array(repeating: "", count: 4)
+                    }
+
+                    try writeLine(rowValues.map(csvEscape).joined(separator: ","))
                     didPrintWorkoutInfo = true
                     didPrintExerciseInfo = true
                 }
+            }
+        }
+
+        func writeBreakRow(_ context: WorkoutExportBreakContext) throws {
+            let dayFormatter = DateFormatter()
+            dayFormatter.dateFormat = "yyyy-MM-dd"
+            dayFormatter.timeZone = TimeZone.current
+            dayFormatter.locale = Locale(identifier: "en_US_POSIX")
+
+            let rowValues =
+                ["Break"] +
+                Array(repeating: "", count: columns.count) +
+                [
+                    dayFormatter.string(from: context.startDate),
+                    dayFormatter.string(from: context.endDate),
+                    context.name,
+                    String(context.dayCount)
+                ]
+
+            try writeLine(rowValues.map(csvEscape).joined(separator: ","))
+        }
+
+        if includeIntentionalBreaks {
+            var nextBreakIndex = breakContexts.startIndex
+
+            for workout in filtered {
+                while nextBreakIndex < breakContexts.endIndex,
+                      breakContexts[nextBreakIndex].startDate <= workout.date {
+                    try writeBreakRow(breakContexts[nextBreakIndex])
+                    nextBreakIndex = breakContexts.index(after: nextBreakIndex)
+                }
+
+                try writeWorkoutRows(for: workout)
+            }
+
+            while nextBreakIndex < breakContexts.endIndex {
+                try writeBreakRow(breakContexts[nextBreakIndex])
+                nextBreakIndex = breakContexts.index(after: nextBreakIndex)
+            }
+        } else {
+            for workout in filtered {
+                try writeWorkoutRows(for: workout)
             }
         }
     }
@@ -558,6 +632,41 @@ struct WorkoutCSVExporter {
             default:
                 return true
             }
+        }
+    }
+
+    private nonisolated static func breakContextsOverlapping(
+        _ ranges: [IntentionalBreakRange],
+        range: (start: Date, endExclusive: Date),
+        calendar: Calendar
+    ) -> [WorkoutExportBreakContext] {
+        let exportEndInclusive = calendar.date(byAdding: .day, value: -1, to: range.endExclusive) ?? range.start
+
+        return ranges.compactMap { breakRange in
+            let breakStart = calendar.startOfDay(for: breakRange.startDate)
+            let breakEndInclusive = calendar.startOfDay(for: breakRange.endDate)
+            let breakEndExclusive = calendar.date(byAdding: .day, value: 1, to: breakEndInclusive) ?? breakEndInclusive
+
+            guard breakStart < range.endExclusive, breakEndExclusive > range.start else {
+                return nil
+            }
+
+            let clippedStart = max(breakStart, range.start)
+            let clippedEnd = min(breakEndInclusive, exportEndInclusive)
+            guard clippedStart <= clippedEnd else { return nil }
+
+            let span = calendar.dateComponents([.day], from: clippedStart, to: clippedEnd).day ?? 0
+            return WorkoutExportBreakContext(
+                startDate: clippedStart,
+                endDate: clippedEnd,
+                name: breakRange.displayName ?? "",
+                dayCount: max(span + 1, 1)
+            )
+        }
+        .sorted { lhs, rhs in
+            if lhs.startDate != rhs.startDate { return lhs.startDate < rhs.startDate }
+            if lhs.endDate != rhs.endDate { return lhs.endDate < rhs.endDate }
+            return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
         }
     }
 

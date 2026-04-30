@@ -37,6 +37,65 @@ final class WorkoutCSVExporterTests: XCTestCase {
         XCTAssertEqual(lines[2], ",,,190,3")
     }
 
+    func testWorkoutHistoryExportCanIncludeIntentionalBreakContextRows() throws {
+        let firstWorkoutDate = date(year: 2026, month: 4, day: 10, hour: 8)
+        let secondWorkoutDate = date(year: 2026, month: 4, day: 15, hour: 8)
+        let firstWorkout = Workout(
+            date: firstWorkoutDate,
+            name: "Upper A",
+            duration: "45m",
+            exercises: [
+                Exercise(
+                    name: "Bench Press",
+                    sets: [
+                        makeSet(date: firstWorkoutDate, setOrder: 1, weight: 185, reps: 5)
+                    ]
+                )
+            ]
+        )
+        let secondWorkout = Workout(
+            date: secondWorkoutDate,
+            name: "Lower A",
+            duration: "50m",
+            exercises: [
+                Exercise(
+                    name: "Squat",
+                    sets: [
+                        makeSet(date: secondWorkoutDate, setOrder: 1, weight: 225, reps: 5)
+                    ]
+                )
+            ]
+        )
+        let breakRange = IntentionalBreakRange(
+            startDate: date(year: 2026, month: 4, day: 12, hour: 0),
+            endDate: date(year: 2026, month: 4, day: 14, hour: 0),
+            name: "Vacation, Recovery",
+            calendar: calendar
+        )
+
+        let data = try WorkoutCSVExporter.exportWorkoutHistoryCSV(
+            workouts: [secondWorkout, firstWorkout],
+            startDate: firstWorkoutDate,
+            endDateInclusive: secondWorkoutDate,
+            selectedColumns: [.workoutStart, .workoutName, .exercise, .weight, .reps],
+            intentionalBreaks: [breakRange],
+            includeIntentionalBreaks: true,
+            weightUnit: "lbs",
+            calendar: calendar
+        )
+
+        let csv = try XCTUnwrap(String(data: data, encoding: .utf8))
+        let lines = csv.components(separatedBy: "\n")
+
+        XCTAssertEqual(
+            lines[0],
+            "Record Type,Workout Start,Workout Name,Exercise,Weight (lbs),Reps,Break Start,Break End,Break Name,Break Days"
+        )
+        XCTAssertEqual(lines[1], "Workout,2026-04-10 08:00,Upper A,Bench Press,185,5,,,,")
+        XCTAssertEqual(lines[2], "Break,,,,,,2026-04-12,2026-04-14,\"Vacation, Recovery\",3")
+        XCTAssertEqual(lines[3], "Workout,2026-04-15 08:00,Lower A,Squat,225,5,,,,")
+    }
+
     func testWorkoutHistoryExportRejectsEmptyColumnSelection() throws {
         let workoutDate = date(year: 2026, month: 4, day: 10, hour: 8)
         let workout = Workout(

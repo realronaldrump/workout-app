@@ -58,6 +58,17 @@ final class HealthExportAndTimelineTests: XCTestCase {
         XCTAssertEqual(indices.last, 28)
     }
 
+    func testHealthTrendPointIdentityIsStableForLogicalPointUpdates() {
+        let date = dayStart(year: 2026, month: 4, day: 20)
+
+        let original = HealthTrendPoint(date: date, value: 72, label: "Resting HR")
+        let updatedValue = HealthTrendPoint(date: date, value: 74, label: "Resting HR")
+        let differentMetric = HealthTrendPoint(date: date, value: 74, label: "Walking HR")
+
+        XCTAssertEqual(original.id, updatedValue.id)
+        XCTAssertNotEqual(original.id, differentMetric.id)
+    }
+
     func testDailyTimelineRangePolicyLimitsAllTimeToRecentWindow() {
         let start = dayStart(year: 2025, month: 1, day: 1)
         let allDays = (0..<150).map { offset in

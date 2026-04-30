@@ -3,6 +3,29 @@ import Foundation
 import SwiftUI
 import UIKit
 
+@MainActor
+final class RestTimerState: ObservableObject {
+    @Published private(set) var secondsRemaining: Int = 0
+    @Published private(set) var isActive: Bool = false
+    @Published private(set) var duration: Int = 90
+
+    func setDuration(_ seconds: Int) {
+        let clamped = max(15, min(600, seconds))
+        guard clamped != duration else { return }
+        duration = clamped
+    }
+
+    func update(isActive: Bool, secondsRemaining: Int) {
+        let clampedSeconds = max(0, secondsRemaining)
+        if self.isActive != isActive {
+            self.isActive = isActive
+        }
+        if self.secondsRemaining != clampedSeconds {
+            self.secondsRemaining = clampedSeconds
+        }
+    }
+}
+
 enum WorkoutSessionError: LocalizedError {
     case noActiveSession
     case noCompletedSets
@@ -48,10 +71,10 @@ final class WorkoutSessionManager: ObservableObject {
     @Published var activeSession: ActiveWorkoutSession?
     @Published var isPresentingSessionUI: Bool = false
 
-    // Rest timer
-    @Published var restTimerSecondsRemaining: Int = 0
-    @Published var restTimerIsActive: Bool = false
-    @Published var restTimerDuration: Int = 90 // default 90s
+    let restTimer = RestTimerState()
+    var restTimerSecondsRemaining: Int { restTimer.secondsRemaining }
+    var restTimerIsActive: Bool { restTimer.isActive }
+    var restTimerDuration: Int { restTimer.duration }
 
     private let fileName = "active_session_v1.json"
     private let draftStore = ActiveSessionDraftStore()
@@ -351,15 +374,16 @@ final class WorkoutSessionManager: ObservableObject {
     private func beginRestTimer(until endTime: Date) {
         restTimerEndTime = endTime
         restTimerTask?.cancel()
+
+        updateRestTimerState(notifyOnCompletion: false)
         restTimerTask = Task { [weak self] in
             guard let self else { return }
 
-            self.updateRestTimerState(notifyOnCompletion: false)
-
             while !Task.isCancelled {
-                guard self.restTimerIsActive else { return }
+                guard self.restTimerIsActive, let endTime = self.restTimerEndTime else { return }
+                let sleepNanoseconds = self.sleepNanosecondsUntilNextRestTimerTick(endTime: endTime)
                 do {
-                    try await Task.sleep(nanoseconds: 250_000_000)
+                    try await Task.sleep(nanoseconds: sleepNanoseconds)
                 } catch { return }
                 self.updateRestTimerState(notifyOnCompletion: true)
             }
@@ -370,12 +394,11 @@ final class WorkoutSessionManager: ObservableObject {
         restTimerTask?.cancel()
         restTimerTask = nil
         restTimerEndTime = nil
-        restTimerIsActive = false
-        restTimerSecondsRemaining = 0
+        restTimer.update(isActive: false, secondsRemaining: 0)
     }
 
     func setRestTimerDuration(_ seconds: Int) {
-        restTimerDuration = max(15, min(600, seconds))
+        restTimer.setDuration(seconds)
     }
 
     func finish() async throws -> LoggedWorkout {
@@ -590,8 +613,7 @@ final class WorkoutSessionManager: ObservableObject {
         guard let endTime = restTimerEndTime else {
             restTimerTask?.cancel()
             restTimerTask = nil
-            restTimerIsActive = false
-            restTimerSecondsRemaining = 0
+            restTimer.update(isActive: false, secondsRemaining: 0)
             return
         }
 
@@ -600,16 +622,22 @@ final class WorkoutSessionManager: ObservableObject {
             restTimerTask?.cancel()
             restTimerTask = nil
             restTimerEndTime = nil
-            restTimerIsActive = false
-            restTimerSecondsRemaining = 0
+            restTimer.update(isActive: false, secondsRemaining: 0)
             if notifyOnCompletion {
                 Haptics.notify(.success)
             }
             return
         }
 
-        restTimerIsActive = true
-        restTimerSecondsRemaining = Int(ceil(remainingInterval))
+        restTimer.update(isActive: true, secondsRemaining: Int(ceil(remainingInterval)))
+    }
+
+    private func sleepNanosecondsUntilNextRestTimerTick(endTime: Date) -> UInt64 {
+        let remaining = max(0, endTime.timeIntervalSinceNow)
+        let fractional = remaining - floor(remaining)
+        let secondsUntilNextDisplayChange = fractional > 0.02 ? fractional : 1.0
+        let clamped = min(max(secondsUntilNextDisplayChange, 0.05), 1.0)
+        return UInt64(clamped * 1_000_000_000)
     }
 
     private func normalizedExerciseName(_ name: String) -> String {
