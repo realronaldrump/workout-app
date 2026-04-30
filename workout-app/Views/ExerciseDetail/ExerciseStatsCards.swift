@@ -3,6 +3,7 @@ import SwiftUI
 struct ExerciseStatsCards: View {
     let exerciseName: String
     let history: [(date: Date, sets: [WorkoutSet])]
+    var showsPerformanceStats: Bool = true
     @ObservedObject private var metadataManager = ExerciseMetadataManager.shared
     @ObservedObject private var metricManager = ExerciseMetricManager.shared
 
@@ -222,13 +223,22 @@ struct ExerciseStatsCards: View {
                     onTap: { selectedStat = .totalSets }
                 )
 
-                StatCard(
-                    title: ExerciseLoad.weightMetricTitle(for: exerciseName),
-                    value: ExerciseLoad.formatWeight(stats.maxWeight, exerciseName: exerciseName),
-                    icon: "scalemass.fill",
-                    color: Theme.Colors.accentSecondary,
-                    onTap: { selectedStat = .maxWeight }
-                )
+                if showsPerformanceStats {
+                    StatCard(
+                        title: ExerciseLoad.weightMetricTitle(for: exerciseName),
+                        value: ExerciseLoad.formatWeight(stats.maxWeight, exerciseName: exerciseName),
+                        icon: "scalemass.fill",
+                        color: Theme.Colors.accentSecondary,
+                        onTap: { selectedStat = .maxWeight }
+                    )
+                } else {
+                    StatCard(
+                        title: "Sessions",
+                        value: "\(history.count)",
+                        icon: "calendar",
+                        color: Theme.Colors.accentSecondary
+                    )
+                }
 
                 StatCard(
                     title: "Avg Reps",

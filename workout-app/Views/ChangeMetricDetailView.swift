@@ -73,6 +73,27 @@ struct ChangeMetricDetailView: View {
         cachedPreviousWorkouts
     }
 
+    private var topVolumeWorkouts: [Workout] {
+        currentWorkouts
+            .filter { normalizedVolume(for: $0) > 0 }
+            .sorted { normalizedVolume(for: $0) > normalizedVolume(for: $1) }
+            .prefix(8)
+            .map { $0 }
+    }
+
+    private var topExerciseTotals: [(name: String, volume: Double)] {
+        let resolver = ExerciseIdentityResolver.current
+        let exercises = currentWorkouts.flatMap {
+            ExerciseAggregation.aggregateExercises(in: $0, resolver: resolver).filter(\.hasVolume)
+        }
+        return Dictionary(grouping: exercises, by: { $0.name })
+            .map { name, exercises in
+                (name: name, volume: exercises.reduce(0) { $0 + $1.totalVolume })
+            }
+            .filter { $0.volume > 0 }
+            .sorted { $0.volume > $1.volume }
+    }
+
     private var windowLabel: String {
         window.label
     }
@@ -133,9 +154,7 @@ struct ChangeMetricDetailView: View {
         let currentCounts = Dictionary(grouping: currentWorkouts, by: \.name).mapValues(\.count)
         let previousCounts = Dictionary(grouping: previousWorkouts, by: \.name).mapValues(\.count)
         let currentVolume = Dictionary(grouping: currentWorkouts, by: \.name).mapValues { items in
-            items.reduce(0) { partialResult, workout in
-                partialResult + workout.totalVolume
-            }
+            ExerciseAggregation.totalVolume(for: items, resolver: ExerciseIdentityResolver.current)
         }
 
         let names = Set(currentCounts.keys).union(previousCounts.keys)
@@ -697,10 +716,7 @@ struct ChangeMetricDetailView: View {
 
     private var volumeSupporting: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            let topWorkouts = currentWorkouts
-                .filter(\.hasVolume)
-                .sorted { $0.totalVolume > $1.totalVolume }
-                .prefix(8)
+            let topWorkouts = topVolumeWorkouts
 
             if topWorkouts.isEmpty {
                 Text("No volume data in this window.")
@@ -720,7 +736,7 @@ struct ChangeMetricDetailView: View {
                                 Text(workout.name)
                                     .font(Theme.Typography.headline)
                                     .foregroundStyle(Theme.Colors.textPrimary)
-                                Text("\(SharedFormatters.volumePrecise(workout.totalVolume)) volume")
+                                Text("\(SharedFormatters.volumePrecise(normalizedVolume(for: workout))) volume")
                                     .font(Theme.Typography.caption)
                                     .foregroundStyle(Theme.Colors.textSecondary)
                             }
@@ -735,12 +751,7 @@ struct ChangeMetricDetailView: View {
                     .buttonStyle(.plain)
                 }
 
-                let exerciseTotals = Dictionary(grouping: currentWorkouts.flatMap(\.volumeExercises), by: { $0.name })
-                    .map { name, exercises in
-                        (name: name, volume: exercises.reduce(0) { $0 + $1.totalVolume })
-                    }
-                    .filter { $0.volume > 0 }
-                    .sorted { $0.volume > $1.volume }
+                let exerciseTotals = topExerciseTotals
 
                 if !exerciseTotals.isEmpty {
                     Text("Top Exercises")
@@ -786,7 +797,7 @@ struct ChangeMetricDetailView: View {
         case "Sessions":
             return sessionChartPoints
         case "Total Volume":
-            return seriesPoints(from: workouts, value: { $0.totalVolume })
+            return seriesPoints(from: workouts, value: { normalizedVolume(for: $0) })
         default:
             return []
         }
@@ -864,15 +875,12 @@ struct ChangeMetricDetailView: View {
         let totalDurationMinutes = workouts.reduce(0) { partialResult, workout in
             partialResult + workout.estimatedDurationMinutes(defaultMinutes: 0)
         }
+        let resolver = ExerciseIdentityResolver.current
         let totalExercises = workouts.reduce(0) { partialResult, workout in
-            partialResult + workout.exercises.count
+            partialResult + ExerciseAggregation.exerciseCount(for: workout, resolver: resolver)
         }
-        let totalSets = workouts.reduce(0) { partialResult, workout in
-            partialResult + workout.totalSets
-        }
-        let totalVolume = workouts.reduce(0) { partialResult, workout in
-            partialResult + workout.totalVolume
-        }
+        let totalSets = ExerciseAggregation.totalSets(for: workouts, resolver: resolver)
+        let totalVolume = ExerciseAggregation.totalVolume(for: workouts, resolver: resolver)
         let workoutCount = max(workouts.count, 1)
         let busiestDay = Dictionary(grouping: workouts, by: { calendar.startOfDay(for: $0.date) })
             .max { lhs, rhs in
@@ -904,6 +912,14 @@ struct ChangeMetricDetailView: View {
             topWorkoutName: topWorkout,
             busiestDayLabel: busiestDay.map { "\($0.key.formatted(.dateTime.weekday(.abbreviated))) • \($0.value.count)" }
         )
+    }
+
+    private func normalizedVolume(for workout: Workout) -> Double {
+        ExerciseAggregation.totalVolume(for: workout, resolver: ExerciseIdentityResolver.current)
+    }
+
+    private func normalizedSets(for workout: Workout) -> Int {
+        ExerciseAggregation.totalSets(for: workout, resolver: ExerciseIdentityResolver.current)
     }
 
     private func dayCount(for interval: DateInterval) -> Int {
@@ -1316,9 +1332,20 @@ private struct SessionWorkoutCard: View {
 
             HStack(spacing: Theme.Spacing.sm) {
                 WorkoutMetricPill(label: workout.duration, icon: "clock")
-                WorkoutMetricPill(label: "\(workout.exercises.count) ex", icon: "figure.strengthtraining.traditional")
-                WorkoutMetricPill(label: "\(workout.totalSets) sets", icon: "number.square")
-                WorkoutMetricPill(label: SharedFormatters.volumeCompact(workout.totalVolume), icon: "scalemass")
+                WorkoutMetricPill(
+                    label: "\(ExerciseAggregation.exerciseCount(for: workout, resolver: ExerciseIdentityResolver.current)) ex",
+                    icon: "figure.strengthtraining.traditional"
+                )
+                WorkoutMetricPill(
+                    label: "\(ExerciseAggregation.totalSets(for: workout, resolver: ExerciseIdentityResolver.current)) sets",
+                    icon: "number.square"
+                )
+                WorkoutMetricPill(
+                    label: SharedFormatters.volumeCompact(
+                        ExerciseAggregation.totalVolume(for: workout, resolver: ExerciseIdentityResolver.current)
+                    ),
+                    icon: "scalemass"
+                )
             }
 
             Text(exercisePreview)

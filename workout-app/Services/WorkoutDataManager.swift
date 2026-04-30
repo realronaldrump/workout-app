@@ -32,19 +32,23 @@ class WorkoutDataManager: ObservableObject {
     private static let importedWorkoutsSourceTimestampKey = "importedWorkoutsSourceTimestamp"
 
     private let database = AppDatabase.shared
-    private let identityStore = WorkoutIdentityStore()
+    private let identityStore = WorkoutIdentityStore.shared
     private let userDefaults = UserDefaults.standard
-    private var exerciseHistoryCache: [String: [ExerciseHistorySession]] = [:]
+    private var aggregateExerciseHistoryCache: [String: [ExerciseHistorySession]] = [:]
+    private var exactExerciseHistoryCache: [String: [ExerciseHistorySession]] = [:]
     private var exerciseSummariesCache: [ExerciseSummary] = []
     private var allExerciseNamesCache: [String] = []
     private var recentExerciseNamesCache: [String] = []
     private var importedWorkoutRequestID: UInt64 = 0
 
+    nonisolated deinit {}
+
     private struct DerivedWorkoutState {
         let workouts: [Workout]
         let importedWorkouts: [Workout]
         let loggedWorkouts: [Workout]
-        let exerciseHistory: [String: [ExerciseHistorySession]]
+        let aggregateExerciseHistory: [String: [ExerciseHistorySession]]
+        let exactExerciseHistory: [String: [ExerciseHistorySession]]
         let exerciseSummaries: [ExerciseSummary]
         let allExerciseNames: [String]
         let recentExerciseNames: [String]
@@ -93,11 +97,13 @@ class WorkoutDataManager: ObservableObject {
     func setLoggedWorkoutsOffMain(_ logged: [LoggedWorkout]) async {
         let importedSnapshot = importedWorkouts
         let loggedIds = Set(logged.map(\.id))
+        let resolver = ExerciseRelationshipManager.shared.resolverSnapshot()
         let state = await Task.detached(priority: .userInitiated) {
             let mapped = logged.map(Self.mapLoggedWorkoutToAnalyticsWorkout)
             return Self.makeDerivedWorkoutState(
                 importedWorkouts: importedSnapshot,
-                loggedWorkouts: mapped
+                loggedWorkouts: mapped,
+                resolver: resolver
             )
         }.value
         loggedWorkoutIds = loggedIds
@@ -249,17 +255,20 @@ class WorkoutDataManager: ObservableObject {
         applyDerivedState(
             Self.makeDerivedWorkoutState(
                 importedWorkouts: importedWorkouts,
-                loggedWorkouts: loggedWorkouts
+                loggedWorkouts: loggedWorkouts,
+                resolver: ExerciseRelationshipManager.shared.resolverSnapshot()
             )
         )
     }
 
     private func applyImportedWorkouts(_ imported: [Workout]) async {
         let loggedSnapshot = loggedWorkouts
+        let resolver = ExerciseRelationshipManager.shared.resolverSnapshot()
         let state = await Task.detached(priority: .userInitiated) {
             Self.makeDerivedWorkoutState(
                 importedWorkouts: imported,
-                loggedWorkouts: loggedSnapshot
+                loggedWorkouts: loggedSnapshot,
+                resolver: resolver
             )
         }.value
         applyDerivedState(state)
@@ -269,18 +278,24 @@ class WorkoutDataManager: ObservableObject {
         workouts = state.workouts
         importedWorkouts = state.importedWorkouts
         loggedWorkouts = state.loggedWorkouts
-        exerciseHistoryCache = state.exerciseHistory
+        aggregateExerciseHistoryCache = state.aggregateExerciseHistory
+        exactExerciseHistoryCache = state.exactExerciseHistory
         exerciseSummariesCache = state.exerciseSummaries
         allExerciseNamesCache = state.allExerciseNames
         recentExerciseNamesCache = state.recentExerciseNames
     }
 
     func getExerciseHistory(for exerciseName: String) -> [(date: Date, sets: [WorkoutSet])] {
-        (exerciseHistoryCache[exerciseName] ?? []).map { (date: $0.date, sets: $0.sets) }
+        (exactExerciseHistoryCache[ExerciseIdentityResolver.trimmedName(exerciseName)] ?? [])
+            .map { (date: $0.date, sets: $0.sets) }
     }
 
-    func exerciseHistorySessions(for exerciseName: String) -> [ExerciseHistorySession] {
-        exerciseHistoryCache[exerciseName] ?? []
+    func exerciseHistorySessions(for exerciseName: String, includingVariants: Bool = true) -> [ExerciseHistorySession] {
+        let key = ExerciseIdentityResolver.trimmedName(exerciseName)
+        if includingVariants {
+            return aggregateExerciseHistoryCache[key] ?? exactExerciseHistoryCache[key] ?? []
+        }
+        return exactExerciseHistoryCache[key] ?? []
     }
 
     func exerciseSummaries() -> [ExerciseSummary] {
@@ -296,6 +311,10 @@ class WorkoutDataManager: ObservableObject {
         return Array(recentExerciseNamesCache.prefix(limit))
     }
 
+    func refreshExerciseIdentityDerivedState() {
+        mergeSources()
+    }
+
     func calculateStats() -> WorkoutStats {
         return calculateStats(for: workouts)
     }
@@ -307,11 +326,16 @@ class WorkoutDataManager: ObservableObject {
         let breakRanges = intentionalBreakRanges ?? IntentionalBreaksStore.load(
             key: IntentionalBreaksStore.savedBreaksKey
         )
+        let resolver = ExerciseRelationshipManager.shared.resolverSnapshot()
         let allExercises = filteredWorkouts.flatMap { $0.exercises }
         let exerciseGroups = Dictionary(grouping: allExercises) { $0.name }
+        let aggregateExercises = filteredWorkouts.flatMap {
+            ExerciseAggregation.aggregateExercises(in: $0, resolver: resolver)
+        }
+        let aggregateExerciseGroups = Dictionary(grouping: aggregateExercises) { $0.name }
 
         // Calculate favorite exercise (most performed)
-        let favoriteExercise = exerciseGroups
+        let favoriteExercise = aggregateExerciseGroups
             .map { (name: $0.key, count: $0.value.count) }
             .max { $0.count < $1.count }?.name
 
@@ -361,9 +385,9 @@ class WorkoutDataManager: ObservableObject {
 
         return WorkoutStats(
             totalWorkouts: filteredWorkouts.count,
-            totalExercises: exerciseGroups.keys.count,
-            totalVolume: filteredWorkouts.reduce(0) { $0 + $1.totalVolume },
-            totalSets: filteredWorkouts.reduce(0) { $0 + $1.totalSets },
+            totalExercises: aggregateExerciseGroups.keys.count,
+            totalVolume: ExerciseAggregation.totalVolume(for: filteredWorkouts, resolver: resolver),
+            totalSets: ExerciseAggregation.totalSets(for: filteredWorkouts, resolver: resolver),
             favoriteExercise: favoriteExercise,
             strongestExercise: strongestExercise,
             mostImprovedExercise: mostImprovedExercise,
@@ -492,7 +516,8 @@ class WorkoutDataManager: ObservableObject {
         loggedWorkoutIds = []
         isLoading = false
         error = nil
-        exerciseHistoryCache = [:]
+        aggregateExerciseHistoryCache = [:]
+        exactExerciseHistoryCache = [:]
         exerciseSummariesCache = []
         allExerciseNamesCache = []
         recentExerciseNamesCache = []
@@ -613,12 +638,14 @@ class WorkoutDataManager: ObservableObject {
 
     private nonisolated static func makeDerivedWorkoutState(
         importedWorkouts: [Workout],
-        loggedWorkouts: [Workout]
+        loggedWorkouts: [Workout],
+        resolver: ExerciseIdentityResolver
     ) -> DerivedWorkoutState {
         let sortedImported = importedWorkouts.sorted { $0.date > $1.date }
         let sortedLogged = loggedWorkouts.sorted { $0.date > $1.date }
         let workouts = (sortedImported + sortedLogged).sorted { $0.date > $1.date }
-        var historyByExercise: [String: [ExerciseHistorySession]] = [:]
+        var aggregateHistoryByExercise: [String: [ExerciseHistorySession]] = [:]
+        var exactHistoryByExercise: [String: [ExerciseHistorySession]] = [:]
         var summaryByExercise: [String: ExerciseStatsAccumulator] = [:]
         var allExerciseNames = Set<String>()
         var seenRecentExerciseKeys = Set<String>()
@@ -628,60 +655,77 @@ class WorkoutDataManager: ObservableObject {
 
         for workout in workouts {
             for exercise in workout.exercises {
-                historyByExercise[exercise.name, default: []].append(
+                let exactName = resolver.performanceTrackName(for: exercise.name)
+                exactHistoryByExercise[exactName, default: []].append(
                     ExerciseHistorySession(workoutId: workout.id, date: workout.date, sets: exercise.sets)
                 )
-
-                var accumulator = summaryByExercise[exercise.name] ?? ExerciseStatsAccumulator()
-                accumulator.totalVolume += exercise.totalVolume
-                if let currentBest = accumulator.maxWeight {
-                    if ExerciseLoad.isBetter(exercise.maxWeight, than: currentBest, exerciseName: exercise.name) {
-                        accumulator.maxWeight = exercise.maxWeight
-                    }
-                } else {
-                    accumulator.maxWeight = exercise.maxWeight
-                }
-                accumulator.frequency += 1
-                accumulator.lastPerformed = max(accumulator.lastPerformed ?? workout.date, workout.date)
-                if let currentBest = accumulator.oneRepMax {
-                    if ExerciseLoad.isBetter(exercise.oneRepMax, than: currentBest, exerciseName: exercise.name) {
-                        accumulator.oneRepMax = exercise.oneRepMax
-                    }
-                } else {
-                    accumulator.oneRepMax = exercise.oneRepMax
-                }
-                summaryByExercise[exercise.name] = accumulator
 
                 let trimmedName = exercise.name.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !trimmedName.isEmpty else { continue }
 
                 allExerciseNames.insert(trimmedName)
-
-                let recentKey = trimmedName.lowercased()
+                let aggregateName = resolver.aggregateName(for: trimmedName)
+                let recentKey = ExerciseIdentityResolver.normalizedName(aggregateName)
                 if seenRecentExerciseKeys.insert(recentKey).inserted {
-                    recentExerciseNames.append(trimmedName)
+                    recentExerciseNames.append(aggregateName)
                 }
+            }
+
+            for (rank, aggregateExercise) in ExerciseAggregation.aggregateExercises(in: workout, resolver: resolver).enumerated() {
+                let aggregateName = aggregateExercise.name
+                let sortedSets = aggregateExercise.sets
+                aggregateHistoryByExercise[aggregateName, default: []].append(
+                    ExerciseHistorySession(workoutId: workout.id, date: workout.date, sets: sortedSets)
+                )
+
+                var accumulator = summaryByExercise[aggregateName] ?? ExerciseStatsAccumulator()
+                accumulator.totalVolume += aggregateExercise.totalVolume
+                if let currentBest = accumulator.maxWeight {
+                    if ExerciseLoad.isBetter(aggregateExercise.maxWeight, than: currentBest, exerciseName: aggregateName) {
+                        accumulator.maxWeight = aggregateExercise.maxWeight
+                    }
+                } else {
+                    accumulator.maxWeight = aggregateExercise.maxWeight
+                }
+                accumulator.frequency += 1
+                accumulator.lastPerformed = max(accumulator.lastPerformed ?? workout.date, workout.date)
+                if let currentBest = accumulator.oneRepMax {
+                    if ExerciseLoad.isBetter(aggregateExercise.oneRepMax, than: currentBest, exerciseName: aggregateName) {
+                        accumulator.oneRepMax = aggregateExercise.oneRepMax
+                    }
+                } else {
+                    accumulator.oneRepMax = aggregateExercise.oneRepMax
+                }
+                accumulator.hasRelationshipVariants = accumulator.hasRelationshipVariants ||
+                    resolver.containsRelationship(for: aggregateName) ||
+                    !resolver.children(of: aggregateName).isEmpty
+                accumulator.firstSeenRank = min(accumulator.firstSeenRank ?? Int.max, rank)
+                summaryByExercise[aggregateName] = accumulator
             }
         }
 
-        for name in historyByExercise.keys {
-            historyByExercise[name]?.sort { $0.date < $1.date }
+        for name in aggregateHistoryByExercise.keys {
+            aggregateHistoryByExercise[name]?.sort { $0.date < $1.date }
+        }
+        for name in exactHistoryByExercise.keys {
+            exactHistoryByExercise[name]?.sort { $0.date < $1.date }
         }
 
         return DerivedWorkoutState(
             workouts: workouts,
             importedWorkouts: sortedImported,
             loggedWorkouts: sortedLogged,
-            exerciseHistory: historyByExercise,
+            aggregateExerciseHistory: aggregateHistoryByExercise,
+            exactExerciseHistory: exactHistoryByExercise,
             exerciseSummaries: summaryByExercise.map { name, accumulator in
                 ExerciseSummary(
                     name: name,
                     stats: ExerciseStats(
                         totalVolume: accumulator.totalVolume,
-                        maxWeight: accumulator.maxWeight ?? 0,
+                        maxWeight: accumulator.hasRelationshipVariants ? 0 : accumulator.maxWeight ?? 0,
                         frequency: accumulator.frequency,
                         lastPerformed: accumulator.lastPerformed,
-                        oneRepMax: accumulator.oneRepMax ?? 0
+                        oneRepMax: accumulator.hasRelationshipVariants ? 0 : accumulator.oneRepMax ?? 0
                     )
                 )
             }
@@ -694,12 +738,14 @@ class WorkoutDataManager: ObservableObject {
 }
 
 extension WorkoutDataManager {
-    struct ExerciseStatsAccumulator {
+    nonisolated struct ExerciseStatsAccumulator {
         var totalVolume: Double = 0
         var maxWeight: Double?
         var frequency: Int = 0
         var lastPerformed: Date?
         var oneRepMax: Double?
+        var firstSeenRank: Int?
+        var hasRelationshipVariants = false
     }
 
     struct ImportedWorkoutBuildResult {

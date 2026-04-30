@@ -105,6 +105,11 @@ final class AppAnalytics {
         queue.sync {
             guard !didConfigure else { return }
             didConfigure = true
+            guard !Self.isRunningTests else {
+                collectionEnabled = false
+                remoteConfiguration = nil
+                return
+            }
             collectionEnabled = readCollectionEnabled()
             debugLogging = readBoolFromInfoDictionary(Self.debugLoggingKey)
 
@@ -137,6 +142,7 @@ final class AppAnalytics {
     }
 
     func setCollectionEnabled(_ enabled: Bool) {
+        guard !Self.isRunningTests else { return }
         userDefaults.set(enabled, forKey: Self.collectionEnabledKey)
         queue.async {
             self.collectionEnabled = enabled
@@ -151,6 +157,7 @@ final class AppAnalytics {
     }
 
     func handleScenePhaseChange(_ phase: ScenePhase) {
+        guard !Self.isRunningTests else { return }
         configureIfNeeded()
 
         queue.async {
@@ -177,6 +184,7 @@ final class AppAnalytics {
     }
 
     func track(_ name: String, payload: [String: String] = [:], floatValue: Double? = nil) {
+        guard !Self.isRunningTests else { return }
         configureIfNeeded()
         queue.async {
             self.enqueue(name: name, payload: payload, floatValue: floatValue)
@@ -223,6 +231,10 @@ final class AppAnalytics {
 
     private func readBoolFromInfoDictionary(_ key: String) -> Bool {
         Bundle.main.object(forInfoDictionaryKey: key) as? Bool ?? false
+    }
+
+    private static var isRunningTests: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     }
 
     private func hashedInstallIdentifier() -> String {

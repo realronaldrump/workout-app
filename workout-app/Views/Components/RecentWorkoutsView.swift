@@ -55,7 +55,10 @@ struct WorkoutRowView: View {
 
                     HStack(spacing: Theme.Spacing.md) {
                         Label(workout.duration, systemImage: "clock")
-                        Label("\(workout.exercises.count) exercises", systemImage: "figure.strengthtraining.traditional")
+                        Label(
+                            "\(ExerciseAggregation.exerciseCount(for: workout, resolver: ExerciseIdentityResolver.current)) exercises",
+                            systemImage: "figure.strengthtraining.traditional"
+                        )
                     }
                     .font(Theme.Typography.caption)
                     .foregroundColor(Theme.Colors.textTertiary)

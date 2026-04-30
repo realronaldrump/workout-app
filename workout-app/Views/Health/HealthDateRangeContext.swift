@@ -7,6 +7,8 @@ final class HealthDateRangeContext: ObservableObject {
     @Published var selectedRange: AppTimeRange = .fourWeeks
     @Published var customRange: DateInterval
 
+    nonisolated deinit {}
+
     init(
         selectedRange: AppTimeRange = .fourWeeks,
         customRange: DateInterval? = nil
@@ -27,6 +29,10 @@ final class HealthDateRangeContext: ObservableObject {
             earliest: earliest,
             custom: customRange
         )
+        if selectedRange == .allTime, earliest != nil {
+            return DateInterval(start: rawRange.start, end: min(rawRange.end, reference))
+        }
+
         let calendar = Calendar.current
         let start = calendar.startOfDay(for: rawRange.start)
         let end = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: rawRange.end) ?? rawRange.end

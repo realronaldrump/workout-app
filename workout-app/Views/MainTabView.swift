@@ -106,6 +106,7 @@ struct MainTabView: View {
     @StateObject private var variantEngine = WorkoutVariantEngine()
     @StateObject private var similarityEngine = WorkoutSimilarityEngine()
     @StateObject private var migrationManager = LegacyDataMigrationManager()
+    @ObservedObject private var relationshipManager = ExerciseRelationshipManager.shared
     @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
     @State private var showingOnboarding = false
     @State private var pendingOnboarding = false
@@ -255,6 +256,12 @@ struct MainTabView: View {
         }
         .onReceive(gymProfilesManager.$gyms) { _ in
             scheduleVariantAnalysis()
+        }
+        .onChange(of: relationshipManager.relationships) { _, _ in
+            dataManager.refreshExerciseIdentityDerivedState()
+            scheduleInsightsRefresh()
+            scheduleVariantAnalysis()
+            scheduleSimilarityAnalysis()
         }
         .onReceive(intentionalBreaksManager.$savedBreaks) { _ in
             scheduleInsightsRefresh()

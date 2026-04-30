@@ -52,7 +52,7 @@ enum AppDataClearCategory: String, CaseIterable, Identifiable, Sendable {
         case .intentionalBreaks:
             return "Saved break ranges and dismissed break suggestions."
         case .exerciseCustomization:
-            return "Muscle tags, custom tags, cardio metric preferences, and favorite exercises."
+            return "Muscle tags, custom tags, exercise relationships, cardio metric preferences, and favorite exercises."
         case .profileAndPreferences:
             return "Profile name, appearance, goals, weight increment, and Health source preferences."
         case .guideProgress:
@@ -112,6 +112,7 @@ struct AppDataClearContext {
     var gymProfilesManager: GymProfilesManager
     var exerciseMetadataManager: ExerciseMetadataManager = .shared
     var exerciseMetricManager: ExerciseMetricManager = .shared
+    var exerciseRelationshipManager: ExerciseRelationshipManager = .shared
     var featureGuideManager: FeatureGuideManager = .shared
     var userDefaults: UserDefaults = .standard
 }
@@ -164,6 +165,8 @@ enum AppDataClearService {
         if categories.contains(.exerciseCustomization) {
             context.exerciseMetadataManager.clearOverrides()
             context.exerciseMetricManager.clearOverrides()
+            context.exerciseRelationshipManager.clearRelationships()
+            context.dataManager.refreshExerciseIdentityDerivedState()
             context.userDefaults.removeObject(forKey: "favoriteExercises")
         }
 

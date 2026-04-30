@@ -21,6 +21,7 @@ struct WorkoutHistoryView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var annotationsManager: WorkoutAnnotationsManager
     @EnvironmentObject private var gymProfilesManager: GymProfilesManager
+    @ObservedObject private var relationshipManager = ExerciseRelationshipManager.shared
 
     var body: some View {
         let filteredWorkouts = cachedFilteredWorkouts
@@ -110,6 +111,9 @@ struct WorkoutHistoryView: View {
             scheduleDerivedStateRefresh(debounceNs: 0)
         }
         .onReceive(gymProfilesManager.$gyms) { _ in
+            scheduleDerivedStateRefresh(debounceNs: 0)
+        }
+        .onChange(of: relationshipManager.relationships) { _, _ in
             scheduleDerivedStateRefresh(debounceNs: 0)
         }
         .onDisappear {
@@ -448,9 +452,10 @@ struct WorkoutHistoryView: View {
 
     private func buildAvailableExerciseOptions() -> [HistoryExerciseOption] {
         var counts: [String: Int] = [:]
+        let resolver = relationshipManager.resolverSnapshot()
 
         for workout in workouts {
-            for exerciseName in Set(workout.exercises.map(\.name)) {
+            for exerciseName in exerciseFilterNames(for: workout, resolver: resolver) {
                 counts[exerciseName, default: 0] += 1
             }
         }
@@ -597,8 +602,11 @@ struct WorkoutHistoryView: View {
 
     private func matchesSearch(_ workout: Workout) -> Bool {
         guard !searchText.isEmpty else { return true }
+        let resolver = relationshipManager.resolverSnapshot()
         return workout.name.localizedCaseInsensitiveContains(searchText)
-            || workout.exercises.contains { $0.name.localizedCaseInsensitiveContains(searchText) }
+            || exerciseFilterNames(for: workout, resolver: resolver).contains {
+                $0.localizedCaseInsensitiveContains(searchText)
+            }
     }
 
     private func matchesTimeWindow(_ workout: Workout) -> Bool {
@@ -619,8 +627,20 @@ struct WorkoutHistoryView: View {
         guard let selectedExercises else { return true }
         guard !selectedExercises.isEmpty else { return false }
 
-        let names = Set(workout.exercises.map(\.name))
-        return selectedExercises.contains { names.contains($0.name) }
+        let resolver = relationshipManager.resolverSnapshot()
+        let names = Set(exerciseFilterNames(for: workout, resolver: resolver).map(ExerciseIdentityResolver.normalizedName))
+        return selectedExercises.contains {
+            names.contains(ExerciseIdentityResolver.normalizedName($0.name))
+        }
+    }
+
+    private func exerciseFilterNames(for workout: Workout, resolver: ExerciseIdentityResolver) -> Set<String> {
+        workout.exercises.reduce(into: Set<String>()) { names, exercise in
+            let rawName = ExerciseIdentityResolver.trimmedName(exercise.name)
+            guard !rawName.isEmpty else { return }
+            names.insert(rawName)
+            names.insert(resolver.aggregateName(for: rawName))
+        }
     }
 
     private func matchesDuration(_ workout: Workout) -> Bool {
@@ -825,6 +845,14 @@ struct WorkoutHistoryRow: View {
     @EnvironmentObject var dataManager: WorkoutDataManager
     @AppStorage("weightIncrement") private var weightIncrement: Double = 2.5
 
+    private var normalizedVolume: Double {
+        ExerciseAggregation.totalVolume(for: workout, resolver: ExerciseIdentityResolver.current)
+    }
+
+    private var normalizedExerciseCount: Int {
+        ExerciseAggregation.exerciseCount(for: workout, resolver: ExerciseIdentityResolver.current)
+    }
+
     var body: some View {
         HStack(spacing: Theme.Spacing.md) {
             NavigationLink(destination: WorkoutDetailView(workout: workout)) {
@@ -851,8 +879,8 @@ struct WorkoutHistoryRow: View {
 
                         HStack(spacing: 12) {
                             metric(workout.duration, systemImage: "clock")
-                            metric("\(workout.exercises.count) exercises", systemImage: "figure.strengthtraining.traditional")
-                            metric(SharedFormatters.volumeWithUnit(workout.totalVolume), systemImage: "scalemass")
+                            metric("\(normalizedExerciseCount) exercises", systemImage: "figure.strengthtraining.traditional")
+                            metric(SharedFormatters.volumeWithUnit(normalizedVolume), systemImage: "scalemass")
                         }
                         .font(Theme.Typography.captionBold)
                         .padding(.top, 4)
@@ -872,8 +900,8 @@ struct WorkoutHistoryRow: View {
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel(
                     "\(workout.name), \(workout.date.formatted(date: .abbreviated, time: .shortened)), "
-                    + "\(workout.duration), \(workout.exercises.count) exercises, "
-                    + "\(SharedFormatters.volumeWithUnit(workout.totalVolume))"
+                    + "\(workout.duration), \(normalizedExerciseCount) exercises, "
+                    + "\(SharedFormatters.volumeWithUnit(normalizedVolume))"
                 )
                 .accessibilityHint("Double tap for workout details, swipe left to repeat")
             }

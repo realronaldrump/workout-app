@@ -2,6 +2,16 @@ import XCTest
 @testable import workout_app
 
 final class WorkoutRepositoryPerformanceStoreTests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        ExerciseRelationshipManager.shared.clearRelationships()
+    }
+
+    override func tearDown() {
+        ExerciseRelationshipManager.shared.clearRelationships()
+        super.tearDown()
+    }
+
     func testNormalizedStoreRoundTripsImportedWorkoutHierarchy() throws {
         let database = AppDatabase(inMemory: true)
         let date = makeDate(hour: 9)
@@ -137,6 +147,116 @@ final class WorkoutRepositoryPerformanceStoreTests: XCTestCase {
 
         let unassignedSnapshot = try await repository.exerciseDetail(name: "Bench Press", scope: .unassigned)
         XCTAssertEqual(unassignedSnapshot.workouts.map(\.id), [otherTargetWorkoutId])
+    }
+
+    func testExerciseDirectorySearchMatchesChildVariantNames() async throws {
+        let database = AppDatabase(inMemory: true)
+        let repository = WorkoutRepository(database: database)
+        ExerciseRelationshipManager.shared.setRelationship(
+            exerciseName: "Leg Extension (Machine) - Left",
+            parentName: "Leg Extension (Machine)",
+            laterality: .left
+        )
+
+        try database.saveImportedWorkouts([
+            makeWorkout(
+                id: UUID(),
+                day: 10,
+                name: "Lower",
+                exercises: [
+                    makeExercise(name: "Leg Extension (Machine) - Left", orderOffset: 0, date: makeDate(day: 10, hour: 8))
+                ]
+            )
+        ])
+
+        let page = try await repository.exerciseDirectory(
+            query: "Left",
+            sort: .alphabetical,
+            limit: 20
+        )
+
+        XCTAssertEqual(page.exercises.map(\.name), ["Leg Extension (Machine)"])
+        XCTAssertEqual(page.totalCount, 1)
+    }
+
+    func testWorkoutHistoryFilterMatchesParentRollupForChildVariantWorkouts() async throws {
+        let database = AppDatabase(inMemory: true)
+        let repository = WorkoutRepository(database: database)
+        let matchingWorkoutId = UUID()
+        ExerciseRelationshipManager.shared.setRelationship(
+            exerciseName: "Leg Extension (Machine) - Left",
+            parentName: "Leg Extension (Machine)",
+            laterality: .left
+        )
+
+        try database.saveImportedWorkouts([
+            makeWorkout(
+                id: matchingWorkoutId,
+                day: 10,
+                name: "Lower",
+                exercises: [
+                    makeExercise(name: "Leg Extension (Machine) - Left", orderOffset: 0, date: makeDate(day: 10, hour: 8))
+                ]
+            ),
+            makeWorkout(
+                id: UUID(),
+                day: 11,
+                name: "Upper",
+                exercises: [
+                    makeExercise(name: "Bench Press", orderOffset: 10, date: makeDate(day: 11, hour: 8))
+                ]
+            )
+        ])
+
+        let page = try await repository.workoutHistoryPage(
+            filter: WorkoutHistoryFilter(exerciseNames: ["Leg Extension (Machine)"]),
+            limit: 20
+        )
+
+        XCTAssertEqual(page.workouts.map(\.id), [matchingWorkoutId])
+        XCTAssertEqual(page.totalCount, 1)
+    }
+
+    func testRepositoryExerciseDetailAggregatesParentAndKeepsVariantExact() async throws {
+        let database = AppDatabase(inMemory: true)
+        let repository = WorkoutRepository(database: database)
+        ExerciseRelationshipManager.shared.setRelationship(
+            exerciseName: "Leg Extension (Machine) - Left",
+            parentName: "Leg Extension (Machine)",
+            laterality: .left
+        )
+        ExerciseRelationshipManager.shared.setRelationship(
+            exerciseName: "Leg Extension (Machine) - Right",
+            parentName: "Leg Extension (Machine)",
+            laterality: .right
+        )
+
+        try database.saveImportedWorkouts([
+            makeWorkout(
+                id: UUID(),
+                day: 10,
+                name: "Lower A",
+                exercises: [
+                    makeExercise(name: "Leg Extension (Machine) - Left", orderOffset: 0, date: makeDate(day: 10, hour: 8))
+                ]
+            ),
+            makeWorkout(
+                id: UUID(),
+                day: 12,
+                name: "Lower B",
+                exercises: [
+                    makeExercise(name: "Leg Extension (Machine) - Right", orderOffset: 10, date: makeDate(day: 12, hour: 8))
+                ]
+            )
+        ])
+
+        let parent = try await repository.exerciseDetail(name: "Leg Extension (Machine)", scope: .all)
+        XCTAssertEqual(parent.history.count, 2)
+        XCTAssertEqual(parent.history.reduce(0) { $0 + $1.sets.count }, 2)
+
+        let left = try await repository.exerciseDetail(name: "Leg Extension (Machine) - Left", scope: .all)
+        XCTAssertEqual(left.history.count, 1)
+        XCTAssertEqual(left.history.first?.sets.first?.exerciseName, "Leg Extension (Machine) - Left")
     }
 
     private func makeDate(hour: Int) -> Date {

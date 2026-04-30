@@ -71,6 +71,13 @@ final class AppBackupServiceTests: XCTestCase {
                         schemaVersion: 1
                     )
                 ],
+                exerciseRelationships: [
+                    ExerciseRelationship(
+                        exerciseName: "Leg Extension (Machine) - Left",
+                        parentName: "Leg Extension (Machine)",
+                        laterality: .left
+                    )
+                ],
                 intentionalBreakRanges: [breakRange],
                 dismissedIntentionalBreakSuggestions: [breakRange],
                 favoriteExercises: ["Bench Press"],
@@ -109,6 +116,9 @@ final class AppBackupServiceTests: XCTestCase {
         XCTAssertEqual(decoded.payload.dailyHealthData.first?.dayStart, day)
         XCTAssertEqual(decoded.payload.exerciseTagOverrides["Bench Press"], [.builtIn(.chest)])
         XCTAssertEqual(decoded.payload.exerciseMetricPreferences["Stair Stepper"]?.countLabel, "floors")
+        XCTAssertEqual(decoded.payload.exerciseRelationships.first?.exerciseName, "Leg Extension (Machine) - Left")
+        XCTAssertEqual(decoded.payload.exerciseRelationships.first?.parentName, "Leg Extension (Machine)")
+        XCTAssertEqual(decoded.payload.exerciseRelationships.first?.laterality, .left)
         XCTAssertEqual(decoded.payload.favoriteExercises, ["Bench Press"])
         XCTAssertEqual(decoded.payload.completedFeatureGuideIDs, ["dashboard"])
         XCTAssertEqual(decoded.payload.settings.profileName, "Davis")

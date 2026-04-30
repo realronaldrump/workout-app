@@ -644,9 +644,11 @@ struct WorkoutSessionView: View {
     ) -> [MuscleGroupSuggestion] {
         guard !dataManager.workouts.isEmpty else { return [] }
 
+        let resolver = ExerciseIdentityResolver.current
         var covered = Set<MuscleGroup>()
         for exercise in session.exercises {
-            for group in groupMappings[exercise.name] ?? [] {
+            let aggregateName = resolver.aggregateName(for: exercise.name)
+            for group in groupMappings[exercise.name] ?? groupMappings[aggregateName] ?? [] {
                 covered.insert(group)
             }
         }
@@ -655,7 +657,8 @@ struct WorkoutSessionView: View {
         return MuscleRecencySuggestionEngine.suggestions(
             workouts: dataManager.workouts,
             muscleGroupsByExerciseName: groupMappings,
-            excluding: covered.union(dismissed)
+            excluding: covered.union(dismissed),
+            resolver: resolver
         )
     }
 

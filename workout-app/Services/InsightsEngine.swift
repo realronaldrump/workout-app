@@ -31,13 +31,14 @@ class InsightsEngine: ObservableObject {
         let workoutsSnapshot = dataManager.workouts
         let annotationsSnapshot = annotationsProvider()
         let gymNameSnapshot = gymNameProvider()
+        let resolver = ExerciseRelationshipManager.shared.resolverSnapshot()
 
         // Run analysis in parallel
         let newInsights = await Task.detached(priority: .userInitiated) {
             return await withTaskGroup(of: [Insight].self) { group in
                 // Personal Records
                 group.addTask {
-                    return self.detectPersonalRecords(in: workoutsSnapshot)
+                    return self.detectPersonalRecords(in: workoutsSnapshot, resolver: resolver)
                 }
 
                 // New Equipment Baseline
@@ -45,18 +46,19 @@ class InsightsEngine: ObservableObject {
                     return self.detectNewEquipmentBaseline(
                         in: workoutsSnapshot,
                         annotations: annotationsSnapshot,
-                        gymNames: gymNameSnapshot
+                        gymNames: gymNameSnapshot,
+                        resolver: resolver
                     )
                 }
 
                 // Progressive Overload Detection
                 group.addTask {
-                    return self.detectProgressiveOverload(in: workoutsSnapshot)
+                    return self.detectProgressiveOverload(in: workoutsSnapshot, resolver: resolver)
                 }
 
                 // Volume Milestones
                 group.addTask {
-                    return self.detectVolumeMilestones(in: workoutsSnapshot)
+                    return self.detectVolumeMilestones(in: workoutsSnapshot, resolver: resolver)
                 }
 
                 // Consistency Streaks
@@ -79,26 +81,32 @@ class InsightsEngine: ObservableObject {
 
     // MARK: - Personal Records Detection
 
-    private nonisolated func detectPersonalRecords(in workouts: [Workout]) -> [Insight] {
+    private nonisolated func detectPersonalRecords(
+        in workouts: [Workout],
+        resolver: ExerciseIdentityResolver
+    ) -> [Insight] {
         var prInsights: [Insight] = []
         let calendar = Calendar.current
         guard let oneWeekAgo = calendar.date(byAdding: .day, value: -7, to: Date()) else { return [] }
 
-        let allExercises = workouts.flatMap { $0.exercises }
-        let exerciseGroups = Dictionary(grouping: allExercises) { $0.name }
+        let exerciseNames = Set(
+            workouts.flatMap { workout in
+                workout.exercises.map { resolver.performanceTrackName(for: $0.name) }
+            }
+            .filter { !ExerciseIdentityResolver.trimmedName($0).isEmpty }
+        )
+        .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
 
-        for (exerciseName, _) in exerciseGroups {
+        for exerciseName in exerciseNames {
             let isAssisted = ExerciseLoad.isAssistedExercise(exerciseName)
-            // Re-implement simplified getExerciseHistory logic here to avoid actor isolation issues or dependency
-            // OR ensure getExerciseHistory is nonisolated/safe.
-            // Better to implement local logic using the snapshot.
-
-            let history = workouts.compactMap { workout -> (date: Date, sets: [WorkoutSet])? in
-                if let exercise = workout.exercises.first(where: { $0.name == exerciseName }) {
-                    return (date: workout.date, sets: exercise.sets)
-                }
-                return nil
-            }.sorted { $0.date < $1.date }
+            let history = ExerciseAggregation
+                .historySessions(
+                    in: workouts,
+                    for: exerciseName,
+                    includingVariants: false,
+                    resolver: resolver
+                )
+                .map { (date: $0.date, sets: $0.sets) }
 
             guard history.count >= 2 else { continue }
 
@@ -186,16 +194,21 @@ class InsightsEngine: ObservableObject {
     private nonisolated func detectNewEquipmentBaseline(
         in workouts: [Workout],
         annotations: [UUID: WorkoutAnnotation],
-        gymNames: [UUID: String]
+        gymNames: [UUID: String],
+        resolver: ExerciseIdentityResolver
     ) -> [Insight] {
         var baselineInsights: [Insight] = []
 
-        let allExercises = workouts.flatMap { $0.exercises }
+        let allExercises = workouts.flatMap {
+            ExerciseAggregation.aggregateExercises(in: $0, resolver: resolver)
+        }
         let exerciseGroups = Dictionary(grouping: allExercises) { $0.name }
 
         for (exerciseName, _) in exerciseGroups {
             let sessions = workouts.compactMap { workout -> (date: Date, gymId: UUID?)? in
-                if workout.exercises.contains(where: { $0.name == exerciseName }) {
+                if ExerciseAggregation
+                    .aggregateExercises(in: workout, resolver: resolver)
+                    .contains(where: { $0.name == exerciseName }) {
                     let gymId = annotations[workout.id]?.gymProfileId
                     return (date: workout.date, gymId: gymId)
                 }
@@ -233,13 +246,18 @@ class InsightsEngine: ObservableObject {
 
     // MARK: - Progressive Overload Detection
 
-    private nonisolated func detectProgressiveOverload(in workouts: [Workout]) -> [Insight] {
+    private nonisolated func detectProgressiveOverload(
+        in workouts: [Workout],
+        resolver: ExerciseIdentityResolver
+    ) -> [Insight] {
         var insights: [Insight] = []
         let calendar = Calendar.current
         guard let fourWeeksAgo = calendar.date(byAdding: .day, value: -28, to: Date()) else { return [] }
 
         let exerciseGroups = Dictionary(
-            grouping: workouts.flatMap { workout in workout.exercises.map { (workout.date, $0) } },
+            grouping: workouts.flatMap { workout in
+                ExerciseAggregation.aggregateExercises(in: workout, resolver: resolver).map { (workout.date, $0) }
+            },
             by: { $0.1.name }
         )
 
@@ -285,11 +303,14 @@ class InsightsEngine: ObservableObject {
 
     // MARK: - Volume Milestones
 
-    private nonisolated func detectVolumeMilestones(in workouts: [Workout]) -> [Insight] {
+    private nonisolated func detectVolumeMilestones(
+        in workouts: [Workout],
+        resolver: ExerciseIdentityResolver
+    ) -> [Insight] {
         var insights: [Insight] = []
 
         // Total lifetime volume milestones
-        let totalVolume = workouts.reduce(0.0) { $0 + $1.totalVolume }
+        let totalVolume = ExerciseAggregation.totalVolume(for: workouts, resolver: resolver)
         let milestones: [(threshold: Double, label: String)] = [
             (10_000_000, "10M lbs"),
             (5_000_000, "5M lbs"),

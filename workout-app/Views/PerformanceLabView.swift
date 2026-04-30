@@ -26,6 +26,7 @@ struct PerformanceLabView: View {
     @EnvironmentObject var gymProfilesManager: GymProfilesManager
     @EnvironmentObject var intentionalBreaksManager: IntentionalBreaksManager
     @EnvironmentObject var variantEngine: WorkoutVariantEngine
+    @ObservedObject private var relationshipManager = ExerciseRelationshipManager.shared
     @AppStorage("intentionalRestDays") private var intentionalRestDays: Int = 1
 
     @State private var selectedTimeFilter: TimeFilter = .twoWeeks
@@ -408,7 +409,8 @@ struct PerformanceLabView: View {
 
     private var comparisonSection: some View {
         let window = selectedChangeWindow
-        let changes = window.map { WorkoutAnalytics.changeMetrics(for: workouts, window: $0) } ?? []
+        let resolver = relationshipManager.resolverSnapshot()
+        let changes = window.map { WorkoutAnalytics.changeMetrics(for: workouts, window: $0, resolver: resolver) } ?? []
 
         return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             Text("Trending")
@@ -451,7 +453,8 @@ struct PerformanceLabView: View {
         let contributions = WorkoutAnalytics.progressContributions(
             workouts: workoutsThroughRangeEnd,
             weeks: selectedWindowWeeks,
-            mappings: muscleMapping
+            mappings: muscleMapping,
+            resolver: relationshipManager.resolverSnapshot()
         )
         let exerciseGains = contributions
             .filter { $0.category == .exercise }
@@ -650,9 +653,11 @@ struct PerformanceLabView: View {
 
     private func muscleEffortTotals(for sourceWorkouts: [Workout]) -> [MuscleTag: Double] {
         var totals: [MuscleTag: Double] = [:]
+        let resolver = relationshipManager.resolverSnapshot()
         for workout in sourceWorkouts {
-            for exercise in workout.exercises {
-                let tags = muscleMapping[exercise.name] ?? []
+            for exercise in ExerciseAggregation.aggregateExercises(in: workout, resolver: resolver) {
+                let tags = muscleMapping[exercise.name]
+                    ?? ExerciseMetadataManager.shared.resolvedTags(for: exercise.name)
                 guard !tags.isEmpty else { continue }
                 let effort = exerciseEffortScore(exercise)
                 guard effort > 0 else { continue }

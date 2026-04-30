@@ -3,6 +3,7 @@ import SwiftUI
 struct PersonalRecordsView: View {
     let exerciseName: String
     let history: [(date: Date, sets: [WorkoutSet])]
+    var title: String = "Personal Records"
     @ObservedObject private var metadataManager = ExerciseMetadataManager.shared
     @ObservedObject private var metricManager = ExerciseMetricManager.shared
 
@@ -138,9 +139,11 @@ struct PersonalRecordsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-            Text("Personal Records")
-                .font(Theme.Typography.title2)
-                .foregroundColor(Theme.Colors.textPrimary)
+            if !title.isEmpty {
+                Text(title)
+                    .font(Theme.Typography.title2)
+                    .foregroundColor(Theme.Colors.textPrimary)
+            }
 
             VStack(spacing: Theme.Spacing.md) {
                 ForEach(records) { record in

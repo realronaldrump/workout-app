@@ -28,6 +28,14 @@ struct WorkoutDetailView: View {
         cachedResolvedWorkout ?? dataManager.workouts.first(where: { $0.id == workout.id }) ?? workout
     }
 
+    private var normalizedExerciseCount: Int {
+        ExerciseAggregation.exerciseCount(for: workout, resolver: ExerciseIdentityResolver.current)
+    }
+
+    private var normalizedVolume: Double {
+        ExerciseAggregation.totalVolume(for: workout, resolver: ExerciseIdentityResolver.current)
+    }
+
     private var isLoggedWorkout: Bool {
         dataManager.loggedWorkoutIds.contains(workout.id)
     }
@@ -81,7 +89,7 @@ struct WorkoutDetailView: View {
                                     Text("Exercises")
                                         .font(Theme.Typography.caption)
                                         .foregroundColor(Theme.Colors.textTertiary)
-                                    Text("\(workout.exercises.count)")
+                                    Text("\(normalizedExerciseCount)")
                                         .font(Theme.Typography.metric)
                                         .foregroundColor(Theme.Colors.textPrimary)
                                 }
@@ -92,7 +100,7 @@ struct WorkoutDetailView: View {
                                     Text("Total Volume")
                                         .font(Theme.Typography.caption)
                                         .foregroundColor(Theme.Colors.textTertiary)
-                                    Text(SharedFormatters.volumeWithUnit(workout.totalVolume))
+                                    Text(SharedFormatters.volumeWithUnit(normalizedVolume))
                                         .font(Theme.Typography.metric)
                                         .foregroundColor(Theme.Colors.textPrimary)
                                 }

@@ -26,6 +26,8 @@ nonisolated enum WorkoutExportColumn: String, CaseIterable, Hashable, Identifiab
     case gymName
     case duration
     case exercise
+    case parentExercise
+    case side
     case tags
     case setNumber
     case weight
@@ -60,6 +62,10 @@ nonisolated enum WorkoutExportColumn: String, CaseIterable, Hashable, Identifiab
             return "Duration"
         case .exercise:
             return "Exercise"
+        case .parentExercise:
+            return "Parent Exercise"
+        case .side:
+            return "Side"
         case .tags:
             return "Tags"
         case .setNumber:
@@ -87,6 +93,10 @@ nonisolated enum WorkoutExportColumn: String, CaseIterable, Hashable, Identifiab
             return "Logged workout duration."
         case .exercise:
             return "Exercise name."
+        case .parentExercise:
+            return "Rollup parent for side-specific exercise variants."
+        case .side:
+            return "Left, right, or unilateral side metadata for variants."
         case .tags:
             return "Exercise muscle tags."
         case .setNumber:
@@ -114,6 +124,10 @@ nonisolated enum WorkoutExportColumn: String, CaseIterable, Hashable, Identifiab
             return "timer"
         case .exercise:
             return "dumbbell"
+        case .parentExercise:
+            return "rectangle.stack"
+        case .side:
+            return "arrow.left.and.right"
         case .tags:
             return "tag"
         case .setNumber:
@@ -145,6 +159,8 @@ private nonisolated struct WorkoutExportRowContext {
     let gymName: String
     let duration: String
     let exerciseName: String
+    let parentExerciseName: String
+    let side: String
     let muscles: String
     let setOrder: String
     let weight: String
@@ -177,6 +193,7 @@ struct WorkoutCSVExporter {
         intentionalBreaks: [IntentionalBreakRange] = [],
         includeIntentionalBreaks: Bool = false,
         weightUnit: String? = nil,
+        resolver: ExerciseIdentityResolver = .empty,
         calendar: Calendar = .current
     ) throws -> Data {
         var data = Data()
@@ -192,6 +209,7 @@ struct WorkoutCSVExporter {
             intentionalBreaks: intentionalBreaks,
             includeIntentionalBreaks: includeIntentionalBreaks,
             weightUnit: weightUnit,
+            resolver: resolver,
             calendar: calendar
         ) { line in
             if wroteAnyLine {
@@ -215,6 +233,7 @@ struct WorkoutCSVExporter {
         intentionalBreaks: [IntentionalBreakRange] = [],
         includeIntentionalBreaks: Bool = false,
         weightUnit: String? = nil,
+        resolver: ExerciseIdentityResolver = .empty,
         calendar: Calendar = .current
     ) throws {
         try iCloudDocumentManager.writeFileAtomically(to: destinationURL) { handle in
@@ -230,6 +249,7 @@ struct WorkoutCSVExporter {
                 intentionalBreaks: intentionalBreaks,
                 includeIntentionalBreaks: includeIntentionalBreaks,
                 weightUnit: weightUnit,
+                resolver: resolver,
                 calendar: calendar
             ) { line in
                 if wroteAnyLine {
@@ -267,6 +287,7 @@ struct WorkoutCSVExporter {
         endDateInclusive: Date,
         includeTags: Bool,
         exerciseTagsByName: [String: String] = [:],
+        resolver: ExerciseIdentityResolver = .empty,
         calendar: Calendar = .current
     ) throws -> Data {
         var data = Data()
@@ -278,6 +299,7 @@ struct WorkoutCSVExporter {
             endDateInclusive: endDateInclusive,
             includeTags: includeTags,
             exerciseTagsByName: exerciseTagsByName,
+            resolver: resolver,
             calendar: calendar
         ) { line in
             if wroteAnyLine {
@@ -297,6 +319,7 @@ struct WorkoutCSVExporter {
         endDateInclusive: Date,
         includeTags: Bool,
         exerciseTagsByName: [String: String] = [:],
+        resolver: ExerciseIdentityResolver = .empty,
         calendar: Calendar = .current
     ) throws {
         try iCloudDocumentManager.writeFileAtomically(to: destinationURL) { handle in
@@ -308,6 +331,7 @@ struct WorkoutCSVExporter {
                 endDateInclusive: endDateInclusive,
                 includeTags: includeTags,
                 exerciseTagsByName: exerciseTagsByName,
+                resolver: resolver,
                 calendar: calendar
             ) { line in
                 if wroteAnyLine {
@@ -423,6 +447,7 @@ struct WorkoutCSVExporter {
         intentionalBreaks: [IntentionalBreakRange],
         includeIntentionalBreaks: Bool,
         weightUnit: String?,
+        resolver: ExerciseIdentityResolver,
         calendar: Calendar,
         writeLine: (String) throws -> Void
     ) throws {
@@ -494,6 +519,9 @@ struct WorkoutCSVExporter {
                     let duration = didPrintWorkoutInfo ? "" : workout.duration
 
                     let exerciseName = didPrintExerciseInfo ? "" : exercise.name
+                    let identity = resolver.displayIdentity(for: exercise.name)
+                    let parentExerciseName = didPrintExerciseInfo || !identity.isVariant ? "" : identity.aggregateName
+                    let side = didPrintExerciseInfo ? "" : (identity.sideLabel ?? "")
                     let muscles = didPrintExerciseInfo ? "" : (exerciseTagsByName[exercise.name] ?? "")
 
                     let context = WorkoutExportRowContext(
@@ -502,6 +530,8 @@ struct WorkoutCSVExporter {
                         gymName: didPrintWorkoutInfo ? "" : (gymNamesByWorkoutID[workout.id] ?? ""),
                         duration: duration,
                         exerciseName: exerciseName,
+                        parentExerciseName: parentExerciseName,
+                        side: side,
                         muscles: muscles,
                         setOrder: String(set.setOrder),
                         weight: formatCompactNumber(set.weight, decimals: 1),
@@ -573,6 +603,7 @@ struct WorkoutCSVExporter {
         endDateInclusive: Date,
         includeTags: Bool,
         exerciseTagsByName: [String: String],
+        resolver: ExerciseIdentityResolver,
         calendar: Calendar,
         writeLine: (String) throws -> Void
     ) throws {
@@ -594,11 +625,31 @@ struct WorkoutCSVExporter {
             throw WorkoutExportError.noExercisesInRange
         }
 
+        let relationshipRows = sortedNames.map { name in
+            let identity = resolver.displayIdentity(for: name)
+            return (
+                name: name,
+                tags: exerciseTagsByName[name] ?? "",
+                parent: identity.isVariant ? identity.aggregateName : "",
+                side: identity.sideLabel ?? ""
+            )
+        }
+
+        let hasRelationshipMetadata = relationshipRows.contains { !$0.parent.isEmpty || !$0.side.isEmpty }
+
         if includeTags {
-            try writeLine(["Exercise", "Tags"].joined(separator: ","))
+            let headers = hasRelationshipMetadata
+                ? ["Exercise", "Tags", "Parent Exercise", "Side"]
+                : ["Exercise", "Tags"]
+            try writeLine(headers.joined(separator: ","))
             for name in sortedNames {
-                let tags = exerciseTagsByName[name] ?? ""
-                try writeLine([csvEscape(name), csvEscape(tags)].joined(separator: ","))
+                let identity = resolver.displayIdentity(for: name)
+                var row = [csvEscape(name), csvEscape(exerciseTagsByName[name] ?? "")]
+                if hasRelationshipMetadata {
+                    row.append(csvEscape(identity.isVariant ? identity.aggregateName : ""))
+                    row.append(csvEscape(identity.sideLabel ?? ""))
+                }
+                try writeLine(row.joined(separator: ","))
             }
         } else {
             try writeLine("Exercise")
@@ -682,6 +733,10 @@ struct WorkoutCSVExporter {
             return context.duration
         case .exercise:
             return context.exerciseName
+        case .parentExercise:
+            return context.parentExerciseName
+        case .side:
+            return context.side
         case .tags:
             return context.muscles
         case .setNumber:

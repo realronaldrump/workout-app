@@ -39,14 +39,16 @@ enum MuscleRecencySuggestionEngine {
         now: Date = Date(),
         calendar: Calendar = .current,
         maxGroups: Int = 3,
-        maxOptionsPerGroup: Int = 6
+        maxOptionsPerGroup: Int = 6,
+        resolver: ExerciseIdentityResolver = .empty
     ) -> [MuscleGroupSuggestion] {
         guard !workouts.isEmpty else { return [] }
 
         let aggregated = aggregate(
             workouts: workouts,
             muscleGroupsByExerciseName: muscleGroupsByExerciseName,
-            excluding: alreadyCoveredGroups
+            excluding: alreadyCoveredGroups,
+            resolver: resolver
         )
         let lastTrainedByGroup = aggregated.lastTrainedByGroup
         let exerciseStatsByGroup = aggregated.exerciseStatsByGroup
@@ -79,11 +81,13 @@ enum MuscleRecencySuggestionEngine {
         workouts: [Workout],
         muscleGroupsByExerciseName: [String: [MuscleGroup]],
         now: Date = Date(),
-        calendar: Calendar = .current
+        calendar: Calendar = .current,
+        resolver: ExerciseIdentityResolver = .empty
     ) -> [MuscleGroupRecency] {
         let aggregated = aggregate(
             workouts: workouts,
-            muscleGroupsByExerciseName: muscleGroupsByExerciseName
+            muscleGroupsByExerciseName: muscleGroupsByExerciseName,
+            resolver: resolver
         )
 
         return MuscleGroup.allCases
@@ -140,14 +144,18 @@ enum MuscleRecencySuggestionEngine {
     nonisolated private static func aggregate(
         workouts: [Workout],
         muscleGroupsByExerciseName: [String: [MuscleGroup]],
-        excluding: Set<MuscleGroup> = []
+        excluding: Set<MuscleGroup> = [],
+        resolver: ExerciseIdentityResolver
     ) -> (lastTrainedByGroup: [MuscleGroup: Date], exerciseStatsByGroup: [MuscleGroup: [String: (last: Date, count: Int)]]) {
         var lastTrainedByGroup: [MuscleGroup: Date] = [:]
         var exerciseStatsByGroup: [MuscleGroup: [String: (last: Date, count: Int)]] = [:]
 
         for workout in workouts {
-            for exercise in workout.exercises {
-                let groups = muscleGroupsByExerciseName[exercise.name] ?? []
+            for exercise in ExerciseAggregation.aggregateExercises(in: workout, resolver: resolver) {
+                let aggregateName = exercise.name
+                let groups = muscleGroupsByExerciseName[exercise.name]
+                    ?? muscleGroupsByExerciseName[aggregateName]
+                    ?? []
                 guard !groups.isEmpty else { continue }
 
                 for group in groups {
@@ -160,11 +168,11 @@ enum MuscleRecencySuggestionEngine {
                     }
 
                     var groupStats = exerciseStatsByGroup[group] ?? [:]
-                    if let existing = groupStats[exercise.name] {
+                    if let existing = groupStats[aggregateName] {
                         let last = max(existing.last, workout.date)
-                        groupStats[exercise.name] = (last, existing.count + 1)
+                        groupStats[aggregateName] = (last, existing.count + 1)
                     } else {
-                        groupStats[exercise.name] = (workout.date, 1)
+                        groupStats[aggregateName] = (workout.date, 1)
                     }
                     exerciseStatsByGroup[group] = groupStats
                 }

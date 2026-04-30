@@ -20,7 +20,7 @@ struct WorkoutSessionInsightsView: View {
     }
 
     private var exerciseVolumes: [ExerciseVolumePoint] {
-        workout.exercises
+        ExerciseAggregation.aggregateExercises(in: workout, resolver: ExerciseIdentityResolver.current)
             .compactMap { exercise in
                 guard exercise.hasVolume else { return nil }
                 return ExerciseVolumePoint(name: exercise.name, volume: exercise.totalVolume)
@@ -120,9 +120,20 @@ struct WorkoutSessionInsightsView: View {
                 .foregroundStyle(Theme.Colors.textPrimary)
 
             LazyVGrid(columns: statColumns, spacing: Theme.Spacing.md) {
-                MetricStatPill(title: "Volume", value: SharedFormatters.volumeCompact(workout.totalVolume))
-                MetricStatPill(title: "Total Sets", value: "\(workout.totalSets)")
-                MetricStatPill(title: "Exercises", value: "\(workout.exercises.count)")
+                MetricStatPill(
+                    title: "Volume",
+                    value: SharedFormatters.volumeCompact(
+                        ExerciseAggregation.totalVolume(for: workout, resolver: ExerciseIdentityResolver.current)
+                    )
+                )
+                MetricStatPill(
+                    title: "Total Sets",
+                    value: "\(ExerciseAggregation.totalSets(for: workout, resolver: ExerciseIdentityResolver.current))"
+                )
+                MetricStatPill(
+                    title: "Exercises",
+                    value: "\(ExerciseAggregation.exerciseCount(for: workout, resolver: ExerciseIdentityResolver.current))"
+                )
             }
         }
         .padding(Theme.Spacing.lg)
@@ -170,7 +181,7 @@ struct WorkoutSessionInsightsView: View {
                 .foregroundStyle(Theme.Colors.textPrimary)
 
             let sorted = Array(
-                workout.exercises
+                ExerciseAggregation.aggregateExercises(in: workout, resolver: ExerciseIdentityResolver.current)
                     .compactMap { exercise -> (name: String, volume: Double)? in
                         guard exercise.hasVolume else { return nil }
                         return (name: exercise.name, volume: exercise.totalVolume)

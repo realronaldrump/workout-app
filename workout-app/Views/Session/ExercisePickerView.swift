@@ -3,6 +3,7 @@ import SwiftUI
 struct ExercisePickerView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var dataManager: WorkoutDataManager
+    @ObservedObject private var relationshipManager = ExerciseRelationshipManager.shared
 
     @State private var searchText: String = ""
     @AppStorage("favoriteExercises") private var favoriteExercisesData: String = "[]"
@@ -12,11 +13,13 @@ struct ExercisePickerView: View {
     private var favoriteExerciseNames: [String] {
         guard let data = favoriteExercisesData.data(using: .utf8),
               let array = try? JSONDecoder().decode([String].self, from: data) else { return [] }
-        return array.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+        let resolver = relationshipManager.resolverSnapshot()
+        return Array(Set(array.map { resolver.aggregateName(for: $0) }))
+            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
     }
 
     private func isFavorite(_ name: String) -> Bool {
-        favoriteExerciseNames.contains(name)
+        !favoriteRollupNames(for: name).isDisjoint(with: Set(favoriteExerciseNames))
     }
 
     private func toggleFavorite(_ name: String) {
@@ -27,10 +30,11 @@ struct ExercisePickerView: View {
         } else {
             favorites = []
         }
-        if favorites.contains(name) {
-            favorites.remove(name)
+        let rollupNames = favoriteRollupNames(for: name)
+        if !favorites.isDisjoint(with: rollupNames) {
+            favorites.subtract(rollupNames)
         } else {
-            favorites.insert(name)
+            favorites.insert(relationshipManager.resolverSnapshot().aggregateName(for: name))
         }
         if let data = try? JSONEncoder().encode(Array(favorites)),
            let string = String(data: data, encoding: .utf8) {
@@ -117,18 +121,23 @@ struct ExercisePickerView: View {
 
     private var allExercises: [String] {
         let catalogNames = ExerciseMetadataManager.defaultExerciseNames
+        let relationshipNames = relationshipManager.relationships.values.flatMap { [$0.exerciseName, $0.parentName] }
         if dataManager.allExerciseNames().isEmpty {
-            return catalogNames
+            return Array(Set(catalogNames + relationshipNames))
+                .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
         }
 
-        return Array(Set(dataManager.allExerciseNames() + catalogNames))
+        return Array(Set(dataManager.allExerciseNames() + catalogNames + relationshipNames))
             .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
     }
 
     private var allExercisesExcludingRecent: [String] {
         let recent = Set(recentExercises)
         let favs = Set(favoriteExerciseNames)
-        return allExercises.filter { !recent.contains($0) && !favs.contains($0) }
+        return allExercises.filter { name in
+            let rollupNames = favoriteRollupNames(for: name)
+            return recent.isDisjoint(with: rollupNames) && favs.isDisjoint(with: rollupNames)
+        }
     }
 
     private var filteredExercises: [String] {
@@ -142,6 +151,16 @@ struct ExercisePickerView: View {
         guard !query.isEmpty else { return false }
         let exists = allExercises.contains { $0.compare(query, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame }
         return !exists
+    }
+
+    private func favoriteRollupNames(for name: String) -> Set<String> {
+        let resolver = relationshipManager.resolverSnapshot()
+        let aggregateName = resolver.aggregateName(for: name)
+        var names = Set([name, aggregateName])
+        for child in resolver.children(of: aggregateName) {
+            names.insert(child.exerciseName)
+        }
+        return names
     }
 
     private var createRow: some View {

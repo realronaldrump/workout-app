@@ -172,6 +172,91 @@ final class WorkoutCSVExporterTests: XCTestCase {
         XCTAssertEqual(actual, expected)
     }
 
+    func testWorkoutHistoryExportCanIncludeRelationshipColumns() throws {
+        let workoutDate = date(year: 2026, month: 4, day: 10, hour: 8)
+        let workout = Workout(
+            date: workoutDate,
+            name: "Lower A",
+            duration: "45m",
+            exercises: [
+                Exercise(
+                    name: "Leg Extension (Machine) - Left",
+                    sets: [
+                        WorkoutSet(
+                            date: workoutDate,
+                            workoutName: "Lower A",
+                            duration: "45m",
+                            exerciseName: "Leg Extension (Machine) - Left",
+                            setOrder: 1,
+                            weight: 50,
+                            reps: 10,
+                            distance: 0,
+                            seconds: 0
+                        )
+                    ]
+                )
+            ]
+        )
+        let resolver = ExerciseIdentityResolver(relationships: [
+            "left": ExerciseRelationship(
+                exerciseName: "Leg Extension (Machine) - Left",
+                parentName: "Leg Extension (Machine)",
+                laterality: .left
+            )
+        ])
+
+        let data = try WorkoutCSVExporter.exportWorkoutHistoryCSV(
+            workouts: [workout],
+            startDate: workoutDate,
+            endDateInclusive: workoutDate,
+            selectedColumns: [.exercise, .parentExercise, .side, .weight, .reps],
+            resolver: resolver,
+            calendar: calendar
+        )
+
+        let csv = try XCTUnwrap(String(data: data, encoding: .utf8))
+        let lines = csv.components(separatedBy: "\n")
+        XCTAssertEqual(lines[0], "Exercise,Parent Exercise,Side,Weight,Reps")
+        XCTAssertEqual(lines[1], "Leg Extension (Machine) - Left,Leg Extension (Machine),Left,50,10")
+    }
+
+    func testExerciseListExportIncludesRelationshipMetadataWhenTagsAreIncluded() throws {
+        let workoutDate = date(year: 2026, month: 4, day: 10, hour: 8)
+        let workout = Workout(
+            date: workoutDate,
+            name: "Lower A",
+            duration: "45m",
+            exercises: [
+                Exercise(
+                    name: "Leg Extension (Machine) - Right",
+                    sets: [makeSet(date: workoutDate, setOrder: 1, weight: 55, reps: 8)]
+                )
+            ]
+        )
+        let resolver = ExerciseIdentityResolver(relationships: [
+            "right": ExerciseRelationship(
+                exerciseName: "Leg Extension (Machine) - Right",
+                parentName: "Leg Extension (Machine)",
+                laterality: .right
+            )
+        ])
+
+        let data = try WorkoutCSVExporter.exportExerciseListCSV(
+            workouts: [workout],
+            startDate: workoutDate,
+            endDateInclusive: workoutDate,
+            includeTags: true,
+            exerciseTagsByName: ["Leg Extension (Machine) - Right": "Quads"],
+            resolver: resolver,
+            calendar: calendar
+        )
+
+        let csv = try XCTUnwrap(String(data: data, encoding: .utf8))
+        let lines = csv.components(separatedBy: "\n")
+        XCTAssertEqual(lines[0], "Exercise,Tags,Parent Exercise,Side")
+        XCTAssertEqual(lines[1], "Leg Extension (Machine) - Right,Quads,Leg Extension (Machine),Right")
+    }
+
     private var calendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "America/Denver") ?? .current

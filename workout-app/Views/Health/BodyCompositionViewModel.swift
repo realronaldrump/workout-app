@@ -23,6 +23,8 @@ final class BodyCompositionViewModel: ObservableObject {
 
     @Published var reportBuckets: [ReportBucket] = []
 
+    nonisolated deinit {}
+
     func load(
         dailyEntries: [DailyHealthData],
         metricKind: BodyCompositionMetricKind,
@@ -44,7 +46,7 @@ final class BodyCompositionViewModel: ObservableObject {
 
         sampleCountInDisplayRange = rawSamples.filter { displayRange.contains($0.timestamp) }.count
 
-        let daily = BodyCompositionAnalytics.dailyRepresentatives(from: rawSamples)
+        let daily = dailyRepresentativesPreservingStoredDayStarts(from: rawSamples)
         let repsInDisplayRange = daily.filter { displayRange.contains($0.dayStart) }
 
         guard !repsInDisplayRange.isEmpty else {
@@ -104,7 +106,7 @@ final class BodyCompositionViewModel: ObservableObject {
         let latestTrend = BodyCompositionAnalytics.trendSummaryForLatest(representatives: daily, windowDays: 30)
         if let latestTrend,
            let latestPoint = points.last,
-           let latestRegression = regressions[calendarStartOfDay(latestPoint.date)] {
+           let latestRegression = regressions[latestPoint.date] {
             trendSummary = latestTrend
             forecastPoints = BodyCompositionAnalytics.forecast(
                 latestDay: latestPoint.date,
@@ -162,7 +164,26 @@ final class BodyCompositionViewModel: ObservableObject {
             .sorted { $0.timestamp < $1.timestamp }
     }
 
-    private func calendarStartOfDay(_ date: Date) -> Date {
-        Calendar.current.startOfDay(for: date)
+    private func dailyRepresentativesPreservingStoredDayStarts(
+        from samples: [BodyRawSample]
+    ) -> [BodyCompositionAnalytics.DailyRepresentative] {
+        guard !samples.isEmpty else { return [] }
+
+        let grouped = Dictionary(grouping: samples) { sample in
+            sample.timestamp
+        }
+
+        let representatives: [BodyCompositionAnalytics.DailyRepresentative] = grouped.compactMap { entry in
+            let sorted = entry.value.sorted { $0.timestamp < $1.timestamp }
+            guard let first = sorted.first else { return nil }
+            return BodyCompositionAnalytics.DailyRepresentative(
+                dayStart: entry.key,
+                timestamp: first.timestamp,
+                value: first.value,
+                samples: sorted
+            )
+        }
+
+        return representatives.sorted { $0.dayStart < $1.dayStart }
     }
 }

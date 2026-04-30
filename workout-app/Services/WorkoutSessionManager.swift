@@ -9,6 +9,8 @@ final class RestTimerState: ObservableObject {
     @Published private(set) var isActive: Bool = false
     @Published private(set) var duration: Int = 90
 
+    nonisolated deinit {}
+
     func setDuration(_ seconds: Int) {
         let clamped = max(15, min(600, seconds))
         guard clamped != duration else { return }
@@ -81,6 +83,11 @@ final class WorkoutSessionManager: ObservableObject {
     private var persistTask: Task<Void, Never>?
     private var restTimerTask: Task<Void, Never>?
     private var restTimerEndTime: Date?
+
+    nonisolated deinit {
+        persistTask?.cancel()
+        restTimerTask?.cancel()
+    }
 
     func restoreDraft() async {
         let url = fileURL()
@@ -506,6 +513,7 @@ final class WorkoutSessionManager: ObservableObject {
     // MARK: - Draft Persistence
 
     private func schedulePersistDraft() {
+        guard !Self.isRunningTests else { return }
         persistTask?.cancel()
         persistTask = Task { [weak self] in
             do {
@@ -648,6 +656,10 @@ final class WorkoutSessionManager: ObservableObject {
         ExerciseMetadataManager.shared
             .resolvedTags(for: name)
             .contains(where: { $0.builtInGroup == .cardio })
+    }
+
+    private static var isRunningTests: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     }
 }
 

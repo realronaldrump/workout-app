@@ -568,7 +568,10 @@ struct CalendarHeatmap: View {
         let calendar = Calendar.current
         return workouts.reduce(into: [Date: Double]()) { totals, workout in
             let day = calendar.startOfDay(for: workout.date)
-            totals[day, default: 0] += workout.totalVolume
+            totals[day, default: 0] += ExerciseAggregation.totalVolume(
+                for: workout,
+                resolver: ExerciseIdentityResolver.current
+            )
         }
     }
 

@@ -51,7 +51,7 @@ nonisolated struct AppBackupImportResult {
 
 nonisolated struct BigBeautifulWorkoutBackup: Codable {
     static let currentFormatIdentifier = "com.davis.big-beautiful-workout.backup"
-    static let currentSchemaVersion = 1
+    static let currentSchemaVersion = 2
 
     var formatIdentifier: String
     var schemaVersion: Int
@@ -88,6 +88,7 @@ nonisolated struct AppBackupPayload: Codable {
     var dailyHealthCoverage: [Date]
     var exerciseTagOverrides: [String: [MuscleTag]]
     var exerciseMetricPreferences: [String: ExerciseCardioMetricPreferences]
+    var exerciseRelationships: [ExerciseRelationship]
     var intentionalBreakRanges: [IntentionalBreakRange]
     var dismissedIntentionalBreakSuggestions: [IntentionalBreakRange]
     var favoriteExercises: [String]
@@ -105,6 +106,7 @@ nonisolated struct AppBackupPayload: Codable {
         dailyHealthCoverage: [Date] = [],
         exerciseTagOverrides: [String: [MuscleTag]] = [:],
         exerciseMetricPreferences: [String: ExerciseCardioMetricPreferences] = [:],
+        exerciseRelationships: [ExerciseRelationship] = [],
         intentionalBreakRanges: [IntentionalBreakRange] = [],
         dismissedIntentionalBreakSuggestions: [IntentionalBreakRange] = [],
         favoriteExercises: [String] = [],
@@ -121,6 +123,7 @@ nonisolated struct AppBackupPayload: Codable {
         self.dailyHealthCoverage = dailyHealthCoverage
         self.exerciseTagOverrides = exerciseTagOverrides
         self.exerciseMetricPreferences = exerciseMetricPreferences
+        self.exerciseRelationships = exerciseRelationships
         self.intentionalBreakRanges = intentionalBreakRanges
         self.dismissedIntentionalBreakSuggestions = dismissedIntentionalBreakSuggestions
         self.favoriteExercises = favoriteExercises
@@ -146,6 +149,10 @@ nonisolated struct AppBackupPayload: Codable {
             [String: ExerciseCardioMetricPreferences].self,
             forKey: .exerciseMetricPreferences
         ) ?? [:]
+        exerciseRelationships = try container.decodeIfPresent(
+            [ExerciseRelationship].self,
+            forKey: .exerciseRelationships
+        ) ?? []
         intentionalBreakRanges = try container.decodeIfPresent(
             [IntentionalBreakRange].self,
             forKey: .intentionalBreakRanges
@@ -193,12 +200,14 @@ enum AppBackupService {
         intentionalBreaksManager: IntentionalBreaksManager,
         exerciseMetadataManager: ExerciseMetadataManager? = nil,
         exerciseMetricManager: ExerciseMetricManager? = nil,
+        exerciseRelationshipManager: ExerciseRelationshipManager? = nil,
         featureGuideManager: FeatureGuideManager? = nil,
         userDefaults: UserDefaults = .standard,
         database: AppDatabase = .shared
     ) throws -> BigBeautifulWorkoutBackup {
         let exerciseMetadataManager = exerciseMetadataManager ?? .shared
         let exerciseMetricManager = exerciseMetricManager ?? .shared
+        let exerciseRelationshipManager = exerciseRelationshipManager ?? .shared
         let featureGuideManager = featureGuideManager ?? .shared
         let info = Bundle.main.infoDictionary
         let version = info?["CFBundleShortVersionString"] as? String ?? "Unknown"
@@ -215,6 +224,9 @@ enum AppBackupService {
             dailyHealthCoverage: Array(healthManager.dailyHealthCoverage).sorted(),
             exerciseTagOverrides: exerciseMetadataManager.muscleTagOverrides,
             exerciseMetricPreferences: exerciseMetricManager.cardioOverrides,
+            exerciseRelationships: exerciseRelationshipManager.relationships.values.sorted {
+                $0.exerciseName.localizedCaseInsensitiveCompare($1.exerciseName) == .orderedAscending
+            },
             intentionalBreakRanges: intentionalBreaksManager.savedBreaks,
             dismissedIntentionalBreakSuggestions: intentionalBreaksManager.dismissedSuggestionRanges,
             favoriteExercises: favoriteExercises(userDefaults: userDefaults),
@@ -328,6 +340,9 @@ enum AppBackupService {
                 }
                 try $0.field("exerciseMetricPreferences") {
                     try writeDictionary(payload.exerciseMetricPreferences)
+                }
+                try $0.field("exerciseRelationships") {
+                    try writeArray(payload.exerciseRelationships)
                 }
                 try $0.field("exerciseTagOverrides") {
                     try writeDictionary(payload.exerciseTagOverrides)
@@ -501,12 +516,14 @@ enum AppBackupImporter {
         intentionalBreaksManager: IntentionalBreaksManager,
         exerciseMetadataManager: ExerciseMetadataManager? = nil,
         exerciseMetricManager: ExerciseMetricManager? = nil,
+        exerciseRelationshipManager: ExerciseRelationshipManager? = nil,
         featureGuideManager: FeatureGuideManager? = nil,
         userDefaults: UserDefaults = .standard
     ) throws -> AppBackupImportResult {
         _ = policy
         let exerciseMetadataManager = exerciseMetadataManager ?? .shared
         let exerciseMetricManager = exerciseMetricManager ?? .shared
+        let exerciseRelationshipManager = exerciseRelationshipManager ?? .shared
         let featureGuideManager = featureGuideManager ?? .shared
         var result = AppBackupImportResult()
         var warnings: [String] = []
@@ -557,6 +574,8 @@ enum AppBackupImporter {
 
         _ = exerciseMetadataManager.mergeOverridesFromBackup(backup.payload.exerciseTagOverrides)
         _ = exerciseMetricManager.mergePreferencesFromBackup(backup.payload.exerciseMetricPreferences)
+        _ = exerciseRelationshipManager.mergeRelationshipsFromBackup(backup.payload.exerciseRelationships)
+        dataManager.refreshExerciseIdentityDerivedState()
         _ = intentionalBreaksManager.mergeBreaksFromBackup(backup.payload.intentionalBreakRanges)
         _ = intentionalBreaksManager.mergeDismissedSuggestionsFromBackup(
             backup.payload.dismissedIntentionalBreakSuggestions

@@ -531,13 +531,19 @@ struct HealthDashboardView: View {
             let ratioPoints = makePoints(currentHealthData, value: { data in
                 guard let energy = data.dailyActiveEnergy else { return nil }
                 guard let workout = currentWorkoutsByID[data.workoutId] else { return nil }
-                return workout.totalVolume / max(energy, 1)
+                return ExerciseAggregation.totalVolume(
+                    for: workout,
+                    resolver: ExerciseIdentityResolver.current
+                ) / max(energy, 1)
             }, label: "Load Ratio")
             let previousEnergyPoints = makePoints(previousHealthData, value: { $0.dailyActiveEnergy }, label: "Active Energy")
             let previousRatioPoints = makePoints(previousHealthData, value: { data in
                 guard let energy = data.dailyActiveEnergy else { return nil }
                 guard let workout = previousWorkoutsByID[data.workoutId] else { return nil }
-                return workout.totalVolume / max(energy, 1)
+                return ExerciseAggregation.totalVolume(
+                    for: workout,
+                    resolver: ExerciseIdentityResolver.current
+                ) / max(energy, 1)
             }, label: "Load Ratio")
 
             guard !energyPoints.isEmpty || !ratioPoints.isEmpty else { return nil }

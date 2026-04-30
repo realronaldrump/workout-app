@@ -23,6 +23,8 @@ enum WorkoutIdentity {
 
 @MainActor
 final class WorkoutIdentityStore {
+    static let shared = WorkoutIdentityStore()
+
     private let database = AppDatabase.shared
     private let fileName = "workout_identity_map.json"
     private var cache: [String: String] = [:]

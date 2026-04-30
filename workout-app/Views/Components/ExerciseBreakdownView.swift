@@ -7,7 +7,10 @@ struct ExerciseBreakdownView: View {
 
     // swiftlint:disable:next large_tuple
     private var exerciseData: [(name: String, volume: Double, frequency: Int)] {
-        let allExercises = workouts.flatMap { $0.exercises }
+        let resolver = ExerciseIdentityResolver.current
+        let allExercises = workouts.flatMap {
+            ExerciseAggregation.aggregateExercises(in: $0, resolver: resolver)
+        }
         let grouped = Dictionary(grouping: allExercises) { $0.name }
 
         return grouped.map { (name: String, exercises: [Exercise]) in

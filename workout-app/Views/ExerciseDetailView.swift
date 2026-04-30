@@ -8,6 +8,7 @@ struct ExerciseDetailView: View {
     @ObservedObject var gymProfilesManager: GymProfilesManager
     @ObservedObject private var metadataManager = ExerciseMetadataManager.shared
     @ObservedObject private var metricManager = ExerciseMetricManager.shared
+    @ObservedObject private var relationshipManager = ExerciseRelationshipManager.shared
     @EnvironmentObject private var healthManager: HealthKitManager
     @EnvironmentObject private var insightsEngine: InsightsEngine
     @EnvironmentObject private var variantEngine: WorkoutVariantEngine
@@ -30,6 +31,7 @@ struct ExerciseDetailView: View {
     @State private var progressReview: ExerciseProgressReview?
     @State private var isLoadingProgressReview = false
     @State private var progressReviewTask: Task<Void, Never>?
+    @State private var relationshipEditorRequest: ExerciseRelationshipEditorRequest?
 
     enum ChartType: String, CaseIterable, Hashable {
         case weight = "Max Weight"
@@ -91,6 +93,38 @@ struct ExerciseDetailView: View {
         static var presets: [ProgressRange] { [.sixWeeks, .threeMonths, .sixMonths, .year, .allTime] }
     }
 
+    private struct ExerciseRelationshipEditorRequest: Identifiable {
+        let id = UUID()
+        let exerciseName: String
+        let parentName: String?
+        let laterality: ExerciseLaterality
+        let mode: Mode
+
+        enum Mode {
+            case assignExisting
+            case createVariant
+        }
+    }
+
+    private struct ExercisePerformanceTrack: Identifiable {
+        let name: String
+        let label: String
+        let history: [(date: Date, sets: [WorkoutSet])]
+
+        var id: String { name }
+    }
+
+    private struct ExerciseSideBreakdown: Identifiable {
+        let name: String
+        let label: String
+        let sessions: Int
+        let sets: Int
+        let volume: Double
+        let lastPerformed: Date?
+
+        var id: String { name }
+    }
+
     init(
         exerciseName: String,
         dataManager: WorkoutDataManager,
@@ -109,6 +143,63 @@ struct ExerciseDetailView: View {
 
     private var exerciseContextPatterns: [WorkoutVariantPattern] {
         Array(variantEngine.patterns(for: exerciseName).prefix(3))
+    }
+
+    private var resolver: ExerciseIdentityResolver {
+        relationshipManager.resolverSnapshot()
+    }
+
+    private var displayIdentity: ExerciseDisplayIdentity {
+        resolver.displayIdentity(for: exerciseName)
+    }
+
+    private var isVariantPage: Bool {
+        displayIdentity.isVariant
+    }
+
+    private var childRelationships: [ExerciseRelationship] {
+        resolver.children(of: exerciseName)
+    }
+
+    private var showsAggregateBreakdown: Bool {
+        !isVariantPage && !childRelationships.isEmpty
+    }
+
+    private var missingStandardSideVariants: [ExerciseLaterality] {
+        guard !isVariantPage, inferredRelationshipSuggestion == nil else { return [] }
+        let existingSides = Set(childRelationships.map(\.laterality))
+        return [ExerciseLaterality.left, .right].filter { side in
+            guard !existingSides.contains(side) else { return false }
+            let childName = ExerciseRelationshipManager.standardVariantName(
+                parentName: exerciseName,
+                laterality: side
+            )
+            return resolver.relationship(for: childName) == nil
+        }
+    }
+
+    private var canSplitIntoStandardSides: Bool {
+        !missingStandardSideVariants.isEmpty
+    }
+
+    private var availableRelationshipExerciseNames: [String] {
+        let relationshipNames = relationshipManager.relationships.values.flatMap { [$0.exerciseName, $0.parentName] }
+        let names = dataManager.allExerciseNames()
+            + ExerciseMetadataManager.defaultExerciseNames
+            + relationshipNames
+            + [exerciseName]
+        let uniqueNames = Set(names)
+        return Array(uniqueNames)
+            .map { ExerciseIdentityResolver.trimmedName($0) }
+            .filter { !$0.isEmpty }
+            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }
+
+    private var inferredRelationshipSuggestion: ExerciseRelationshipSuggestion? {
+        relationshipManager.suggestedRelationship(
+            for: exerciseName,
+            knownExerciseNames: Set(availableRelationshipExerciseNames)
+        )
     }
 
     private var isCardio: Bool {
@@ -386,17 +477,31 @@ struct ExerciseDetailView: View {
         customProgressEndDate = today
     }
 
-    private func exerciseMatches(_ name: String) -> Bool {
-        name.trimmingCharacters(in: .whitespacesAndNewlines)
-            .localizedCaseInsensitiveCompare(exerciseName.trimmingCharacters(in: .whitespacesAndNewlines)) == .orderedSame
+    private func historySessions(
+        from workouts: [Workout],
+        targetName: String = "",
+        includingVariants: Bool
+    ) -> [ExerciseHistorySession] {
+        let resolvedTargetName = targetName.isEmpty ? exerciseName : targetName
+        return ExerciseAggregation.historySessions(
+            in: workouts,
+            for: resolvedTargetName,
+            includingVariants: includingVariants,
+            resolver: resolver
+        )
     }
 
-    private func historySessions(from workouts: [Workout]) -> [ExerciseHistorySession] {
-        workouts.compactMap { workout in
-            guard let exercise = workout.exercises.first(where: { exerciseMatches($0.name) }) else { return nil }
-            return ExerciseHistorySession(workoutId: workout.id, date: workout.date, sets: exercise.sets)
-        }
-        .sorted { $0.date < $1.date }
+    private func filteredHistoryTuples(
+        for targetName: String,
+        includingVariants: Bool
+    ) -> [(date: Date, sets: [WorkoutSet])] {
+        let sourceHistory = exerciseWorkouts.isEmpty
+            ? dataManager.exerciseHistorySessions(for: targetName, includingVariants: includingVariants)
+            : historySessions(from: exerciseWorkouts, targetName: targetName, includingVariants: includingVariants)
+
+        return sourceHistory
+            .filter { matchesSelectedGymScope(workoutId: $0.workoutId) }
+            .map { (date: $0.date, sets: $0.sets) }
     }
 
     private func matchesSelectedGymScope(workoutId: UUID) -> Bool {
@@ -412,15 +517,10 @@ struct ExerciseDetailView: View {
     }
 
     private func refreshScopedHistory() {
-        let sourceHistory = exerciseWorkouts.isEmpty
-            ? dataManager.exerciseHistorySessions(for: exerciseName)
-            : historySessions(from: exerciseWorkouts)
-
-        let historySessions = sourceHistory.filter { session in
-            matchesSelectedGymScope(workoutId: session.workoutId)
-        }
-
-        scopedHistory = historySessions.map { (date: $0.date, sets: $0.sets) }
+        scopedHistory = filteredHistoryTuples(
+            for: exerciseName,
+            includingVariants: !isVariantPage
+        )
 
         let sets = scopedHistory.flatMap(\.sets)
         if isCardio {
@@ -437,7 +537,11 @@ struct ExerciseDetailView: View {
             availableChartTypes = types.isEmpty ? [.duration] : types
         } else {
             cachedCardioConfig = nil
-            availableChartTypes = isAssisted ? [.weight, .oneRepMax, .reps] : [.weight, .volume, .oneRepMax, .reps]
+            if showsAggregateBreakdown {
+                availableChartTypes = isAssisted ? [.reps] : [.volume, .reps]
+            } else {
+                availableChartTypes = isAssisted ? [.weight, .oneRepMax, .reps] : [.weight, .volume, .oneRepMax, .reps]
+            }
         }
 
         if !availableChartTypes.contains(selectedChart) {
@@ -447,6 +551,65 @@ struct ExerciseDetailView: View {
         if selectedProgressRange == .custom {
             clampCustomProgressRangeToScope()
         }
+    }
+
+    private var sideBreakdowns: [ExerciseSideBreakdown] {
+        let tracks = exactTrackNamesForBreakdown()
+        return tracks.compactMap { track in
+            let history = filteredHistoryTuples(for: track.name, includingVariants: false)
+            guard !history.isEmpty else { return nil }
+            return ExerciseSideBreakdown(
+                name: track.name,
+                label: track.label,
+                sessions: history.count,
+                sets: history.reduce(0) { $0 + $1.sets.count },
+                volume: history.reduce(0) { partial, session in
+                    partial + session.sets.reduce(0) { $0 + ($1.weight * Double($1.reps)) }
+                },
+                lastPerformed: history.map(\.date).max()
+            )
+        }
+    }
+
+    private var performanceTracks: [ExercisePerformanceTrack] {
+        exactTrackNamesForBreakdown().compactMap { track in
+            let history = filteredHistoryTuples(for: track.name, includingVariants: false)
+            guard !history.isEmpty else { return nil }
+            return ExercisePerformanceTrack(name: track.name, label: track.label, history: history)
+        }
+    }
+
+    private func exactTrackNamesForBreakdown() -> [(name: String, label: String)] {
+        if isVariantPage {
+            return [(exerciseName, displayIdentity.sideLabel ?? "Variant")]
+        }
+
+        var tracks: [(name: String, label: String)] = [(exerciseName, "Bilateral")]
+        tracks += childRelationships.map { relationship in
+            (relationship.exerciseName, relationship.laterality.displayName)
+        }
+
+        var seen = Set<String>()
+        return tracks.filter { track in
+            seen.insert(ExerciseIdentityResolver.normalizedName(track.name)).inserted
+        }
+    }
+
+    private var sideBalanceSummary: String? {
+        let breakdownsByLabel = sideBreakdowns.reduce(into: [String: ExerciseSideBreakdown]()) { result, breakdown in
+            result[breakdown.label] = breakdown
+        }
+        guard let left = breakdownsByLabel[ExerciseLaterality.left.displayName],
+              let right = breakdownsByLabel[ExerciseLaterality.right.displayName] else {
+            return nil
+        }
+
+        let volumeDelta = abs(left.volume - right.volume)
+        let strongerLabel = left.volume >= right.volume ? "Left" : "Right"
+        if volumeDelta == 0 {
+            return "Left and right logged volume is even."
+        }
+        return "\(strongerLabel) volume is ahead by \(SharedFormatters.volumeWithUnit(volumeDelta))."
     }
 
     private func scheduleExerciseDetailRefresh(debounceNs: UInt64 = 0) {
@@ -477,6 +640,228 @@ struct ExerciseDetailView: View {
         }
     }
 
+    @ViewBuilder
+    private var relationshipPanel: some View {
+        if isVariantPage {
+            variantRelationshipCard
+        } else if showsAggregateBreakdown {
+            parentBreakdownCard
+        } else {
+            createVariantCard
+        }
+    }
+
+    private var variantRelationshipCard: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Variant")
+                        .font(Theme.Typography.title3)
+                        .foregroundColor(Theme.Colors.textPrimary)
+                    Text(displayIdentity.aggregateName)
+                        .font(Theme.Typography.caption)
+                        .foregroundColor(Theme.Colors.textSecondary)
+                }
+
+                Spacer()
+
+                Text(displayIdentity.sideLabel ?? "Variant")
+                    .font(Theme.Typography.captionBold)
+                    .foregroundStyle(Theme.Colors.accent)
+                    .padding(.horizontal, Theme.Spacing.sm)
+                    .padding(.vertical, Theme.Spacing.xs)
+                    .background(Theme.Colors.accent.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small, style: .continuous))
+            }
+
+            HStack(spacing: Theme.Spacing.sm) {
+                AppPillButton(title: "Edit", systemImage: "slider.horizontal.3", variant: .neutral) {
+                    relationshipEditorRequest = ExerciseRelationshipEditorRequest(
+                        exerciseName: exerciseName,
+                        parentName: displayIdentity.aggregateName,
+                        laterality: displayIdentity.laterality ?? .left,
+                        mode: .assignExisting
+                    )
+                }
+
+                AppPillButton(title: "Remove", systemImage: "xmark", variant: .danger) {
+                    relationshipManager.removeRelationship(for: exerciseName)
+                    dataManager.refreshExerciseIdentityDerivedState()
+                    refreshScopedHistory()
+                    scheduleExerciseDetailRefresh(debounceNs: 0)
+                }
+            }
+        }
+        .padding(Theme.Spacing.lg)
+        .softCard(elevation: 1)
+    }
+
+    private var parentBreakdownCard: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            HStack {
+                Text("Side Breakdown")
+                    .font(Theme.Typography.title3)
+                    .foregroundColor(Theme.Colors.textPrimary)
+
+                Spacer()
+
+                HStack(spacing: Theme.Spacing.sm) {
+                    if canSplitIntoStandardSides {
+                        AppPillButton(title: "Split L/R", systemImage: "arrow.left.and.right", variant: .accent) {
+                            splitIntoStandardSides()
+                        }
+                    }
+
+                    AppPillButton(title: "Add Side", systemImage: "plus", variant: .neutral) {
+                        relationshipEditorRequest = ExerciseRelationshipEditorRequest(
+                            exerciseName: defaultVariantName(parentName: exerciseName, laterality: .left),
+                            parentName: exerciseName,
+                            laterality: .left,
+                            mode: .createVariant
+                        )
+                    }
+                }
+            }
+
+            VStack(spacing: Theme.Spacing.sm) {
+                ForEach(sideBreakdowns) { breakdown in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(breakdown.label)
+                                .font(Theme.Typography.bodyBold)
+                                .foregroundColor(Theme.Colors.textPrimary)
+                            Text(breakdown.name)
+                                .font(Theme.Typography.caption)
+                                .foregroundColor(Theme.Colors.textSecondary)
+                                .lineLimit(1)
+                        }
+
+                        Spacer()
+
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text(SharedFormatters.volumeCompact(breakdown.volume))
+                                .font(Theme.Typography.captionBold)
+                                .foregroundColor(Theme.Colors.textPrimary)
+                            Text("\(breakdown.sets) sets")
+                                .font(Theme.Typography.caption)
+                                .foregroundColor(Theme.Colors.textTertiary)
+                        }
+                    }
+                    .padding(Theme.Spacing.md)
+                    .background(Theme.Colors.surfaceRaised)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous))
+                }
+            }
+
+            if let sideBalanceSummary {
+                Text(sideBalanceSummary)
+                    .font(Theme.Typography.caption)
+                    .foregroundColor(Theme.Colors.textSecondary)
+            }
+        }
+        .padding(Theme.Spacing.lg)
+        .softCard(elevation: 1)
+    }
+
+    private var createVariantCard: some View {
+        let suggestion = inferredRelationshipSuggestion
+        return HStack(spacing: Theme.Spacing.md) {
+            Image(systemName: "arrow.left.and.right")
+                .font(Theme.Typography.title4)
+                .foregroundColor(Theme.Colors.accent)
+                .frame(width: 36, height: 36)
+                .background(Theme.Colors.accent.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(suggestion == nil ? "Side Variants" : "Suggested Variant")
+                    .font(Theme.Typography.headline)
+                    .foregroundColor(Theme.Colors.textPrimary)
+                Text(suggestion?.parentName ?? "Create left, right, or unilateral tracks.")
+                    .font(Theme.Typography.caption)
+                    .foregroundColor(Theme.Colors.textSecondary)
+            }
+
+            Spacer()
+
+            HStack(spacing: Theme.Spacing.sm) {
+                if canSplitIntoStandardSides {
+                    AppPillButton(title: "Split L/R", systemImage: "arrow.left.and.right", variant: .accent) {
+                        splitIntoStandardSides()
+                    }
+                }
+
+                AppToolbarIconButton(systemImage: "plus", accessibilityLabel: "Add side variant", variant: .subtle) {
+                    if let suggestion {
+                        relationshipEditorRequest = ExerciseRelationshipEditorRequest(
+                            exerciseName: suggestion.exerciseName,
+                            parentName: suggestion.parentName,
+                            laterality: suggestion.laterality,
+                            mode: .assignExisting
+                        )
+                    } else {
+                        relationshipEditorRequest = ExerciseRelationshipEditorRequest(
+                            exerciseName: defaultVariantName(parentName: exerciseName, laterality: .left),
+                            parentName: exerciseName,
+                            laterality: .left,
+                            mode: .createVariant
+                        )
+                    }
+                }
+            }
+        }
+        .padding(Theme.Spacing.lg)
+        .softCard(elevation: 1)
+    }
+
+    @ViewBuilder
+    private var personalRecordsSection: some View {
+        if showsAggregateBreakdown && !performanceTracks.isEmpty {
+            VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
+                Text("Personal Records")
+                    .font(Theme.Typography.title2)
+                    .foregroundColor(Theme.Colors.textPrimary)
+
+                ForEach(performanceTracks) { track in
+                    VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+                        Text(track.label)
+                            .font(Theme.Typography.captionBold)
+                            .foregroundColor(Theme.Colors.textSecondary)
+                            .textCase(.uppercase)
+                            .tracking(0.8)
+                        PersonalRecordsView(
+                            exerciseName: track.name,
+                            history: track.history,
+                            title: ""
+                        )
+                    }
+                }
+            }
+        } else {
+            PersonalRecordsView(
+                exerciseName: exerciseName,
+                history: scopedHistory
+            )
+        }
+    }
+
+    private func defaultVariantName(parentName: String, laterality: ExerciseLaterality) -> String {
+        ExerciseRelationshipManager.standardVariantName(parentName: parentName, laterality: laterality)
+    }
+
+    private func splitIntoStandardSides() {
+        let result = relationshipManager.createStandardSideVariants(
+            parentName: exerciseName,
+            sides: missingStandardSideVariants
+        )
+        guard !result.created.isEmpty else { return }
+
+        dataManager.refreshExerciseIdentityDerivedState()
+        refreshScopedHistory()
+        scheduleExerciseDetailRefresh(debounceNs: 0)
+        Haptics.selection()
+    }
+
     var body: some View {
         ZStack {
             AdaptiveBackground()
@@ -498,7 +883,13 @@ struct ExerciseDetailView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
-                    ExerciseStatsCards(exerciseName: exerciseName, history: scopedHistory)
+                    ExerciseStatsCards(
+                        exerciseName: exerciseName,
+                        history: scopedHistory,
+                        showsPerformanceStats: !showsAggregateBreakdown
+                    )
+
+                    relationshipPanel
 
                     VStack(alignment: .leading, spacing: 16) {
                         HStack {
@@ -529,7 +920,7 @@ struct ExerciseDetailView: View {
                         progressChartCard
                     }
 
-                    if !isCardio {
+                    if !isCardio && !showsAggregateBreakdown {
                         ExerciseRangeBreakdown(exerciseName: exerciseName, history: scopedHistory)
                     }
 
@@ -568,7 +959,7 @@ struct ExerciseDetailView: View {
                         }
                     }
 
-                    if !isCardio {
+                    if !isCardio && !showsAggregateBreakdown {
                         if let progressReview {
                             ProgressReviewSection(
                                 review: progressReview,
@@ -594,10 +985,7 @@ struct ExerciseDetailView: View {
                         }
                     }
 
-                    PersonalRecordsView(
-                        exerciseName: exerciseName,
-                        history: scopedHistory
-                    )
+                    personalRecordsSection
 
                     RecentSetsView(
                         exerciseName: exerciseName,
@@ -620,6 +1008,26 @@ struct ExerciseDetailView: View {
                 earliestSelectableDate: earliestScopedWorkoutDate.map { Calendar.current.startOfDay(for: $0) },
                 latestSelectableDate: Date()
             )
+        }
+        .sheet(item: $relationshipEditorRequest) { request in
+            ExerciseRelationshipEditorSheet(
+                initialExerciseName: request.exerciseName,
+                initialParentName: request.parentName ?? exerciseName,
+                initialLaterality: request.laterality,
+                updatesDefaultNameOnSideChange: request.mode == .createVariant,
+                availableExerciseNames: availableRelationshipExerciseNames
+            ) { childName, parentName, laterality in
+                    let didSave = relationshipManager.setRelationship(
+                        exerciseName: childName,
+                        parentName: parentName,
+                        laterality: laterality,
+                        replacingExerciseName: request.exerciseName
+                    )
+                    guard didSave else { return }
+                    dataManager.refreshExerciseIdentityDerivedState()
+                    refreshScopedHistory()
+                    scheduleExerciseDetailRefresh(debounceNs: 0)
+            }
         }
         .onAppear {
             refreshScopedHistory()
@@ -653,6 +1061,12 @@ struct ExerciseDetailView: View {
         }
         .onReceive(metricManager.objectWillChange) { _ in
             refreshScopedHistory()
+        }
+        .onChange(of: relationshipManager.relationships) { _, _ in
+            dataManager.refreshExerciseIdentityDerivedState()
+            refreshScopedHistory()
+            scheduleExerciseDetailRefresh(debounceNs: 0)
+            scheduleProgressReviewRefresh()
         }
         .onChange(of: healthManager.authorizationStatus) { _, _ in
             scheduleProgressReviewRefresh()
@@ -717,7 +1131,7 @@ struct ExerciseDetailView: View {
     }
 
     private func refreshProgressReview() async {
-        guard !isCardio else {
+        guard !isCardio, !showsAggregateBreakdown else {
             progressReview = nil
             isLoadingProgressReview = false
             return
@@ -765,6 +1179,174 @@ struct ExerciseDetailView: View {
             try? await Task.sleep(nanoseconds: debounceNs)
             guard !Task.isCancelled else { return }
             await refreshProgressReview()
+        }
+    }
+}
+
+private struct ExerciseRelationshipEditorSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let availableExerciseNames: [String]
+    let updatesDefaultNameOnSideChange: Bool
+    let onSave: (String, String, ExerciseLaterality) -> Void
+
+    @State private var draftExerciseName: String
+    @State private var draftParentName: String
+    @State private var draftLaterality: ExerciseLaterality
+    @State private var generatedName: String
+
+    init(
+        initialExerciseName: String,
+        initialParentName: String,
+        initialLaterality: ExerciseLaterality,
+        updatesDefaultNameOnSideChange: Bool,
+        availableExerciseNames: [String],
+        onSave: @escaping (String, String, ExerciseLaterality) -> Void
+    ) {
+        let trimmedExercise = ExerciseIdentityResolver.trimmedName(initialExerciseName)
+        let trimmedParent = ExerciseIdentityResolver.trimmedName(initialParentName)
+        self.availableExerciseNames = availableExerciseNames
+        self.updatesDefaultNameOnSideChange = updatesDefaultNameOnSideChange
+        self.onSave = onSave
+        _draftExerciseName = State(initialValue: trimmedExercise)
+        _draftParentName = State(initialValue: trimmedParent)
+        _draftLaterality = State(initialValue: initialLaterality)
+        _generatedName = State(initialValue: trimmedExercise)
+    }
+
+    private var parentCandidates: [String] {
+        let childKey = ExerciseIdentityResolver.normalizedName(draftExerciseName)
+        return availableExerciseNames
+            .filter { ExerciseIdentityResolver.normalizedName($0) != childKey }
+            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }
+
+    private var canSave: Bool {
+        let child = ExerciseIdentityResolver.trimmedName(draftExerciseName)
+        let parent = ExerciseIdentityResolver.trimmedName(draftParentName)
+        return !child.isEmpty &&
+            !parent.isEmpty &&
+            ExerciseIdentityResolver.normalizedName(child) != ExerciseIdentityResolver.normalizedName(parent)
+    }
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                AdaptiveBackground()
+
+                ScrollView(showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
+                        fieldCard(title: "Variant Name") {
+                            TextField("Exercise name", text: $draftExerciseName)
+                                .textInputAutocapitalization(.words)
+                                .disableAutocorrection(true)
+                                .font(Theme.Typography.body)
+                                .foregroundColor(Theme.Colors.textPrimary)
+                                .padding(Theme.Spacing.md)
+                                .background(Theme.Colors.surfaceRaised)
+                                .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous))
+                        }
+
+                        fieldCard(title: "Parent Exercise") {
+                            Picker("Parent Exercise", selection: $draftParentName) {
+                                ForEach(parentCandidates, id: \.self) { name in
+                                    Text(name).tag(name)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+
+                        fieldCard(title: "Side") {
+                            Picker("Side", selection: $draftLaterality) {
+                                ForEach(ExerciseLaterality.allCases, id: \.self) { laterality in
+                                    Text(laterality.displayName).tag(laterality)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+                        }
+
+                        Button(action: save) {
+                            Text("Save Relationship")
+                                .font(Theme.Typography.headline)
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(Theme.Spacing.md)
+                                .background(canSave ? Theme.Colors.accent : Theme.Colors.textTertiary)
+                                .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(!canSave)
+                    }
+                    .padding(Theme.Spacing.xl)
+                }
+            }
+            .navigationTitle("Exercise Variant")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    AppToolbarButton(title: "Cancel", systemImage: "xmark", variant: .subtle) {
+                        dismiss()
+                    }
+                }
+            }
+            .onChange(of: draftLaterality) { oldValue, newValue in
+                guard updatesDefaultNameOnSideChange else { return }
+                guard draftExerciseName == generatedName || draftExerciseName == defaultName(parent: draftParentName, laterality: oldValue) else {
+                    return
+                }
+                let next = defaultName(parent: draftParentName, laterality: newValue)
+                draftExerciseName = next
+                generatedName = next
+            }
+            .onChange(of: draftParentName) { oldValue, newValue in
+                guard updatesDefaultNameOnSideChange else { return }
+                guard draftExerciseName == generatedName || draftExerciseName == defaultName(parent: oldValue, laterality: draftLaterality) else {
+                    return
+                }
+                let next = defaultName(parent: newValue, laterality: draftLaterality)
+                draftExerciseName = next
+                generatedName = next
+            }
+        }
+        .presentationDragIndicator(.visible)
+    }
+
+    private func fieldCard<Content: View>(
+        title: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            Text(title)
+                .font(Theme.Typography.metricLabel)
+                .foregroundStyle(Theme.Colors.textTertiary)
+                .textCase(.uppercase)
+                .tracking(0.8)
+            content()
+        }
+        .padding(Theme.Spacing.lg)
+        .softCard(elevation: 1)
+    }
+
+    private func save() {
+        guard canSave else { return }
+        onSave(
+            ExerciseIdentityResolver.trimmedName(draftExerciseName),
+            ExerciseIdentityResolver.trimmedName(draftParentName),
+            draftLaterality
+        )
+        Haptics.selection()
+        dismiss()
+    }
+
+    private func defaultName(parent: String, laterality: ExerciseLaterality) -> String {
+        switch laterality {
+        case .left:
+            return "\(parent) - Left"
+        case .right:
+            return "\(parent) - Right"
+        case .unilateral:
+            return "\(parent) - Unilateral"
         }
     }
 }

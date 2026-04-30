@@ -16,7 +16,14 @@ final class ExerciseMetricManager: ObservableObject {
     }
 
     func preferences(for exerciseName: String) -> ExerciseCardioMetricPreferences {
-        cardioOverrides[exerciseName] ?? .default
+        if let override = cardioOverrides[exerciseName] {
+            return override
+        }
+        if let relationship = ExerciseRelationshipManager.shared.relationship(for: exerciseName),
+           let parentOverride = cardioOverrides[relationship.parentName] {
+            return parentOverride
+        }
+        return .default
     }
 
     func setPrimaryMetric(for exerciseName: String, to selection: ExerciseCardioMetricPreferences.PrimaryMetricSelection) {

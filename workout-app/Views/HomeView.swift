@@ -12,6 +12,7 @@ struct HomeView: View {
     @EnvironmentObject var intentionalBreaksManager: IntentionalBreaksManager
     @EnvironmentObject var sessionManager: WorkoutSessionManager
     @ObservedObject private var metadataManager = ExerciseMetadataManager.shared
+    @ObservedObject private var relationshipManager = ExerciseRelationshipManager.shared
     @Binding var selectedTab: AppTab
 
     @StateObject private var recoveryCoverageEngine = RecoveryCoverageEngine()
@@ -248,6 +249,11 @@ struct HomeView: View {
         }
         .onReceive(metadataManager.objectWillChange) { _ in
             scheduleHomeDerivedStateRefresh()
+        }
+        .onChange(of: relationshipManager.relationships) { _, _ in
+            dataManager.refreshExerciseIdentityDerivedState()
+            scheduleHomeDerivedStateRefresh()
+            scheduleRecoveryCoverageRefresh()
         }
         .onReceive(insightsEngine.$insights) { _ in
             rebuildHomeHighlights()
@@ -887,6 +893,12 @@ struct HomeView: View {
             hasher.combine(metadataManager.muscleTagOverrides[key] ?? [])
         }
 
+        for relationship in relationshipManager.relationships.values.sorted(by: {
+            $0.exerciseName.localizedCaseInsensitiveCompare($1.exerciseName) == .orderedAscending
+        }) {
+            hasher.combine(relationship)
+        }
+
         return hasher.finalize()
     }
 
@@ -907,7 +919,8 @@ struct HomeView: View {
             ? nil
             : dataManager.calculateStats(for: workouts, intentionalBreakRanges: breaks)
 
-        let allMetrics = WorkoutAnalytics.changeMetrics(for: workouts, window: changeWindow)
+        let resolver = relationshipManager.resolverSnapshot()
+        let allMetrics = WorkoutAnalytics.changeMetrics(for: workouts, window: changeWindow, resolver: resolver)
         let preferredMetrics = allMetrics.filter {
             $0.title.contains("Sessions") || $0.title.contains("Volume")
         }
@@ -930,7 +943,8 @@ struct HomeView: View {
         }
         cachedMuscleSuggestions = MuscleRecencySuggestionEngine.suggestions(
             workouts: workouts,
-            muscleGroupsByExerciseName: groupMappings
+            muscleGroupsByExerciseName: groupMappings,
+            resolver: resolver
         )
         syncSelectedWeekBucket()
         homeDerivedCacheKey = fingerprint

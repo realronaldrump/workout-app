@@ -328,15 +328,19 @@ nonisolated final class AppDatabase: @unchecked Sendable {
     }
 
     nonisolated func loadWorkouts(containingExerciseNamed exerciseName: String, range: DateInterval? = nil) throws -> [Workout] {
-        let normalizedName = Self.normalizedName(exerciseName)
-        guard !normalizedName.isEmpty else { return [] }
+        try loadWorkouts(containingAnyExerciseNamed: [exerciseName], range: range)
+    }
+
+    nonisolated func loadWorkouts(containingAnyExerciseNamed exerciseNames: [String], range: DateInterval? = nil) throws -> [Workout] {
+        let normalizedNames = Array(Set(exerciseNames.map(Self.normalizedName).filter { !$0.isEmpty }))
+        guard !normalizedNames.isEmpty else { return [] }
 
         return try performRead { context in
             let exerciseRequest = NSFetchRequest<NSDictionary>(entityName: EntityName.exercise)
             exerciseRequest.resultType = .dictionaryResultType
             exerciseRequest.propertiesToFetch = ["workoutId"]
             exerciseRequest.returnsDistinctResults = true
-            exerciseRequest.predicate = NSPredicate(format: "normalizedName == %@", normalizedName)
+            exerciseRequest.predicate = NSPredicate(format: "normalizedName IN %@", normalizedNames)
             exerciseRequest.fetchBatchSize = 256
 
             let workoutIds = Set(try context.fetch(exerciseRequest).compactMap { row in

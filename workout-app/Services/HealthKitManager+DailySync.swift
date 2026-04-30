@@ -60,15 +60,15 @@ struct DailyHealthCoveragePlanner {
             uncoveredSpans.append((start: startDay, end: previousDay))
         }
 
-        let plannedRanges = uncoveredSpans.flatMap { span in
-            chunkedRanges(from: span.start, through: span.end, batchSizeDays: batchSizeDays, calendar: calendar)
-        }
-
         switch direction {
         case .forward:
-            return plannedRanges
+            return uncoveredSpans.flatMap { span in
+                chunkedRanges(from: span.start, through: span.end, batchSizeDays: batchSizeDays, calendar: calendar)
+            }
         case .backward:
-            return Array(plannedRanges.reversed())
+            return uncoveredSpans.reversed().flatMap { span in
+                chunkedRangesBackward(from: span.start, through: span.end, batchSizeDays: batchSizeDays, calendar: calendar)
+            }
         }
     }
 
@@ -91,6 +91,30 @@ struct DailyHealthCoveragePlanner {
 
             guard let nextStart = calendar.date(byAdding: .day, value: 1, to: chunkEndDay) else { break }
             currentStart = nextStart
+        }
+
+        return intervals
+    }
+
+    private static func chunkedRangesBackward(
+        from startDay: Date,
+        through endDay: Date,
+        batchSizeDays: Int,
+        calendar: Calendar
+    ) -> [DateInterval] {
+        guard batchSizeDays > 0 else { return [] }
+
+        var intervals: [DateInterval] = []
+        var currentEnd = endDay
+
+        while currentEnd >= startDay {
+            let minStart = calendar.date(byAdding: .day, value: -(batchSizeDays - 1), to: currentEnd) ?? startDay
+            let chunkStartDay = max(minStart, startDay)
+            let chunkEnd = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: currentEnd) ?? currentEnd
+            intervals.append(DateInterval(start: chunkStartDay, end: chunkEnd))
+
+            guard let previousEnd = calendar.date(byAdding: .day, value: -1, to: chunkStartDay) else { break }
+            currentEnd = previousEnd
         }
 
         return intervals

@@ -7,6 +7,7 @@ struct ExportWorkoutsView: View {
     @ObservedObject var dataManager: WorkoutDataManager
     @ObservedObject var iCloudManager: iCloudDocumentManager
     @ObservedObject private var exerciseMetadataManager = ExerciseMetadataManager.shared
+    @ObservedObject private var exerciseRelationshipManager = ExerciseRelationshipManager.shared
     @EnvironmentObject private var healthManager: HealthKitManager
     @EnvironmentObject private var logStore: WorkoutLogStore
     @EnvironmentObject private var annotationsManager: WorkoutAnnotationsManager
@@ -770,6 +771,7 @@ private extension ExportWorkoutsView {
         let annotations = annotationsManager.annotations.count
         let tagOverrides = exerciseMetadataManager.muscleTagOverrides.count
         let metricPrefs = ExerciseMetricManager.shared.cardioOverrides.count
+        let relationships = exerciseRelationshipManager.relationships.count
 
         return [
             BackupInventoryItem(id: "workouts", icon: "figure.strengthtraining.traditional", title: "Workouts", value: "\(workouts)"),
@@ -780,6 +782,7 @@ private extension ExportWorkoutsView {
             BackupInventoryItem(id: "dailyHealth", icon: "calendar.badge.heart", title: "Daily health entries", value: "\(dailyHealth)"),
             BackupInventoryItem(id: "annotations", icon: "note.text", title: "Workout annotations", value: "\(annotations)"),
             BackupInventoryItem(id: "tagOverrides", icon: "tag.fill", title: "Exercise tag overrides", value: "\(tagOverrides)"),
+            BackupInventoryItem(id: "relationships", icon: "rectangle.stack.fill", title: "Exercise relationships", value: "\(relationships)"),
             BackupInventoryItem(id: "metricPrefs", icon: "slider.horizontal.3", title: "Metric preferences", value: "\(metricPrefs)")
         ]
     }
@@ -824,8 +827,11 @@ private extension ExportWorkoutsView {
 
     var scopeStats: some View {
         let workouts = workoutsInSelection
-        let totalSets = workouts.reduce(0) { $0 + $1.totalSets }
-        let totalExercises = Set(workouts.flatMap { $0.exercises.map(\.name) }).count
+        let resolver = exerciseRelationshipManager.resolverSnapshot()
+        let totalSets = ExerciseAggregation.totalSets(for: workouts, resolver: resolver)
+        let totalExercises = Set(
+            workouts.flatMap { ExerciseAggregation.aggregateExercises(in: $0, resolver: resolver).map(\.name) }
+        ).count
 
         return HStack(spacing: Theme.Spacing.md) {
             scopeStatTile(label: "Workouts", value: "\(workouts.count)")
@@ -988,7 +994,15 @@ private extension ExportWorkoutsView {
     }
 
     var availableExerciseNames: [String] {
-        let names = Set(workoutsInSelection.flatMap { $0.exercises.map(\.name) })
+        let resolver = exerciseRelationshipManager.resolverSnapshot()
+        let names = workoutsInSelection.reduce(into: Set<String>()) { result, workout in
+            for exercise in workout.exercises {
+                let rawName = ExerciseIdentityResolver.trimmedName(exercise.name)
+                guard !rawName.isEmpty else { continue }
+                result.insert(rawName)
+                result.insert(resolver.aggregateName(for: rawName))
+            }
+        }
         return names.sorted(by: localizedAscending)
     }
 
@@ -998,6 +1012,17 @@ private extension ExportWorkoutsView {
 
     var selectedExerciseNamesInRange: Set<String> {
         selectedExerciseNames.intersection(Set(availableExerciseNames))
+    }
+
+    func exerciseMatchesSelection(
+        _ exercise: Exercise,
+        selectedNameKeys: Set<String>,
+        resolver: ExerciseIdentityResolver
+    ) -> Bool {
+        let rawName = ExerciseIdentityResolver.trimmedName(exercise.name)
+        guard !rawName.isEmpty else { return false }
+        return selectedNameKeys.contains(ExerciseIdentityResolver.normalizedName(rawName)) ||
+            selectedNameKeys.contains(ExerciseIdentityResolver.normalizedName(resolver.aggregateName(for: rawName)))
     }
 
     var workoutDateOptions: [ExportWorkoutDateOption] {
@@ -1021,7 +1046,15 @@ private extension ExportWorkoutsView {
     }
 
     var availableMuscleTags: [MuscleTag] {
-        let exerciseNames = Set(workoutsInSelection.flatMap { $0.exercises.map(\.name) })
+        let resolver = exerciseRelationshipManager.resolverSnapshot()
+        let exerciseNames = workoutsInSelection.reduce(into: Set<String>()) { result, workout in
+            for exercise in workout.exercises {
+                let rawName = ExerciseIdentityResolver.trimmedName(exercise.name)
+                guard !rawName.isEmpty else { continue }
+                result.insert(rawName)
+                result.insert(resolver.aggregateName(for: rawName))
+            }
+        }
         var uniqueTags: [String: MuscleTag] = [:]
 
         for exerciseName in exerciseNames {
@@ -1589,6 +1622,7 @@ private extension ExportWorkoutsView {
         let gymNamesByWorkoutID = gymNamesByWorkoutID(for: workoutsSnapshot)
         let storageSnapshot = iCloudManager.storageSnapshot()
         let unit = weightUnit
+        let resolver = exerciseRelationshipManager.resolverSnapshot()
 
         Task.detached(priority: .userInitiated) {
             do {
@@ -1612,7 +1646,8 @@ private extension ExportWorkoutsView {
                     selectedColumns: selectedColumns,
                     intentionalBreaks: breakRanges,
                     includeIntentionalBreaks: includeBreakRanges,
-                    weightUnit: unit
+                    weightUnit: unit,
+                    resolver: resolver
                 )
 
                 await MainActor.run {
@@ -1663,6 +1698,7 @@ private extension ExportWorkoutsView {
         }
 
         let includeTags = includeExerciseTags
+        let resolver = exerciseRelationshipManager.resolverSnapshot()
         let exerciseNames = Set(workoutsSnapshot.flatMap { $0.exercises.map(\.name) })
         let exerciseTagsByName: [String: String]
         if includeTags {
@@ -1697,7 +1733,8 @@ private extension ExportWorkoutsView {
                     startDate: start,
                     endDateInclusive: end,
                     includeTags: includeTags,
-                    exerciseTagsByName: exerciseTagsByName
+                    exerciseTagsByName: exerciseTagsByName,
+                    resolver: resolver
                 )
 
                 await MainActor.run {
@@ -1730,6 +1767,8 @@ private extension ExportWorkoutsView {
         let selectedColumns = orderedSelectedWorkoutColumns
         let includeBreakRanges = includeBreakRangesInWorkoutExport
         let breakRanges = includeBreakRanges ? breakRangesInSelection : []
+        let resolver = exerciseRelationshipManager.resolverSnapshot()
+        let selectedNameKeys = Set(selectedNames.map(ExerciseIdentityResolver.normalizedName))
         let analyticsPayload = workoutColumnAnalyticsPayload(for: selectedColumns)
             .merging(["Export.selectionCount": "\(selectedNames.count)"]) { _, new in new }
             .merging(
@@ -1745,7 +1784,9 @@ private extension ExportWorkoutsView {
         isExportingWorkouts = true
 
         let workoutsSnapshot = workoutsInSelection.compactMap { workout -> Workout? in
-            let filteredExercises = workout.exercises.filter { selectedNames.contains($0.name) }
+            let filteredExercises = workout.exercises.filter {
+                exerciseMatchesSelection($0, selectedNameKeys: selectedNameKeys, resolver: resolver)
+            }
             guard !filteredExercises.isEmpty else { return nil }
             return Workout(
                 id: workout.id,
@@ -1791,7 +1832,8 @@ private extension ExportWorkoutsView {
                     selectedColumns: selectedColumns,
                     intentionalBreaks: breakRanges,
                     includeIntentionalBreaks: includeBreakRanges,
-                    weightUnit: unit
+                    weightUnit: unit,
+                    resolver: resolver
                 )
 
                 await MainActor.run {
@@ -1865,6 +1907,7 @@ private extension ExportWorkoutsView {
         let storageSnapshot = iCloudManager.storageSnapshot()
         let unit = weightUnit
         let selectedGroupCount = selectedTagIds.count
+        let resolver = exerciseRelationshipManager.resolverSnapshot()
 
         Task.detached(priority: .userInitiated) {
             do {
@@ -1889,7 +1932,8 @@ private extension ExportWorkoutsView {
                     selectedColumns: selectedColumns,
                     intentionalBreaks: breakRanges,
                     includeIntentionalBreaks: includeBreakRanges,
-                    weightUnit: unit
+                    weightUnit: unit,
+                    resolver: resolver
                 )
 
                 await MainActor.run {
@@ -1951,6 +1995,7 @@ private extension ExportWorkoutsView {
         let storageSnapshot = iCloudManager.storageSnapshot()
         let unit = weightUnit
         let selectedDateCount = selectedIds.count
+        let resolver = exerciseRelationshipManager.resolverSnapshot()
 
         Task.detached(priority: .userInitiated) {
             do {
@@ -1975,7 +2020,8 @@ private extension ExportWorkoutsView {
                     selectedColumns: selectedColumns,
                     intentionalBreaks: breakRanges,
                     includeIntentionalBreaks: includeBreakRanges,
-                    weightUnit: unit
+                    weightUnit: unit,
+                    resolver: resolver
                 )
 
                 await MainActor.run {
@@ -2171,6 +2217,7 @@ private extension ExportWorkoutsView {
         backup.payload.dailyHealthData.count +
         backup.payload.exerciseTagOverrides.count +
         backup.payload.exerciseMetricPreferences.count +
+        backup.payload.exerciseRelationships.count +
         backup.payload.intentionalBreakRanges.count
     }
 

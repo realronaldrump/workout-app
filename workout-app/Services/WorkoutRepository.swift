@@ -112,10 +112,11 @@ actor WorkoutRepository {
 
     func homeSnapshot() async throws -> HomeDashboardSnapshot {
         let workouts = try loadAllWorkouts()
+        let resolver = await ExerciseRelationshipManager.shared.resolverSnapshot()
         return HomeDashboardSnapshot(
             recentWorkouts: Array(workouts.prefix(5)),
-            stats: Self.stats(for: workouts),
-            exerciseSummaries: Self.exerciseSummaries(for: workouts),
+            stats: Self.stats(for: workouts, resolver: resolver),
+            exerciseSummaries: Self.exerciseSummaries(for: workouts, resolver: resolver),
             allExerciseNames: Self.allExerciseNames(for: workouts),
             datasetRevision: datasetRevision
         )
@@ -126,9 +127,10 @@ actor WorkoutRepository {
         cursor: WorkoutHistoryCursor? = nil,
         limit: Int
     ) async throws -> WorkoutHistoryPage {
+        let resolver = await ExerciseRelationshipManager.shared.resolverSnapshot()
         let annotations = Dictionary(uniqueKeysWithValues: try database.loadAnnotations().map { ($0.workoutId, $0) })
         let filtered = try loadAllWorkouts().filter { workout in
-            Self.matchesHistoryFilter(workout, filter: filter, annotations: annotations)
+            Self.matchesHistoryFilter(workout, filter: filter, annotations: annotations, resolver: resolver)
         }
         let offset = cursor?.offset ?? 0
         let resolvedLimit = max(1, limit)
@@ -157,10 +159,15 @@ actor WorkoutRepository {
         cursor: ExerciseCursor? = nil,
         limit: Int
     ) async throws -> ExerciseDirectoryPage {
+        let resolver = await ExerciseRelationshipManager.shared.resolverSnapshot()
         let summaries = Self.sortedExerciseSummaries(
-            Self.exerciseSummaries(for: try loadAllWorkouts()).filter { summary in
+            Self.exerciseSummaries(for: try loadAllWorkouts(), resolver: resolver).filter { summary in
                 let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-                return trimmed.isEmpty || summary.name.localizedCaseInsensitiveContains(trimmed)
+                return trimmed.isEmpty ||
+                    summary.name.localizedCaseInsensitiveContains(trimmed) ||
+                    resolver.children(of: summary.name).contains {
+                        $0.exerciseName.localizedCaseInsensitiveContains(trimmed)
+                    }
             },
             sort: sort
         )
@@ -180,29 +187,47 @@ actor WorkoutRepository {
         scope: ExerciseScope,
         range: DateInterval? = nil
     ) async throws -> ExerciseDetailSnapshot {
+        let resolver = await ExerciseRelationshipManager.shared.resolverSnapshot()
+        let trimmedName = ExerciseIdentityResolver.trimmedName(name)
+        let isVariant = resolver.relationship(for: trimmedName) != nil
+        let lookupNames = isVariant
+            ? [trimmedName]
+            : [trimmedName] + resolver.children(of: trimmedName).map(\.exerciseName)
         let annotations = Dictionary(uniqueKeysWithValues: try database.loadAnnotations().map { ($0.workoutId, $0) })
-        let workouts = try database.loadWorkouts(containingExerciseNamed: name, range: range).filter { workout in
+        let workouts = try database.loadWorkouts(containingAnyExerciseNamed: lookupNames, range: range).filter { workout in
             if let range, !range.contains(workout.date) { return false }
             return Self.matchesScope(workoutId: workout.id, scope: scope, annotations: annotations)
         }
         let history = workouts.compactMap { workout -> ExerciseHistorySession? in
-            guard let exercise = workout.exercises.first(where: {
-                $0.name.trimmingCharacters(in: .whitespacesAndNewlines)
-                    .localizedCaseInsensitiveCompare(name.trimmingCharacters(in: .whitespacesAndNewlines)) == .orderedSame
-            }) else { return nil }
-            return ExerciseHistorySession(workoutId: workout.id, date: workout.date, sets: exercise.sets)
+            let matching: [Exercise]
+            if isVariant {
+                matching = workout.exercises.filter {
+                    Self.exerciseNameMatches($0.name, target: trimmedName)
+                }
+            } else {
+                matching = ExerciseAggregation.aggregateExercises(in: workout, resolver: resolver).filter {
+                    Self.exerciseNameMatches($0.name, target: trimmedName)
+                }
+            }
+            guard !matching.isEmpty else { return nil }
+            let sets = matching.flatMap(\.sets).sorted { lhs, rhs in
+                if lhs.setOrder != rhs.setOrder { return lhs.setOrder < rhs.setOrder }
+                return lhs.date < rhs.date
+            }
+            return ExerciseHistorySession(workoutId: workout.id, date: workout.date, sets: sets)
         }
         .sorted { $0.date < $1.date }
 
-        return ExerciseDetailSnapshot(exerciseName: name, history: history, workouts: workouts)
+        return ExerciseDetailSnapshot(exerciseName: trimmedName, history: history, workouts: workouts)
     }
 
     func performanceSnapshot(range: DateInterval) async throws -> PerformanceSnapshot {
         let workouts = try loadAllWorkouts().filter { range.contains($0.date) }
+        let resolver = await ExerciseRelationshipManager.shared.resolverSnapshot()
         return PerformanceSnapshot(
             workouts: workouts,
-            stats: Self.stats(for: workouts),
-            exerciseSummaries: Self.exerciseSummaries(for: workouts)
+            stats: Self.stats(for: workouts, resolver: resolver),
+            exerciseSummaries: Self.exerciseSummaries(for: workouts, resolver: resolver)
         )
     }
 
@@ -243,6 +268,7 @@ actor WorkoutRepository {
         try database.saveWorkoutHealthData(payload.workoutHealthData)
         try database.saveDailyHealthData(payload.dailyHealthData)
         try database.saveDailyHealthCoverage(Set(payload.dailyHealthCoverage))
+        _ = await ExerciseRelationshipManager.shared.mergeRelationshipsFromBackup(payload.exerciseRelationships)
         incrementRevision()
         return WorkoutRepositoryImportSummary(
             importedWorkoutCount: payload.importedWorkouts.count,
@@ -297,12 +323,16 @@ private extension WorkoutRepository {
     nonisolated static func matchesHistoryFilter(
         _ workout: Workout,
         filter: WorkoutHistoryFilter,
-        annotations: [UUID: WorkoutAnnotation]
+        annotations: [UUID: WorkoutAnnotation],
+        resolver: ExerciseIdentityResolver = .empty
     ) -> Bool {
         let query = filter.searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         if !query.isEmpty,
            !workout.name.localizedCaseInsensitiveContains(query),
-           !workout.exercises.contains(where: { $0.name.localizedCaseInsensitiveContains(query) }) {
+           !workout.exercises.contains(where: {
+               $0.name.localizedCaseInsensitiveContains(query) ||
+                   resolver.aggregateName(for: $0.name).localizedCaseInsensitiveContains(query)
+           }) {
             return false
         }
 
@@ -311,8 +341,15 @@ private extension WorkoutRepository {
         }
 
         if !filter.exerciseNames.isEmpty {
-            let names = Set(workout.exercises.map(\.name))
-            if filter.exerciseNames.isDisjoint(with: names) {
+            let selectedNames = Set(filter.exerciseNames.map(ExerciseIdentityResolver.normalizedName))
+            var names = Set<String>()
+            for exercise in workout.exercises {
+                let rawName = ExerciseIdentityResolver.trimmedName(exercise.name)
+                guard !rawName.isEmpty else { continue }
+                names.insert(ExerciseIdentityResolver.normalizedName(rawName))
+                names.insert(ExerciseIdentityResolver.normalizedName(resolver.aggregateName(for: rawName)))
+            }
+            if selectedNames.isDisjoint(with: names) {
                 return false
             }
         }
@@ -380,31 +417,38 @@ private extension WorkoutRepository {
             .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
     }
 
-    nonisolated static func exerciseSummaries(for workouts: [Workout]) -> [ExerciseSummary] {
+    nonisolated static func exerciseSummaries(
+        for workouts: [Workout],
+        resolver: ExerciseIdentityResolver = .empty
+    ) -> [ExerciseSummary] {
         var accumulators: [String: ExerciseAccumulator] = [:]
         for workout in workouts {
-            for exercise in workout.exercises {
-                var accumulator = accumulators[exercise.name] ?? ExerciseAccumulator()
-                accumulator.totalVolume += exercise.totalVolume
+            for aggregateExercise in ExerciseAggregation.aggregateExercises(in: workout, resolver: resolver) {
+                let name = aggregateExercise.name
+                var accumulator = accumulators[name] ?? ExerciseAccumulator()
+                accumulator.totalVolume += aggregateExercise.totalVolume
                 accumulator.frequency += 1
                 accumulator.lastPerformed = max(accumulator.lastPerformed ?? workout.date, workout.date)
                 if accumulator.maxWeight == nil ||
                     ExerciseLoad.isBetter(
-                        exercise.maxWeight,
-                        than: accumulator.maxWeight ?? exercise.maxWeight,
-                        exerciseName: exercise.name
+                        aggregateExercise.maxWeight,
+                        than: accumulator.maxWeight ?? aggregateExercise.maxWeight,
+                        exerciseName: name
                     ) {
-                    accumulator.maxWeight = exercise.maxWeight
+                    accumulator.maxWeight = aggregateExercise.maxWeight
                 }
                 if accumulator.oneRepMax == nil ||
                     ExerciseLoad.isBetter(
-                        exercise.oneRepMax,
-                        than: accumulator.oneRepMax ?? exercise.oneRepMax,
-                        exerciseName: exercise.name
+                        aggregateExercise.oneRepMax,
+                        than: accumulator.oneRepMax ?? aggregateExercise.oneRepMax,
+                        exerciseName: name
                     ) {
-                    accumulator.oneRepMax = exercise.oneRepMax
+                    accumulator.oneRepMax = aggregateExercise.oneRepMax
                 }
-                accumulators[exercise.name] = accumulator
+                accumulator.hasRelationshipVariants = accumulator.hasRelationshipVariants ||
+                    resolver.containsRelationship(for: name) ||
+                    !resolver.children(of: name).isEmpty
+                accumulators[name] = accumulator
             }
         }
 
@@ -413,10 +457,10 @@ private extension WorkoutRepository {
                 name: name,
                 stats: ExerciseStats(
                     totalVolume: accumulator.totalVolume,
-                    maxWeight: accumulator.maxWeight ?? 0,
+                    maxWeight: accumulator.hasRelationshipVariants ? 0 : accumulator.maxWeight ?? 0,
                     frequency: accumulator.frequency,
                     lastPerformed: accumulator.lastPerformed,
-                    oneRepMax: accumulator.oneRepMax ?? 0
+                    oneRepMax: accumulator.hasRelationshipVariants ? 0 : accumulator.oneRepMax ?? 0
                 )
             )
         }
@@ -439,10 +483,17 @@ private extension WorkoutRepository {
         }
     }
 
-    nonisolated static func stats(for workouts: [Workout]) -> WorkoutStats {
+    nonisolated static func stats(
+        for workouts: [Workout],
+        resolver: ExerciseIdentityResolver = .empty
+    ) -> WorkoutStats {
         let allExercises = workouts.flatMap(\.exercises)
         let exerciseGroups = Dictionary(grouping: allExercises, by: \.name)
-        let favoriteExercise = exerciseGroups.max { $0.value.count < $1.value.count }?.key
+        let aggregateExercises = workouts.flatMap {
+            ExerciseAggregation.aggregateExercises(in: $0, resolver: resolver)
+        }
+        let aggregateExerciseGroups = Dictionary(grouping: aggregateExercises, by: \.name)
+        let favoriteExercise = aggregateExerciseGroups.max { $0.value.count < $1.value.count }?.key
         let strongestExercise = exerciseGroups.compactMap { name, exercises -> (name: String, weight: Double, score: Double)? in
             guard let bestWeight = ExerciseLoad.bestWeight(in: exercises.flatMap { $0.sets.map(\.weight) }, exerciseName: name) else {
                 return nil
@@ -459,9 +510,9 @@ private extension WorkoutRepository {
 
         return WorkoutStats(
             totalWorkouts: workouts.count,
-            totalExercises: exerciseGroups.count,
-            totalVolume: workouts.reduce(0) { $0 + $1.totalVolume },
-            totalSets: workouts.reduce(0) { $0 + $1.totalSets },
+            totalExercises: aggregateExerciseGroups.count,
+            totalVolume: ExerciseAggregation.totalVolume(for: workouts, resolver: resolver),
+            totalSets: ExerciseAggregation.totalSets(for: workouts, resolver: resolver),
             favoriteExercise: favoriteExercise,
             strongestExercise: strongestExercise,
             mostImprovedExercise: nil,
@@ -515,5 +566,11 @@ private extension WorkoutRepository {
         var frequency: Int = 0
         var lastPerformed: Date?
         var oneRepMax: Double?
+        var hasRelationshipVariants = false
+    }
+
+    nonisolated static func exerciseNameMatches(_ lhs: String, target: String) -> Bool {
+        lhs.trimmingCharacters(in: .whitespacesAndNewlines)
+            .localizedCaseInsensitiveCompare(target.trimmingCharacters(in: .whitespacesAndNewlines)) == .orderedSame
     }
 }

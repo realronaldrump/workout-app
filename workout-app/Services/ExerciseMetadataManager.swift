@@ -29,6 +29,7 @@ class ExerciseMetadataManager: ObservableObject {
         .init(name: "Bayesian Curl", groups: [.biceps]),
         .init(name: "Bench Press - Close Grip (Barbell)", groups: [.triceps, .chest, .shoulders]),
         .init(name: "Bench Press (Barbell)", groups: [.chest, .triceps, .shoulders]),
+        .init(name: "Bent Over One Arm Row (Dumbbell)", groups: [.back, .biceps]),
         .init(name: "Bent Over Row (Dumbbell)", groups: [.back, .biceps]),
         .init(name: "Bicep Curl (Barbell)", groups: [.biceps]),
         .init(name: "Bicep Curl (Cable)", groups: [.biceps]),
@@ -37,6 +38,7 @@ class ExerciseMetadataManager: ObservableObject {
         .init(name: "Bicep Curl (Machine) (Bands)", groups: [.biceps]),
         .init(name: "Bulgarian Split Squat", groups: [.quads, .glutes, .hamstrings]),
         .init(name: "Calf Extension Machine", groups: [.calves]),
+        .init(name: "Calf Press on Seated Leg Press", groups: [.calves]),
         .init(name: "Chest Fly", groups: [.chest]),
         .init(name: "Chest Fly (Dumbbell)", groups: [.chest]),
         .init(name: "Chest Press (Machine)", groups: [.chest, .triceps, .shoulders]),
@@ -120,6 +122,10 @@ class ExerciseMetadataManager: ObservableObject {
         .init(name: "Shrug (Smith Machine)", groups: [.back, .traps]),
         .init(name: "Side Leg Raises", groups: [.glutes]),
         .init(name: "Single Arm Tricep Extension (dumbell)", groups: [.triceps]),
+        .init(name: "Single Leg Leg Curl (Left)", groups: [.hamstrings]),
+        .init(name: "Single Leg Leg Curl (Right)", groups: [.hamstrings]),
+        .init(name: "Single Leg Leg Extension (Left)", groups: [.quads]),
+        .init(name: "Single Leg Leg Extension (Right)", groups: [.quads]),
         .init(name: "Single-Arm Overhead Cable Extension", groups: [.triceps]),
         .init(name: "Single-Leg RDL", groups: [.hamstrings, .glutes, .core]),
         .init(name: "Skullcrusher (Barbell)", groups: [.triceps]),
@@ -178,6 +184,12 @@ class ExerciseMetadataManager: ObservableObject {
         if let override = muscleTagOverrides[exerciseName] {
             return override
         }
+        if let relationship = ExerciseRelationshipManager.shared.relationship(for: exerciseName) {
+            if let parentOverride = muscleTagOverrides[relationship.parentName] {
+                return parentOverride
+            }
+            return Self.defaultMappings[relationship.parentName] ?? []
+        }
         return Self.defaultMappings[exerciseName] ?? []
     }
 
@@ -196,11 +208,17 @@ class ExerciseMetadataManager: ObservableObject {
     }
 
     func defaultTags(for exerciseName: String) -> [MuscleTag] {
-        Self.defaultMappings[exerciseName] ?? []
+        if let direct = Self.defaultMappings[exerciseName] {
+            return direct
+        }
+        if let relationship = ExerciseRelationshipManager.shared.relationship(for: exerciseName) {
+            return Self.defaultMappings[relationship.parentName] ?? []
+        }
+        return []
     }
 
     func hasDefaultTags(for exerciseName: String) -> Bool {
-        Self.defaultMappings[exerciseName] != nil
+        !defaultTags(for: exerciseName).isEmpty
     }
 
     func isOverridden(for exerciseName: String) -> Bool {

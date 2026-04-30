@@ -34,6 +34,7 @@ final class RecoveryCoverageEngine: ObservableObject {
         }
 
         isAnalyzing = true
+        let resolver = ExerciseRelationshipManager.shared.resolverSnapshot()
 
         let result = await Task(priority: .userInitiated) {
             let recoverySignals = Self.computeRecoverySignals(dailyHealth: dailyHealth)
@@ -41,7 +42,8 @@ final class RecoveryCoverageEngine: ObservableObject {
                 workouts: workouts,
                 mappings: muscleMappings,
                 intentionalBreakRanges: intentionalBreakRanges,
-                window: .twelveWeeks
+                window: .twelveWeeks,
+                resolver: resolver
             )
 
             return (recoverySignals, frequency)
@@ -50,7 +52,8 @@ final class RecoveryCoverageEngine: ObservableObject {
         cachedFrequencySource = FrequencyAnalysisSource(
             workouts: workouts,
             mappings: muscleMappings,
-            intentionalBreakRanges: intentionalBreakRanges
+            intentionalBreakRanges: intentionalBreakRanges,
+            resolver: resolver
         )
         recoverySignals = result.0
         frequencyInsights = result.1
@@ -63,7 +66,8 @@ final class RecoveryCoverageEngine: ObservableObject {
             workouts: cachedFrequencySource.workouts,
             mappings: cachedFrequencySource.mappings,
             intentionalBreakRanges: cachedFrequencySource.intentionalBreakRanges,
-            window: window
+            window: window,
+            resolver: cachedFrequencySource.resolver
         )
     }
 
@@ -154,6 +158,7 @@ final class RecoveryCoverageEngine: ObservableObject {
         let workouts: [Workout]
         let mappings: [String: [MuscleTag]]
         let intentionalBreakRanges: [IntentionalBreakRange]
+        let resolver: ExerciseIdentityResolver
     }
 
     private static func analyzeFrequency(
@@ -161,7 +166,8 @@ final class RecoveryCoverageEngine: ObservableObject {
         mappings: [String: [MuscleTag]],
         intentionalBreakRanges: [IntentionalBreakRange],
         window: FrequencyInsightWindow,
-        referenceDate: Date = Date()
+        referenceDate: Date = Date(),
+        resolver: ExerciseIdentityResolver = .empty
     ) -> [FrequencyInsight] {
         let calendar = Calendar.current
         guard let bounds = window.interval(for: workouts, referenceDate: referenceDate, calendar: calendar) else {
@@ -223,7 +229,8 @@ final class RecoveryCoverageEngine: ObservableObject {
             guard trackedWeekSet.contains(weekStart) else { continue }
 
             for exercise in workout.exercises {
-                let tags = mappings[exercise.name] ?? []
+                let aggregateName = resolver.aggregateName(for: exercise.name)
+                let tags = mappings[exercise.name] ?? mappings[aggregateName] ?? []
                 for tag in tags {
                     let key = tag.displayName
                     muscleWeekSets[key, default: Set()].insert(weekStart)

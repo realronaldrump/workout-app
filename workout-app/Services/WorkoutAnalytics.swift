@@ -156,11 +156,15 @@ struct WorkoutAnalytics {
     }
 
     static func repRangeDistribution(for workouts: [Workout]) -> [RepRangeBucket] {
-        let allSets = workouts.flatMap { $0.exercises }.flatMap { $0.sets }
+        let resolver = ExerciseRelationshipManager.shared.resolverSnapshot()
+        let allExercises = workouts.flatMap {
+            ExerciseAggregation.aggregateExercises(in: $0, resolver: resolver)
+        }
+        let allSets = allExercises.flatMap { $0.sets }
 
         // Rep range distribution is a strength metric; exclude cardio-tagged exercises so
         // count-based cardio (e.g. "floors") doesn't pollute the rep histogram.
-        let exerciseNames = Set(workouts.flatMap { $0.exercises.map(\.name) })
+        let exerciseNames = Set(allExercises.map(\.name))
         let cardioNames: Set<String> = Set(
             exerciseNames.filter { name in
                 ExerciseMetadataManager.shared
@@ -192,7 +196,10 @@ struct WorkoutAnalytics {
     }
 
     static func intensityZones(for workouts: [Workout]) -> [IntensityZoneBucket] {
-        let allExercises = workouts.flatMap { $0.exercises }
+        let resolver = ExerciseRelationshipManager.shared.resolverSnapshot()
+        let allExercises = workouts.flatMap {
+            ExerciseAggregation.aggregateExercises(in: $0, resolver: resolver)
+        }
         let best1RMByExercise = Dictionary(grouping: allExercises, by: { $0.name }).compactMapValues { exercises in
             let sets = exercises.flatMap { $0.sets }
             let exerciseName = exercises.first?.name ?? ""
@@ -200,7 +207,7 @@ struct WorkoutAnalytics {
             return best > 0 ? best : nil
         }
 
-        let allSets = workouts.flatMap { $0.exercises }.flatMap { $0.sets }
+        let allSets = allExercises.flatMap { $0.sets }
         let zones: [IntensityZoneDescriptor] = [
             IntensityZoneDescriptor(label: "<50%", range: 0.0...0.49, tint: Theme.Colors.textSecondary),
             IntensityZoneDescriptor(label: "50-65%", range: 0.50...0.65, tint: Theme.Colors.accentSecondary),
@@ -240,7 +247,8 @@ struct WorkoutAnalytics {
     static func progressContributions(
         workouts: [Workout],
         weeks: Int,
-        mappings: [String: [MuscleTag]]
+        mappings: [String: [MuscleTag]],
+        resolver: ExerciseIdentityResolver = .empty
     ) -> [ProgressContribution] {
         guard let endDate = workouts.map({ $0.date }).max() else { return [] }
         let calendar = Calendar.current
@@ -250,11 +258,11 @@ struct WorkoutAnalytics {
         let current = workouts.filter { $0.date >= currentStart }
         let previous = workouts.filter { $0.date >= previousStart && $0.date < currentStart }
 
-        let exerciseDeltas = progressDeltaByExercise(current: current, previous: previous)
+        let exerciseDeltas = progressDeltaByExercise(current: current, previous: previous, resolver: resolver)
 
         let exerciseContributions = exerciseDeltas.map { name, delta in
-            let previousValue = previousExerciseValue(previous, exerciseName: name)
-            let currentValue = currentExerciseValue(current, exerciseName: name)
+            let previousValue = previousExerciseValue(previous, exerciseName: name, resolver: resolver)
+            let currentValue = currentExerciseValue(current, exerciseName: name, resolver: resolver)
             let percent = percentChange(current: currentValue, previous: previousValue)
             return ProgressContribution(
                 name: name,
@@ -269,7 +277,7 @@ struct WorkoutAnalytics {
 
         var muscleTotals: [MuscleTag: Double] = [:]
         for (exerciseName, delta) in exerciseDeltas {
-            let tags = mappings[exerciseName] ?? []
+            let tags = mappings[exerciseName] ?? ExerciseMetadataManager.shared.resolvedTags(for: exerciseName)
             for tag in tags {
                 muscleTotals[tag, default: 0] += delta
             }
@@ -287,7 +295,7 @@ struct WorkoutAnalytics {
             )
         }
 
-        let workoutTypeDeltas = progressDeltaByWorkoutName(current: current, previous: previous)
+        let workoutTypeDeltas = progressDeltaByWorkoutName(current: current, previous: previous, resolver: resolver)
         let workoutContributions = workoutTypeDeltas.map { name, delta in
             ProgressContribution(
                 name: name,
@@ -330,21 +338,34 @@ struct WorkoutAnalytics {
         )
     }
 
-    static func changeMetrics(for workouts: [Workout], windowDays: Int) -> [ChangeMetric] {
+    static func changeMetrics(
+        for workouts: [Workout],
+        windowDays: Int,
+        resolver: ExerciseIdentityResolver = .empty
+    ) -> [ChangeMetric] {
         guard let window = rollingChangeWindow(for: workouts, windowDays: windowDays) else { return [] }
-        return changeMetrics(for: workouts, window: window)
+        return changeMetrics(for: workouts, window: window, resolver: resolver)
     }
 
-    static func changeMetrics(for workouts: [Workout], window: ChangeMetricWindow) -> [ChangeMetric] {
-        changeMetrics(for: workouts, currentRange: window.current, previousRange: window.previous)
+    static func changeMetrics(
+        for workouts: [Workout],
+        window: ChangeMetricWindow,
+        resolver: ExerciseIdentityResolver = .empty
+    ) -> [ChangeMetric] {
+        changeMetrics(for: workouts, currentRange: window.current, previousRange: window.previous, resolver: resolver)
     }
 
-    static func changeMetrics(for workouts: [Workout], currentRange: DateInterval, previousRange: DateInterval) -> [ChangeMetric] {
+    static func changeMetrics(
+        for workouts: [Workout],
+        currentRange: DateInterval,
+        previousRange: DateInterval,
+        resolver: ExerciseIdentityResolver = .empty
+    ) -> [ChangeMetric] {
         let current = workouts.filter { currentRange.contains($0.date) }
         let previous = workouts.filter { previousRange.contains($0.date) }
 
-        let currentVolume = current.reduce(0) { $0 + $1.totalVolume }
-        let previousVolume = previous.reduce(0) { $0 + $1.totalVolume }
+        let currentVolume = ExerciseAggregation.totalVolume(for: current, resolver: resolver)
+        let previousVolume = ExerciseAggregation.totalVolume(for: previous, resolver: resolver)
 
         let currentSessions = Double(current.count)
         let previousSessions = Double(previous.count)
@@ -383,13 +404,23 @@ struct WorkoutAnalytics {
 
     // MARK: - Helpers
 
-    private static func progressDeltaByExercise(current: [Workout], previous: [Workout]) -> [String: Double] {
-        let exercises = Set(current.flatMap { $0.exercises.map { $0.name } } + previous.flatMap { $0.exercises.map { $0.name } })
+    private static func progressDeltaByExercise(
+        current: [Workout],
+        previous: [Workout],
+        resolver: ExerciseIdentityResolver
+    ) -> [String: Double] {
+        let currentExercises = current.flatMap {
+            ExerciseAggregation.aggregateExercises(in: $0, resolver: resolver).map(\.name)
+        }
+        let previousExercises = previous.flatMap {
+            ExerciseAggregation.aggregateExercises(in: $0, resolver: resolver).map(\.name)
+        }
+        let exercises = Set(currentExercises + previousExercises)
         var deltas: [String: Double] = [:]
 
         for name in exercises {
-            let currentValue = currentExerciseValue(current, exerciseName: name)
-            let previousValue = previousExerciseValue(previous, exerciseName: name)
+            let currentValue = currentExerciseValue(current, exerciseName: name, resolver: resolver)
+            let previousValue = previousExerciseValue(previous, exerciseName: name, resolver: resolver)
             let delta = currentValue - previousValue
             deltas[name] = delta
         }
@@ -408,10 +439,16 @@ struct WorkoutAnalytics {
 
         var sessionsByExercise: [String: Int] = [:]
         var weeksByExercise: [String: Set<Date>] = [:]
+        let resolver = ExerciseRelationshipManager.shared.resolverSnapshot()
 
         for workout in workouts {
             guard let weekStart = weekStart(for: workout.date, calendar: calendar) else { continue }
-            let exerciseNames = Set(workout.exercises.map(\.name))
+            let exerciseNames = Set(
+                ExerciseAggregation.aggregateExercises(
+                    in: workout,
+                    resolver: resolver
+                ).map(\.name)
+            )
             for name in exerciseNames {
                 sessionsByExercise[name, default: 0] += 1
                 weeksByExercise[name, default: []].insert(weekStart)
@@ -439,22 +476,38 @@ struct WorkoutAnalytics {
         return calendar.date(from: components)
     }
 
-    private static func progressDeltaByWorkoutName(current: [Workout], previous: [Workout]) -> [String: Double] {
+    private static func progressDeltaByWorkoutName(
+        current: [Workout],
+        previous: [Workout],
+        resolver: ExerciseIdentityResolver
+    ) -> [String: Double] {
         let names = Set(current.map { $0.name } + previous.map { $0.name })
         var deltas: [String: Double] = [:]
 
         for name in names {
-            let currentVolume = current.filter { $0.name == name }.reduce(0) { $0 + $1.totalVolume }
-            let previousVolume = previous.filter { $0.name == name }.reduce(0) { $0 + $1.totalVolume }
+            let currentVolume = ExerciseAggregation.totalVolume(
+                for: current.filter { $0.name == name },
+                resolver: resolver
+            )
+            let previousVolume = ExerciseAggregation.totalVolume(
+                for: previous.filter { $0.name == name },
+                resolver: resolver
+            )
             deltas[name] = currentVolume - previousVolume
         }
 
         return deltas
     }
 
-    private static func currentExerciseValue(_ workouts: [Workout], exerciseName: String) -> Double {
+    private static func currentExerciseValue(
+        _ workouts: [Workout],
+        exerciseName: String,
+        resolver: ExerciseIdentityResolver
+    ) -> Double {
         let sets = workouts.flatMap { workout in
-            workout.exercises.filter { $0.name == exerciseName }.flatMap { $0.sets }
+            ExerciseAggregation.aggregateExercises(in: workout, resolver: resolver)
+                .filter { $0.name == exerciseName }
+                .flatMap { $0.sets }
         }
         guard let bestWeight = ExerciseLoad.bestWeight(in: sets.map(\.weight), exerciseName: exerciseName) else {
             return 0
@@ -463,8 +516,12 @@ struct WorkoutAnalytics {
         return ExerciseLoad.comparisonValue(for: bestWeight, exerciseName: exerciseName)
     }
 
-    private static func previousExerciseValue(_ workouts: [Workout], exerciseName: String) -> Double {
-        currentExerciseValue(workouts, exerciseName: exerciseName)
+    private static func previousExerciseValue(
+        _ workouts: [Workout],
+        exerciseName: String,
+        resolver: ExerciseIdentityResolver
+    ) -> Double {
+        currentExerciseValue(workouts, exerciseName: exerciseName, resolver: resolver)
     }
 
     private static func changeMetric(title: String, current: Double, previous: Double) -> ChangeMetric {

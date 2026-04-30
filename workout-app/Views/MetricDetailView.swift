@@ -142,7 +142,7 @@ struct MetricDetailView: View {
                     HeroChip(title: "Avg / Session", value: SharedFormatters.volumePrecise(avgVolumePerSession), tint: Theme.Colors.success)
                     HeroChip(
                         title: "Peak Session",
-                        value: SharedFormatters.volumePrecise(peakVolumeSession?.totalVolume ?? 0),
+                        value: SharedFormatters.volumePrecise(peakVolumeSession.map { normalizedVolume(for: $0) } ?? 0),
                         tint: Theme.Colors.accentSecondary
                     )
                     HeroChip(title: "Sessions", value: "\(workouts.count)", tint: Theme.Colors.warning)
@@ -633,7 +633,7 @@ struct MetricDetailView: View {
                     ForEach(topVolumeWorkouts) { workout in
                         VolumeSessionChip(
                             title: workout.name,
-                            value: SharedFormatters.volumeCompact(workout.totalVolume),
+                            value: SharedFormatters.volumeCompact(normalizedVolume(for: workout)),
                             isSelected: selectedVolumeWorkoutId == workout.id,
                             onTap: {
                                 withAnimation(Theme.Animation.spring) {
@@ -662,7 +662,7 @@ struct MetricDetailView: View {
                     NavigationLink(destination: WorkoutDetailView(workout: workout)) {
                         MetricWorkoutRow(
                             workout: workout,
-                            subtitle: "\(SharedFormatters.volumeCompact(workout.totalVolume)) volume | \(timeOfDayLabel(for: workout.date))",
+                            subtitle: "\(SharedFormatters.volumeCompact(normalizedVolume(for: workout))) volume | \(timeOfDayLabel(for: workout.date))",
                             highlight: selectedVolumeWorkoutId == workout.id
                         )
                     }
@@ -675,12 +675,7 @@ struct MetricDetailView: View {
     }
 
     private var topExercisesByVolumeCard: some View {
-        let exerciseTotals = Dictionary(grouping: volumeWorkouts.flatMap(\.volumeExercises), by: { $0.name })
-            .map { name, exercises in
-                (name: name, volume: exercises.reduce(0) { $0 + $1.totalVolume })
-            }
-            .filter { $0.volume > 0 }
-            .sorted { $0.volume > $1.volume }
+        let exerciseTotals = topExerciseTotals
 
         return VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             Text("Top Exercises By Volume")
@@ -797,7 +792,7 @@ struct MetricDetailView: View {
     }
 
     private var totalVolume: Double {
-        workouts.reduce(0) { $0 + $1.totalVolume }
+        ExerciseAggregation.totalVolume(for: workouts, resolver: ExerciseIdentityResolver.current)
     }
 
     private var avgVolumePerSession: Double {
@@ -806,7 +801,7 @@ struct MetricDetailView: View {
     }
 
     private var peakVolumeSession: Workout? {
-        workouts.max(by: { $0.totalVolume < $1.totalVolume })
+        workouts.max(by: { normalizedVolume(for: $0) < normalizedVolume(for: $1) })
     }
 
     private var selectedSessionDayLabel: String {
@@ -1107,12 +1102,29 @@ struct MetricDetailView: View {
         volumeWorkouts
             .sorted { $0.date < $1.date }
             .map { workout in
-                VolumePoint(id: workout.id, date: workout.date, value: workout.totalVolume)
+                VolumePoint(id: workout.id, date: workout.date, value: normalizedVolume(for: workout))
             }
     }
 
     private var topVolumeWorkouts: [Workout] {
-        volumeWorkouts.sorted { $0.totalVolume > $1.totalVolume }.prefix(6).map { $0 }
+        volumeWorkouts.sorted { normalizedVolume(for: $0) > normalizedVolume(for: $1) }.prefix(6).map { $0 }
+    }
+
+    private var topExerciseTotals: [(name: String, volume: Double)] {
+        let resolver = ExerciseIdentityResolver.current
+        let exercises = volumeWorkouts.flatMap {
+            ExerciseAggregation.aggregateExercises(in: $0, resolver: resolver).filter(\.hasVolume)
+        }
+        return Dictionary(grouping: exercises, by: { $0.name })
+            .map { name, exercises in
+                (name: name, volume: exercises.reduce(0) { $0 + $1.totalVolume })
+            }
+            .filter { $0.volume > 0 }
+            .sorted { $0.volume > $1.volume }
+    }
+
+    private func normalizedVolume(for workout: Workout) -> Double {
+        ExerciseAggregation.totalVolume(for: workout, resolver: ExerciseIdentityResolver.current)
     }
 
     private var volumeListWorkouts: [Workout] {
@@ -1268,7 +1280,7 @@ private struct MetricWorkoutRow: View {
                 Text(workout.duration)
                     .font(Theme.Typography.captionBold)
                     .foregroundColor(Theme.Colors.textSecondary)
-                Text("\(workout.exercises.count) exercises")
+                Text("\(ExerciseAggregation.exerciseCount(for: workout, resolver: ExerciseIdentityResolver.current)) exercises")
                     .font(Theme.Typography.caption)
                     .foregroundColor(Theme.Colors.textTertiary)
             }

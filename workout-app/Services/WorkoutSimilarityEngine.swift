@@ -20,9 +20,10 @@ final class WorkoutSimilarityEngine: ObservableObject {
 
         isAnalyzing = true
         let workoutsSnapshot = workouts
+        let resolver = ExerciseRelationshipManager.shared.resolverSnapshot()
 
         let result = await Task.detached(priority: .userInitiated) {
-            WorkoutSimilarityAnalyzer.buildLibrary(workouts: workoutsSnapshot)
+            WorkoutSimilarityAnalyzer.buildLibrary(workouts: workoutsSnapshot, resolver: resolver)
         }.value
 
         guard currentGeneration == generation else { return }
@@ -62,9 +63,12 @@ private enum WorkoutSimilarityAnalyzer {
         let positionsByName: [String: Int]
     }
 
-    nonisolated static func buildLibrary(workouts: [Workout]) -> WorkoutSimilarityLibrary {
+    nonisolated static func buildLibrary(
+        workouts: [Workout],
+        resolver: ExerciseIdentityResolver = .empty
+    ) -> WorkoutSimilarityLibrary {
         let snapshots = workouts
-            .map(snapshot(for:))
+            .map { snapshot(for: $0, resolver: resolver) }
             .sorted(by: snapshotSort)
 
         var reviewsByWorkoutId: [UUID: WorkoutSimilarityReview] = [:]
@@ -128,12 +132,24 @@ private enum WorkoutSimilarityAnalyzer {
         )
     }
 
-    private nonisolated static func snapshot(for workout: Workout) -> Snapshot {
-        let exercises = workout.exercises.map { exercise in
-            let trimmed = exercise.name.trimmingCharacters(in: .whitespacesAndNewlines)
-            return CanonicalExercise(
-                displayName: trimmed.isEmpty ? exercise.name : trimmed,
-                normalizedName: normalizedExerciseName(exercise.name)
+    private nonisolated static func snapshot(
+        for workout: Workout,
+        resolver: ExerciseIdentityResolver
+    ) -> Snapshot {
+        var seen = Set<String>()
+        var exercises: [CanonicalExercise] = []
+        exercises.reserveCapacity(workout.exercises.count)
+
+        for exercise in workout.exercises {
+            let aggregateName = resolver.aggregateName(for: exercise.name)
+            let trimmed = aggregateName.trimmingCharacters(in: .whitespacesAndNewlines)
+            let normalized = normalizedExerciseName(trimmed)
+            guard !normalized.isEmpty, seen.insert(normalized).inserted else { continue }
+            exercises.append(
+                CanonicalExercise(
+                    displayName: trimmed.isEmpty ? aggregateName : trimmed,
+                    normalizedName: normalized
+                )
             )
         }
 

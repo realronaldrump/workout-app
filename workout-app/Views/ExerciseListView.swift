@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ExerciseListView: View {
     @ObservedObject var dataManager: WorkoutDataManager
+    @ObservedObject private var relationshipManager = ExerciseRelationshipManager.shared
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var annotationsManager: WorkoutAnnotationsManager
     @EnvironmentObject var gymProfilesManager: GymProfilesManager
@@ -21,8 +22,9 @@ struct ExerciseListView: View {
 
     private func toggleFavorite(_ name: String) {
         var favorites = favoriteExercises
-        if favorites.contains(name) {
-            favorites.remove(name)
+        let rollupNames = favoriteRollupNames(for: name)
+        if !favorites.isDisjoint(with: rollupNames) {
+            favorites.subtract(rollupNames)
         } else {
             favorites.insert(name)
         }
@@ -41,8 +43,14 @@ struct ExerciseListView: View {
     }
 
     private func buildExercises() -> [(name: String, stats: ExerciseStats)] {
+        let resolver = relationshipManager.resolverSnapshot()
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         let filtered = dataManager.exerciseSummaries().filter { exercise in
-            searchText.isEmpty || exercise.name.localizedCaseInsensitiveContains(searchText)
+            query.isEmpty ||
+                exercise.name.localizedCaseInsensitiveContains(query) ||
+                resolver.children(of: exercise.name).contains {
+                    $0.exerciseName.localizedCaseInsensitiveContains(query)
+                }
         }
 
         switch sortOrder {
@@ -65,12 +73,24 @@ struct ExerciseListView: View {
 
     private var favoriteExerciseRows: [(name: String, stats: ExerciseStats)] {
         guard searchText.isEmpty else { return [] }
-        return cachedExercises.filter { favoriteExercises.contains($0.name) }
+        return cachedExercises.filter { isFavoriteRollup($0.name) }
     }
 
     private var nonFavoriteExerciseRows: [(name: String, stats: ExerciseStats)] {
         guard searchText.isEmpty else { return cachedExercises }
-        return cachedExercises.filter { !favoriteExercises.contains($0.name) }
+        return cachedExercises.filter { !isFavoriteRollup($0.name) }
+    }
+
+    private func isFavoriteRollup(_ name: String) -> Bool {
+        !favoriteExercises.isDisjoint(with: favoriteRollupNames(for: name))
+    }
+
+    private func favoriteRollupNames(for name: String) -> Set<String> {
+        var names = Set([name])
+        for child in relationshipManager.children(of: name) {
+            names.insert(child.exerciseName)
+        }
+        return names
     }
 
     var body: some View {
@@ -149,6 +169,10 @@ struct ExerciseListView: View {
             cachedExercises = buildExercises()
         }
         .onChange(of: dataManager.workouts) { _, _ in
+            cachedExercises = buildExercises()
+        }
+        .onChange(of: relationshipManager.relationships) { _, _ in
+            dataManager.refreshExerciseIdentityDerivedState()
             cachedExercises = buildExercises()
         }
     }
@@ -284,8 +308,8 @@ struct ExerciseListView: View {
                 toggleFavorite(exercise.name)
             } label: {
                 Label(
-                    favoriteExercises.contains(exercise.name) ? "Unfavorite" : "Favorite",
-                    systemImage: favoriteExercises.contains(exercise.name) ? "star.slash" : "star"
+                    isFavoriteRollup(exercise.name) ? "Unfavorite" : "Favorite",
+                    systemImage: isFavoriteRollup(exercise.name) ? "star.slash" : "star"
                 )
             }
             Button("View History") {
@@ -322,7 +346,7 @@ struct ExerciseRowView: View {
 
                 HStack(spacing: 12) {
                     ExerciseMetricPill(icon: "repeat", text: "\(stats.frequency)x")
-                    ExerciseMetricPill(icon: "scalemass", text: formatWeight(stats.maxWeight))
+                    ExerciseMetricPill(icon: "chart.bar.fill", text: SharedFormatters.volumeCompact(stats.totalVolume))
 
                     if let lastDate = stats.lastPerformed {
                         ExerciseMetricPill(icon: "clock", text: relativeDateString(for: lastDate))
@@ -338,10 +362,6 @@ struct ExerciseRowView: View {
         }
         .padding(Theme.Spacing.lg)
         .modifier(ExerciseRowCardModifier(isEnabled: showsCard))
-    }
-
-    private func formatWeight(_ weight: Double) -> String {
-        ExerciseLoad.formatWeight(weight, exerciseName: name)
     }
 
     private func relativeDateString(for date: Date) -> String {

@@ -188,7 +188,10 @@ struct HomeWorkoutRow: View {
 
                         HStack(spacing: Theme.Spacing.md) {
                             Label(workout.duration, systemImage: "clock")
-                            Label("\(workout.exercises.count) exercises", systemImage: "figure.strengthtraining.traditional")
+                            Label(
+                                "\(ExerciseAggregation.exerciseCount(for: workout, resolver: ExerciseIdentityResolver.current)) exercises",
+                                systemImage: "figure.strengthtraining.traditional"
+                            )
                         }
                         .font(Theme.Typography.caption)
                         .foregroundColor(Theme.Colors.textSecondary)
@@ -452,7 +455,7 @@ private struct WeeklySessionPreviewCard: View {
                     Text(workout.duration)
                         .font(Theme.Typography.captionBold)
                         .foregroundColor(Theme.Colors.textSecondary)
-                    Text("\(workout.exercises.count) exercises")
+                    Text("\(ExerciseAggregation.exerciseCount(for: workout, resolver: ExerciseIdentityResolver.current)) exercises")
                         .font(Theme.Typography.caption)
                         .foregroundColor(Theme.Colors.textTertiary)
                 }

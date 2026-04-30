@@ -2,6 +2,7 @@ import SwiftUI
 
 struct MuscleRecencyView: View {
     @ObservedObject var dataManager: WorkoutDataManager
+    @ObservedObject private var relationshipManager = ExerciseRelationshipManager.shared
 
     private var recencyRows: [MuscleGroupRecency] {
         let workouts = dataManager.workouts
@@ -13,7 +14,8 @@ struct MuscleRecencyView: View {
 
         return MuscleRecencySuggestionEngine.allGroupRecency(
             workouts: workouts,
-            muscleGroupsByExerciseName: groupMappings
+            muscleGroupsByExerciseName: groupMappings,
+            resolver: relationshipManager.resolverSnapshot()
         )
     }
 

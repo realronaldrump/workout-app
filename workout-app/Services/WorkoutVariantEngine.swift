@@ -25,12 +25,14 @@ final class WorkoutVariantEngine: ObservableObject {
         let workoutsSnapshot = workouts
         let annotationsSnapshot = annotations
         let gymNamesSnapshot = gymNames
+        let resolver = ExerciseRelationshipManager.shared.resolverSnapshot()
 
         let result = await Task.detached(priority: .userInitiated) {
             WorkoutVariantAnalyzer.buildLibrary(
                 workouts: workoutsSnapshot,
                 annotations: annotationsSnapshot,
-                gymNames: gymNamesSnapshot
+                gymNames: gymNamesSnapshot,
+                resolver: resolver
             )
         }.value
 
@@ -44,8 +46,13 @@ final class WorkoutVariantEngine: ObservableObject {
     }
 
     func patterns(for exerciseName: String) -> [WorkoutVariantPattern] {
-        library.standoutPatterns.filter { pattern in
-            pattern.evidence.contains { $0.exerciseName == exerciseName }
+        let resolver = ExerciseRelationshipManager.shared.resolverSnapshot()
+        let targetName = resolver.aggregateName(for: exerciseName)
+        return library.standoutPatterns.filter { pattern in
+            pattern.evidence.contains { evidence in
+                guard let exerciseName = evidence.exerciseName else { return false }
+                return resolver.aggregateName(for: exerciseName) == targetName
+            }
         }
     }
 }
@@ -57,9 +64,12 @@ private enum WorkoutVariantAnalyzer {
     nonisolated static func buildLibrary(
         workouts: [Workout],
         annotations: [UUID: WorkoutAnnotation],
-        gymNames: [UUID: String]
+        gymNames: [UUID: String],
+        resolver: ExerciseIdentityResolver = .empty
     ) -> WorkoutVariantLibrary {
-        let snapshots = workouts.map { snapshot(for: $0, annotations: annotations, gymNames: gymNames) }
+        let snapshots = workouts.map {
+            snapshot(for: $0, annotations: annotations, gymNames: gymNames, resolver: resolver)
+        }
         let groups = Dictionary(grouping: snapshots) { $0.comparisonGroupKey }
 
         var reviewsByWorkoutId: [UUID: WorkoutVariantWorkoutReview] = [:]
@@ -107,6 +117,7 @@ private enum WorkoutVariantAnalyzer {
         let durationMinutes: Double
         let totalVolume: Double
         let totalSets: Int
+        let exerciseCount: Int
         let firstExerciseName: String?
         let timeBucket: TimeBucket
         let exerciseNames: Set<String>
@@ -179,7 +190,7 @@ private enum WorkoutVariantAnalyzer {
         let baselineTimeBucket = mode(snapshots.map(\.timeBucket)) ?? .evening
         let baselineGymId = modeOptional(snapshots.map(\.gymId))
         let durationMedian = median(snapshots.map(\.durationMinutes))
-        let exerciseCountMedian = max(1, Int(median(snapshots.map { Double($0.workout.exercises.count) }).rounded()))
+        let exerciseCountMedian = max(1, Int(median(snapshots.map { Double($0.exerciseCount) }).rounded()))
 
         let durationBands = snapshots.map { durationBand(for: $0, medianDuration: durationMedian) }
         let exerciseCountBands = snapshots.map { exerciseCountBand(for: $0, medianCount: exerciseCountMedian) }
@@ -657,9 +668,10 @@ private enum WorkoutVariantAnalyzer {
     private nonisolated static func snapshot(
         for workout: Workout,
         annotations: [UUID: WorkoutAnnotation],
-        gymNames: [UUID: String]
+        gymNames: [UUID: String],
+        resolver: ExerciseIdentityResolver
     ) -> Snapshot {
-        let canonicalExercises = canonicalExercises(for: workout)
+        let canonicalExercises = canonicalExercises(for: workout, resolver: resolver)
         let comparisonGroupKey = canonicalExercises.map(\.normalizedName).sorted().joined(separator: "|")
         let comparisonGroupLabel = structureLabel(for: canonicalExercises.map(\.displayName))
         let gymId = annotations[workout.id]?.gymProfileId
@@ -674,10 +686,12 @@ private enum WorkoutVariantAnalyzer {
         for exercise in workout.exercises {
             let estimated = OneRepMax.bestEstimate(in: exercise.sets, exerciseName: exercise.name)
             if estimated > 0 {
-                exerciseEstimatedMaxes[exercise.name] = ExerciseLoad.comparisonValue(
+                let aggregateName = resolver.aggregateName(for: exercise.name)
+                let comparisonValue = ExerciseLoad.comparisonValue(
                     for: estimated,
                     exerciseName: exercise.name
                 )
+                exerciseEstimatedMaxes[aggregateName] = max(exerciseEstimatedMaxes[aggregateName] ?? 0, comparisonValue)
             }
         }
 
@@ -688,11 +702,16 @@ private enum WorkoutVariantAnalyzer {
             gymId: gymId,
             gymLabel: gymLabel,
             durationMinutes: Double(workout.estimatedDurationMinutes()),
-            totalVolume: workout.totalVolume,
-            totalSets: workout.totalSets,
-            firstExerciseName: workout.exercises.first?.name,
+            totalVolume: ExerciseAggregation
+                .aggregateExercises(in: workout, resolver: resolver)
+                .reduce(0) { $0 + $1.totalVolume },
+            totalSets: ExerciseAggregation
+                .aggregateExercises(in: workout, resolver: resolver)
+                .reduce(0) { $0 + $1.sets.count },
+            exerciseCount: ExerciseAggregation.exerciseCount(for: workout, resolver: resolver),
+            firstExerciseName: workout.exercises.first.map { resolver.aggregateName(for: $0.name) },
             timeBucket: timeBucket(for: workout.date),
-            exerciseNames: Set(workout.exercises.map(\.name)),
+            exerciseNames: Set(workout.exercises.map { resolver.aggregateName(for: $0.name) }),
             exerciseEstimatedMaxes: exerciseEstimatedMaxes
         )
     }
@@ -702,16 +721,20 @@ private enum WorkoutVariantAnalyzer {
         let normalizedName: String
     }
 
-    private nonisolated static func canonicalExercises(for workout: Workout) -> [CanonicalExercise] {
+    private nonisolated static func canonicalExercises(
+        for workout: Workout,
+        resolver: ExerciseIdentityResolver
+    ) -> [CanonicalExercise] {
         var seen = Set<String>()
         var result: [CanonicalExercise] = []
 
         for exercise in workout.exercises {
-            let normalizedName = normalizedExerciseName(exercise.name)
+            let aggregateName = resolver.aggregateName(for: exercise.name)
+            let normalizedName = normalizedExerciseName(aggregateName)
             guard !normalizedName.isEmpty, seen.insert(normalizedName).inserted else { continue }
 
-            let trimmed = exercise.name.trimmingCharacters(in: .whitespacesAndNewlines)
-            let displayName = trimmed.isEmpty ? exercise.name : trimmed
+            let trimmed = aggregateName.trimmingCharacters(in: .whitespacesAndNewlines)
+            let displayName = trimmed.isEmpty ? aggregateName : trimmed
             result.append(
                 CanonicalExercise(
                     displayName: displayName,
@@ -782,10 +805,10 @@ private enum WorkoutVariantAnalyzer {
         for snapshot: Snapshot,
         medianCount: Int
     ) -> ExerciseCountBand {
-        if snapshot.workout.exercises.count <= max(1, medianCount - 1) {
+        if snapshot.exerciseCount <= max(1, medianCount - 1) {
             return .compact
         }
-        if snapshot.workout.exercises.count >= medianCount + 1 {
+        if snapshot.exerciseCount >= medianCount + 1 {
             return .extended
         }
         return .standard

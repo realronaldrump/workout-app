@@ -709,7 +709,10 @@ struct ConsistencyDetailView: View {
             let weekStart = SharedFormatters.startOfWeekSunday(for: workout.date)
             var accumulator = partialResult[weekStart, default: WeekAccumulator()]
             accumulator.sessions += 1
-            accumulator.totalVolume += workout.totalVolume
+            accumulator.totalVolume += ExerciseAggregation.totalVolume(
+                for: workout,
+                resolver: ExerciseIdentityResolver.current
+            )
             accumulator.totalMinutes += workout.estimatedDurationMinutes(defaultMinutes: 60)
             accumulator.uniqueDays.insert(calendar.startOfDay(for: workout.date))
             partialResult[weekStart] = accumulator
@@ -872,9 +875,10 @@ struct ConsistencyDetailView: View {
         return (1...7).map { weekday in
             let dayWorkouts = grouped[weekday] ?? []
             let sessions = dayWorkouts.count
-            let volume = dayWorkouts.reduce(0) { partialResult, workout in
-                partialResult + workout.totalVolume
-            }
+            let volume = ExerciseAggregation.totalVolume(
+                for: dayWorkouts,
+                resolver: ExerciseIdentityResolver.current
+            )
 
             return WeekdayConsistencyStat(
                 weekday: weekday,

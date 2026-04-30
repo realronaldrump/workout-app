@@ -111,6 +111,7 @@ struct MuscleHeatmapView: View {
 
     private func calculateMuscleStats() -> [MuscleTag: MuscleStats] {
         let recentWorkouts = dataManager.workouts.filter { dateRange.contains($0.date) }
+        let resolver = ExerciseIdentityResolver.current
         // swiftlint:disable:next large_tuple
         var muscleGroupData: [MuscleTag: (sets: Int, exercises: Set<String>, lastDate: Date?)] = [:]
 
@@ -119,7 +120,7 @@ struct MuscleHeatmapView: View {
         }
 
         for workout in recentWorkouts {
-            for exercise in workout.exercises {
+            for exercise in ExerciseAggregation.aggregateExercises(in: workout, resolver: resolver) {
                 let tags = ExerciseMetadataManager.shared.resolvedTags(for: exercise.name)
                 guard !tags.isEmpty else { continue }
 
