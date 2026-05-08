@@ -16,7 +16,7 @@ struct StrongImportWizard: View {
     @State private var step = 0
     @State private var isImporting = false
     @State private var importError: String?
-    @State private var importStats: (workouts: Int, exercises: Int)?
+    @State private var importStats: (workouts: Int, exercises: Int, sideLinks: Int)?
     @State private var showingFileImporter = false
     @State private var importPhase: ImportPhase = .idle
     @State private var importedFileName: String?
@@ -260,6 +260,20 @@ struct StrongImportWizard: View {
                                 Text("Exercises")
                                     .font(Theme.Typography.caption)
                                     .foregroundStyle(Theme.Colors.textSecondary)
+                            }
+
+                            if stats.sideLinks > 0 {
+                                Divider()
+                                    .frame(height: 40)
+
+                                VStack {
+                                    Text("\(stats.sideLinks)")
+                                        .font(Theme.Typography.title2)
+                                        .foregroundStyle(Theme.Colors.accent)
+                                    Text("Side Links")
+                                        .font(Theme.Typography.caption)
+                                        .foregroundStyle(Theme.Colors.textSecondary)
+                                }
                             }
                         }
                         .padding()
@@ -821,21 +835,22 @@ struct StrongImportWizard: View {
         }
         let requestID = dataManager.beginImportedWorkoutRequest()
 
-        await dataManager.processImportedWorkoutSets(
+        let relationshipResult = await dataManager.processImportedWorkoutSets(
             sets,
             healthIdentitySnapshot: healthIdentitySnapshot,
             requestID: requestID
         )
 
         let stats = dataManager.calculateStats()
-        importStats = (stats.totalWorkouts, stats.totalExercises)
+        importStats = (stats.totalWorkouts, stats.totalExercises, relationshipResult.created.count)
         AppAnalytics.shared.track(
             AnalyticsSignal.importCompleted,
             payload: [
                 "Context.source": source,
                 "Import.kind": "strongCSV",
                 "Import.workoutCount": "\(stats.totalWorkouts)",
-                "Import.exerciseCount": "\(stats.totalExercises)"
+                "Import.exerciseCount": "\(stats.totalExercises)",
+                "Import.sideLinkCount": "\(relationshipResult.created.count)"
             ]
         )
     }
@@ -891,7 +906,7 @@ struct StrongImportWizard: View {
         )
 
         let stats = dataManager.calculateStats()
-        importStats = (stats.totalWorkouts, stats.totalExercises)
+        importStats = (stats.totalWorkouts, stats.totalExercises, 0)
         AppAnalytics.shared.track(
             AnalyticsSignal.importCompleted,
             payload: [

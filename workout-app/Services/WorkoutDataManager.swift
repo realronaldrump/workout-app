@@ -54,11 +54,12 @@ class WorkoutDataManager: ObservableObject {
         let recentExerciseNames: [String]
     }
 
+    @discardableResult
     func processImportedWorkoutSets(
         _ sets: [WorkoutSet],
         healthIdentitySnapshot: [WorkoutHealthIdentitySnapshot] = [],
         requestID: UInt64? = nil
-    ) async {
+    ) async -> ExerciseRelationshipAutoLinkResult {
         isLoading = true
         error = nil
         let snapshots = (existingImported: importedWorkouts, identitySnapshot: identityStore.snapshot())
@@ -74,9 +75,11 @@ class WorkoutDataManager: ObservableObject {
         }
         let (processedWorkouts, newIdentityEntries) = await task.value
 
-        guard requestID.map(isCurrentImportedWorkoutRequest) ?? true else { return }
+        guard requestID.map(isCurrentImportedWorkoutRequest) ?? true else {
+            return .empty
+        }
 
-        await applyImportedWorkouts(processedWorkouts)
+        let autoLinkResult = await applyImportedWorkouts(processedWorkouts, repairSideRelationships: true)
         isLoading = false
         identityStore.merge(newIdentityEntries)
 
@@ -85,6 +88,8 @@ class WorkoutDataManager: ObservableObject {
         } catch {
             print("Failed to persist imported workouts: \(error)")
         }
+
+        return autoLinkResult
     }
 
     func setLoggedWorkouts(_ logged: [LoggedWorkout]) {
@@ -129,7 +134,7 @@ class WorkoutDataManager: ObservableObject {
 
             if iCloudDocumentManager.latestBackupFile(in: searchDirectories) != nil {
                 guard isCurrentImportedWorkoutRequest(requestID) else { return }
-                await applyImportedWorkouts(persistedWorkouts)
+                _ = await applyImportedWorkouts(persistedWorkouts, repairSideRelationships: true)
                 isLoading = false
                 return
             }
@@ -140,7 +145,7 @@ class WorkoutDataManager: ObservableObject {
 
             if !persistedWorkouts.isEmpty, latestSignature == cachedSignature || cachedSignature == nil {
                 guard isCurrentImportedWorkoutRequest(requestID) else { return }
-                await applyImportedWorkouts(persistedWorkouts)
+                _ = await applyImportedWorkouts(persistedWorkouts, repairSideRelationships: true)
                 isLoading = false
                 if cachedSignature == nil {
                     persistImportSourceSignature(latestSignature)
@@ -150,7 +155,7 @@ class WorkoutDataManager: ObservableObject {
 
             if latestFile == nil {
                 guard isCurrentImportedWorkoutRequest(requestID) else { return }
-                await applyImportedWorkouts(persistedWorkouts)
+                _ = await applyImportedWorkouts(persistedWorkouts, repairSideRelationships: true)
                 isLoading = false
                 return
             }
@@ -175,7 +180,7 @@ class WorkoutDataManager: ObservableObject {
         case .success(let sets):
             guard !sets.isEmpty else {
                 guard isCurrentImportedWorkoutRequest(requestID) else { return }
-                await applyImportedWorkouts([])
+                _ = await applyImportedWorkouts([], repairSideRelationships: false)
                 isLoading = false
                 clearImportSourceSignature()
                 do {
@@ -185,7 +190,7 @@ class WorkoutDataManager: ObservableObject {
                 }
                 return
             }
-            await processImportedWorkoutSets(
+            _ = await processImportedWorkoutSets(
                 sets,
                 healthIdentitySnapshot: healthIdentitySnapshot,
                 requestID: requestID
@@ -208,7 +213,7 @@ class WorkoutDataManager: ObservableObject {
                 try database.loadImportedWorkouts()
             }.value
             guard requestID == importedWorkoutRequestID else { return }
-            await applyImportedWorkouts(persisted)
+            _ = await applyImportedWorkouts(persisted, repairSideRelationships: true)
         } catch {
             print("Failed to load persisted imported workouts: \(error)")
         }
@@ -261,8 +266,16 @@ class WorkoutDataManager: ObservableObject {
         )
     }
 
-    private func applyImportedWorkouts(_ imported: [Workout]) async {
+    private func applyImportedWorkouts(
+        _ imported: [Workout],
+        repairSideRelationships: Bool
+    ) async -> ExerciseRelationshipAutoLinkResult {
         let loggedSnapshot = loggedWorkouts
+        let autoLinkResult = repairSideRelationships
+            ? ExerciseRelationshipManager.shared.autoLinkSideRelationships(
+                observedExerciseNames: Self.exerciseNames(in: imported + loggedSnapshot)
+            )
+            : .empty
         let resolver = ExerciseRelationshipManager.shared.resolverSnapshot()
         let state = await Task.detached(priority: .userInitiated) {
             Self.makeDerivedWorkoutState(
@@ -272,6 +285,7 @@ class WorkoutDataManager: ObservableObject {
             )
         }.value
         applyDerivedState(state)
+        return autoLinkResult
     }
 
     private func applyDerivedState(_ state: DerivedWorkoutState) {
@@ -733,6 +747,15 @@ class WorkoutDataManager: ObservableObject {
             allExerciseNames: Array(allExerciseNames)
                 .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending },
             recentExerciseNames: recentExerciseNames
+        )
+    }
+
+    nonisolated static func exerciseNames(in workouts: [Workout]) -> Set<String> {
+        Set(
+            workouts.flatMap { workout in
+                workout.exercises.map { ExerciseIdentityResolver.trimmedName($0.name) }
+            }
+            .filter { !$0.isEmpty }
         )
     }
 }

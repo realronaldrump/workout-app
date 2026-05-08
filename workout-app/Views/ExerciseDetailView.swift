@@ -99,6 +99,21 @@ struct ExerciseDetailView: View {
         let parentName: String?
         let laterality: ExerciseLaterality
         let mode: Mode
+        let replacingExerciseName: String?
+
+        init(
+            exerciseName: String,
+            parentName: String?,
+            laterality: ExerciseLaterality,
+            mode: Mode,
+            replacingExerciseName: String? = nil
+        ) {
+            self.exerciseName = exerciseName
+            self.parentName = parentName
+            self.laterality = laterality
+            self.mode = mode
+            self.replacingExerciseName = replacingExerciseName
+        }
 
         enum Mode {
             case assignExisting
@@ -195,8 +210,22 @@ struct ExerciseDetailView: View {
             .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
     }
 
+    private var observedRelationshipExerciseNames: [String] {
+        let relationshipNames = relationshipManager.relationships.values.flatMap { [$0.exerciseName, $0.parentName] }
+        let names = dataManager.allExerciseNames()
+            + relationshipNames
+            + [exerciseName]
+        return Array(Set(names))
+            .map { ExerciseIdentityResolver.trimmedName($0) }
+            .filter { !$0.isEmpty }
+            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }
+
     private var inferredRelationshipSuggestion: ExerciseRelationshipSuggestion? {
         relationshipManager.suggestedRelationship(
+            for: exerciseName,
+            knownExerciseNames: Set(observedRelationshipExerciseNames)
+        ) ?? relationshipManager.suggestedRelationship(
             for: exerciseName,
             knownExerciseNames: Set(availableRelationshipExerciseNames)
         )
@@ -713,12 +742,7 @@ struct ExerciseDetailView: View {
                     }
 
                     AppPillButton(title: "Add Side", systemImage: "plus", variant: .neutral) {
-                        relationshipEditorRequest = ExerciseRelationshipEditorRequest(
-                            exerciseName: defaultVariantName(parentName: exerciseName, laterality: .left),
-                            parentName: exerciseName,
-                            laterality: .left,
-                            mode: .createVariant
-                        )
+                        relationshipEditorRequest = addSideEditorRequest(parentName: exerciseName)
                     }
                 }
             }
@@ -800,12 +824,7 @@ struct ExerciseDetailView: View {
                             mode: .assignExisting
                         )
                     } else {
-                        relationshipEditorRequest = ExerciseRelationshipEditorRequest(
-                            exerciseName: defaultVariantName(parentName: exerciseName, laterality: .left),
-                            parentName: exerciseName,
-                            laterality: .left,
-                            mode: .createVariant
-                        )
+                        relationshipEditorRequest = addSideEditorRequest(parentName: exerciseName)
                     }
                 }
             }
@@ -847,6 +866,72 @@ struct ExerciseDetailView: View {
 
     private func defaultVariantName(parentName: String, laterality: ExerciseLaterality) -> String {
         ExerciseRelationshipManager.standardVariantName(parentName: parentName, laterality: laterality)
+    }
+
+    private func suggestedSideRelationships(forParentName parentName: String) -> [ExerciseRelationshipSuggestion] {
+        let observedSuggestions = relationshipManager.suggestedRelationships(
+            forParent: parentName,
+            knownExerciseNames: Set(observedRelationshipExerciseNames)
+        )
+        if !observedSuggestions.isEmpty {
+            return observedSuggestions
+        }
+
+        return relationshipManager.suggestedRelationships(
+            forParent: parentName,
+            knownExerciseNames: Set(availableRelationshipExerciseNames)
+        )
+    }
+
+    private func addSideEditorRequest(parentName: String) -> ExerciseRelationshipEditorRequest {
+        let suggestions = suggestedSideRelationships(forParentName: parentName)
+        let suggestedSide = suggestions.first { suggestion in
+            missingSide(forParentName: parentName) == suggestion.laterality ||
+                standardRelationshipNameForReplacement(
+                    parentName: parentName,
+                    laterality: suggestion.laterality
+                ) != nil
+        } ?? suggestions.first
+        let laterality = suggestedSide?.laterality ?? missingSide(forParentName: parentName) ?? .left
+        let replacementName = standardRelationshipNameForReplacement(
+            parentName: parentName,
+            laterality: laterality
+        )
+
+        if let suggestedSide {
+            return ExerciseRelationshipEditorRequest(
+                exerciseName: suggestedSide.exerciseName,
+                parentName: parentName,
+                laterality: suggestedSide.laterality,
+                mode: .assignExisting,
+                replacingExerciseName: replacementName
+            )
+        }
+
+        return ExerciseRelationshipEditorRequest(
+            exerciseName: replacementName ?? defaultVariantName(parentName: parentName, laterality: laterality),
+            parentName: parentName,
+            laterality: laterality,
+            mode: .createVariant,
+            replacingExerciseName: replacementName
+        )
+    }
+
+    private func missingSide(forParentName parentName: String) -> ExerciseLaterality? {
+        let existingSides = Set(resolver.children(of: parentName).map(\.laterality))
+        return [ExerciseLaterality.left, .right].first { !existingSides.contains($0) }
+    }
+
+    private func standardRelationshipNameForReplacement(
+        parentName: String,
+        laterality: ExerciseLaterality
+    ) -> String? {
+        let standardName = defaultVariantName(parentName: parentName, laterality: laterality)
+        return resolver.children(of: parentName).first { relationship in
+            relationship.laterality == laterality &&
+                ExerciseIdentityResolver.normalizedName(relationship.exerciseName) ==
+                ExerciseIdentityResolver.normalizedName(standardName)
+        }?.exerciseName
     }
 
     private func splitIntoStandardSides() {
@@ -1015,13 +1100,16 @@ struct ExerciseDetailView: View {
                 initialParentName: request.parentName ?? exerciseName,
                 initialLaterality: request.laterality,
                 updatesDefaultNameOnSideChange: request.mode == .createVariant,
-                availableExerciseNames: availableRelationshipExerciseNames
+                availableExerciseNames: availableRelationshipExerciseNames,
+                suggestedExerciseNames: suggestedSideRelationships(
+                    forParentName: request.parentName ?? exerciseName
+                ).map(\.exerciseName)
             ) { childName, parentName, laterality in
                     let didSave = relationshipManager.setRelationship(
                         exerciseName: childName,
                         parentName: parentName,
                         laterality: laterality,
-                        replacingExerciseName: request.exerciseName
+                        replacingExerciseName: request.replacingExerciseName ?? request.exerciseName
                     )
                     guard didSave else { return }
                     dataManager.refreshExerciseIdentityDerivedState()
@@ -1187,6 +1275,7 @@ private struct ExerciseRelationshipEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     let availableExerciseNames: [String]
+    let suggestedExerciseNames: [String]
     let updatesDefaultNameOnSideChange: Bool
     let onSave: (String, String, ExerciseLaterality) -> Void
 
@@ -1194,6 +1283,7 @@ private struct ExerciseRelationshipEditorSheet: View {
     @State private var draftParentName: String
     @State private var draftLaterality: ExerciseLaterality
     @State private var generatedName: String
+    @State private var exerciseSearchText = ""
 
     init(
         initialExerciseName: String,
@@ -1201,11 +1291,13 @@ private struct ExerciseRelationshipEditorSheet: View {
         initialLaterality: ExerciseLaterality,
         updatesDefaultNameOnSideChange: Bool,
         availableExerciseNames: [String],
+        suggestedExerciseNames: [String] = [],
         onSave: @escaping (String, String, ExerciseLaterality) -> Void
     ) {
         let trimmedExercise = ExerciseIdentityResolver.trimmedName(initialExerciseName)
         let trimmedParent = ExerciseIdentityResolver.trimmedName(initialParentName)
         self.availableExerciseNames = availableExerciseNames
+        self.suggestedExerciseNames = suggestedExerciseNames
         self.updatesDefaultNameOnSideChange = updatesDefaultNameOnSideChange
         self.onSave = onSave
         _draftExerciseName = State(initialValue: trimmedExercise)
@@ -1219,6 +1311,45 @@ private struct ExerciseRelationshipEditorSheet: View {
         return availableExerciseNames
             .filter { ExerciseIdentityResolver.normalizedName($0) != childKey }
             .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }
+
+    private var selectableExerciseNames: [String] {
+        let parentKey = ExerciseIdentityResolver.normalizedName(draftParentName)
+        return availableExerciseNames.filter { name in
+            let key = ExerciseIdentityResolver.normalizedName(name)
+            return !key.isEmpty && key != parentKey
+        }
+    }
+
+    private var dynamicSuggestedExerciseNames: [String] {
+        ExerciseIdentityResolver.inferredSuggestions(
+            forParent: draftParentName,
+            knownExerciseNames: Set(availableExerciseNames)
+        )
+        .map(\.exerciseName)
+    }
+
+    private var prioritizedExerciseNames: [String] {
+        orderedUnique(suggestedExerciseNames + dynamicSuggestedExerciseNames)
+            .filter { candidate in
+                selectableExerciseNames.contains {
+                    ExerciseIdentityResolver.normalizedName($0) ==
+                        ExerciseIdentityResolver.normalizedName(candidate)
+                }
+            }
+    }
+
+    private var exerciseSearchResults: [String] {
+        let query = ExerciseIdentityResolver.trimmedName(exerciseSearchText)
+        let source: [String]
+        if query.isEmpty {
+            source = prioritizedExerciseNames
+        } else {
+            source = selectableExerciseNames.filter {
+                $0.localizedCaseInsensitiveContains(query)
+            }
+        }
+        return Array(orderedUnique(source).prefix(8))
     }
 
     private var canSave: Bool {
@@ -1237,14 +1368,61 @@ private struct ExerciseRelationshipEditorSheet: View {
                 ScrollView(showsIndicators: false) {
                     VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
                         fieldCard(title: "Variant Name") {
-                            TextField("Exercise name", text: $draftExerciseName)
-                                .textInputAutocapitalization(.words)
-                                .disableAutocorrection(true)
-                                .font(Theme.Typography.body)
-                                .foregroundColor(Theme.Colors.textPrimary)
-                                .padding(Theme.Spacing.md)
-                                .background(Theme.Colors.surfaceRaised)
-                                .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous))
+                            VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+                                TextField("Exercise name", text: $draftExerciseName)
+                                    .textInputAutocapitalization(.words)
+                                    .disableAutocorrection(true)
+                                    .font(Theme.Typography.body)
+                                    .foregroundColor(Theme.Colors.textPrimary)
+                                    .padding(Theme.Spacing.md)
+                                    .background(Theme.Colors.surfaceRaised)
+                                    .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous))
+
+                                TextField("Search existing exercises", text: $exerciseSearchText)
+                                    .textInputAutocapitalization(.words)
+                                    .disableAutocorrection(true)
+                                    .font(Theme.Typography.callout)
+                                    .foregroundColor(Theme.Colors.textPrimary)
+                                    .padding(Theme.Spacing.md)
+                                    .background(Theme.Colors.surfaceRaised)
+                                    .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous))
+
+                                if !exerciseSearchResults.isEmpty {
+                                    VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                                        Text(exerciseSearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Suggested Matches" : "Existing Exercises")
+                                            .font(Theme.Typography.metricLabel)
+                                            .foregroundStyle(Theme.Colors.textTertiary)
+                                            .textCase(.uppercase)
+                                            .tracking(0.8)
+
+                                        ForEach(exerciseSearchResults, id: \.self) { name in
+                                            Button {
+                                                selectExerciseName(name)
+                                            } label: {
+                                                HStack(spacing: Theme.Spacing.sm) {
+                                                    Image(systemName: name == draftExerciseName ? "checkmark.circle.fill" : "circle")
+                                                        .font(Theme.Typography.callout)
+                                                        .foregroundStyle(name == draftExerciseName ? Theme.Colors.accent : Theme.Colors.textTertiary)
+
+                                                    Text(name)
+                                                        .font(Theme.Typography.callout)
+                                                        .foregroundColor(Theme.Colors.textPrimary)
+                                                        .lineLimit(2)
+                                                        .multilineTextAlignment(.leading)
+
+                                                    Spacer()
+                                                }
+                                                .padding(.vertical, Theme.Spacing.xs)
+                                            }
+                                            .buttonStyle(.plain)
+                                        }
+                                    }
+                                } else if !exerciseSearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                    Text("No existing exercise matches")
+                                        .font(Theme.Typography.caption)
+                                        .foregroundStyle(Theme.Colors.textSecondary)
+                                }
+                            }
                         }
 
                         fieldCard(title: "Parent Exercise") {
@@ -1337,6 +1515,29 @@ private struct ExerciseRelationshipEditorSheet: View {
         )
         Haptics.selection()
         dismiss()
+    }
+
+    private func selectExerciseName(_ name: String) {
+        draftExerciseName = name
+        generatedName = ""
+
+        if let suggestion = ExerciseIdentityResolver.inferredSuggestion(
+            for: name,
+            knownExerciseNames: Set(availableExerciseNames)
+        ), ExerciseIdentityResolver.normalizedName(suggestion.parentName) ==
+            ExerciseIdentityResolver.normalizedName(draftParentName) {
+            draftLaterality = suggestion.laterality
+        }
+
+        Haptics.selection()
+    }
+
+    private func orderedUnique(_ names: [String]) -> [String] {
+        var seen = Set<String>()
+        return names
+            .map(ExerciseIdentityResolver.trimmedName)
+            .filter { !$0.isEmpty }
+            .filter { seen.insert(ExerciseIdentityResolver.normalizedName($0)).inserted }
     }
 
     private func defaultName(parent: String, laterality: ExerciseLaterality) -> String {

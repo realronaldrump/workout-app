@@ -60,6 +60,152 @@ final class ExerciseRelationshipTests: XCTestCase {
         )
     }
 
+    func testInferredSuggestionRecognizesStrongSingleLegExtensionNames() {
+        let known: Set<String> = [
+            "Leg Extension (Machine)",
+            "Single Leg Leg Extension (Left)",
+            "Single Leg Leg Extension (Right)"
+        ]
+
+        let left = ExerciseIdentityResolver.inferredSuggestion(
+            for: "Single Leg Leg Extension (Left)",
+            knownExerciseNames: known
+        )
+        let right = ExerciseIdentityResolver.inferredSuggestion(
+            for: "Single Leg Leg Extension (Right)",
+            knownExerciseNames: known
+        )
+
+        XCTAssertEqual(left?.exerciseName, "Single Leg Leg Extension (Left)")
+        XCTAssertEqual(left?.parentName, "Leg Extension (Machine)")
+        XCTAssertEqual(left?.laterality, .left)
+        XCTAssertEqual(right?.parentName, "Leg Extension (Machine)")
+        XCTAssertEqual(right?.laterality, .right)
+    }
+
+    func testInferredSuggestionMatchesSingleLegCurlToUniqueObservedParent() {
+        let known: Set<String> = [
+            "Seated Leg Curl (Machine)",
+            "Single Leg Leg Curl (Left)",
+            "Single Leg Leg Curl (Right)"
+        ]
+
+        let suggestion = ExerciseIdentityResolver.inferredSuggestion(
+            for: "Single Leg Leg Curl (Left)",
+            knownExerciseNames: known
+        )
+
+        XCTAssertEqual(suggestion?.parentName, "Seated Leg Curl (Machine)")
+        XCTAssertEqual(suggestion?.laterality, .left)
+    }
+
+    func testInferredSuggestionSkipsAmbiguousSingleLegCurlParents() {
+        let known: Set<String> = [
+            "Seated Leg Curl (Machine)",
+            "Lying Leg Curl (Machine)",
+            "Single Leg Leg Curl (Left)"
+        ]
+
+        XCTAssertNil(ExerciseIdentityResolver.inferredSuggestion(
+            for: "Single Leg Leg Curl (Left)",
+            knownExerciseNames: known
+        ))
+    }
+
+    func testAutoLinkSideRelationshipsPreservesImportedNamesAndSkipsConflictingSides() {
+        ExerciseRelationshipManager.shared.setRelationship(
+            exerciseName: "Custom Left Leg Extension",
+            parentName: "Leg Extension (Machine)",
+            laterality: .left
+        )
+
+        let result = ExerciseRelationshipManager.shared.autoLinkSideRelationships(
+            observedExerciseNames: [
+                "Leg Extension (Machine)",
+                "Single Leg Leg Extension (Left)",
+                "Single Leg Leg Extension (Right)"
+            ]
+        )
+        let resolver = ExerciseRelationshipManager.shared.resolverSnapshot()
+
+        XCTAssertEqual(result.created.map(\.exerciseName), ["Single Leg Leg Extension (Right)"])
+        XCTAssertNil(ExerciseRelationshipManager.shared.relationship(for: "Single Leg Leg Extension (Left)"))
+        XCTAssertEqual(
+            ExerciseRelationshipManager.shared.relationship(for: "Custom Left Leg Extension")?.parentName,
+            "Leg Extension (Machine)"
+        )
+        XCTAssertEqual(
+            resolver.aggregateName(for: "Single Leg Leg Extension (Right)"),
+            "Leg Extension (Machine)"
+        )
+        XCTAssertEqual(
+            resolver.performanceTrackName(for: "Single Leg Leg Extension (Right)"),
+            "Single Leg Leg Extension (Right)"
+        )
+    }
+
+    func testWorkoutDataManagerAutoLinksStrongStyleSidesBeforeSummaries() async {
+        let manager = WorkoutDataManager()
+        manager.clearWorkoutHistory()
+        defer { manager.clearWorkoutHistory() }
+
+        let date = makeDate(day: 2)
+        let result = await manager.processImportedWorkoutSets([
+            workoutSet(date: date, exerciseName: "Leg Extension (Machine)", order: 1, weight: 90, reps: 10),
+            workoutSet(date: date, exerciseName: "Single Leg Leg Extension (Left)", order: 2, weight: 45, reps: 10),
+            workoutSet(date: date, exerciseName: "Single Leg Leg Extension (Right)", order: 2, weight: 50, reps: 10)
+        ])
+
+        XCTAssertEqual(
+            result.created.map(\.exerciseName).sorted(),
+            ["Single Leg Leg Extension (Left)", "Single Leg Leg Extension (Right)"]
+        )
+        XCTAssertEqual(manager.exerciseSummaries().map(\.name), ["Leg Extension (Machine)"])
+        XCTAssertEqual(
+            manager.exerciseHistorySessions(for: "Leg Extension (Machine)", includingVariants: true).count,
+            1
+        )
+        XCTAssertEqual(
+            manager.exerciseHistorySessions(for: "Single Leg Leg Extension (Left)", includingVariants: false)
+                .first?.sets.first?.exerciseName,
+            "Single Leg Leg Extension (Left)"
+        )
+    }
+
+    func testLoadPersistedImportedWorkoutsRepairsUnmatchedSideRelationships() async throws {
+        let manager = WorkoutDataManager()
+        manager.clearWorkoutHistory()
+        defer { manager.clearWorkoutHistory() }
+
+        let date = makeDate(day: 3)
+        try AppDatabase.shared.saveImportedWorkouts([
+            Workout(
+                date: date,
+                name: "Lower",
+                duration: "30m",
+                exercises: [
+                    Exercise(name: "Leg Extension (Machine)", sets: [
+                        workoutSet(date: date, exerciseName: "Leg Extension (Machine)", order: 1, weight: 90, reps: 10)
+                    ]),
+                    Exercise(name: "Single Leg Leg Extension (Left)", sets: [
+                        workoutSet(date: date, exerciseName: "Single Leg Leg Extension (Left)", order: 2, weight: 45, reps: 10)
+                    ]),
+                    Exercise(name: "Single Leg Leg Extension (Right)", sets: [
+                        workoutSet(date: date, exerciseName: "Single Leg Leg Extension (Right)", order: 2, weight: 50, reps: 10)
+                    ])
+                ]
+            )
+        ])
+
+        await manager.loadPersistedImportedWorkouts()
+
+        XCTAssertEqual(
+            ExerciseRelationshipManager.shared.relationship(for: "Single Leg Leg Extension (Left)")?.parentName,
+            "Leg Extension (Machine)"
+        )
+        XCTAssertEqual(manager.exerciseSummaries().map(\.name), ["Leg Extension (Machine)"])
+    }
+
     func testWorkoutDataManagerAggregatesParentHistoryWhileKeepingExactHistoriesSeparate() {
         ExerciseRelationshipManager.shared.setRelationship(
             exerciseName: "Leg Extension (Machine) - Left",

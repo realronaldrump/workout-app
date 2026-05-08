@@ -252,6 +252,9 @@ actor WorkoutRepository {
             identitySnapshot: identitySnapshot,
             healthIdentitySnapshot: healthIdentitySnapshot
         )
+        _ = await ExerciseRelationshipManager.shared.autoLinkSideRelationships(
+            observedExerciseNames: WorkoutDataManager.exerciseNames(in: workouts)
+        )
         try database.saveImportedWorkouts(workouts)
         try database.mergeWorkoutIdentities(identityEntries)
         incrementRevision()

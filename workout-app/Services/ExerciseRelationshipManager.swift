@@ -65,8 +65,26 @@ nonisolated struct ExerciseRelationshipSuggestion: Hashable, Sendable {
     let laterality: ExerciseLaterality
 }
 
+nonisolated struct ExerciseRelationshipAutoLinkResult: Hashable, Sendable {
+    let created: [ExerciseRelationship]
+    let skipped: Int
+
+    static let empty = ExerciseRelationshipAutoLinkResult(created: [], skipped: 0)
+}
+
 nonisolated struct ExerciseIdentityResolver: Hashable, Sendable {
     private let relationshipsByNormalizedName: [String: ExerciseRelationship]
+
+    private struct SideNamePattern {
+        let prefix: String
+        let suffix: String
+        let laterality: ExerciseLaterality
+    }
+
+    private struct SideNameComponents {
+        let baseName: String
+        let laterality: ExerciseLaterality
+    }
 
     init(relationships: [String: ExerciseRelationship] = [:]) {
         var canonical: [String: ExerciseRelationship] = [:]
@@ -166,55 +184,209 @@ nonisolated struct ExerciseIdentityResolver: Hashable, Sendable {
         let trimmed = trimmedName(exerciseName)
         guard !trimmed.isEmpty else { return nil }
 
-        let candidates: [(prefix: String, suffix: String, laterality: ExerciseLaterality)] = [
-            ("Left ", "", .left),
-            ("Right ", "", .right),
-            ("L ", "", .left),
-            ("R ", "", .right),
-            ("", " - Left", .left),
-            ("", " - Right", .right),
-            ("", " (Left)", .left),
-            ("", " (Right)", .right),
-            ("", " Left", .left),
-            ("", " Right", .right)
+        guard let components = sideNameComponents(for: trimmed),
+              let parent = uniqueParentName(
+                forBaseName: components.baseName,
+                knownExerciseNames: knownExerciseNames,
+                excludingExerciseName: trimmed
+              ) else { return nil }
+
+        return ExerciseRelationshipSuggestion(
+            exerciseName: trimmed,
+            parentName: parent,
+            laterality: components.laterality
+        )
+    }
+
+    static func inferredSuggestions(
+        forParent parentName: String,
+        knownExerciseNames: Set<String>
+    ) -> [ExerciseRelationshipSuggestion] {
+        let parent = trimmedName(parentName)
+        let parentKey = normalizedName(parent)
+        guard !parentKey.isEmpty else { return [] }
+
+        return knownExerciseNames
+            .compactMap { name -> ExerciseRelationshipSuggestion? in
+                guard normalizedName(name) != parentKey else { return nil }
+                guard let suggestion = inferredSuggestion(
+                    for: name,
+                    knownExerciseNames: knownExerciseNames
+                ) else { return nil }
+                return normalizedName(suggestion.parentName) == parentKey ? suggestion : nil
+            }
+            .sorted { lhs, rhs in
+                let sideOrder: [ExerciseLaterality: Int] = [.left: 0, .right: 1, .unilateral: 2]
+                let lhsOrder = sideOrder[lhs.laterality] ?? Int.max
+                let rhsOrder = sideOrder[rhs.laterality] ?? Int.max
+                if lhsOrder != rhsOrder { return lhsOrder < rhsOrder }
+                return lhs.exerciseName.localizedCaseInsensitiveCompare(rhs.exerciseName) == .orderedAscending
+            }
+    }
+
+    private static var sideNamePatterns: [SideNamePattern] {
+        [
+            SideNamePattern(prefix: "Left ", suffix: "", laterality: .left),
+            SideNamePattern(prefix: "Right ", suffix: "", laterality: .right),
+            SideNamePattern(prefix: "L ", suffix: "", laterality: .left),
+            SideNamePattern(prefix: "R ", suffix: "", laterality: .right),
+            SideNamePattern(prefix: "", suffix: " - Left", laterality: .left),
+            SideNamePattern(prefix: "", suffix: " - Right", laterality: .right),
+            SideNamePattern(prefix: "", suffix: " (Left)", laterality: .left),
+            SideNamePattern(prefix: "", suffix: " (Right)", laterality: .right),
+            SideNamePattern(prefix: "", suffix: " Left", laterality: .left),
+            SideNamePattern(prefix: "", suffix: " Right", laterality: .right)
         ]
+    }
 
-        let knownByNormalized = knownExerciseNames.reduce(into: [String: String]()) { result, name in
-            let trimmedKnownName = trimmedName(name)
-            guard !trimmedKnownName.isEmpty else { return }
-            result[normalizedName(trimmedKnownName)] = trimmedKnownName
-        }
+    private static func sideNameComponents(for exerciseName: String) -> SideNameComponents? {
+        let trimmed = trimmedName(exerciseName)
+        guard !trimmed.isEmpty else { return nil }
+        let lowercased = trimmed.lowercased()
 
-        for candidate in candidates {
-            if !candidate.prefix.isEmpty,
-               trimmed.localizedCaseInsensitiveContains(candidate.prefix),
-               normalizedName(trimmed).hasPrefix(normalizedName(candidate.prefix)) {
-                let parent = String(trimmed.dropFirst(candidate.prefix.count))
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                if let resolvedParent = knownByNormalized[normalizedName(parent)], !resolvedParent.isEmpty {
-                    return ExerciseRelationshipSuggestion(
-                        exerciseName: trimmed,
-                        parentName: resolvedParent,
-                        laterality: candidate.laterality
-                    )
-                }
+        for pattern in sideNamePatterns {
+            if !pattern.prefix.isEmpty,
+               lowercased.hasPrefix(pattern.prefix.lowercased()) {
+                let base = String(trimmed.dropFirst(pattern.prefix.count))
+                let canonicalBase = canonicalSideBaseName(base)
+                guard !canonicalBase.isEmpty else { return nil }
+                return SideNameComponents(baseName: canonicalBase, laterality: pattern.laterality)
             }
 
-            if !candidate.suffix.isEmpty,
-               normalizedName(trimmed).hasSuffix(normalizedName(candidate.suffix)) {
-                let parent = String(trimmed.dropLast(candidate.suffix.count))
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                if let resolvedParent = knownByNormalized[normalizedName(parent)], !resolvedParent.isEmpty {
-                    return ExerciseRelationshipSuggestion(
-                        exerciseName: trimmed,
-                        parentName: resolvedParent,
-                        laterality: candidate.laterality
-                    )
-                }
+            if !pattern.suffix.isEmpty,
+               lowercased.hasSuffix(pattern.suffix.lowercased()) {
+                let base = String(trimmed.dropLast(pattern.suffix.count))
+                let canonicalBase = canonicalSideBaseName(base)
+                guard !canonicalBase.isEmpty else { return nil }
+                return SideNameComponents(baseName: canonicalBase, laterality: pattern.laterality)
             }
         }
 
         return nil
+    }
+
+    private static func uniqueParentName(
+        forBaseName baseName: String,
+        knownExerciseNames: Set<String>,
+        excludingExerciseName exerciseName: String
+    ) -> String? {
+        let childKey = normalizedName(exerciseName)
+        let childBaseKeys = comparisonKeys(forBaseName: baseName)
+        guard !childBaseKeys.isEmpty else { return nil }
+
+        let matches = knownExerciseNames.reduce(into: [String: String]()) { result, candidate in
+            let trimmedCandidate = trimmedName(candidate)
+            let candidateKey = normalizedName(trimmedCandidate)
+            guard !trimmedCandidate.isEmpty, candidateKey != childKey else { return }
+            guard sideNameComponents(for: trimmedCandidate) == nil else { return }
+
+            let parentKeys = comparisonKeys(forParentName: trimmedCandidate)
+            guard !childBaseKeys.isDisjoint(with: parentKeys) else { return }
+            result[candidateKey] = trimmedCandidate
+        }
+
+        guard matches.count == 1 else { return nil }
+        return matches.values.first
+    }
+
+    private static func canonicalSideBaseName(_ name: String) -> String {
+        let stripped = stripLeadingPhrases(
+            from: stripParentheticalEquipment(from: name),
+            phrases: unilateralLeadingPhrases
+        )
+        return collapsedWhitespace(stripped)
+    }
+
+    private static func comparisonKeys(forBaseName baseName: String) -> Set<String> {
+        comparisonKeys(for: baseName, stripsPositionPhrases: false)
+    }
+
+    private static func comparisonKeys(forParentName parentName: String) -> Set<String> {
+        comparisonKeys(for: parentName, stripsPositionPhrases: true)
+    }
+
+    private static func comparisonKeys(for name: String, stripsPositionPhrases: Bool) -> Set<String> {
+        var keys: Set<String> = []
+        let withoutEquipment = stripParentheticalEquipment(from: name)
+        let withoutUnilateral = stripLeadingPhrases(from: withoutEquipment, phrases: unilateralLeadingPhrases)
+        let collapsed = collapsedWhitespace(withoutUnilateral)
+        let primary = normalizedComparisonName(collapsed)
+        if !primary.isEmpty {
+            keys.insert(primary)
+        }
+
+        if stripsPositionPhrases {
+            let withoutPosition = stripLeadingPhrases(from: collapsed, phrases: positionalLeadingPhrases)
+            let positionKey = normalizedComparisonName(withoutPosition)
+            if !positionKey.isEmpty {
+                keys.insert(positionKey)
+            }
+        }
+
+        return keys
+    }
+
+    private static var unilateralLeadingPhrases: [String] {
+        [
+            "Single Leg ",
+            "Single-Leg ",
+            "Single Arm ",
+            "Single-Arm ",
+            "Single Side ",
+            "Single-Side ",
+            "One Leg ",
+            "One-Leg ",
+            "One Arm ",
+            "One-Arm ",
+            "Unilateral "
+        ]
+    }
+
+    private static var positionalLeadingPhrases: [String] {
+        [
+            "Seated ",
+            "Lying ",
+            "Standing ",
+            "Kneeling ",
+            "Prone ",
+            "Supine "
+        ]
+    }
+
+    private static func stripLeadingPhrases(from name: String, phrases: [String]) -> String {
+        var result = collapsedWhitespace(name)
+        var didStrip = true
+        while didStrip {
+            didStrip = false
+            for phrase in phrases where normalizedName(result).hasPrefix(normalizedName(phrase)) {
+                result = String(result.dropFirst(phrase.count))
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                didStrip = true
+                break
+            }
+        }
+        return result
+    }
+
+    private static func stripParentheticalEquipment(from name: String) -> String {
+        name.replacingOccurrences(
+            of: #"\s*\([^)]*\)"#,
+            with: "",
+            options: .regularExpression
+        )
+    }
+
+    private static func collapsedWhitespace(_ name: String) -> String {
+        name
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+    }
+
+    private static func normalizedComparisonName(_ name: String) -> String {
+        collapsedWhitespace(name)
+            .lowercased()
+            .replacingOccurrences(of: "-", with: " ")
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
     }
 }
 
@@ -449,6 +621,55 @@ final class ExerciseRelationshipManager: ObservableObject {
             for: exerciseName,
             knownExerciseNames: knownExerciseNames
         )
+    }
+
+    func suggestedRelationships(
+        forParent parentName: String,
+        knownExerciseNames: Set<String>
+    ) -> [ExerciseRelationshipSuggestion] {
+        ExerciseIdentityResolver.inferredSuggestions(
+            forParent: parentName,
+            knownExerciseNames: knownExerciseNames
+        )
+        .filter { relationship(for: $0.exerciseName) == nil }
+    }
+
+    @discardableResult
+    func autoLinkSideRelationships(
+        observedExerciseNames: Set<String>
+    ) -> ExerciseRelationshipAutoLinkResult {
+        let observed = Set(
+            observedExerciseNames
+                .map(ExerciseIdentityResolver.trimmedName)
+                .filter { !$0.isEmpty }
+        )
+        guard !observed.isEmpty else { return .empty }
+
+        var created: [ExerciseRelationship] = []
+        var skipped = 0
+
+        for exerciseName in observed.sorted(by: { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }) {
+            guard relationship(for: exerciseName) == nil,
+                  let suggestion = ExerciseIdentityResolver.inferredSuggestion(
+                    for: exerciseName,
+                    knownExerciseNames: observed
+                  ) else {
+                continue
+            }
+
+            let didSave = setRelationship(
+                exerciseName: suggestion.exerciseName,
+                parentName: suggestion.parentName,
+                laterality: suggestion.laterality
+            )
+            if didSave, let relationship = relationship(for: suggestion.exerciseName) {
+                created.append(relationship)
+            } else {
+                skipped += 1
+            }
+        }
+
+        return ExerciseRelationshipAutoLinkResult(created: created, skipped: skipped)
     }
 
     @discardableResult

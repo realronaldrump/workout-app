@@ -100,6 +100,31 @@ final class WorkoutRepositoryPerformanceStoreTests: XCTestCase {
         XCTAssertEqual(snapshot.exerciseSummaries.first(where: { $0.name == "Bench Press" })?.stats.frequency, 1)
     }
 
+    func testRepositoryStrongCSVImportAutoLinksStrongStyleSideExercises() async throws {
+        let database = AppDatabase(inMemory: true)
+        let repository = WorkoutRepository(database: database)
+        let csv = """
+        Date,Workout Name,Duration,Exercise Name,Set Order,Weight,Reps,Distance,Seconds
+        2026-04-10 08:00:00,Lower,45m,Leg Extension (Machine),1,90,10,0,0
+        2026-04-10 08:01:00,Lower,45m,Single Leg Leg Extension (Left),2,45,10,0,0
+        2026-04-10 08:02:00,Lower,45m,Single Leg Leg Extension (Right),2,50,10,0,0
+        """
+
+        try await repository.importStrongCSV(Data(csv.utf8), sourceSignature: "side-csv")
+
+        let snapshot = try await repository.homeSnapshot()
+        let parent = try await repository.exerciseDetail(name: "Leg Extension (Machine)", scope: .all)
+        let left = try await repository.exerciseDetail(name: "Single Leg Leg Extension (Left)", scope: .all)
+
+        XCTAssertEqual(snapshot.exerciseSummaries.map(\.name), ["Leg Extension (Machine)"])
+        XCTAssertEqual(
+            ExerciseRelationshipManager.shared.relationship(for: "Single Leg Leg Extension (Left)")?.parentName,
+            "Leg Extension (Machine)"
+        )
+        XCTAssertEqual(parent.history.first?.sets.count, 2)
+        XCTAssertEqual(left.history.first?.sets.first?.exerciseName, "Single Leg Leg Extension (Left)")
+    }
+
     func testExerciseDetailUsesIndexedExerciseLookupAndPreservesWorkoutContext() async throws {
         let database = AppDatabase(inMemory: true)
         let repository = WorkoutRepository(database: database)
