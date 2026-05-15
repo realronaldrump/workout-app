@@ -511,6 +511,62 @@ final class ExerciseRelationshipTests: XCTestCase {
         )
     }
 
+    func testDetectedSideCanReplaceHiddenStaleSideRelationship() {
+        ExerciseRelationshipManager.shared.setRelationship(
+            exerciseName: "Single Leg Leg Curl (Left)",
+            parentName: "Seated Leg Curl (Machine)",
+            laterality: .left
+        )
+        ExerciseRelationshipManager.shared.setRelationship(
+            exerciseName: "Single Leg Seated Leg Curl (Right)",
+            parentName: "Seated Leg Curl (Machine)",
+            laterality: .right
+        )
+
+        let children = ExerciseRelationshipManager.shared.children(of: "Seated Leg Curl (Machine)")
+        let replacement = ExerciseRelationshipManager.replacementCandidateForSideAssignment(
+            parentName: "Seated Leg Curl (Machine)",
+            laterality: .left,
+            children: children
+        ) { exerciseName in
+            exerciseName == "Single Leg Seated Leg Curl (Right)"
+        }
+
+        XCTAssertEqual(replacement?.exerciseName, "Single Leg Leg Curl (Left)")
+        XCTAssertTrue(ExerciseRelationshipManager.shared.setRelationship(
+            exerciseName: "Single Leg Seated Leg Curl (Left)",
+            parentName: "Seated Leg Curl (Machine)",
+            laterality: .left,
+            replacingExerciseName: replacement?.exerciseName
+        ))
+        XCTAssertNil(ExerciseRelationshipManager.shared.relationship(for: "Single Leg Leg Curl (Left)"))
+        XCTAssertEqual(
+            ExerciseRelationshipManager.shared.children(of: "Seated Leg Curl (Machine)").map(\.exerciseName),
+            [
+                "Single Leg Seated Leg Curl (Left)",
+                "Single Leg Seated Leg Curl (Right)"
+            ]
+        )
+    }
+
+    func testReplacementCandidateDoesNotReplaceSideWithHistory() {
+        let existing = ExerciseRelationship(
+            exerciseName: "Single Leg Leg Curl (Left)",
+            parentName: "Seated Leg Curl (Machine)",
+            laterality: .left
+        )
+
+        let replacement = ExerciseRelationshipManager.replacementCandidateForSideAssignment(
+            parentName: "Seated Leg Curl (Machine)",
+            laterality: .left,
+            children: [existing]
+        ) { _ in
+            true
+        }
+
+        XCTAssertNil(replacement)
+    }
+
     func testMuscleTagsAndCardioPreferencesInheritFromParentUnlessChildOverrides() {
         ExerciseRelationshipManager.shared.setRelationship(
             exerciseName: "Leg Extension (Machine) - Left",

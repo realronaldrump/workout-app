@@ -16,6 +16,7 @@ struct WorkoutHistoryView: View {
     @State private var cachedLocationBreakdownItems: [HistoryLocationBreakdownItem] = []
     @State private var cachedAvailableLocationOptions: [HistoryLocationOption] = []
     @State private var cachedAvailableExerciseOptions: [HistoryExerciseOption] = []
+    @State private var locallyDeletedWorkoutIDs: Set<UUID> = []
     @State private var derivedRefreshTask: Task<Void, Never>?
 
     @Environment(\.dismiss) private var dismiss
@@ -24,6 +25,7 @@ struct WorkoutHistoryView: View {
     @ObservedObject private var relationshipManager = ExerciseRelationshipManager.shared
 
     var body: some View {
+        let currentWorkouts = visibleWorkouts
         let filteredWorkouts = cachedFilteredWorkouts
         let groupedWorkouts = cachedGroupedWorkouts
         let locationBreakdownItems = cachedLocationBreakdownItems
@@ -35,7 +37,7 @@ struct WorkoutHistoryView: View {
                 LazyVStack(alignment: .leading, spacing: Theme.Spacing.xl) {
                     header
 
-                    if !workouts.isEmpty {
+                    if !currentWorkouts.isEmpty {
                         resultsOverviewCard(
                             filteredWorkouts: filteredWorkouts,
                             locationBreakdownItems: locationBreakdownItems
@@ -104,7 +106,8 @@ struct WorkoutHistoryView: View {
         .onChange(of: selectedDurationBands) { _, _ in
             scheduleDerivedStateRefresh()
         }
-        .onChange(of: workouts) { _, _ in
+        .onChange(of: workouts) { _, newWorkouts in
+            locallyDeletedWorkoutIDs.formIntersection(Set(newWorkouts.map(\.id)))
             scheduleDerivedStateRefresh(debounceNs: 0)
         }
         .onReceive(annotationsManager.$annotations) { _ in
@@ -355,7 +358,7 @@ struct WorkoutHistoryView: View {
         groupedWorkouts: [(month: String, workouts: [Workout])]
     ) -> some View {
         Group {
-            if workouts.isEmpty {
+            if visibleWorkouts.isEmpty {
                 EmptyStateCard(
                     icon: "clock.badge.exclamationmark",
                     tint: Theme.Colors.accent,
@@ -402,7 +405,10 @@ struct WorkoutHistoryView: View {
 
                             VStack(spacing: Theme.Spacing.sm) {
                                 ForEach(group.workouts) { workout in
-                                    WorkoutHistoryRow(workout: workout)
+                                    WorkoutHistoryRow(
+                                        workout: workout,
+                                        onDeleted: { loggedWorkoutDeleted(workout.id) }
+                                    )
                                 }
                             }
                         }
@@ -410,6 +416,11 @@ struct WorkoutHistoryView: View {
                 }
             }
         }
+    }
+
+    private var visibleWorkouts: [Workout] {
+        guard !locallyDeletedWorkoutIDs.isEmpty else { return workouts }
+        return workouts.filter { !locallyDeletedWorkoutIDs.contains($0.id) }
     }
 
     private var availableLocationOptions: [HistoryLocationOption] {
@@ -420,7 +431,7 @@ struct WorkoutHistoryView: View {
         var countsByID: [String: Int] = [:]
         var optionByID: [String: HistoryLocationOption] = [:]
 
-        for workout in workouts {
+        for workout in visibleWorkouts {
             let option = locationOption(for: workout)
             countsByID[option.id, default: 0] += 1
             optionByID[option.id] = option
@@ -454,7 +465,7 @@ struct WorkoutHistoryView: View {
         var counts: [String: Int] = [:]
         let resolver = relationshipManager.resolverSnapshot()
 
-        for workout in workouts {
+        for workout in visibleWorkouts {
             for exerciseName in exerciseFilterNames(for: workout, resolver: resolver) {
                 counts[exerciseName, default: 0] += 1
             }
@@ -574,7 +585,7 @@ struct WorkoutHistoryView: View {
     }
 
     private func filteredWorkouts() -> [Workout] {
-        workouts.filter { workout in
+        visibleWorkouts.filter { workout in
             matchesSearch(workout)
             && matchesTimeWindow(workout)
             && matchesLocation(workout)
@@ -654,7 +665,7 @@ struct WorkoutHistoryView: View {
     private func durationSubtitle(for band: HistoryDurationBand) -> String {
         optionSubtitle(
             baseSubtitle: band.subtitle,
-            workoutCount: workouts.filter { band.contains(minutes: $0.estimatedDurationMinutes()) }.count
+            workoutCount: visibleWorkouts.filter { band.contains(minutes: $0.estimatedDurationMinutes()) }.count
         )
     }
 
@@ -663,9 +674,9 @@ struct WorkoutHistoryView: View {
             if filteredWorkouts.isEmpty {
                 return "Nothing matches the current filter stack."
             }
-            return "\(filteredWorkouts.count) of \(workouts.count) workouts are in view."
+            return "\(filteredWorkouts.count) of \(visibleWorkouts.count) workouts are in view."
         }
-        return "\(workouts.count) workouts ready to browse."
+        return "\(visibleWorkouts.count) workouts ready to browse."
     }
 
     private func resultsSubheadline(filteredWorkouts: [Workout]) -> String {
@@ -778,6 +789,11 @@ struct WorkoutHistoryView: View {
         refreshDerivedState()
     }
 
+    private func loggedWorkoutDeleted(_ id: UUID) {
+        locallyDeletedWorkoutIDs.insert(id)
+        refreshDerivedState()
+    }
+
     private func sanitizeSelections() {
         selectedLocations = sanitizedSelection(selectedLocations, validItems: cachedAvailableLocationOptions)
         selectedExercises = sanitizedSelection(selectedExercises, validItems: cachedAvailableExerciseOptions)
@@ -838,12 +854,15 @@ struct WorkoutHistoryView: View {
 
 struct WorkoutHistoryRow: View {
     let workout: Workout
+    var onDeleted: (() -> Void)?
     @EnvironmentObject var healthManager: HealthKitManager
     @EnvironmentObject var annotationsManager: WorkoutAnnotationsManager
     @EnvironmentObject var gymProfilesManager: GymProfilesManager
     @EnvironmentObject var sessionManager: WorkoutSessionManager
     @EnvironmentObject var dataManager: WorkoutDataManager
+    @EnvironmentObject var logStore: WorkoutLogStore
     @AppStorage("weightIncrement") private var weightIncrement: Double = 2.5
+    @State private var showingDeleteAlert = false
 
     private var normalizedVolume: Double {
         ExerciseAggregation.totalVolume(for: workout, resolver: ExerciseIdentityResolver.current)
@@ -851,6 +870,10 @@ struct WorkoutHistoryRow: View {
 
     private var normalizedExerciseCount: Int {
         ExerciseAggregation.exerciseCount(for: workout, resolver: ExerciseIdentityResolver.current)
+    }
+
+    private var isLoggedWorkout: Bool {
+        dataManager.loggedWorkoutIds.contains(workout.id)
     }
 
     var body: some View {
@@ -903,7 +926,7 @@ struct WorkoutHistoryRow: View {
                     + "\(workout.duration), \(normalizedExerciseCount) exercises, "
                     + "\(SharedFormatters.volumeWithUnit(normalizedVolume))"
                 )
-                .accessibilityHint("Double tap for workout details, swipe left to repeat")
+                .accessibilityHint(accessibilityHint)
             }
             .buttonStyle(.plain)
 
@@ -923,7 +946,34 @@ struct WorkoutHistoryRow: View {
         }
         .padding(Theme.Spacing.lg)
         .softCard(elevation: 1)
-        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+        .contextMenu {
+            Button {
+                Haptics.selection()
+                repeatThisWorkout()
+            } label: {
+                Label("Repeat", systemImage: "arrow.counterclockwise")
+            }
+
+            if isLoggedWorkout {
+                Button(role: .destructive) {
+                    Haptics.selection()
+                    showingDeleteAlert = true
+                } label: {
+                    Label("Delete Workout", systemImage: "trash")
+                }
+            }
+        }
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            if isLoggedWorkout {
+                Button(role: .destructive) {
+                    Haptics.selection()
+                    showingDeleteAlert = true
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+                .tint(Theme.Colors.error)
+            }
+
             Button {
                 Haptics.selection()
                 repeatThisWorkout()
@@ -932,6 +982,19 @@ struct WorkoutHistoryRow: View {
             }
             .tint(Theme.Colors.accent)
         }
+        .alert("Delete Workout?", isPresented: $showingDeleteAlert) {
+            Button("Delete", role: .destructive) { deleteLoggedWorkout() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This permanently deletes this logged workout.")
+        }
+    }
+
+    private var accessibilityHint: String {
+        if isLoggedWorkout {
+            return "Double tap for workout details, swipe left for repeat or delete, long press for actions"
+        }
+        return "Double tap for workout details, swipe left to repeat, long press for actions"
     }
 
     private func metric(_ value: String, systemImage: String) -> some View {
@@ -995,5 +1058,14 @@ struct WorkoutHistoryRow: View {
 
         sessionManager.isPresentingSessionUI = true
         Haptics.notify(.success)
+    }
+
+    private func deleteLoggedWorkout() {
+        Task { @MainActor in
+            await logStore.delete(id: workout.id)
+            await dataManager.setLoggedWorkoutsOffMain(logStore.workouts)
+            onDeleted?()
+            Haptics.notify(.success)
+        }
     }
 }

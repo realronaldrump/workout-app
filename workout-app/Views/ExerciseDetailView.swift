@@ -887,13 +887,13 @@ struct ExerciseDetailView: View {
         let suggestions = suggestedSideRelationships(forParentName: parentName)
         let suggestedSide = suggestions.first { suggestion in
             missingSide(forParentName: parentName) == suggestion.laterality ||
-                standardRelationshipNameForReplacement(
+                relationshipNameForReplacement(
                     parentName: parentName,
                     laterality: suggestion.laterality
                 ) != nil
         } ?? suggestions.first
         let laterality = suggestedSide?.laterality ?? missingSide(forParentName: parentName) ?? .left
-        let replacementName = standardRelationshipNameForReplacement(
+        let replacementName = relationshipNameForReplacement(
             parentName: parentName,
             laterality: laterality
         )
@@ -922,15 +922,19 @@ struct ExerciseDetailView: View {
         return [ExerciseLaterality.left, .right].first { !existingSides.contains($0) }
     }
 
-    private func standardRelationshipNameForReplacement(
+    private func relationshipNameForReplacement(
         parentName: String,
         laterality: ExerciseLaterality
     ) -> String? {
-        let standardName = defaultVariantName(parentName: parentName, laterality: laterality)
-        return resolver.children(of: parentName).first { relationship in
-            relationship.laterality == laterality &&
-                ExerciseIdentityResolver.normalizedName(relationship.exerciseName) ==
-                ExerciseIdentityResolver.normalizedName(standardName)
+        ExerciseRelationshipManager.replacementCandidateForSideAssignment(
+            parentName: parentName,
+            laterality: laterality,
+            children: resolver.children(of: parentName)
+        ) { exerciseName in
+            !dataManager.exerciseHistorySessions(
+                for: exerciseName,
+                includingVariants: false
+            ).isEmpty
         }?.exerciseName
     }
 
@@ -1111,10 +1115,11 @@ struct ExerciseDetailView: View {
                         laterality: laterality,
                         replacingExerciseName: request.replacingExerciseName ?? request.exerciseName
                     )
-                    guard didSave else { return }
+                    guard didSave else { return false }
                     dataManager.refreshExerciseIdentityDerivedState()
                     refreshScopedHistory()
                     scheduleExerciseDetailRefresh(debounceNs: 0)
+                    return true
             }
         }
         .onAppear {
@@ -1277,13 +1282,14 @@ private struct ExerciseRelationshipEditorSheet: View {
     let availableExerciseNames: [String]
     let suggestedExerciseNames: [String]
     let updatesDefaultNameOnSideChange: Bool
-    let onSave: (String, String, ExerciseLaterality) -> Void
+    let onSave: (String, String, ExerciseLaterality) -> Bool
 
     @State private var draftExerciseName: String
     @State private var draftParentName: String
     @State private var draftLaterality: ExerciseLaterality
     @State private var generatedName: String
     @State private var exerciseSearchText = ""
+    @State private var saveError: String?
 
     init(
         initialExerciseName: String,
@@ -1292,7 +1298,7 @@ private struct ExerciseRelationshipEditorSheet: View {
         updatesDefaultNameOnSideChange: Bool,
         availableExerciseNames: [String],
         suggestedExerciseNames: [String] = [],
-        onSave: @escaping (String, String, ExerciseLaterality) -> Void
+        onSave: @escaping (String, String, ExerciseLaterality) -> Bool
     ) {
         let trimmedExercise = ExerciseIdentityResolver.trimmedName(initialExerciseName)
         let trimmedParent = ExerciseIdentityResolver.trimmedName(initialParentName)
@@ -1444,6 +1450,12 @@ private struct ExerciseRelationshipEditorSheet: View {
                             .pickerStyle(.segmented)
                         }
 
+                        if let saveError {
+                            Text(saveError)
+                                .font(Theme.Typography.caption)
+                                .foregroundStyle(Theme.Colors.error)
+                        }
+
                         Button(action: save) {
                             Text("Save Relationship")
                                 .font(Theme.Typography.headline)
@@ -1508,11 +1520,16 @@ private struct ExerciseRelationshipEditorSheet: View {
 
     private func save() {
         guard canSave else { return }
-        onSave(
+        saveError = nil
+        let didSave = onSave(
             ExerciseIdentityResolver.trimmedName(draftExerciseName),
             ExerciseIdentityResolver.trimmedName(draftParentName),
             draftLaterality
         )
+        guard didSave else {
+            saveError = "Could not save this relationship. This side may already be linked to another exercise."
+            return
+        }
         Haptics.selection()
         dismiss()
     }

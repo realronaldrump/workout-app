@@ -822,6 +822,28 @@ final class ExerciseRelationshipManager: ObservableObject {
         }
     }
 
+    static func replacementCandidateForSideAssignment(
+        parentName: String,
+        laterality: ExerciseLaterality,
+        children: [ExerciseRelationship],
+        hasExactHistory: (String) -> Bool
+    ) -> ExerciseRelationship? {
+        let parentKey = ExerciseIdentityResolver.normalizedName(parentName)
+        let standardName = standardVariantName(parentName: parentName, laterality: laterality)
+        let sideChildren = children.filter {
+            ExerciseIdentityResolver.normalizedName($0.parentName) == parentKey &&
+                $0.laterality == laterality
+        }
+
+        return sideChildren.first {
+            ExerciseIdentityResolver.normalizedName($0.exerciseName) ==
+                ExerciseIdentityResolver.normalizedName(standardName) &&
+                !hasExactHistory($0.exerciseName)
+        } ?? sideChildren.first {
+            !hasExactHistory($0.exerciseName)
+        }
+    }
+
     private func load() {
         guard let data = userDefaults.data(forKey: storageKey) else { return }
         if let decoded = try? JSONDecoder().decode([ExerciseRelationship].self, from: data) {
