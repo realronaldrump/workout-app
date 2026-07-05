@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct HealthCustomRangeSheet: View {
-    @Environment(\.dismiss) var dismiss
+    @Environment(\.dismiss) private var dismiss
     @Binding var range: DateInterval
     let earliestSelectableDate: Date?
     let onApply: () -> Void
@@ -39,31 +39,33 @@ struct HealthCustomRangeSheet: View {
                             selection: $endDate,
                             range: startDate...Date()
                         )
-
-                        Button {
-                            let calendar = Calendar.current
-                            let start = calendar.startOfDay(for: startDate)
-                            let end = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: endDate) ?? endDate
-                            range = DateInterval(start: start, end: end)
-                            onApply()
-                            dismiss()
-                        } label: {
-                            Text("Apply Range")
-                                .font(Theme.Typography.headline)
-                                .foregroundStyle(Theme.Colors.textPrimary)
-                                .frame(maxWidth: .infinity)
-                                .padding(Theme.Spacing.md)
-                                .background(Theme.Colors.elevated)
-                                .cornerRadius(Theme.CornerRadius.large)
-                        }
-                        .buttonStyle(.plain)
                     }
                     .padding(Theme.Spacing.xl)
                 }
             }
             .navigationTitle("Custom Range")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Apply") {
+                        applyRange()
+                    }
+                    .fontWeight(.semibold)
+                }
+            }
+            .onChange(of: startDate) { _, newValue in
+                if endDate < newValue {
+                    endDate = newValue
+                }
+            }
         }
+        .presentationDetents([.large])
     }
 
     private func dateCard(
@@ -90,5 +92,15 @@ struct HealthCustomRangeSheet: View {
         }
         .padding(Theme.Spacing.lg)
         .softCard(elevation: 2)
+    }
+
+    private func applyRange() {
+        let calendar = Calendar.current
+        let start = calendar.startOfDay(for: startDate)
+        let resolvedEnd = max(startDate, endDate)
+        let end = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: resolvedEnd) ?? resolvedEnd
+        range = DateInterval(start: start, end: end)
+        onApply()
+        dismiss()
     }
 }

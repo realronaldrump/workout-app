@@ -64,93 +64,89 @@ struct HealthDashboardView: View {
     private var headerSubtitle: String {
         let workoutCount = currentWorkouts.count
         let healthCount = currentHealthData.count
-        return "\(rangeLabel) • \(workoutCount) workouts • \(healthCount) health entries"
+        return "\(rangeLabel) • \(workoutCount) workouts • \(healthCount) synced entries"
     }
 
     var body: some View {
-        NavigationStack {
-            ZStack {
-                AdaptiveBackground()
+        ZStack {
+            AdaptiveBackground()
 
-                ScrollView(showsIndicators: false) {
-                    LazyVStack(alignment: .leading, spacing: Theme.Spacing.xxl) {
-                        headerSection
+            ScrollView(showsIndicators: false) {
+                LazyVStack(alignment: .leading, spacing: Theme.Spacing.xxl) {
+                    headerSection
 
-                        timeRangeSection
+                    categorySection
 
-                        categorySection
+                    if healthManager.healthDataStore.isEmpty {
+                        emptyState
+                    } else if currentHealthData.isEmpty {
+                        rangeEmptyState
+                    } else {
+                        highlightsSection
 
-                        if healthManager.healthDataStore.isEmpty {
-                            emptyState
-                        } else if currentHealthData.isEmpty {
-                            rangeEmptyState
-                        } else {
-                            highlightsSection
+                        quickStatsSection
 
-                            quickStatsSection
+                        trendsSection
 
-                            trendsSection
-
-                            if selectedCategory == .all || selectedCategory == .sessions {
-                                recentSessionsSection
-                            }
+                        if selectedCategory == .all || selectedCategory == .sessions {
+                            recentSessionsSection
                         }
                     }
-                    .padding(.vertical, Theme.Spacing.xxl)
-                    .padding(.horizontal, Theme.Spacing.lg)
                 }
+                .padding(.vertical, Theme.Spacing.xxl)
+                .padding(.horizontal, Theme.Spacing.lg)
             }
-            .navigationTitle("Health Insights")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    HealthDateRangeToolbarMenu(earliestDate: earliestDate)
-                }
+        }
+        .navigationTitle("Workout Health")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                HealthDateRangeToolbarMenu(earliestDate: earliestDate)
             }
-            .navigationDestination(item: $selectedDetailKind) { kind in
-                if let detail = detailFor(kind) {
-                    HealthMetricDetailScreen(
-                        detail: detail,
-                        rangeLabel: rangeLabel,
-                        earliestDate: earliestDate
-                    )
-                } else {
-                    VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-                        Text(kind.title)
-                            .font(Theme.Typography.title2)
-                            .foregroundStyle(Theme.Colors.textPrimary)
+        }
+        .navigationDestination(item: $selectedDetailKind) { kind in
+            if let detail = detailFor(kind) {
+                HealthMetricDetailScreen(
+                    detail: detail,
+                    rangeLabel: rangeLabel,
+                    earliestDate: earliestDate
+                )
+            } else {
+                VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+                    Text(kind.title)
+                        .font(Theme.Typography.title2)
+                        .foregroundStyle(Theme.Colors.textPrimary)
 
-                        Text("Not enough data in this range yet.")
-                            .font(Theme.Typography.body)
-                            .foregroundStyle(Theme.Colors.textSecondary)
-                    }
-                    .padding(Theme.Spacing.xl)
+                    Text("Not enough workout-linked health data in this range yet.")
+                        .font(Theme.Typography.body)
+                        .foregroundStyle(Theme.Colors.textSecondary)
                 }
+                .padding(Theme.Spacing.xl)
             }
-            .navigationDestination(item: $selectedWorkout) { workout in
-                WorkoutDetailView(workout: workout)
-            }
-            .navigationDestination(isPresented: $showingWorkoutsInRange) {
-                WorkoutsInRangeView(workouts: currentWorkouts, rangeLabel: rangeLabel)
-            }
-            .onAppear { refreshDerivedDataImmediately() }
-            .onDisappear {
-                derivedRefreshTask?.cancel()
-                derivedRefreshTask = nil
-            }
-            .onReceive(healthManager.$healthDataStore) { _ in
-                scheduleDerivedDataRefresh()
-            }
-            .onReceive(dataManager.$workouts) { _ in
-                scheduleDerivedDataRefresh()
-            }
-            .onChange(of: dateRangeContext.selectedRange) { _, _ in
+        }
+        .navigationDestination(item: $selectedWorkout) { workout in
+            WorkoutDetailView(workout: workout)
+        }
+        .navigationDestination(isPresented: $showingWorkoutsInRange) {
+            WorkoutsInRangeView(workouts: currentWorkouts, rangeLabel: rangeLabel)
+        }
+        .onAppear { refreshDerivedDataImmediately() }
+        .onDisappear {
+            derivedRefreshTask?.cancel()
+            derivedRefreshTask = nil
+        }
+        .onReceive(healthManager.$healthDataStore) { _ in
+            scheduleDerivedDataRefresh()
+        }
+        .onReceive(dataManager.$workouts) { _ in
+            scheduleDerivedDataRefresh()
+        }
+        .onChange(of: dateRangeContext.selectedRange) { _, _ in
+            refreshDerivedDataImmediately()
+        }
+        .onChange(of: dateRangeContext.customRange) { _, _ in
+            if dateRangeContext.selectedRange == .custom {
                 refreshDerivedDataImmediately()
-            }
-            .onChange(of: dateRangeContext.customRange) { _, _ in
-                if dateRangeContext.selectedRange == .custom {
-                    refreshDerivedDataImmediately()
-                }
             }
         }
     }
@@ -183,7 +179,7 @@ struct HealthDashboardView: View {
 
     private var headerSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text("Health Insights")
+            Text("Workout Health")
                 .font(Theme.Typography.screenTitle)
                 .foregroundStyle(Theme.Colors.textPrimary)
                 .tracking(1.5)
@@ -194,13 +190,9 @@ struct HealthDashboardView: View {
         }
     }
 
-    private var timeRangeSection: some View {
-        HealthDateRangeSection(earliestDate: earliestDate)
-    }
-
     private var categorySection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text("Focus")
+            Text("Metric Focus")
                 .font(Theme.Typography.caption)
                 .foregroundStyle(Theme.Colors.textTertiary)
 
@@ -295,14 +287,22 @@ struct HealthDashboardView: View {
     private var trendsSection: some View {
         let allKinds: [HealthMetricKind] = [.heartRate, .sleep, .activity, .cardio, .body]
         let filteredKinds = allKinds.filter { selectedCategory == .all || $0.category == selectedCategory }
+        let availableKinds = filteredKinds.filter { detailFor($0) != nil }
         return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             Text("Trends")
                 .font(Theme.Typography.title2)
                 .foregroundStyle(Theme.Colors.textPrimary)
 
             VStack(spacing: Theme.Spacing.md) {
-                ForEach(filteredKinds, id: \.id) { kind in
-                    trendCard(kind: kind)
+                if availableKinds.isEmpty {
+                    EmptyMetricCard(
+                        title: "No trends yet",
+                        message: "Try a longer range or sync more Apple Health workouts."
+                    )
+                } else {
+                    ForEach(availableKinds, id: \.id) { kind in
+                        trendCard(kind: kind)
+                    }
                 }
             }
         }
@@ -411,11 +411,11 @@ struct HealthDashboardView: View {
                 .padding(.top, Theme.Spacing.xl)
                 .accessibilityHidden(true)
 
-            Text("No health data yet")
+            Text("No workout health data yet")
                 .font(Theme.Typography.title2)
                 .foregroundStyle(Theme.Colors.textPrimary)
 
-            Text("Connect Apple Health to see sleep, cardio, activity, heart rate, and body trends.")
+            Text("Sync Apple Health workouts to see sleep, cardio, activity, heart rate, and body trends tied to training days.")
                 .font(Theme.Typography.body)
                 .foregroundStyle(Theme.Colors.textSecondary)
                 .multilineTextAlignment(.center)
@@ -451,11 +451,11 @@ struct HealthDashboardView: View {
 
     private var rangeEmptyState: some View {
         VStack(spacing: Theme.Spacing.md) {
-            Text("No data in this range")
+            Text("No workout health in this range")
                 .font(Theme.Typography.title3)
                 .foregroundStyle(Theme.Colors.textPrimary)
 
-            Text("Try a longer range or adjust the custom dates.")
+            Text("Try a longer range, adjust the custom dates, or sync recent Apple Health workouts.")
                 .font(Theme.Typography.body)
                 .foregroundStyle(Theme.Colors.textSecondary)
                 .multilineTextAlignment(.center)
@@ -758,32 +758,46 @@ struct HealthDashboardView: View {
         let avgWorkoutHR = average(currentHealthData.compactMap { $0.avgHeartRate })
         let avgSleep = average(currentHealthData.compactMap { $0.sleepSummary?.totalHours })
         let avgEnergy = average(currentHealthData.compactMap { $0.dailyActiveEnergy })
-        let highlightCards: [HighlightCardModel] = [
-            HighlightCardModel(
-                title: "Avg Workout HR",
-                value: avgWorkoutHR.map { "\(Int($0)) bpm" } ?? "--",
-                subtitle: "Average workout heart rate in this range",
-                icon: "heart.fill",
-                tint: Theme.Colors.error,
-                category: .heart
-            ),
-            HighlightCardModel(
-                title: "Avg Sleep",
-                value: avgSleep.map { String(format: "%.1fh", $0) } ?? "--",
-                subtitle: "Average sleep duration in this range",
-                icon: "moon.zzz.fill",
-                tint: Theme.Colors.accentSecondary,
-                category: .sleep
-            ),
-            HighlightCardModel(
-                title: "Daily Energy",
-                value: avgEnergy.map { "\(Int($0)) cal" } ?? "--",
-                subtitle: "Average active energy in this range",
-                icon: "flame.fill",
-                tint: Theme.Colors.warning,
-                category: .activity
+        var highlightCards: [HighlightCardModel] = []
+
+        if let avgWorkoutHR {
+            highlightCards.append(
+                HighlightCardModel(
+                    title: "Avg Workout HR",
+                    value: "\(Int(avgWorkoutHR)) bpm",
+                    subtitle: "Average workout heart rate in this range",
+                    icon: "heart.fill",
+                    tint: Theme.Colors.error,
+                    category: .heart
+                )
             )
-        ]
+        }
+
+        if let avgSleep {
+            highlightCards.append(
+                HighlightCardModel(
+                    title: "Avg Sleep",
+                    value: String(format: "%.1fh", avgSleep),
+                    subtitle: "Average sleep duration in this range",
+                    icon: "moon.zzz.fill",
+                    tint: Theme.Colors.accentSecondary,
+                    category: .sleep
+                )
+            )
+        }
+
+        if let avgEnergy {
+            highlightCards.append(
+                HighlightCardModel(
+                    title: "Daily Energy",
+                    value: "\(Int(avgEnergy)) cal",
+                    subtitle: "Average active energy in this range",
+                    icon: "flame.fill",
+                    tint: Theme.Colors.warning,
+                    category: .activity
+                )
+            )
+        }
 
         let workoutCount = currentWorkouts.count
         let previousWorkoutCount: Double? = previousRange == nil ? nil : Double(previousWorkouts.count)
@@ -793,7 +807,7 @@ struct HealthDashboardView: View {
         let prevCalories: Double? = previousRange == nil ? nil : previousHealthData.compactMap { $0.activeCalories }.reduce(0, +)
         let peakHR = currentHealthData.compactMap { $0.maxHeartRate }.max()
         let prevPeakHR = previousHealthData.compactMap { $0.maxHeartRate }.max()
-        let summaryCards: [MetricSummaryModel] = [
+        var summaryCards: [MetricSummaryModel] = [
             MetricSummaryModel(
                 title: "Workouts",
                 value: "\(workoutCount)",
@@ -802,35 +816,50 @@ struct HealthDashboardView: View {
                 tint: Theme.Colors.success,
                 delta: deltaText(current: Double(workoutCount), previous: previousWorkoutCount),
                 category: .sessions
-            ),
-            MetricSummaryModel(
-                title: "Avg Workout HR",
-                value: avgHR.map { "\(Int($0)) bpm" } ?? "--",
-                subtitle: "Average heart rate during workouts",
-                icon: "heart.fill",
-                tint: Theme.Colors.error,
-                delta: deltaText(current: avgHR, previous: prevAvgHR, lowerIsBetter: true),
-                category: .heart
-            ),
-            MetricSummaryModel(
-                title: "Calories Burned",
-                value: calories > 0 ? "\(formatNumber(calories)) cal" : "--",
-                subtitle: "Active calories from workouts",
-                icon: "flame.fill",
-                tint: Theme.Colors.warning,
-                delta: deltaText(current: calories, previous: prevCalories),
-                category: .activity
-            ),
-            MetricSummaryModel(
-                title: "Peak HR",
-                value: peakHR.map { "\(Int($0)) bpm" } ?? "--",
-                subtitle: "Highest workout heart rate",
-                icon: "bolt.heart.fill",
-                tint: Theme.Colors.accentSecondary,
-                delta: deltaText(current: peakHR, previous: prevPeakHR, lowerIsBetter: true),
-                category: .heart
             )
         ]
+
+        if let avgHR {
+            summaryCards.append(
+                MetricSummaryModel(
+                    title: "Avg Workout HR",
+                    value: "\(Int(avgHR)) bpm",
+                    subtitle: "Average heart rate during workouts",
+                    icon: "heart.fill",
+                    tint: Theme.Colors.error,
+                    delta: deltaText(current: avgHR, previous: prevAvgHR, lowerIsBetter: true),
+                    category: .heart
+                )
+            )
+        }
+
+        if calories > 0 {
+            summaryCards.append(
+                MetricSummaryModel(
+                    title: "Calories Burned",
+                    value: "\(formatNumber(calories)) cal",
+                    subtitle: "Active calories from workouts",
+                    icon: "flame.fill",
+                    tint: Theme.Colors.warning,
+                    delta: deltaText(current: calories, previous: prevCalories),
+                    category: .activity
+                )
+            )
+        }
+
+        if let peakHR {
+            summaryCards.append(
+                MetricSummaryModel(
+                    title: "Peak HR",
+                    value: "\(Int(peakHR)) bpm",
+                    subtitle: "Highest workout heart rate",
+                    icon: "bolt.heart.fill",
+                    tint: Theme.Colors.accentSecondary,
+                    delta: deltaText(current: peakHR, previous: prevPeakHR, lowerIsBetter: true),
+                    category: .heart
+                )
+            )
+        }
 
         var details: [HealthMetricKind: HealthMetricDetail] = [:]
         for kind in [HealthMetricKind.heartRate, .sleep, .activity, .cardio, .body] {
@@ -1299,6 +1328,7 @@ private struct HealthMetricDetailScreen: View {
             color: series.color,
             areaFill: false,
             height: 220,
+            showsControls: false,
             valueText: { formatValue($0, unit: series.unit) },
             dateText: { $0.formatted(date: .abbreviated, time: .omitted) }
         )

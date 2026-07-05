@@ -4,10 +4,12 @@ struct HealthHubView: View {
     @EnvironmentObject var healthManager: HealthKitManager
     @EnvironmentObject private var dateRangeContext: HealthDateRangeContext
 
-    @State private var timelineDensity: TimelineDensity = .compact
+    @State private var timelineDensity: TimelineDensity = .all
+    @State private var timelineSortOrder: DailyTimelineSortOrder = .newestFirst
     @State private var selectedMetric: HealthMetric?
     @State private var cachedDailyData: [DailyHealthData] = []
     @State private var cachedSummaryCards: [HealthSummaryCardModel] = []
+    @State private var cachedTimelineRows: [DailyTimelineRowModel] = []
     @State private var isCatchUpSyncing = false
 
     private var earliestDate: Date? {
@@ -22,56 +24,26 @@ struct HealthHubView: View {
         dateRangeContext.rangeLabel(earliest: earliestDate)
     }
 
-    private var timelineSourceDays: [DailyHealthData] {
-        DailyTimelineRangePolicy.displayedDays(
-            from: cachedDailyData,
-            selectedRange: dateRangeContext.selectedRange,
-            range: currentRange
-        )
-    }
-
-    private var timelineUsesRecentWindow: Bool {
-        DailyTimelineRangePolicy.shouldLimitTimeline(
-            selectedRange: dateRangeContext.selectedRange,
-            range: currentRange
-        )
-    }
-
-    private var timelinePresentation: TimelinePresentation {
-        let sorted = timelineSourceDays.sorted { $0.dayStart > $1.dayStart }
-        return TimelinePresentation(days: sorted, density: timelineDensity)
+    private var timelinePresentation: DailyTimelinePresentation {
+        DailyTimelinePresentation(rows: cachedTimelineRows, density: timelineDensity)
     }
 
     private var timelineSummaryText: String? {
-        var segments: [String] = []
-
-        if timelineUsesRecentWindow {
-            segments.append("Latest \(DailyTimelineRangePolicy.recentWindowDays) days of daily entries")
-        }
-
-        if timelinePresentation.isSampled {
-            let cadence = timelinePresentation.samplingStep == 7
-                ? "Showing weekly checkpoints"
-                : "Showing roughly every \(timelinePresentation.samplingStep) days"
-            let hiddenDates = timelinePresentation.hiddenCount == 1 ? "1 date hidden" : "\(timelinePresentation.hiddenCount) dates hidden"
-            segments.append("\(cadence) across \(timelinePresentation.totalCount) days")
-            segments.append(hiddenDates)
-        }
-
-        guard !segments.isEmpty else { return nil }
-        return segments.joined(separator: " • ")
+        guard timelinePresentation.hasMore else { return nil }
+        let dayLabel = timelinePresentation.totalCount == 1 ? "day" : "days"
+        return "Showing \(timelinePresentation.visibleCount) of \(timelinePresentation.totalCount) \(dayLabel)"
     }
 
     private var canShowMoreTimeline: Bool {
-        timelineDensity == .compact && timelineSourceDays.count > TimelinePresentation.expandedTargetCount
+        timelineDensity == .compact && cachedTimelineRows.count > DailyTimelineDisplayPolicy.compactCount
     }
 
     private var canShowAllTimeline: Bool {
-        timelineDensity != .all && timelinePresentation.isSampled
+        timelineDensity != .all && timelinePresentation.hasMore
     }
 
     private var canShowLessTimeline: Bool {
-        timelineDensity != .compact && timelineSourceDays.count > TimelinePresentation.compactTargetCount
+        timelineDensity != .compact && cachedTimelineRows.count > DailyTimelineDisplayPolicy.compactCount
     }
 
     private var headerSubtitle: String {
@@ -100,7 +72,9 @@ struct HealthHubView: View {
                         if cachedDailyData.isEmpty {
                             emptyState
                         } else {
-                            summarySection
+                            if !cachedSummaryCards.isEmpty {
+                                summarySection
+                            }
                             dailyTimelineSection
                         }
                     }
@@ -121,14 +95,17 @@ struct HealthHubView: View {
             await catchUpRecentHealthData()
         }
         .onChange(of: dateRangeContext.selectedRange) { _, _ in
-            timelineDensity = .compact
+            timelineDensity = .all
             refreshCachedContent()
         }
         .onChange(of: dateRangeContext.customRange) { _, _ in
             if dateRangeContext.selectedRange == .custom {
-                timelineDensity = .compact
+                timelineDensity = .all
                 refreshCachedContent()
             }
+        }
+        .onChange(of: timelineSortOrder) { _, _ in
+            refreshTimelineRows()
         }
         .onReceive(healthManager.$dailyHealthStore) { _ in
             refreshCachedContent()
@@ -217,6 +194,8 @@ struct HealthHubView: View {
 
                 Spacer()
 
+                timelineSortMenu
+
                 if canShowLessTimeline {
                     Button("Show Less") {
                         withAnimation(Theme.Animation.smooth) {
@@ -237,11 +216,12 @@ struct HealthHubView: View {
             }
 
             LazyVStack(spacing: Theme.Spacing.md) {
-                ForEach(timelinePresentation.days) { day in
+                ForEach(timelinePresentation.rows) { row in
                     NavigationLink {
-                        DailyHealthDetailView(day: day)
+                        DailyHealthDetailView(day: row.day)
                     } label: {
-                        DailyTimelineRow(day: day)
+                        DailyTimelineRow(model: row)
+                            .equatable()
                     }
                     .buttonStyle(.plain)
                 }
@@ -271,6 +251,33 @@ struct HealthHubView: View {
                 .tracking(0.8)
             }
         }
+    }
+
+    private var timelineSortMenu: some View {
+        Menu {
+            Picker("Timeline Sort", selection: $timelineSortOrder) {
+                ForEach(DailyTimelineSortOrder.allCases) { order in
+                    Label(order.title, systemImage: order.icon)
+                        .tag(order)
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.up.arrow.down")
+                    .font(Theme.Typography.captionBold)
+                    .foregroundStyle(Theme.Colors.accent)
+                Text(timelineSortOrder.shortTitle)
+                    .font(Theme.Typography.captionBold)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                    .textCase(.uppercase)
+                    .tracking(0.8)
+            }
+            .padding(.horizontal, Theme.Spacing.sm)
+            .frame(minHeight: 36)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Sort daily timeline")
+        .accessibilityValue(timelineSortOrder.title)
     }
 
     private var categorySection: some View {
@@ -425,53 +432,79 @@ struct HealthHubView: View {
         let avgHRV = average(dailyData.compactMap { $0.heartRateVariability })
         let avgEnergy = average(dailyData.compactMap { $0.activeEnergy })
 
-        return [
-            HealthSummaryCardModel(
-                id: "avgSteps",
-                metric: .steps,
-                title: "Avg Steps",
-                value: avgSteps.map { "\(Int($0))" } ?? "--",
-                unit: "steps",
-                icon: "figure.walk",
-                tint: Theme.Colors.warning
-            ),
-            HealthSummaryCardModel(
-                id: "avgSleep",
-                metric: .sleep,
-                title: "Avg Sleep",
-                value: avgSleep.map { String(format: "%.1f", $0) } ?? "--",
-                unit: "h",
-                icon: "moon.zzz.fill",
-                tint: Theme.Colors.accentSecondary
-            ),
-            HealthSummaryCardModel(
-                id: "avgRestingHr",
-                metric: .restingHeartRate,
-                title: "Resting HR",
-                value: avgRestingHR.map { "\(Int($0))" } ?? "--",
-                unit: "bpm",
-                icon: "heart",
-                tint: Theme.Colors.error
-            ),
-            HealthSummaryCardModel(
-                id: "avgHrv",
-                metric: .heartRateVariability,
-                title: "Avg HRV",
-                value: avgHRV.map { "\(Int($0))" } ?? "--",
-                unit: "ms",
-                icon: "waveform.path.ecg",
-                tint: Theme.Colors.accent
-            ),
-            HealthSummaryCardModel(
-                id: "avgEnergy",
-                metric: .activeEnergy,
-                title: "Active Energy",
-                value: avgEnergy.map { "\(Int($0))" } ?? "--",
-                unit: "cal",
-                icon: "flame.fill",
-                tint: Theme.Colors.warning
+        var cards: [HealthSummaryCardModel] = []
+
+        if let avgSteps {
+            cards.append(
+                HealthSummaryCardModel(
+                    id: "avgSteps",
+                    metric: .steps,
+                    title: "Avg Steps",
+                    value: "\(Int(avgSteps))",
+                    unit: "steps",
+                    icon: "figure.walk",
+                    tint: Theme.Colors.warning
+                )
             )
-        ]
+        }
+
+        if let avgSleep {
+            cards.append(
+                HealthSummaryCardModel(
+                    id: "avgSleep",
+                    metric: .sleep,
+                    title: "Avg Sleep",
+                    value: String(format: "%.1f", avgSleep),
+                    unit: "h",
+                    icon: "moon.zzz.fill",
+                    tint: Theme.Colors.accentSecondary
+                )
+            )
+        }
+
+        if let avgRestingHR {
+            cards.append(
+                HealthSummaryCardModel(
+                    id: "avgRestingHr",
+                    metric: .restingHeartRate,
+                    title: "Resting HR",
+                    value: "\(Int(avgRestingHR))",
+                    unit: "bpm",
+                    icon: "heart",
+                    tint: Theme.Colors.error
+                )
+            )
+        }
+
+        if let avgHRV {
+            cards.append(
+                HealthSummaryCardModel(
+                    id: "avgHrv",
+                    metric: .heartRateVariability,
+                    title: "Avg HRV",
+                    value: "\(Int(avgHRV))",
+                    unit: "ms",
+                    icon: "waveform.path.ecg",
+                    tint: Theme.Colors.accent
+                )
+            )
+        }
+
+        if let avgEnergy {
+            cards.append(
+                HealthSummaryCardModel(
+                    id: "avgEnergy",
+                    metric: .activeEnergy,
+                    title: "Active Energy",
+                    value: "\(Int(avgEnergy))",
+                    unit: "cal",
+                    icon: "flame.fill",
+                    tint: Theme.Colors.warning
+                )
+            )
+        }
+
+        return cards
     }
 
     private func average(_ values: [Double]) -> Double? {
@@ -489,6 +522,12 @@ struct HealthHubView: View {
             .sorted { $0.dayStart < $1.dayStart }
         cachedDailyData = filtered
         cachedSummaryCards = buildSummaryCards(from: filtered)
+        refreshTimelineRows(from: filtered)
+    }
+
+    private func refreshTimelineRows(from dailyData: [DailyHealthData]? = nil) {
+        let source = dailyData ?? cachedDailyData
+        cachedTimelineRows = DailyTimelineRowModel.rows(from: source, sortOrder: timelineSortOrder)
     }
 }
 
@@ -502,122 +541,84 @@ private struct HealthSummaryCardModel: Identifiable {
     let tint: Color
 }
 
-private enum TimelineDensity {
+enum TimelineDensity {
     case compact
     case expanded
     case all
 }
 
-enum TimelineSampling {
-    static func sampledIndices(totalCount: Int, targetCount: Int) -> [Int] {
-        guard totalCount > 0 else { return [] }
-        guard targetCount > 1, totalCount > targetCount else {
-            return Array(0..<totalCount)
+enum DailyTimelineSortOrder: String, CaseIterable, Identifiable {
+    case newestFirst
+    case oldestFirst
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .newestFirst: return "Newest first"
+        case .oldestFirst: return "Oldest first"
         }
-
-        let desiredCount = min(totalCount, targetCount)
-        var indices: [Int] = []
-        indices.reserveCapacity(desiredCount)
-
-        for sampleIndex in 0..<desiredCount {
-            let progress = Double(sampleIndex) / Double(desiredCount - 1)
-            let resolvedIndex = Int((progress * Double(totalCount - 1)).rounded())
-            if indices.last != resolvedIndex {
-                indices.append(resolvedIndex)
-            }
-        }
-
-        if indices.last != totalCount - 1 {
-            indices.append(totalCount - 1)
-        }
-
-        return indices
     }
 
-    static func approximateStep(totalCount: Int, displayedCount: Int) -> Int {
-        guard displayedCount > 1, totalCount > displayedCount else { return 1 }
-        return max(1, Int(round(Double(totalCount - 1) / Double(displayedCount - 1))))
+    var shortTitle: String {
+        switch self {
+        case .newestFirst: return "Newest"
+        case .oldestFirst: return "Oldest"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .newestFirst: return "arrow.down"
+        case .oldestFirst: return "arrow.up"
+        }
+    }
+
+    func sortedDays(_ days: [DailyHealthData]) -> [DailyHealthData] {
+        switch self {
+        case .newestFirst:
+            return days.sorted { $0.dayStart > $1.dayStart }
+        case .oldestFirst:
+            return days.sorted { $0.dayStart < $1.dayStart }
+        }
     }
 }
 
-enum DailyTimelineRangePolicy {
-    static let recentWindowDays = 90
-    static let longRangeThresholdDays = 366
+enum DailyTimelineDisplayPolicy {
+    static let compactCount = 12
+    static let expandedCount = 28
 
-    static func shouldLimitTimeline(
-        selectedRange: AppTimeRange,
-        range: DateInterval
-    ) -> Bool {
-        selectedRange == .allTime || range.duration > TimeInterval(longRangeThresholdDays * 24 * 60 * 60)
-    }
-
-    static func displayedDays(
-        from days: [DailyHealthData],
-        selectedRange: AppTimeRange,
-        range: DateInterval,
-        calendar: Calendar = .current
-    ) -> [DailyHealthData] {
-        let sortedDays = days.sorted { $0.dayStart < $1.dayStart }
-        guard shouldLimitTimeline(selectedRange: selectedRange, range: range) else {
-            return sortedDays
-        }
-
-        let cutoffReference = calendar.date(byAdding: .day, value: -(recentWindowDays - 1), to: range.end) ?? range.start
-        let cutoff = max(calendar.startOfDay(for: cutoffReference), calendar.startOfDay(for: range.start))
-        return sortedDays.filter { $0.dayStart >= cutoff }
-    }
-
-}
-
-private struct TimelinePresentation {
-    static let compactTargetCount = 12
-    static let expandedTargetCount = 28
-
-    let days: [DailyHealthData]
-    let totalCount: Int
-    let samplingStep: Int
-
-    var isSampled: Bool {
-        samplingStep > 1
-    }
-
-    var hiddenCount: Int {
-        max(totalCount - days.count, 0)
-    }
-
-    init(days allDays: [DailyHealthData], density: TimelineDensity) {
-        totalCount = allDays.count
-
+    static func visibleCount(totalCount: Int, density: TimelineDensity) -> Int {
         switch density {
         case .compact:
-            let sampled = Self.sample(allDays, targetCount: Self.compactTargetCount)
-            days = sampled.days
-            samplingStep = sampled.step
+            return min(totalCount, compactCount)
         case .expanded:
-            let sampled = Self.sample(allDays, targetCount: Self.expandedTargetCount)
-            days = sampled.days
-            samplingStep = sampled.step
+            return min(totalCount, expandedCount)
         case .all:
-            days = allDays
-            samplingStep = 1
+            return totalCount
         }
     }
 
-    private static func sample(_ days: [DailyHealthData], targetCount: Int) -> (days: [DailyHealthData], step: Int) {
-        guard days.count > targetCount, targetCount > 1 else {
-            return (days, 1)
-        }
+    static func visibleItems<T>(from items: [T], density: TimelineDensity) -> [T] {
+        Array(items.prefix(visibleCount(totalCount: items.count, density: density)))
+    }
+}
 
-        let sampledIndices = TimelineSampling.sampledIndices(
-            totalCount: days.count,
-            targetCount: targetCount
-        )
-        let sampledDays = sampledIndices.map { days[$0] }
-        let samplingStep = TimelineSampling.approximateStep(
-            totalCount: days.count,
-            displayedCount: sampledDays.count
-        )
-        return (sampledDays, samplingStep)
+private struct DailyTimelinePresentation {
+    let rows: [DailyTimelineRowModel]
+    let totalCount: Int
+
+    var visibleCount: Int {
+        rows.count
+    }
+
+    var hasMore: Bool {
+        visibleCount < totalCount
+    }
+
+    init(rows allRows: [DailyTimelineRowModel], density: TimelineDensity) {
+        totalCount = allRows.count
+        rows = DailyTimelineDisplayPolicy.visibleItems(from: allRows, density: density)
     }
 }
 
@@ -700,63 +701,135 @@ private struct HealthCategoryCard: View {
     }
 }
 
-private struct DailyTimelineRow: View {
+private struct DailyTimelineStatModel: Identifiable, Equatable {
+    let id: String
+    let label: String
+    let value: String
+    let unit: String
+}
+
+private struct DailyTimelineRowModel: Identifiable, Equatable {
+    let id: Date
     let day: DailyHealthData
+    let title: String
+    let subtitle: String
+    let dayNumber: String
+    let monthAbbrev: String
+    let isToday: Bool
+    let stats: [DailyTimelineStatModel]
 
-    private var title: String {
-        HealthHubFormatters.weekday.string(from: day.dayStart)
-    }
-
-    private var subtitle: String {
-        if Calendar.current.isDateInToday(day.dayStart) {
-            return "Today"
+    static func rows(from days: [DailyHealthData], sortOrder: DailyTimelineSortOrder) -> [DailyTimelineRowModel] {
+        sortOrder.sortedDays(days).map { day in
+            DailyTimelineRowModel(day: day)
         }
-        if Calendar.current.isDateInYesterday(day.dayStart) {
-            return "Yesterday"
+    }
+
+    init(day: DailyHealthData, calendar: Calendar = .current) {
+        self.id = day.id
+        self.day = day
+        self.title = HealthHubFormatters.weekday.string(from: day.dayStart)
+        if calendar.isDateInToday(day.dayStart) {
+            self.subtitle = "Today"
+        } else if calendar.isDateInYesterday(day.dayStart) {
+            self.subtitle = "Yesterday"
+        } else {
+            self.subtitle = HealthHubFormatters.mediumDate.string(from: day.dayStart)
         }
-        return HealthHubFormatters.mediumDate.string(from: day.dayStart)
+
+        self.dayNumber = HealthHubFormatters.dayNumber.string(from: day.dayStart)
+        self.monthAbbrev = HealthHubFormatters.monthAbbrev.string(from: day.dayStart).uppercased()
+        self.isToday = calendar.isDateInToday(day.dayStart)
+        self.stats = Self.makeStats(for: day)
     }
 
-    private var dayNumber: String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "d"
-        return formatter.string(from: day.dayStart)
+    private static func makeStats(for day: DailyHealthData) -> [DailyTimelineStatModel] {
+        var items: [DailyTimelineStatModel] = []
+
+        if let sleep = day.sleepSummary?.totalHours {
+            items.append(
+                DailyTimelineStatModel(
+                    id: "sleep",
+                    label: "Sleep",
+                    value: String(format: "%.1f", sleep),
+                    unit: "h"
+                )
+            )
+        }
+
+        if let steps = day.steps {
+            items.append(
+                DailyTimelineStatModel(
+                    id: "steps",
+                    label: "Steps",
+                    value: "\(Int(steps))",
+                    unit: ""
+                )
+            )
+        }
+
+        if let activeEnergy = day.activeEnergy {
+            items.append(
+                DailyTimelineStatModel(
+                    id: "energy",
+                    label: "Energy",
+                    value: "\(Int(activeEnergy))",
+                    unit: "cal"
+                )
+            )
+        }
+
+        if let restingHeartRate = day.restingHeartRate {
+            items.append(
+                DailyTimelineStatModel(
+                    id: "resting",
+                    label: "Resting",
+                    value: "\(Int(restingHeartRate))",
+                    unit: "bpm"
+                )
+            )
+        }
+
+        return items
     }
 
-    private var monthAbbrev: String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMM"
-        return formatter.string(from: day.dayStart).uppercased()
+    static func == (lhs: DailyTimelineRowModel, rhs: DailyTimelineRowModel) -> Bool {
+        lhs.id == rhs.id &&
+            lhs.title == rhs.title &&
+            lhs.subtitle == rhs.subtitle &&
+            lhs.dayNumber == rhs.dayNumber &&
+            lhs.monthAbbrev == rhs.monthAbbrev &&
+            lhs.isToday == rhs.isToday &&
+            lhs.stats == rhs.stats
     }
+}
 
-    private var isToday: Bool {
-        Calendar.current.isDateInToday(day.dayStart)
-    }
+private struct DailyTimelineRow: View, Equatable {
+    let model: DailyTimelineRowModel
 
     var body: some View {
         HStack(alignment: .top, spacing: Theme.Spacing.md) {
             // Date badge
             VStack(spacing: 1) {
-                Text(monthAbbrev)
+                Text(model.monthAbbrev)
                     .font(Theme.Typography.microLabel)
-                    .foregroundStyle(isToday ? .white : Theme.Colors.textTertiary)
-                Text(dayNumber)
+                    .foregroundStyle(model.isToday ? .white : Theme.Colors.textTertiary)
+                Text(model.dayNumber)
                     .font(Theme.Typography.numberSmall)
-                    .foregroundStyle(isToday ? .white : Theme.Colors.textPrimary)
+                    .foregroundStyle(model.isToday ? .white : Theme.Colors.textPrimary)
             }
             .frame(width: 42, height: 42)
             .background(
                 RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                    .fill(isToday ? Theme.Colors.accent : Theme.Colors.accent.opacity(Theme.Opacity.subtleFill))
+                    .fill(model.isToday ? Theme.Colors.accent : Theme.Colors.accent.opacity(Theme.Opacity.subtleFill))
             )
 
             VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                 HStack(alignment: .firstTextBaseline) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(title)
+                        Text(model.title)
                             .font(Theme.Typography.subheadlineBold)
                             .foregroundStyle(Theme.Colors.textPrimary)
-                        Text(subtitle)
+                        Text(model.subtitle)
                             .font(Theme.Typography.caption)
                             .foregroundStyle(Theme.Colors.textSecondary)
                     }
@@ -768,22 +841,22 @@ private struct DailyTimelineRow: View {
                         .foregroundStyle(Theme.Colors.textTertiary)
                 }
 
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: Theme.Spacing.sm) {
-                        DailyTimelineStat(label: "Sleep", value: day.sleepSummary.map { String(format: "%.1f", $0.totalHours) } ?? "--", unit: "h")
-                        DailyTimelineStat(label: "Steps", value: day.steps.map { "\(Int($0))" } ?? "--", unit: "")
-                        DailyTimelineStat(label: "Energy", value: day.activeEnergy.map { "\(Int($0))" } ?? "--", unit: "cal")
-                        DailyTimelineStat(label: "Resting", value: day.restingHeartRate.map { "\(Int($0))" } ?? "--", unit: "bpm")
-                    }
-
-                    VStack(spacing: Theme.Spacing.sm) {
+                if model.stats.isEmpty {
+                    Text("No key metrics recorded for this day.")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Colors.textTertiary)
+                } else {
+                    ViewThatFits(in: .horizontal) {
                         HStack(spacing: Theme.Spacing.sm) {
-                            DailyTimelineStat(label: "Sleep", value: day.sleepSummary.map { String(format: "%.1f", $0.totalHours) } ?? "--", unit: "h")
-                            DailyTimelineStat(label: "Steps", value: day.steps.map { "\(Int($0))" } ?? "--", unit: "")
+                            ForEach(model.stats) { stat in
+                                DailyTimelineStat(label: stat.label, value: stat.value, unit: stat.unit)
+                            }
                         }
-                        HStack(spacing: Theme.Spacing.sm) {
-                            DailyTimelineStat(label: "Energy", value: day.activeEnergy.map { "\(Int($0))" } ?? "--", unit: "cal")
-                            DailyTimelineStat(label: "Resting", value: day.restingHeartRate.map { "\(Int($0))" } ?? "--", unit: "bpm")
+
+                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: Theme.Spacing.sm) {
+                            ForEach(model.stats) { stat in
+                                DailyTimelineStat(label: stat.label, value: stat.value, unit: stat.unit)
+                            }
                         }
                     }
                 }
@@ -812,6 +885,18 @@ private enum HealthHubFormatters {
     static let weekday: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "EEEE"
+        return formatter
+    }()
+
+    static let dayNumber: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "d"
+        return formatter
+    }()
+
+    static let monthAbbrev: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM"
         return formatter
     }()
 }

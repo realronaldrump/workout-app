@@ -66,14 +66,12 @@ struct HealthPermissionAuditView: View {
 
     private var headerCard: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Per-Type Health Access")
+            Text("Review Health Access")
                 .font(Theme.Typography.sectionHeader)
                 .foregroundStyle(Theme.Colors.textPrimary)
 
             Text(
-                "Apple lets apps see whether a read permission still needs an authorization prompt, " +
-                "but not whether a specific read type is currently granted or denied. " +
-                "Use this screen to catch newly added Health types after app updates, then confirm final toggles in Health."
+                "Use this when Health metrics are missing or after an app update adds new Apple Health types."
             )
             .font(Theme.Typography.caption)
             .foregroundStyle(Theme.Colors.textSecondary)
@@ -88,7 +86,7 @@ struct HealthPermissionAuditView: View {
                         Image(systemName: "heart.text.square.fill")
                     }
 
-                    Text(isRequestingAuthorization ? "Checking Permissions..." : "Request Health Access Again")
+                    Text(isRequestingAuthorization ? "Checking Access..." : "Review Health Access")
                         .font(Theme.Typography.bodyBold)
                 }
                 .foregroundStyle(.white)
@@ -100,7 +98,7 @@ struct HealthPermissionAuditView: View {
             .buttonStyle(.plain)
             .disabled(isRequestingAuthorization || healthManager.authorizationStatus == .unavailable)
 
-            Text("Health app verification path: open the Health app and review this app under its data-access screen.")
+            Text("Apple manages final Health toggles in the Health app. Return here after changing access.")
                 .font(Theme.Typography.caption)
                 .foregroundStyle(Theme.Colors.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -131,8 +129,8 @@ struct HealthPermissionAuditView: View {
 
             Text(
                 needsReviewCount == 0
-                    ? "No newly added Health types currently require the authorization sheet."
-                    : "\(needsReviewCount) type\(needsReviewCount == 1 ? "" : "s") still need review in the authorization flow or Health app."
+                    ? "All requested Health types have a recorded authorization decision."
+                    : "\(needsReviewCount) type\(needsReviewCount == 1 ? "" : "s") may need another review in the authorization flow or Health app."
             )
             .font(Theme.Typography.caption)
             .foregroundStyle(Theme.Colors.textSecondary)
@@ -253,7 +251,7 @@ struct HealthPermissionAuditView: View {
         case .needsReview:
             return "Needs Review"
         case .decisionRecorded:
-            return "Decision Recorded"
+            return "Recorded"
         case .unavailable:
             return "Unavailable"
         }
@@ -300,7 +298,7 @@ struct HealthPermissionAuditView: View {
             do {
                 try await healthManager.requestAuthorization()
                 await loadAudit()
-                actionMessage = "Health authorization flow completed. Review any remaining items marked Needs Review."
+                actionMessage = "Health access review completed. Check any remaining items marked Needs Review."
             } catch {
                 errorMessage = error.localizedDescription
                 await loadAudit()

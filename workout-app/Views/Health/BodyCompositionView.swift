@@ -13,8 +13,8 @@ struct BodyCompositionView: View {
 
     @State private var showMA7 = true
     @State private var showRA30 = true
-    @State private var showTrend = true
-    @State private var showForecast = true
+    @State private var showTrend = false
+    @State private var showForecast = false
 
     @State private var expandedDays: Set<Date> = []
 
@@ -29,7 +29,7 @@ struct BodyCompositionView: View {
             switch self {
             case .overview: return "Overview"
             case .logbook: return "Logbook"
-            case .reports: return "Reports"
+            case .reports: return "Advanced"
             }
         }
     }
@@ -72,11 +72,6 @@ struct BodyCompositionView: View {
         }
         .navigationTitle("Body Composition")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                HealthDateRangeToolbarMenu(earliestDate: earliestDateForAll)
-            }
-        }
         .onAppear {
             healthManager.refreshAuthorizationStatus()
             refreshData()
@@ -188,7 +183,6 @@ struct BodyCompositionView: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
             keyStatsSection
             intervalChangesSection
-            trendForecastSection
             chartSection
         }
     }
@@ -202,19 +196,31 @@ struct BodyCompositionView: View {
             return trend.pacePerWeek
         }()
 
+        var stats: [BodyStatItem] = []
+        if let latest {
+            stats.append(BodyStatItem(title: "Current", value: formatValue(latest)))
+        }
+        if let latestMA7 {
+            stats.append(BodyStatItem(title: "7-day avg", value: formatValue(latestMA7)))
+        }
+        if let latestRA30 {
+            stats.append(BodyStatItem(title: "30-day avg", value: formatValue(latestRA30)))
+        }
+        if let pace {
+            stats.append(BodyStatItem(title: "Weekly Pace", value: formatDeltaPerWeek(pace)))
+        }
+
         return ViewThatFits(in: .horizontal) {
             HStack(spacing: Theme.Spacing.md) {
-                BodyStatCard(title: "Current", value: latest.map(formatValue) ?? "--", subtitle: nil)
-                BodyStatCard(title: "7d MA", value: latestMA7.map(formatValue) ?? "--", subtitle: nil)
-                BodyStatCard(title: "30d RA", value: latestRA30.map(formatValue) ?? "--", subtitle: nil)
-                BodyStatCard(title: "Weekly Pace", value: pace.map(formatDeltaPerWeek) ?? "--", subtitle: nil)
+                ForEach(stats) { stat in
+                    BodyStatCard(title: stat.title, value: stat.value, subtitle: stat.subtitle)
+                }
             }
 
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: Theme.Spacing.md) {
-                BodyStatCard(title: "Current", value: latest.map(formatValue) ?? "--", subtitle: nil)
-                BodyStatCard(title: "7d MA", value: latestMA7.map(formatValue) ?? "--", subtitle: nil)
-                BodyStatCard(title: "30d RA", value: latestRA30.map(formatValue) ?? "--", subtitle: nil)
-                BodyStatCard(title: "Weekly Pace", value: pace.map(formatDeltaPerWeek) ?? "--", subtitle: nil)
+                ForEach(stats) { stat in
+                    BodyStatCard(title: stat.title, value: stat.value, subtitle: stat.subtitle)
+                }
             }
         }
     }
@@ -325,8 +331,8 @@ struct BodyCompositionView: View {
 
         return ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: Theme.Spacing.sm) {
-                overlayChip("7d MA", isOn: $showMA7, tint: Theme.Colors.accentSecondary)
-                overlayChip("30d RA", isOn: $showRA30, tint: Theme.Colors.accentTertiary)
+                overlayChip("7-day avg", isOn: $showMA7, tint: Theme.Colors.accentSecondary)
+                overlayChip("30-day avg", isOn: $showRA30, tint: Theme.Colors.accentTertiary)
                 overlayChip("Trend", isOn: $showTrend, tint: Theme.Colors.textSecondary, isEnabled: canShowTrend)
                 overlayChip("Forecast", isOn: $showForecast, tint: Theme.Colors.accent.opacity(0.6), isEnabled: canShowForecast)
             }
@@ -375,7 +381,7 @@ struct BodyCompositionView: View {
 
     private var logbookTab: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-            Text("Weigh-In Log")
+            Text(metricKind == .weight ? "Weigh-In Log" : "Body Fat Log")
                 .font(Theme.Typography.sectionHeader)
                 .foregroundStyle(Theme.Colors.textPrimary)
                 .tracking(1.0)
@@ -404,10 +410,17 @@ struct BodyCompositionView: View {
         }
     }
 
-    // MARK: - Reports
+    // MARK: - Advanced
 
     private var reportsTab: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
+            Text("Advanced Analysis")
+                .font(Theme.Typography.sectionHeader)
+                .foregroundStyle(Theme.Colors.textPrimary)
+                .tracking(1.0)
+
+            trendForecastSection
+
             Text("Reports")
                 .font(Theme.Typography.sectionHeader)
                 .foregroundStyle(Theme.Colors.textPrimary)
@@ -659,6 +672,14 @@ struct BodyCompositionView: View {
     }
 }
 
+private struct BodyStatItem: Identifiable {
+    let title: String
+    let value: String
+    var subtitle: String? = nil
+
+    var id: String { title }
+}
+
 private struct BodyStatCard: View {
     let title: String
     let value: String
@@ -754,22 +775,22 @@ private struct TrendForecastCard: View {
 
     private var r2Text: String? {
         guard let r2 = trend.rSquared else { return nil }
-        return "R² \(String(format: "%.2f", r2))"
+        return "Fit \(Int((r2 * 100).rounded()))%"
     }
 
     private var sigmaText: String? {
         guard let sigma = trend.residualStdDev else { return nil }
-        return "±\(String(format: "%.1f", sigma)) \(unit)"
+        return "Typical error ±\(String(format: "%.1f", sigma)) \(unit)"
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("30d Regression")
+                    Text("30-day trend")
                         .font(Theme.Typography.captionBold)
                         .foregroundStyle(Theme.Colors.textPrimary)
-                    Text("\(trend.pointCount) pts")
+                    Text("\(trend.pointCount) readings")
                         .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.Colors.textTertiary)
                 }
@@ -781,11 +802,15 @@ private struct TrendForecastCard: View {
                         Text(r2Text)
                             .font(Theme.Typography.caption)
                             .foregroundStyle(Theme.Colors.textSecondary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
                     }
                     if let sigmaText {
                         Text(sigmaText)
                             .font(Theme.Typography.caption)
                             .foregroundStyle(Theme.Colors.textSecondary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
                     }
                 }
             }
@@ -922,9 +947,15 @@ private struct LogbookDayCard: View {
                             .minimumScaleFactor(0.75)
                     }
 
-                    StatLine(label: "7d MA", value: day.movingAverage7d.map(formatValue) ?? "--")
-                    StatLine(label: "30d RA", value: day.rollingAverage30d.map(formatValue) ?? "--")
-                    StatLine(label: "Rate", value: day.weeklyRate.map(formatRate) ?? "--")
+                    if let movingAverage7d = day.movingAverage7d {
+                        StatLine(label: "7-day avg", value: formatValue(movingAverage7d))
+                    }
+                    if let rollingAverage30d = day.rollingAverage30d {
+                        StatLine(label: "30-day avg", value: formatValue(rollingAverage30d))
+                    }
+                    if let weeklyRate = day.weeklyRate {
+                        StatLine(label: "Weekly pace", value: formatRate(weeklyRate))
+                    }
                 }
             }
 
@@ -949,9 +980,15 @@ private struct LogbookDayCard: View {
                 }
 
                 HStack(spacing: Theme.Spacing.md) {
-                    StatBlock(label: "7d MA", value: day.movingAverage7d.map(formatValue) ?? "--")
-                    StatBlock(label: "30d RA", value: day.rollingAverage30d.map(formatValue) ?? "--")
-                    StatBlock(label: "Rate", value: day.weeklyRate.map(formatRate) ?? "--")
+                    if let movingAverage7d = day.movingAverage7d {
+                        StatBlock(label: "7-day avg", value: formatValue(movingAverage7d))
+                    }
+                    if let rollingAverage30d = day.rollingAverage30d {
+                        StatBlock(label: "30-day avg", value: formatValue(rollingAverage30d))
+                    }
+                    if let weeklyRate = day.weeklyRate {
+                        StatBlock(label: "Weekly pace", value: formatRate(weeklyRate))
+                    }
                 }
             }
         }

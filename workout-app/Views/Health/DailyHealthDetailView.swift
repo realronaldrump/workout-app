@@ -13,6 +13,60 @@ struct DailyHealthDetailView: View {
         return formatter.string(from: day.dayStart)
     }
 
+    private var overviewItems: [DailyOverviewItem] {
+        var items: [DailyOverviewItem] = []
+
+        if let steps = day.steps {
+            items.append(
+                DailyOverviewItem(
+                    title: "Steps",
+                    value: "\(Int(steps))",
+                    unit: "steps",
+                    icon: "figure.walk",
+                    tint: Theme.Colors.warning
+                )
+            )
+        }
+
+        if let sleep = day.sleepSummary?.totalHours {
+            items.append(
+                DailyOverviewItem(
+                    title: "Sleep",
+                    value: String(format: "%.1f", sleep),
+                    unit: "h",
+                    icon: "moon.zzz.fill",
+                    tint: Theme.Colors.accentSecondary
+                )
+            )
+        }
+
+        if let activeEnergy = day.activeEnergy {
+            items.append(
+                DailyOverviewItem(
+                    title: "Energy",
+                    value: "\(Int(activeEnergy))",
+                    unit: "cal",
+                    icon: "flame.fill",
+                    tint: Theme.Colors.warning
+                )
+            )
+        }
+
+        if let restingHeartRate = day.restingHeartRate {
+            items.append(
+                DailyOverviewItem(
+                    title: "Resting HR",
+                    value: "\(Int(restingHeartRate))",
+                    unit: "bpm",
+                    icon: "heart",
+                    tint: Theme.Colors.error
+                )
+            )
+        }
+
+        return items
+    }
+
     var body: some View {
         ZStack {
             AdaptiveBackground()
@@ -21,7 +75,9 @@ struct DailyHealthDetailView: View {
                 LazyVStack(alignment: .leading, spacing: Theme.Spacing.xl) {
                     headerSection
 
-                    overviewSection
+                    if !overviewItems.isEmpty {
+                        overviewSection
+                    }
 
                     if let sleepSummary = day.sleepSummary {
                         sleepSummarySection(summary: sleepSummary)
@@ -63,47 +119,32 @@ struct DailyHealthDetailView: View {
 
     private var overviewSection: some View {
         LazyVGrid(columns: overviewColumns, spacing: Theme.Spacing.md) {
-            DailyOverviewCard(
-                title: "Steps",
-                value: formatInt(day.steps),
-                unit: "steps",
-                icon: "figure.walk",
-                tint: Theme.Colors.warning
-            )
-            DailyOverviewCard(
-                title: "Sleep",
-                value: day.sleepSummary.map { String(format: "%.1f", $0.totalHours) } ?? "--",
-                unit: "h",
-                icon: "moon.zzz.fill",
-                tint: Theme.Colors.accentSecondary
-            )
-            DailyOverviewCard(
-                title: "Energy",
-                value: formatInt(day.activeEnergy),
-                unit: "cal",
-                icon: "flame.fill",
-                tint: Theme.Colors.warning
-            )
-            DailyOverviewCard(
-                title: "Resting HR",
-                value: formatInt(day.restingHeartRate),
-                unit: "bpm",
-                icon: "heart",
-                tint: Theme.Colors.error
-            )
+            ForEach(overviewItems) { item in
+                DailyOverviewCard(item: item)
+            }
         }
     }
 
+    @ViewBuilder
     private func metricsSection(title: String, metrics: [HealthMetric]) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text(title)
-                .font(Theme.Typography.title3)
-                .foregroundStyle(Theme.Colors.textPrimary)
+        let availableMetrics = metrics.filter { metric in
+            metric != .sleep && day.value(for: metric) != nil
+        }
 
-            VStack(spacing: Theme.Spacing.sm) {
-                ForEach(metrics) { metric in
-                    if metric != .sleep {
-                        DailyMetricRow(metric: metric, value: day.value(for: metric))
+        if !availableMetrics.isEmpty {
+            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                Text(title)
+                    .font(Theme.Typography.title3)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+
+                VStack(spacing: Theme.Spacing.sm) {
+                    ForEach(availableMetrics) { metric in
+                        NavigationLink {
+                            HealthMetricDetailView(metric: metric)
+                        } label: {
+                            DailyMetricRow(metric: metric, value: day.value(for: metric))
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
             }
@@ -147,11 +188,6 @@ struct DailyHealthDetailView: View {
         .softCard(elevation: 1)
     }
 
-    private func formatInt(_ value: Double?) -> String {
-        guard let value else { return "--" }
-        return "\(Int(value))"
-    }
-
     private func formatDuration(_ duration: TimeInterval) -> String {
         let hours = Int(duration) / 3600
         let minutes = (Int(duration) % 3600) / 60
@@ -162,30 +198,36 @@ struct DailyHealthDetailView: View {
     }
 }
 
-private struct DailyOverviewCard: View {
+private struct DailyOverviewItem: Identifiable {
     let title: String
     let value: String
     let unit: String
     let icon: String
     let tint: Color
 
+    var id: String { title }
+}
+
+private struct DailyOverviewCard: View {
+    let item: DailyOverviewItem
+
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             HStack(spacing: Theme.Spacing.xs) {
-                Image(systemName: icon)
+                Image(systemName: item.icon)
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(tint)
-                Text(title)
+                    .foregroundStyle(item.tint)
+                Text(item.title)
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Colors.textSecondary)
             }
 
             HStack(alignment: .lastTextBaseline, spacing: 4) {
-                Text(value)
+                Text(item.value)
                     .font(Theme.Typography.numberSmall)
                     .foregroundStyle(Theme.Colors.textPrimary)
-                if !unit.isEmpty {
-                    Text(unit)
+                if !item.unit.isEmpty {
+                    Text(item.unit)
                         .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.Colors.textTertiary)
                 }
@@ -226,6 +268,10 @@ private struct DailyMetricRow: View {
                     .font(Theme.Typography.subheadline)
                     .foregroundStyle(Theme.Colors.textTertiary)
             }
+
+            Image(systemName: "chevron.right")
+                .font(Theme.Typography.caption2Bold)
+                .foregroundStyle(Theme.Colors.textTertiary)
         }
         .padding(Theme.Spacing.md)
         .softCard(elevation: 1)

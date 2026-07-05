@@ -29,12 +29,25 @@ struct HealthCategoryDetailView: View {
         HealthMetric.metrics(for: category)
     }
 
+    private var metricsWithData: [HealthMetric] {
+        metrics.filter { !metricPoints(for: $0).isEmpty }
+    }
+
+    private var unavailableMetrics: [HealthMetric] {
+        metrics.filter { metricPoints(for: $0).isEmpty }
+    }
+
     private var spotlightMetric: HealthMetric {
-        category.primaryMetric ?? metrics.first ?? .steps
+        if let primaryMetric = category.primaryMetric,
+           metricsWithData.contains(primaryMetric) {
+            return primaryMetric
+        }
+
+        return metricsWithData.first ?? category.primaryMetric ?? metrics.first ?? .steps
     }
 
     private var secondaryMetrics: [HealthMetric] {
-        metrics.filter { $0 != spotlightMetric }
+        metricsWithData.filter { $0 != spotlightMetric }
     }
 
     var body: some View {
@@ -46,7 +59,7 @@ struct HealthCategoryDetailView: View {
                     categoryHeader
                         .staggeredAppear(index: 0)
 
-                    if dailyData.isEmpty {
+                    if dailyData.isEmpty || metricsWithData.isEmpty {
                         emptyState
                     } else {
                         spotlightSection
@@ -59,6 +72,10 @@ struct HealthCategoryDetailView: View {
 
                         if !secondaryMetrics.isEmpty {
                             secondarySection
+                        }
+
+                        if !unavailableMetrics.isEmpty {
+                            unavailableMetricsDisclosure
                         }
                     }
                 }
@@ -111,10 +128,10 @@ struct HealthCategoryDetailView: View {
 
     private var emptyState: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text("No data yet")
+            Text("No \(category.title.lowercased()) data in this range")
                 .font(Theme.Typography.title3)
                 .foregroundStyle(Theme.Colors.textPrimary)
-            Text("Use Settings to sync Apple Health data before viewing \(category.title.lowercased()) metrics here.")
+            Text("Try a longer time range or review Apple Health access for this category.")
                 .font(Theme.Typography.body)
                 .foregroundStyle(Theme.Colors.textSecondary)
         }
@@ -246,11 +263,56 @@ struct HealthCategoryDetailView: View {
             }
         }
         .chartYScale(domain: chartYDomain(for: points, baseline: baseline))
-        .chartYAxis(.hidden)
+        .chartYAxis {
+            AxisMarks(values: .automatic(desiredCount: 3)) { value in
+                AxisGridLine()
+                    .foregroundStyle(Theme.Colors.border.opacity(0.35))
+                AxisValueLabel {
+                    if let axisValue = value.as(Double.self) {
+                        Text(spotlightMetric.format(axisValue))
+                            .font(Theme.Typography.caption2)
+                            .foregroundStyle(Theme.Colors.textTertiary)
+                    }
+                }
+            }
+        }
         .chartPlotStyle { plotArea in
             plotArea.clipped()
         }
         .frame(height: Theme.ChartHeight.standard)
+    }
+
+    private var unavailableMetricsDisclosure: some View {
+        DisclosureGroup {
+            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                ForEach(unavailableMetrics) { metric in
+                    HStack(spacing: Theme.Spacing.sm) {
+                        Image(systemName: metric.icon)
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(metric.chartColor)
+                            .frame(width: 24, height: 24)
+
+                        Text(metric.title)
+                            .font(Theme.Typography.subheadline)
+                            .foregroundStyle(Theme.Colors.textSecondary)
+
+                        Spacer()
+                    }
+                }
+
+                Text("These metrics are either not recorded by your devices, not shared with this app, or not present in the selected range.")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.top, Theme.Spacing.sm)
+        } label: {
+            Text("Unavailable Metrics")
+                .font(Theme.Typography.subheadlineBold)
+                .foregroundStyle(Theme.Colors.textPrimary)
+        }
+        .padding(Theme.Spacing.lg)
+        .softCard(elevation: 1)
     }
 
     // MARK: - Insight Banner

@@ -89,7 +89,7 @@ struct HealthMetricDetailView: View {
                         statsSection
                     }
 
-                    if metric == .sleep {
+                    if metric == .sleep && dailyData.contains(where: { $0.sleepSummary != nil }) {
                         sleepBreakdownSection
                     }
                 }
@@ -145,10 +145,10 @@ struct HealthMetricDetailView: View {
 
     private var emptyState: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text("No data in this range")
+            Text("No \(metric.title.lowercased()) data in this range")
                 .font(Theme.Typography.title3)
                 .foregroundStyle(Theme.Colors.textPrimary)
-            Text("Try a longer time range or use Settings to sync more Apple Health data.")
+            Text("Try a longer time range, sync recent Apple Health data, or review Health access for this metric.")
                 .font(Theme.Typography.body)
                 .foregroundStyle(Theme.Colors.textSecondary)
         }
@@ -168,6 +168,7 @@ struct HealthMetricDetailView: View {
                 areaFill: true,
                 height: 180,
                 fullDomain: range.start...range.end,
+                showsControls: false,
                 valueText: { tooltipValueText(displayValue: $0) }
             )
         }

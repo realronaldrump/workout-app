@@ -118,7 +118,7 @@ struct ConsistencyDetailView: View {
                         .foregroundColor(Theme.Colors.textSecondary)
                 }
 
-                Text("Sunday-start calendar weeks. Saved break dates scale weekly goals down and keep excused gaps from breaking streaks.")
+                Text("Saved break dates scale weekly goals down and keep excused gaps from breaking streaks.")
                     .font(Theme.Typography.caption)
                     .foregroundColor(Theme.Colors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)

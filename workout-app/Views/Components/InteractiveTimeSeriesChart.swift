@@ -16,6 +16,7 @@ struct InteractiveTimeSeriesChart: View {
     let height: CGFloat
     let fullDomain: ClosedRange<Date>?
     let clampYToZero: Bool
+    let showsControls: Bool
     let valueText: (Double) -> String
     let dateText: (Date) -> String
 
@@ -32,6 +33,7 @@ struct InteractiveTimeSeriesChart: View {
         height: CGFloat = 200,
         fullDomain: ClosedRange<Date>? = nil,
         clampYToZero: Bool = true,
+        showsControls: Bool = true,
         valueText: @escaping (Double) -> String,
         dateText: @escaping (Date) -> String = { $0.formatted(date: .abbreviated, time: .omitted) }
     ) {
@@ -42,6 +44,7 @@ struct InteractiveTimeSeriesChart: View {
         self.height = height
         self.fullDomain = fullDomain
         self.clampYToZero = clampYToZero
+        self.showsControls = showsControls
         self.valueText = valueText
         self.dateText = dateText
 
@@ -259,7 +262,9 @@ struct InteractiveTimeSeriesChart: View {
             .frame(height: height)
             .accessibilityLabel(headerText)
 
-            controls
+            if showsControls {
+                controls
+            }
         }
         .onDisappear {
             selectionClearTask?.cancel()

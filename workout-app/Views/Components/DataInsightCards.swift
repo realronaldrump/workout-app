@@ -144,10 +144,6 @@ struct DataInsightCards: View {
             "In \(selectedWindow.detailPhrase), you trained it in \(insight.coverageSummary.lowercased())"
         ]
 
-        if let breakAdjustmentSummary = insight.breakAdjustmentSummary {
-            parts.append(breakAdjustmentSummary.lowercased())
-        }
-
         parts.append(insight.recencyDescription)
         return parts.joined(separator: ". ") + "."
     }
@@ -372,12 +368,6 @@ private struct DataInsightDetailSheet: View {
                 insight: insight,
                 selectedWindow: selectedWindow
             )
-
-            if let breakAdjustmentSummary = insight.breakAdjustmentSummary {
-                Text(breakAdjustmentSummary)
-                    .font(Theme.Typography.caption)
-                    .foregroundColor(Theme.Colors.textSecondary)
-            }
 
             LazyVGrid(
                 columns: [
@@ -655,12 +645,6 @@ private struct FrequencyCoverageRow: View {
                         .font(Theme.Typography.caption)
                         .foregroundColor(Theme.Colors.textSecondary)
                 }
-            }
-
-            if let breakAdjustmentSummary = insight.breakAdjustmentSummary {
-                Text(breakAdjustmentSummary)
-                    .font(Theme.Typography.caption)
-                    .foregroundColor(Theme.Colors.textTertiary)
             }
 
             GeometryReader { geo in

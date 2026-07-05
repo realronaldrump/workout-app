@@ -42,20 +42,20 @@ final class HealthExportAndTimelineTests: XCTestCase {
         ])
     }
 
-    func testTimelineSamplingKeepsCompactViewNearTargetCount() {
-        let indices = TimelineSampling.sampledIndices(totalCount: 13, targetCount: 12)
+    func testTimelineDisplayPolicyKeepsCompactRowsContiguous() {
+        let items = Array(0..<29)
+        let visible = DailyTimelineDisplayPolicy.visibleItems(from: items, density: .compact)
 
-        XCTAssertEqual(indices.count, 12)
-        XCTAssertEqual(indices.first, 0)
-        XCTAssertEqual(indices.last, 12)
+        XCTAssertEqual(visible, Array(0..<DailyTimelineDisplayPolicy.compactCount))
     }
 
-    func testTimelineSamplingKeepsExpandedViewNearTargetCount() {
-        let indices = TimelineSampling.sampledIndices(totalCount: 29, targetCount: 28)
+    func testTimelineDisplayPolicyKeepsExpandedRowsContiguous() {
+        let items = Array(0..<29)
+        let visible = DailyTimelineDisplayPolicy.visibleItems(from: items, density: .expanded)
 
-        XCTAssertEqual(indices.count, 28)
-        XCTAssertEqual(indices.first, 0)
-        XCTAssertEqual(indices.last, 28)
+        XCTAssertEqual(visible.count, DailyTimelineDisplayPolicy.expandedCount)
+        XCTAssertEqual(visible.first, 0)
+        XCTAssertEqual(visible.last, 27)
     }
 
     func testHealthTrendPointIdentityIsStableForLogicalPointUpdates() {
@@ -69,44 +69,47 @@ final class HealthExportAndTimelineTests: XCTestCase {
         XCTAssertNotEqual(original.id, differentMetric.id)
     }
 
-    func testDailyTimelineRangePolicyLimitsAllTimeToRecentWindow() {
+    func testTimelineDisplayPolicyShowAllKeepsFullRange() {
         let start = dayStart(year: 2025, month: 1, day: 1)
         let allDays = (0..<150).map { offset in
             DailyHealthData(dayStart: day(offset: offset, from: start), steps: Double(offset))
         }
-        let endDay = day(offset: 149, from: start)
-        let range = DateInterval(start: start, end: endOfDay(endDay))
 
-        let displayed = DailyTimelineRangePolicy.displayedDays(
-            from: allDays,
-            selectedRange: .allTime,
-            range: range,
-            calendar: calendar
-        )
-
-        XCTAssertEqual(displayed.count, DailyTimelineRangePolicy.recentWindowDays)
-        XCTAssertEqual(displayed.first?.dayStart, day(offset: 60, from: start))
-        XCTAssertEqual(displayed.last?.dayStart, endDay)
-    }
-
-    func testDailyTimelineRangePolicyKeepsShortCustomRangeUntouched() {
-        let start = dayStart(year: 2026, month: 2, day: 1)
-        let allDays = (0..<21).map { offset in
-            DailyHealthData(dayStart: day(offset: offset, from: start), steps: Double(offset))
-        }
-        let endDay = day(offset: 20, from: start)
-        let range = DateInterval(start: start, end: endOfDay(endDay))
-
-        let displayed = DailyTimelineRangePolicy.displayedDays(
-            from: allDays,
-            selectedRange: .custom,
-            range: range,
-            calendar: calendar
-        )
+        let displayed = DailyTimelineDisplayPolicy.visibleItems(from: allDays, density: .all)
 
         XCTAssertEqual(displayed.count, allDays.count)
         XCTAssertEqual(displayed.first?.dayStart, start)
-        XCTAssertEqual(displayed.last?.dayStart, endDay)
+        XCTAssertEqual(displayed.last?.dayStart, day(offset: 149, from: start))
+    }
+
+    func testDailyTimelineSortOrderNewestFirst() {
+        let start = dayStart(year: 2026, month: 2, day: 1)
+        let allDays = (0..<3).map { offset in
+            DailyHealthData(dayStart: day(offset: offset, from: start), steps: Double(offset))
+        }
+
+        let sorted = DailyTimelineSortOrder.newestFirst.sortedDays(allDays)
+
+        XCTAssertEqual(sorted.map(\.dayStart), [
+            day(offset: 2, from: start),
+            day(offset: 1, from: start),
+            start
+        ])
+    }
+
+    func testDailyTimelineSortOrderOldestFirst() {
+        let start = dayStart(year: 2026, month: 2, day: 1)
+        let allDays = (0..<3).reversed().map { offset in
+            DailyHealthData(dayStart: day(offset: offset, from: start), steps: Double(offset))
+        }
+
+        let sorted = DailyTimelineSortOrder.oldestFirst.sortedDays(allDays)
+
+        XCTAssertEqual(sorted.map(\.dayStart), [
+            start,
+            day(offset: 1, from: start),
+            day(offset: 2, from: start)
+        ])
     }
 
     func testDailyHealthCoveragePlannerBatchesMissingRangesBackward() {

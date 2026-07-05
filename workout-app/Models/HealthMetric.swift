@@ -20,7 +20,7 @@ enum HealthHubCategory: String, CaseIterable, Identifiable {
         case .vitals: return "Vitals"
         case .cardio: return "Cardio"
         case .body: return "Body"
-        case .sessions: return "Sessions"
+        case .sessions: return "Workout Health"
         }
     }
 
@@ -32,7 +32,7 @@ enum HealthHubCategory: String, CaseIterable, Identifiable {
         case .vitals: return "SpO2, respiration, temp"
         case .cardio: return "Fitness metrics"
         case .body: return "Body composition"
-        case .sessions: return "Workout insights"
+        case .sessions: return "Workout-linked metrics"
         }
     }
 
@@ -44,7 +44,7 @@ enum HealthHubCategory: String, CaseIterable, Identifiable {
         case .vitals: return "cross.case.fill"
         case .cardio: return "figure.run"
         case .body: return "figure.arms.open"
-        case .sessions: return "clock.arrow.2.circlepath"
+        case .sessions: return "waveform.path.ecg.rectangle"
         }
     }
 
