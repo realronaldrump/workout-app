@@ -45,6 +45,26 @@ private struct HistoryTabView: View {
     }
 }
 
+private struct HealthTabRoot: View {
+    @StateObject private var healthStore: HealthViewStore
+
+    init(healthManager: HealthKitManager, dataManager: WorkoutDataManager) {
+        _healthStore = StateObject(
+            wrappedValue: HealthViewStore(
+                healthManager: healthManager,
+                dataManager: dataManager
+            )
+        )
+    }
+
+    var body: some View {
+        NavigationStack {
+            HealthHubView()
+        }
+        .environmentObject(healthStore)
+    }
+}
+
 private struct ActiveSessionInset: View {
     @ObservedObject var sessionManager: WorkoutSessionManager
 
@@ -144,9 +164,10 @@ struct MainTabView: View {
             }
             .tag(AppTab.today)
 
-            NavigationStack {
-                HealthHubView()
-            }
+            HealthTabRoot(
+                healthManager: healthManager,
+                dataManager: dataManager
+            )
             .tabItem {
                 Label("Health", systemImage: "heart.fill")
             }

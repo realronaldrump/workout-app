@@ -156,13 +156,18 @@ struct BodyCompositionTrendChart: View {
     // MARK: - Chart
 
     private var chart: some View {
-        Chart {
+        let currentYDomain = yDomain
+        let renderedPoints = HealthChartPointSampler.sampled(points, limit: 400)
+        let renderedMA7 = HealthChartPointSampler.sampled(ma7, limit: 400)
+        let renderedRA30 = HealthChartPointSampler.sampled(ra30, limit: 400)
+
+        return Chart {
             // Area fill — gradient under the primary line
-            if !points.isEmpty {
-                ForEach(points) { point in
+            if !renderedPoints.isEmpty {
+                ForEach(renderedPoints) { point in
                     AreaMark(
                         x: .value("Date", point.date),
-                        yStart: .value("Baseline", yDomain.lowerBound),
+                        yStart: .value("Baseline", currentYDomain.lowerBound),
                         yEnd: .value("Value", point.value),
                         series: .value("Series", "Actual")
                     )
@@ -191,7 +196,7 @@ struct BodyCompositionTrendChart: View {
             }
 
             // Primary data line
-            ForEach(points) { point in
+            ForEach(renderedPoints) { point in
                 LineMark(
                     x: .value("Date", point.date),
                     y: .value("Value", point.value),
@@ -204,7 +209,7 @@ struct BodyCompositionTrendChart: View {
 
             // 7-day moving average
             if showMA7 {
-                ForEach(ma7) { point in
+                ForEach(renderedMA7) { point in
                     LineMark(
                         x: .value("Date", point.date),
                         y: .value("7d MA", point.value),
@@ -218,7 +223,7 @@ struct BodyCompositionTrendChart: View {
 
             // 30-day rolling average
             if showRA30 {
-                ForEach(ra30) { point in
+                ForEach(renderedRA30) { point in
                     LineMark(
                         x: .value("Date", point.date),
                         y: .value("30d RA", point.value),
@@ -320,7 +325,7 @@ struct BodyCompositionTrendChart: View {
             }
         }
         .chartXScale(domain: fullXDomain)
-        .chartYScale(domain: yDomain)
+        .chartYScale(domain: currentYDomain)
         .chartPlotStyle { plotArea in
             plotArea
                 .clipped()

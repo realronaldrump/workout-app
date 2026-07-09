@@ -2,7 +2,7 @@ import Charts
 import SwiftUI
 
 struct BodyCompositionView: View {
-    @EnvironmentObject private var healthManager: HealthKitManager
+    @EnvironmentObject private var healthManager: HealthViewStore
     @EnvironmentObject private var dateRangeContext: HealthDateRangeContext
 
     @StateObject private var model = BodyCompositionViewModel()

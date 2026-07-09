@@ -3,25 +3,37 @@ import Foundation
 
 @MainActor
 final class BodyCompositionViewModel: ObservableObject {
-    @Published var isLoading = false
-    @Published var errorMessage: String?
+    private struct Snapshot {
+        var isLoading = false
+        var errorMessage: String?
+        var sampleCountInDisplayRange = 0
+        var lastUpdatedAt: Date?
+        var earliestSampleDate: Date?
+        var representativeSeries: [TimeSeriesPoint] = []
+        var ma7Series: [TimeSeriesPoint] = []
+        var ra30Series: [TimeSeriesPoint] = []
+        var logbookDays: [BodyLogbookDay] = []
+        var intervalDeltas: [IntervalDelta] = []
+        var trendSummary: TrendSummary?
+        var forecastPoints: [ForecastPoint] = []
+        var reportBuckets: [ReportBucket] = []
+    }
 
-    @Published var sampleCountInDisplayRange: Int = 0
-    @Published var lastUpdatedAt: Date?
+    @Published private var snapshot = Snapshot()
 
-    @Published var earliestSampleDate: Date?
-
-    @Published var representativeSeries: [TimeSeriesPoint] = []
-    @Published var ma7Series: [TimeSeriesPoint] = []
-    @Published var ra30Series: [TimeSeriesPoint] = []
-
-    @Published var logbookDays: [BodyLogbookDay] = []
-
-    @Published var intervalDeltas: [IntervalDelta] = []
-    @Published var trendSummary: TrendSummary?
-    @Published var forecastPoints: [ForecastPoint] = []
-
-    @Published var reportBuckets: [ReportBucket] = []
+    var isLoading: Bool { snapshot.isLoading }
+    var errorMessage: String? { snapshot.errorMessage }
+    var sampleCountInDisplayRange: Int { snapshot.sampleCountInDisplayRange }
+    var lastUpdatedAt: Date? { snapshot.lastUpdatedAt }
+    var earliestSampleDate: Date? { snapshot.earliestSampleDate }
+    var representativeSeries: [TimeSeriesPoint] { snapshot.representativeSeries }
+    var ma7Series: [TimeSeriesPoint] { snapshot.ma7Series }
+    var ra30Series: [TimeSeriesPoint] { snapshot.ra30Series }
+    var logbookDays: [BodyLogbookDay] { snapshot.logbookDays }
+    var intervalDeltas: [IntervalDelta] { snapshot.intervalDeltas }
+    var trendSummary: TrendSummary? { snapshot.trendSummary }
+    var forecastPoints: [ForecastPoint] { snapshot.forecastPoints }
+    var reportBuckets: [ReportBucket] { snapshot.reportBuckets }
 
     nonisolated deinit {}
 
@@ -31,27 +43,22 @@ final class BodyCompositionViewModel: ObservableObject {
         displayRange: DateInterval,
         reportGranularity: ReportGranularity
     ) {
-        isLoading = true
-        errorMessage = nil
-
-        defer {
-            isLoading = false
-            lastUpdatedAt = Date()
-        }
-
-        earliestSampleDate = earliestLocalSampleDate(in: dailyEntries, metricKind: metricKind)
+        let earliestSampleDate = earliestLocalSampleDate(in: dailyEntries, metricKind: metricKind)
 
         let analysisRange = BodyCompositionAnalytics.bufferedAnalysisRange(for: displayRange, bufferDays: 35)
         let rawSamples = localSamples(from: dailyEntries, metricKind: metricKind, range: analysisRange)
 
-        sampleCountInDisplayRange = rawSamples.filter { displayRange.contains($0.timestamp) }.count
+        let sampleCountInDisplayRange = rawSamples.filter { displayRange.contains($0.timestamp) }.count
 
         let daily = dailyRepresentativesPreservingStoredDayStarts(from: rawSamples)
         let repsInDisplayRange = daily.filter { displayRange.contains($0.dayStart) }
 
         guard !repsInDisplayRange.isEmpty else {
-            clearComputedData(keepCounts: true)
-            reportBuckets = []
+            snapshot = Snapshot(
+                sampleCountInDisplayRange: sampleCountInDisplayRange,
+                lastUpdatedAt: Date(),
+                earliestSampleDate: earliestSampleDate
+            )
             return
         }
 
@@ -64,14 +71,13 @@ final class BodyCompositionViewModel: ObservableObject {
             .map { TimeSeriesPoint(date: $0.dayStart, value: $0.value) }
             .sorted { $0.date < $1.date }
 
-        representativeSeries = points
-        ma7Series = repsInDisplayRange.compactMap { rep in
+        let ma7Series: [TimeSeriesPoint] = repsInDisplayRange.compactMap { rep in
             guard let value = ma7[rep.dayStart] else { return nil }
             return TimeSeriesPoint(date: rep.dayStart, value: value)
         }
         .sorted { $0.date < $1.date }
 
-        ra30Series = repsInDisplayRange.compactMap { rep in
+        let ra30Series: [TimeSeriesPoint] = repsInDisplayRange.compactMap { rep in
             guard let value = ra30[rep.dayStart] else { return nil }
             return TimeSeriesPoint(date: rep.dayStart, value: value)
         }
@@ -100,10 +106,15 @@ final class BodyCompositionViewModel: ObservableObject {
             )
         }
 
-        logbookDays = logbookAscending.sorted { $0.dayStart > $1.dayStart }
-        intervalDeltas = BodyCompositionAnalytics.intervalDeltas(points: points, displayRangeStart: displayRange.start)
+        let logbookDays = logbookAscending.sorted { $0.dayStart > $1.dayStart }
+        let intervalDeltas = BodyCompositionAnalytics.intervalDeltas(
+            points: points,
+            displayRangeStart: displayRange.start
+        )
 
         let latestTrend = BodyCompositionAnalytics.trendSummaryForLatest(representatives: daily, windowDays: 30)
+        let trendSummary: TrendSummary?
+        let forecastPoints: [ForecastPoint]
         if let latestTrend,
            let latestPoint = points.last,
            let latestRegression = regressions[latestPoint.date] {
@@ -118,25 +129,30 @@ final class BodyCompositionViewModel: ObservableObject {
             forecastPoints = []
         }
 
-        reportBuckets = BodyCompositionAnalytics.reportBuckets(points: points, granularity: reportGranularity)
+        let reportBuckets = BodyCompositionAnalytics.reportBuckets(points: points, granularity: reportGranularity)
+
+        snapshot = Snapshot(
+            sampleCountInDisplayRange: sampleCountInDisplayRange,
+            lastUpdatedAt: Date(),
+            earliestSampleDate: earliestSampleDate,
+            representativeSeries: points,
+            ma7Series: ma7Series,
+            ra30Series: ra30Series,
+            logbookDays: logbookDays,
+            intervalDeltas: intervalDeltas,
+            trendSummary: trendSummary,
+            forecastPoints: forecastPoints,
+            reportBuckets: reportBuckets
+        )
     }
 
     func recomputeReports(granularity: ReportGranularity) {
-        reportBuckets = BodyCompositionAnalytics.reportBuckets(points: representativeSeries, granularity: granularity)
-    }
-
-    private func clearComputedData(keepCounts: Bool = false) {
-        if !keepCounts {
-            sampleCountInDisplayRange = 0
-        }
-        representativeSeries = []
-        ma7Series = []
-        ra30Series = []
-        logbookDays = []
-        intervalDeltas = []
-        trendSummary = nil
-        forecastPoints = []
-        reportBuckets = []
+        var next = snapshot
+        next.reportBuckets = BodyCompositionAnalytics.reportBuckets(
+            points: snapshot.representativeSeries,
+            granularity: granularity
+        )
+        snapshot = next
     }
 
     private func earliestLocalSampleDate(

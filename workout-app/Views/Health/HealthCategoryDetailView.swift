@@ -4,7 +4,7 @@ import Charts
 struct HealthCategoryDetailView: View {
     let category: HealthHubCategory
 
-    @EnvironmentObject var healthManager: HealthKitManager
+    @EnvironmentObject var healthManager: HealthViewStore
     @EnvironmentObject private var dateRangeContext: HealthDateRangeContext
 
     private var earliestDate: Date? {
@@ -20,37 +20,20 @@ struct HealthCategoryDetailView: View {
     }
 
     private var dailyData: [DailyHealthData] {
-        healthManager.dailyHealthStore.values
-            .filter { range.contains($0.dayStart) }
+        // Resolve once. `range` computes the earliest stored date, making a
+        // per-element lookup here O(n²) over the full cache.
+        let resolvedRange = range
+        return healthManager.dailyHealthStore.values
+            .filter { resolvedRange.contains($0.dayStart) }
             .sorted { $0.dayStart < $1.dayStart }
     }
 
-    private var metrics: [HealthMetric] {
-        HealthMetric.metrics(for: category)
-    }
-
-    private var metricsWithData: [HealthMetric] {
-        metrics.filter { !metricPoints(for: $0).isEmpty }
-    }
-
-    private var unavailableMetrics: [HealthMetric] {
-        metrics.filter { metricPoints(for: $0).isEmpty }
-    }
-
-    private var spotlightMetric: HealthMetric {
-        if let primaryMetric = category.primaryMetric,
-           metricsWithData.contains(primaryMetric) {
-            return primaryMetric
-        }
-
-        return metricsWithData.first ?? category.primaryMetric ?? metrics.first ?? .steps
-    }
-
-    private var secondaryMetrics: [HealthMetric] {
-        metricsWithData.filter { $0 != spotlightMetric }
-    }
-
     var body: some View {
+        let presentation = HealthCategoryPresentation(
+            category: category,
+            dailyData: dailyData
+        )
+
         ZStack {
             AdaptiveBackground()
 
@@ -59,23 +42,23 @@ struct HealthCategoryDetailView: View {
                     categoryHeader
                         .staggeredAppear(index: 0)
 
-                    if dailyData.isEmpty || metricsWithData.isEmpty {
+                    if presentation.dailyData.isEmpty || presentation.metricsWithData.isEmpty {
                         emptyState
                     } else {
-                        spotlightSection
+                        spotlightSection(presentation.spotlight)
                             .staggeredAppear(index: 1)
 
-                        if let insightText = generateInsight() {
+                        if let insightText = generateInsight(for: presentation.spotlight) {
                             insightBanner(insightText)
                                 .staggeredAppear(index: 2)
                         }
 
-                        if !secondaryMetrics.isEmpty {
-                            secondarySection
+                        if !presentation.secondaryMetrics.isEmpty {
+                            secondarySection(presentation.secondaryMetrics)
                         }
 
-                        if !unavailableMetrics.isEmpty {
-                            unavailableMetricsDisclosure
+                        if !presentation.unavailableMetrics.isEmpty {
+                            unavailableMetricsDisclosure(presentation.unavailableMetrics)
                         }
                     }
                 }
@@ -141,49 +124,44 @@ struct HealthCategoryDetailView: View {
 
     // MARK: - Spotlight Section
 
-    private var spotlightSection: some View {
-        let points = metricPoints(for: spotlightMetric)
-        let latest = latestValue(for: spotlightMetric)
-        let trend = trendPercentage(for: spotlightMetric)
-        let avg = average(for: spotlightMetric)
-        let minVal = minValue(for: spotlightMetric)
-        let maxVal = maxValue(for: spotlightMetric)
+    private func spotlightSection(_ snapshot: HealthCategoryMetricSnapshot) -> some View {
+        let metric = snapshot.metric
 
         return NavigationLink {
-            HealthMetricDetailView(metric: spotlightMetric)
+            HealthMetricDetailView(metric: metric)
         } label: {
             VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
                 // Header: icon + name + trend
                 HStack {
                     HStack(spacing: Theme.Spacing.sm) {
-                        Image(systemName: spotlightMetric.icon)
+                        Image(systemName: metric.icon)
                             .font(Theme.Iconography.medium)
-                            .foregroundStyle(spotlightMetric.chartColor)
-                        Text(spotlightMetric.title)
+                            .foregroundStyle(metric.chartColor)
+                        Text(metric.title)
                             .font(Theme.Typography.sectionHeader2)
                             .foregroundStyle(Theme.Colors.textPrimary)
                     }
 
                     Spacer()
 
-                    if let trend {
-                        TrendBadge(percentage: trend, color: spotlightMetric.chartColor)
+                    if let trend = snapshot.trend {
+                        TrendBadge(percentage: trend, color: metric.chartColor)
                     }
                 }
 
                 // Big number
                 HStack(alignment: .lastTextBaseline, spacing: Theme.Spacing.sm) {
-                    Text(latest.map(spotlightMetric.format) ?? "--")
+                    Text(snapshot.latest.map(metric.format) ?? "--")
                         .font(Theme.Typography.numberLarge)
                         .foregroundStyle(Theme.Colors.textPrimary)
-                    Text(spotlightMetric.displayUnit)
+                    Text(metric.displayUnit)
                         .font(Theme.Typography.sectionHeader)
                         .foregroundStyle(Theme.Colors.textTertiary)
                 }
 
                 // Chart
-                if points.count >= 2 {
-                    spotlightChart(points: points)
+                if snapshot.points.count >= 2 {
+                    spotlightChart(points: snapshot.renderedPoints, metric: metric)
                 }
 
                 // Divider
@@ -195,20 +173,20 @@ struct HealthCategoryDetailView: View {
                 HStack(spacing: 0) {
                     SpotlightStat(
                         label: "AVG",
-                        value: avg.map(spotlightMetric.format) ?? "--",
-                        unit: spotlightMetric.displayUnit
+                        value: snapshot.average.map(metric.format) ?? "--",
+                        unit: metric.displayUnit
                     )
                     Spacer()
                     SpotlightStat(
                         label: "LOW",
-                        value: minVal.map(spotlightMetric.format) ?? "--",
-                        unit: spotlightMetric.displayUnit
+                        value: snapshot.minimum.map(metric.format) ?? "--",
+                        unit: metric.displayUnit
                     )
                     Spacer()
                     SpotlightStat(
                         label: "HIGH",
-                        value: maxVal.map(spotlightMetric.format) ?? "--",
-                        unit: spotlightMetric.displayUnit
+                        value: snapshot.maximum.map(metric.format) ?? "--",
+                        unit: metric.displayUnit
                     )
                 }
             }
@@ -219,14 +197,14 @@ struct HealthCategoryDetailView: View {
                     topLeadingRadius: Theme.CornerRadius.large,
                     topTrailingRadius: Theme.CornerRadius.large
                 )
-                .fill(spotlightMetric.chartColor)
+                .fill(metric.chartColor)
                 .frame(height: 3)
             }
         }
         .buttonStyle(.plain)
     }
 
-    private func spotlightChart(points: [HealthTrendPoint]) -> some View {
+    private func spotlightChart(points: [HealthTrendPoint], metric: HealthMetric) -> some View {
         let baseline = areaBaseline(for: points)
 
         return Chart(points) { point in
@@ -238,8 +216,8 @@ struct HealthCategoryDetailView: View {
             .foregroundStyle(
                 LinearGradient(
                     colors: [
-                        spotlightMetric.chartColor.opacity(0.25),
-                        spotlightMetric.chartColor.opacity(0.02)
+                        metric.chartColor.opacity(0.25),
+                        metric.chartColor.opacity(0.02)
                     ],
                     startPoint: .top,
                     endPoint: .bottom
@@ -251,7 +229,7 @@ struct HealthCategoryDetailView: View {
                 x: .value("Date", point.date),
                 y: .value("Value", point.value)
             )
-            .foregroundStyle(spotlightMetric.chartColor)
+            .foregroundStyle(metric.chartColor)
             .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round))
             .interpolationMethod(.catmullRom)
         }
@@ -269,7 +247,7 @@ struct HealthCategoryDetailView: View {
                     .foregroundStyle(Theme.Colors.border.opacity(0.35))
                 AxisValueLabel {
                     if let axisValue = value.as(Double.self) {
-                        Text(spotlightMetric.format(axisValue))
+                        Text(metric.format(axisValue))
                             .font(Theme.Typography.caption2)
                             .foregroundStyle(Theme.Colors.textTertiary)
                     }
@@ -282,7 +260,7 @@ struct HealthCategoryDetailView: View {
         .frame(height: Theme.ChartHeight.standard)
     }
 
-    private var unavailableMetricsDisclosure: some View {
+    private func unavailableMetricsDisclosure(_ unavailableMetrics: [HealthMetric]) -> some View {
         DisclosureGroup {
             VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                 ForEach(unavailableMetrics) { metric in
@@ -335,79 +313,31 @@ struct HealthCategoryDetailView: View {
 
     // MARK: - Secondary Section
 
-    private var secondarySection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+    private func secondarySection(_ secondaryMetrics: [HealthCategoryMetricSnapshot]) -> some View {
+        LazyVStack(alignment: .leading, spacing: Theme.Spacing.md) {
             Text("ALL METRICS")
                 .sectionHeaderStyle()
                 .padding(.top, Theme.Spacing.sm)
 
-            ForEach(Array(secondaryMetrics.enumerated()), id: \.element.id) { index, metric in
+            ForEach(secondaryMetrics) { snapshot in
+                let metric = snapshot.metric
                 NavigationLink {
                     HealthMetricDetailView(metric: metric)
                 } label: {
                     EnrichedMetricRow(
                         metric: metric,
-                        points: metricPoints(for: metric),
-                        latestValue: latestValue(for: metric),
-                        average: average(for: metric),
-                        trend: trendPercentage(for: metric)
+                        points: snapshot.renderedPoints,
+                        latestValue: snapshot.latest,
+                        average: snapshot.average,
+                        trend: snapshot.trend
                     )
                 }
                 .buttonStyle(.plain)
-                .staggeredAppear(index: index + 3)
             }
         }
     }
 
     // MARK: - Data Helpers
-
-    private func metricPoints(for metric: HealthMetric) -> [HealthTrendPoint] {
-        dailyData.compactMap { day in
-            guard let value = day.value(for: metric) else { return nil }
-            return HealthTrendPoint(date: day.dayStart, value: value, label: metric.title)
-        }
-    }
-
-    private func latestValue(for metric: HealthMetric) -> Double? {
-        for day in dailyData.reversed() {
-            if let value = day.value(for: metric) {
-                return value
-            }
-        }
-        return nil
-    }
-
-    private func average(for metric: HealthMetric) -> Double? {
-        let values = dailyData.compactMap { $0.value(for: metric) }
-        guard !values.isEmpty else { return nil }
-        return values.reduce(0, +) / Double(values.count)
-    }
-
-    private func minValue(for metric: HealthMetric) -> Double? {
-        dailyData.compactMap { $0.value(for: metric) }.min()
-    }
-
-    private func maxValue(for metric: HealthMetric) -> Double? {
-        dailyData.compactMap { $0.value(for: metric) }.max()
-    }
-
-    private func trendPercentage(for metric: HealthMetric) -> Double? {
-        let values = dailyData.compactMap { day -> (Date, Double)? in
-            guard let metricValue = day.value(for: metric) else { return nil }
-            return (day.dayStart, metricValue)
-        }
-        guard values.count >= 4 else { return nil }
-
-        let midpoint = values.count / 2
-        let firstHalf = values[..<midpoint].map(\.1)
-        let secondHalf = values[midpoint...].map(\.1)
-
-        let avgFirst = firstHalf.reduce(0, +) / Double(firstHalf.count)
-        let avgSecond = secondHalf.reduce(0, +) / Double(secondHalf.count)
-
-        guard avgFirst != 0 else { return nil }
-        return ((avgSecond - avgFirst) / abs(avgFirst)) * 100
-    }
 
     private func areaBaseline(for points: [HealthTrendPoint]) -> Double {
         let values = points.map(\.value)
@@ -420,13 +350,16 @@ struct HealthCategoryDetailView: View {
         let values = points.map(\.value)
         guard let maxVal = values.max() else { return 0...1 }
         let span = maxVal - baseline
-        let padding = span * 0.08
-        return baseline...(maxVal + padding)
+        if span <= 0 {
+            let padding = max(abs(maxVal) * 0.05, 1)
+            return max(0, baseline - padding)...(maxVal + padding)
+        }
+        return baseline...(maxVal + span * 0.08)
     }
 
-    private func generateInsight() -> String? {
-        guard let trend = trendPercentage(for: spotlightMetric) else { return nil }
-        let name = spotlightMetric.title.lowercased()
+    private func generateInsight(for snapshot: HealthCategoryMetricSnapshot) -> String? {
+        guard let trend = snapshot.trend else { return nil }
+        let name = snapshot.metric.title.lowercased()
         let absT = abs(trend)
         let direction = trend > 0 ? "up" : "down"
         let pct = String(format: "%.0f%%", absT)
@@ -438,6 +371,81 @@ struct HealthCategoryDetailView: View {
         } else {
             return "Your \(name) is \(direction) \(pct) — a notable shift from the first half of this period."
         }
+    }
+}
+
+private struct HealthCategoryMetricSnapshot: Identifiable {
+    let metric: HealthMetric
+    let points: [HealthTrendPoint]
+    let renderedPoints: [HealthTrendPoint]
+    let latest: Double?
+    let average: Double?
+    let minimum: Double?
+    let maximum: Double?
+    let trend: Double?
+
+    var id: HealthMetric { metric }
+
+    init(metric: HealthMetric, dailyData: [DailyHealthData]) {
+        self.metric = metric
+
+        let points = dailyData.compactMap { day -> HealthTrendPoint? in
+            guard let value = day.value(for: metric) else { return nil }
+            return HealthTrendPoint(date: day.dayStart, value: value, label: metric.title)
+        }
+        self.points = points
+        renderedPoints = HealthChartPointSampler.sampled(points, limit: 240)
+
+        let values = points.map(\.value)
+        latest = values.last
+        average = values.isEmpty ? nil : values.reduce(0, +) / Double(values.count)
+        minimum = values.min()
+        maximum = values.max()
+        trend = Self.trendPercentage(values)
+    }
+
+    private static func trendPercentage(_ values: [Double]) -> Double? {
+        guard values.count >= 4 else { return nil }
+
+        let midpoint = values.count / 2
+        let firstHalf = values[..<midpoint]
+        let secondHalf = values[midpoint...]
+        let firstAverage = firstHalf.reduce(0, +) / Double(firstHalf.count)
+        let secondAverage = secondHalf.reduce(0, +) / Double(secondHalf.count)
+
+        guard firstAverage != 0 else { return nil }
+        return ((secondAverage - firstAverage) / abs(firstAverage)) * 100
+    }
+}
+
+private struct HealthCategoryPresentation {
+    let dailyData: [DailyHealthData]
+    let metricsWithData: [HealthCategoryMetricSnapshot]
+    let unavailableMetrics: [HealthMetric]
+    let spotlight: HealthCategoryMetricSnapshot
+    let secondaryMetrics: [HealthCategoryMetricSnapshot]
+
+    init(category: HealthHubCategory, dailyData: [DailyHealthData]) {
+        self.dailyData = dailyData
+
+        let metrics = HealthMetric.metrics(for: category)
+        let snapshots = metrics.map {
+            HealthCategoryMetricSnapshot(metric: $0, dailyData: dailyData)
+        }
+        let available = snapshots.filter { !$0.points.isEmpty }
+        metricsWithData = available
+        unavailableMetrics = snapshots.filter(\.points.isEmpty).map(\.metric)
+
+        let preferred = category.primaryMetric.flatMap { primary in
+            available.first { $0.metric == primary }
+        }
+        let fallbackMetric = category.primaryMetric ?? metrics.first ?? .steps
+        let spotlight = preferred ?? available.first ?? HealthCategoryMetricSnapshot(
+            metric: fallbackMetric,
+            dailyData: dailyData
+        )
+        self.spotlight = spotlight
+        secondaryMetrics = available.filter { $0.metric != spotlight.metric }
     }
 }
 
@@ -513,7 +521,20 @@ private struct EnrichedMetricRow: View {
         return Swift.max(0, minVal - span * 0.1)
     }
 
+    private var chartYDomain: ClosedRange<Double> {
+        let baseline = areaBaseline
+        let maximum = points.map(\.value).max() ?? 1
+        if maximum <= baseline {
+            let padding = max(abs(maximum) * 0.05, 1)
+            return max(0, baseline - padding)...(maximum + padding)
+        }
+        return baseline...(maximum + (maximum - baseline) * 0.05)
+    }
+
     var body: some View {
+        let baseline = areaBaseline
+        let chartDomain = chartYDomain
+
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             // Header row
             HStack {
@@ -580,7 +601,7 @@ private struct EnrichedMetricRow: View {
                 Chart(points) { point in
                     AreaMark(
                         x: .value("Date", point.date),
-                        yStart: .value("Baseline", areaBaseline),
+                        yStart: .value("Baseline", baseline),
                         yEnd: .value("Value", point.value)
                     )
                     .foregroundStyle(
@@ -604,7 +625,7 @@ private struct EnrichedMetricRow: View {
                     .interpolationMethod(.catmullRom)
                 }
                 .chartXAxis(.hidden)
-                .chartYScale(domain: areaBaseline...(points.map(\.value).max() ?? 1) * 1.05)
+                .chartYScale(domain: chartDomain)
                 .chartYAxis(.hidden)
                 .chartPlotStyle { plotArea in
                     plotArea.clipped()

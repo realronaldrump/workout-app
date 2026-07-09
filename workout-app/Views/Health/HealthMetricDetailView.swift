@@ -3,7 +3,7 @@ import SwiftUI
 struct HealthMetricDetailView: View {
     let metric: HealthMetric
 
-    @EnvironmentObject var healthManager: HealthKitManager
+    @EnvironmentObject var healthManager: HealthViewStore
     @EnvironmentObject private var dateRangeContext: HealthDateRangeContext
 
     private var earliestDate: Date? {
@@ -19,78 +19,33 @@ struct HealthMetricDetailView: View {
     }
 
     private var dailyData: [DailyHealthData] {
-        healthManager.dailyHealthStore.values
-            .filter { range.contains($0.dayStart) }
+        // Resolve once. `range` scans for the earliest stored date, so calling it
+        // from the filter closure makes even a one-week selection quadratic.
+        let resolvedRange = range
+        return healthManager.dailyHealthStore.values
+            .filter { resolvedRange.contains($0.dayStart) }
             .sorted { $0.dayStart < $1.dayStart }
     }
 
-    private var points: [HealthTrendPoint] {
-        dailyData.compactMap { day in
-            guard let value = day.value(for: metric) else { return nil }
-            return HealthTrendPoint(date: day.dayStart, value: value, label: metric.title)
-        }
-    }
-
-    private var chartPoints: [HealthTrendPoint] {
-        points.map { point in
-            HealthTrendPoint(
-                date: point.date,
-                value: metric.displayValue(from: point.value),
-                label: point.label
-            )
-        }
-    }
-
-    private var values: [Double] {
-        points.map { $0.value }
-    }
-
-    private var averageValue: Double? {
-        guard !values.isEmpty else { return nil }
-        return values.reduce(0, +) / Double(values.count)
-    }
-
-    private var minValue: Double? {
-        values.min()
-    }
-
-    private var maxValue: Double? {
-        values.max()
-    }
-
-    private var minPoint: HealthTrendPoint? {
-        guard let minValue else { return nil }
-        // If multiple days share the same min, prefer the most recent occurrence.
-        return points
-            .filter { $0.value == minValue }
-            .max(by: { $0.date < $1.date })
-    }
-
-    private var maxPoint: HealthTrendPoint? {
-        guard let maxValue else { return nil }
-        // If multiple days share the same max, prefer the most recent occurrence.
-        return points
-            .filter { $0.value == maxValue }
-            .max(by: { $0.date < $1.date })
-    }
-
     var body: some View {
+        let presentation = HealthMetricPresentation(metric: metric, dailyData: dailyData)
+
         ZStack {
             AdaptiveBackground()
 
             ScrollView(showsIndicators: false) {
                 LazyVStack(alignment: .leading, spacing: Theme.Spacing.xl) {
-                    headerSection
+                    headerSection(presentation)
 
-                    if points.isEmpty {
+                    if presentation.points.isEmpty {
                         emptyState
                     } else {
-                        dailyChartSection
-                        statsSection
+                        dailyChartSection(presentation)
+                        statsSection(presentation)
                     }
 
-                    if metric == .sleep && dailyData.contains(where: { $0.sleepSummary != nil }) {
-                        sleepBreakdownSection
+                    if metric == .sleep && !presentation.sleepSummaries.isEmpty {
+                        sleepBreakdownSection(presentation.sleepSummaries)
                     }
                 }
                 .padding(.vertical, Theme.Spacing.xxl)
@@ -106,7 +61,7 @@ struct HealthMetricDetailView: View {
         }
     }
 
-    private var headerSection: some View {
+    private func headerSection(_ presentation: HealthMetricPresentation) -> some View {
         HStack(spacing: Theme.Spacing.md) {
             Image(systemName: metric.icon)
                 .font(Theme.Iconography.title3)
@@ -122,7 +77,7 @@ struct HealthMetricDetailView: View {
                 )
 
             VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                if let latest = values.last {
+                if let latest = presentation.latest {
                     HStack(alignment: .lastTextBaseline, spacing: 6) {
                         Text(metric.format(latest))
                             .font(Theme.Typography.title)
@@ -156,14 +111,14 @@ struct HealthMetricDetailView: View {
         .softCard(elevation: 1)
     }
 
-    private var dailyChartSection: some View {
+    private func dailyChartSection(_ presentation: HealthMetricPresentation) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             Text("Daily Trend")
                 .font(Theme.Typography.title3)
                 .foregroundStyle(Theme.Colors.textPrimary)
 
             InteractiveTimeSeriesChart(
-                points: chartPoints,
+                points: presentation.chartPoints,
                 color: metric.chartColor,
                 areaFill: true,
                 height: 180,
@@ -176,59 +131,59 @@ struct HealthMetricDetailView: View {
         .softCard(elevation: 1)
     }
 
-	    private var statsSection: some View {
+    private func statsSection(_ presentation: HealthMetricPresentation) -> some View {
 	        let includeDayForExtremes = metric == .bodyMass
 
 	        return ViewThatFits(in: .horizontal) {
 	            HStack(spacing: Theme.Spacing.md) {
                 MetricStatCard(
                     title: "Average",
-                    value: averageValue.map(metric.format) ?? "--",
+                    value: presentation.average.map(metric.format) ?? "--",
                     unit: metric.displayUnit,
                     tint: metric.chartColor,
                     icon: "equal.circle"
                 )
 	                MetricStatCard(
 	                    title: "Min",
-                    value: minValue.map(metric.format) ?? "--",
+                    value: presentation.minimum.map(metric.format) ?? "--",
                     unit: metric.displayUnit,
                     tint: Theme.Colors.accent,
                     icon: "arrow.down.circle",
-                    subtitle: includeDayForExtremes ? minPoint.map { formatDay($0.date) } : nil
+                    subtitle: includeDayForExtremes ? presentation.minimumPoint.map { formatDay($0.date) } : nil
                 )
                 MetricStatCard(
                     title: "Max",
-                    value: maxValue.map(metric.format) ?? "--",
+                    value: presentation.maximum.map(metric.format) ?? "--",
                     unit: metric.displayUnit,
                     tint: Theme.Colors.accentSecondary,
                     icon: "arrow.up.circle",
-                    subtitle: includeDayForExtremes ? maxPoint.map { formatDay($0.date) } : nil
+                    subtitle: includeDayForExtremes ? presentation.maximumPoint.map { formatDay($0.date) } : nil
                 )
             }
 
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: Theme.Spacing.md) {
                 MetricStatCard(
                     title: "Average",
-                    value: averageValue.map(metric.format) ?? "--",
+                    value: presentation.average.map(metric.format) ?? "--",
                     unit: metric.displayUnit,
                     tint: metric.chartColor,
                     icon: "equal.circle"
                 )
                 MetricStatCard(
                     title: "Min",
-                    value: minValue.map(metric.format) ?? "--",
+                    value: presentation.minimum.map(metric.format) ?? "--",
                     unit: metric.displayUnit,
                     tint: Theme.Colors.accent,
                     icon: "arrow.down.circle",
-                    subtitle: includeDayForExtremes ? minPoint.map { formatDay($0.date) } : nil
+                    subtitle: includeDayForExtremes ? presentation.minimumPoint.map { formatDay($0.date) } : nil
                 )
                 MetricStatCard(
                     title: "Max",
-                    value: maxValue.map(metric.format) ?? "--",
+                    value: presentation.maximum.map(metric.format) ?? "--",
                     unit: metric.displayUnit,
                     tint: Theme.Colors.accentSecondary,
                     icon: "arrow.up.circle",
-                    subtitle: includeDayForExtremes ? maxPoint.map { formatDay($0.date) } : nil
+                    subtitle: includeDayForExtremes ? presentation.maximumPoint.map { formatDay($0.date) } : nil
                 )
             }
         }
@@ -239,8 +194,7 @@ struct HealthMetricDetailView: View {
         date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
     }
 
-    private var sleepBreakdownSection: some View {
-        let summaries = dailyData.compactMap { $0.sleepSummary }
+    private func sleepBreakdownSection(_ summaries: [SleepSummary]) -> some View {
         let count = Double(summaries.count)
         let stageAverages = averageSleepStages(summaries: summaries)
         let fallbackCount = summaries.filter(\.usedFallbackSource).count
@@ -331,6 +285,50 @@ struct HealthMetricDetailView: View {
 
         let count = Double(summaries.count)
         return totals.mapValues { ($0 / count) / 3600 }
+    }
+}
+
+private struct HealthMetricPresentation {
+    let points: [HealthTrendPoint]
+    let chartPoints: [HealthTrendPoint]
+    let latest: Double?
+    let average: Double?
+    let minimum: Double?
+    let maximum: Double?
+    let minimumPoint: HealthTrendPoint?
+    let maximumPoint: HealthTrendPoint?
+    let sleepSummaries: [SleepSummary]
+
+    init(metric: HealthMetric, dailyData: [DailyHealthData]) {
+        let points = dailyData.compactMap { day -> HealthTrendPoint? in
+            guard let value = day.value(for: metric) else { return nil }
+            return HealthTrendPoint(date: day.dayStart, value: value, label: metric.title)
+        }
+        self.points = points
+        chartPoints = points.map { point in
+            HealthTrendPoint(
+                date: point.date,
+                value: metric.displayValue(from: point.value),
+                label: point.label
+            )
+        }
+
+        let values = points.map(\.value)
+        latest = values.last
+        average = values.isEmpty ? nil : values.reduce(0, +) / Double(values.count)
+        minimum = values.min()
+        maximum = values.max()
+        minimumPoint = Self.mostRecentPoint(matching: minimum, in: points)
+        maximumPoint = Self.mostRecentPoint(matching: maximum, in: points)
+        sleepSummaries = metric == .sleep ? dailyData.compactMap(\.sleepSummary) : []
+    }
+
+    private static func mostRecentPoint(
+        matching value: Double?,
+        in points: [HealthTrendPoint]
+    ) -> HealthTrendPoint? {
+        guard let value else { return nil }
+        return points.last { $0.value == value }
     }
 }
 

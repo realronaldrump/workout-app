@@ -191,6 +191,10 @@ struct InteractiveTimeSeriesChart: View {
     }
 
     var body: some View {
+        let currentXDomain = xDomain
+        let currentYDomain = yDomain
+        let renderedPoints = HealthChartPointSampler.sampled(visiblePoints, limit: 400)
+
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             Text(headerText)
                 .font(Theme.Typography.caption)
@@ -198,10 +202,10 @@ struct InteractiveTimeSeriesChart: View {
 
             Chart {
                 if areaFill {
-                    ForEach(points) { point in
+                    ForEach(renderedPoints) { point in
                         AreaMark(
                             x: .value("Date", point.date),
-                            yStart: .value("Baseline", yDomain.lowerBound),
+                            yStart: .value("Baseline", currentYDomain.lowerBound),
                             yEnd: .value("Value", point.value)
                         )
                         .foregroundStyle(color.opacity(0.18))
@@ -209,7 +213,7 @@ struct InteractiveTimeSeriesChart: View {
                     }
                 }
 
-                ForEach(points) { point in
+                ForEach(renderedPoints) { point in
                     LineMark(
                         x: .value("Date", point.date),
                         y: .value("Value", point.value)
@@ -234,8 +238,8 @@ struct InteractiveTimeSeriesChart: View {
                         .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
                 }
             }
-            .chartXScale(domain: xDomain)
-            .chartYScale(domain: yDomain)
+            .chartXScale(domain: currentXDomain)
+            .chartYScale(domain: currentYDomain)
             .chartOverlay { proxy in
                 GeometryReader { geometry in
                     Rectangle()
@@ -407,5 +411,57 @@ struct InteractiveTimeSeriesChart: View {
         if value < min { return min }
         if value > max { return max }
         return value
+    }
+}
+
+enum HealthChartPointSampler {
+    /// Reduces render-only chart marks while retaining each bucket's extrema.
+    /// Statistics and point inspection continue to use the complete series.
+    static func sampled(_ points: [HealthTrendPoint], limit: Int) -> [HealthTrendPoint] {
+        sampled(points, limit: limit, value: \.value)
+    }
+
+    static func sampled(_ points: [TimeSeriesPoint], limit: Int) -> [TimeSeriesPoint] {
+        sampled(points, limit: limit, value: \.value)
+    }
+
+    private static func sampled<Point>(
+        _ points: [Point],
+        limit: Int,
+        value: (Point) -> Double
+    ) -> [Point] {
+        guard limit > 0 else { return [] }
+        guard points.count > limit else { return points }
+        guard let first = points.first, let last = points.last else { return [] }
+        if limit == 1 { return [first] }
+        if limit == 2 { return [first, last] }
+
+        let interior = points.dropFirst().dropLast()
+        let bucketCount = max(1, (limit - 2) / 2)
+        let bucketSize = max(1, Int(ceil(Double(interior.count) / Double(bucketCount))))
+        var sampled: [Point] = [first]
+        sampled.reserveCapacity(limit)
+
+        var start = interior.startIndex
+        while start < interior.endIndex {
+            let end = interior.index(start, offsetBy: bucketSize, limitedBy: interior.endIndex) ?? interior.endIndex
+            let bucket = interior[start..<end]
+
+            if let minimum = bucket.indices.min(by: { value(bucket[$0]) < value(bucket[$1]) }),
+               let maximum = bucket.indices.max(by: { value(bucket[$0]) < value(bucket[$1]) }) {
+                if minimum <= maximum {
+                    sampled.append(bucket[minimum])
+                    if maximum != minimum { sampled.append(bucket[maximum]) }
+                } else {
+                    sampled.append(bucket[maximum])
+                    sampled.append(bucket[minimum])
+                }
+            }
+
+            start = end
+        }
+
+        sampled.append(last)
+        return sampled
     }
 }

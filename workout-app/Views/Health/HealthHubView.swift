@@ -1,10 +1,10 @@
 import SwiftUI
 
 struct HealthHubView: View {
-    @EnvironmentObject var healthManager: HealthKitManager
+    @EnvironmentObject var healthManager: HealthViewStore
     @EnvironmentObject private var dateRangeContext: HealthDateRangeContext
 
-    @State private var timelineDensity: TimelineDensity = .all
+    @State private var timelineDensity: TimelineDensity = .compact
     @State private var timelineSortOrder: DailyTimelineSortOrder = .newestFirst
     @State private var selectedMetric: HealthMetric?
     @State private var cachedDailyData: [DailyHealthData] = []
@@ -95,12 +95,12 @@ struct HealthHubView: View {
             await catchUpRecentHealthData()
         }
         .onChange(of: dateRangeContext.selectedRange) { _, _ in
-            timelineDensity = .all
+            timelineDensity = .compact
             refreshCachedContent()
         }
         .onChange(of: dateRangeContext.customRange) { _, _ in
             if dateRangeContext.selectedRange == .custom {
-                timelineDensity = .all
+                timelineDensity = .compact
                 refreshCachedContent()
             }
         }
@@ -517,8 +517,11 @@ struct HealthHubView: View {
     }
 
     private func refreshCachedContent() {
+        // Resolve once. `currentRange` also resolves the earliest stored date, so
+        // evaluating it from the filter closure turns this scan quadratic.
+        let resolvedRange = currentRange
         let filtered = healthManager.dailyHealthStore.values
-            .filter { currentRange.contains($0.dayStart) }
+            .filter { resolvedRange.contains($0.dayStart) }
             .sorted { $0.dayStart < $1.dayStart }
         cachedDailyData = filtered
         cachedSummaryCards = buildSummaryCards(from: filtered)

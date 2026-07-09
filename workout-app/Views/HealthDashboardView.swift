@@ -4,8 +4,7 @@ import Charts
 // swiftlint:disable file_length
 
 struct HealthDashboardView: View {
-    @EnvironmentObject var healthManager: HealthKitManager
-    @EnvironmentObject var dataManager: WorkoutDataManager
+    @EnvironmentObject var healthManager: HealthViewStore
     @EnvironmentObject private var dateRangeContext: HealthDateRangeContext
 
     @State private var selectedCategory: HealthCategory = .all
@@ -138,7 +137,7 @@ struct HealthDashboardView: View {
         .onReceive(healthManager.$healthDataStore) { _ in
             scheduleDerivedDataRefresh()
         }
-        .onReceive(dataManager.$workouts) { _ in
+        .onReceive(healthManager.$workouts) { _ in
             scheduleDerivedDataRefresh()
         }
         .onChange(of: dateRangeContext.selectedRange) { _, _ in
@@ -170,7 +169,7 @@ struct HealthDashboardView: View {
     private func refreshDerivedData() {
         derived = Self.computeDerived(
             healthDataStore: healthManager.healthDataStore,
-            workouts: dataManager.workouts,
+            workouts: healthManager.workouts,
             dateRangeContext: dateRangeContext
         )
     }
@@ -293,7 +292,7 @@ struct HealthDashboardView: View {
                 .font(Theme.Typography.title2)
                 .foregroundStyle(Theme.Colors.textPrimary)
 
-            VStack(spacing: Theme.Spacing.md) {
+            LazyVStack(spacing: Theme.Spacing.md) {
                 if availableKinds.isEmpty {
                     EmptyMetricCard(
                         title: "No trends yet",
@@ -1157,6 +1156,8 @@ private struct TrendCard: View {
     }
 
     var body: some View {
+        let renderedPoints = HealthChartPointSampler.sampled(points, limit: 240)
+
         MetricTileButton(chevronPlacement: .bottomTrailing, action: onTap) {
             VStack(alignment: .leading, spacing: Theme.Spacing.md) {
                 HStack {
@@ -1180,7 +1181,7 @@ private struct TrendCard: View {
                         )
                 }
 
-                Chart(points) { point in
+                Chart(renderedPoints) { point in
                     LineMark(
                         x: .value("Date", point.date),
                         y: .value("Value", point.value)
@@ -1273,7 +1274,7 @@ private struct HealthMetricDetailScreen: View {
             AdaptiveBackground()
 
             ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: Theme.Spacing.xxl) {
+                LazyVStack(alignment: .leading, spacing: Theme.Spacing.xxl) {
                     headerSection
 
                     if detail.series.count > 1 {
@@ -1379,7 +1380,7 @@ private struct HealthMetricDetailScreen: View {
 
     private func dataPointsSection(for series: HealthMetricSeries) -> some View {
         let points = series.points.sorted { $0.date > $1.date }
-        return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+        return LazyVStack(alignment: .leading, spacing: Theme.Spacing.md) {
             Text("Data Points")
                 .font(Theme.Typography.headline)
                 .foregroundStyle(Theme.Colors.textPrimary)
