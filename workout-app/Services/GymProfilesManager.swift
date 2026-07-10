@@ -9,12 +9,18 @@ final class GymProfilesManager: ObservableObject {
 
     @AppStorage("lastUsedGymProfileId") private var lastUsedGymProfileIdString: String = ""
 
-    private let database = AppDatabase.shared
+    private let database: AppDatabase
     private let fileName = "gym_profiles.json"
     private let annotationsManager: WorkoutAnnotationsManager
+    private var persistenceTask: Task<Void, Error>?
 
-    init(annotationsManager: WorkoutAnnotationsManager, loadOnInit: Bool = true) {
+    init(
+        annotationsManager: WorkoutAnnotationsManager,
+        database: AppDatabase = .shared,
+        loadOnInit: Bool = true
+    ) {
         self.annotationsManager = annotationsManager
+        self.database = database
         if loadOnInit {
             load()
         }
@@ -158,15 +164,35 @@ final class GymProfilesManager: ObservableObject {
         )
     }
 
-    func clearAll() {
+    func clearAll() async throws {
         gyms = []
         lastUsedGymProfileId = nil
-        try? database.clearGymProfiles()
-        removeLegacyFile()
+        try await enqueuePersistence { database in
+            try database.clearGymProfiles()
+        }.value
+        try removeLegacyFileIfPresent()
     }
 
-    func reloadPersistedGyms() {
-        load()
+    /// Drains writes already queued by gym mutations or backup import.
+    func waitForPendingPersistence() async throws {
+        if let persistenceTask {
+            try await persistenceTask.value
+        }
+    }
+
+    func reloadPersistedGyms() async {
+        if let persistenceTask {
+            _ = try? await persistenceTask.value
+        }
+        do {
+            let stored = try await Task.detached(priority: .userInitiated) { [database] in
+                try database.loadGymProfiles()
+            }.value
+            gyms = stored
+            removeLegacyFile()
+        } catch {
+            print("Failed to load gym profiles: \(error)")
+        }
     }
 
     func mergeGymsFromBackup(_ backupGyms: [GymProfile]) -> (
@@ -214,14 +240,30 @@ final class GymProfilesManager: ObservableObject {
 
     private func persist() {
         let entries = gyms
+        enqueuePersistence { database in
+            try database.saveGymProfiles(entries)
+        }
+    }
+
+    @discardableResult
+    private func enqueuePersistence(
+        _ operation: @escaping @Sendable (AppDatabase) throws -> Void
+    ) -> Task<Void, Error> {
+        let previous = persistenceTask
         let database = database
-        Task.detached(priority: .utility) {
+        let task: Task<Void, Error> = Task.detached(priority: .utility) {
+            if let previous {
+                _ = try? await previous.value
+            }
             do {
-                try database.saveGymProfiles(entries)
+                try operation(database)
             } catch {
                 print("Failed to persist gym profiles: \(error)")
+                throw error
             }
         }
+        persistenceTask = task
+        return task
     }
 
     private func load() {
@@ -234,13 +276,17 @@ final class GymProfilesManager: ObservableObject {
     }
 
     private func removeLegacyFile() {
-        let url = fileURL()
-        guard FileManager.default.fileExists(atPath: url.path) else { return }
         do {
-            try FileManager.default.removeItem(at: url)
+            try removeLegacyFileIfPresent()
         } catch {
             print("Failed to delete gym profiles store: \(error)")
         }
+    }
+
+    private func removeLegacyFileIfPresent() throws {
+        let url = fileURL()
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        try FileManager.default.removeItem(at: url)
     }
 
     /// Best-effort coordinate lookup for all gyms.

@@ -169,6 +169,7 @@ struct CompactChangeCard: View {
 
 struct HomeWorkoutRow: View {
     let workout: Workout
+    let exerciseCount: Int
     let onRepeat: () -> Void
     let onTap: () -> Void
     @EnvironmentObject var healthManager: HealthKitManager
@@ -189,7 +190,7 @@ struct HomeWorkoutRow: View {
                         HStack(spacing: Theme.Spacing.md) {
                             Label(workout.duration, systemImage: "clock")
                             Label(
-                                "\(ExerciseAggregation.exerciseCount(for: workout, resolver: ExerciseIdentityResolver.current)) exercises",
+                                "\(exerciseCount) exercises",
                                 systemImage: "figure.strengthtraining.traditional"
                             )
                         }
@@ -236,6 +237,7 @@ struct HomeWeekBucket: Identifiable {
     let weekStart: Date
     let referenceDate: Date
     let workouts: [Workout]
+    let exerciseCounts: [UUID: Int]
     let stats: WorkoutStats
     let trackedDayCount: Int
     let excludedDayCount: Int
@@ -412,7 +414,10 @@ struct WeeklySummaryCarouselCard: View {
                         .tracking(0.8)
 
                     ForEach(bucket.workouts.prefix(3)) { workout in
-                        WeeklySessionPreviewCard(workout: workout) {
+                        WeeklySessionPreviewCard(
+                            workout: workout,
+                            exerciseCount: bucket.exerciseCounts[workout.id] ?? workout.exercises.count
+                        ) {
                             onWorkoutTap(workout)
                         }
                     }
@@ -433,6 +438,7 @@ struct WeeklySummaryCarouselCard: View {
 
 private struct WeeklySessionPreviewCard: View {
     let workout: Workout
+    let exerciseCount: Int
     let onTap: () -> Void
 
     var body: some View {
@@ -455,7 +461,7 @@ private struct WeeklySessionPreviewCard: View {
                     Text(workout.duration)
                         .font(Theme.Typography.captionBold)
                         .foregroundColor(Theme.Colors.textSecondary)
-                    Text("\(ExerciseAggregation.exerciseCount(for: workout, resolver: ExerciseIdentityResolver.current)) exercises")
+                    Text("\(exerciseCount) exercises")
                         .font(Theme.Typography.caption)
                         .foregroundColor(Theme.Colors.textTertiary)
                 }

@@ -31,7 +31,7 @@ enum IntentionalBreaksStore {
 enum IntentionalBreaksAnalytics {
     static let minimumSuggestedBreakDays = 3
 
-    static func mergedRanges(
+    nonisolated static func mergedRanges(
         _ ranges: [IntentionalBreakRange],
         calendar: Calendar = .current
     ) -> [IntentionalBreakRange] {
@@ -75,14 +75,14 @@ enum IntentionalBreaksAnalytics {
         return merged
     }
 
-    static func normalizedWorkoutDays(
+    nonisolated static func normalizedWorkoutDays(
         for workouts: [Workout],
         calendar: Calendar = .current
     ) -> Set<Date> {
         Set(workouts.map { calendar.startOfDay(for: $0.date) })
     }
 
-    static func breakDaySet(
+    nonisolated static func breakDaySet(
         from ranges: [IntentionalBreakRange],
         excluding workoutDays: Set<Date> = [],
         within bounds: ClosedRange<Date>? = nil,
@@ -111,7 +111,7 @@ enum IntentionalBreaksAnalytics {
         return days
     }
 
-    static func dayCount(
+    nonisolated static func dayCount(
         from start: Date,
         to end: Date,
         breakDays: Set<Date>,

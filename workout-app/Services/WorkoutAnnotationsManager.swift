@@ -5,10 +5,12 @@ import Foundation
 final class WorkoutAnnotationsManager: ObservableObject {
     @Published private(set) var annotations: [UUID: WorkoutAnnotation] = [:]
 
-    private let database = AppDatabase.shared
+    private let database: AppDatabase
     private let fileName = "workout_annotations.json"
+    private var persistenceTask: Task<Void, Error>?
 
-    init(loadOnInit: Bool = true) {
+    init(database: AppDatabase = .shared, loadOnInit: Bool = true) {
+        self.database = database
         if loadOnInit {
             load()
         }
@@ -67,14 +69,34 @@ final class WorkoutAnnotationsManager: ObservableObject {
         persist()
     }
 
-    func clearAll() {
+    func clearAll() async throws {
         annotations = [:]
-        try? database.clearAnnotations()
-        removeLegacyFile()
+        try await enqueuePersistence { database in
+            try database.clearAnnotations()
+        }.value
+        try removeLegacyFileIfPresent()
     }
 
-    func reloadPersistedAnnotations() {
-        load()
+    /// Drains writes already queued by annotation mutations or backup import.
+    func waitForPendingPersistence() async throws {
+        if let persistenceTask {
+            try await persistenceTask.value
+        }
+    }
+
+    func reloadPersistedAnnotations() async {
+        if let persistenceTask {
+            _ = try? await persistenceTask.value
+        }
+        do {
+            let stored = try await Task.detached(priority: .userInitiated) { [database] in
+                try database.loadAnnotations()
+            }.value
+            annotations = Dictionary(uniqueKeysWithValues: stored.map { ($0.workoutId, $0) })
+            removeLegacyFile()
+        } catch {
+            print("Failed to load annotations: \(error)")
+        }
     }
 
     func mergeAnnotationsFromBackup(
@@ -119,14 +141,30 @@ final class WorkoutAnnotationsManager: ObservableObject {
 
     private func persist() {
         let entries = Array(annotations.values)
+        enqueuePersistence { database in
+            try database.replaceAnnotations(entries)
+        }
+    }
+
+    @discardableResult
+    private func enqueuePersistence(
+        _ operation: @escaping @Sendable (AppDatabase) throws -> Void
+    ) -> Task<Void, Error> {
+        let previous = persistenceTask
         let database = database
-        Task.detached(priority: .utility) {
+        let task: Task<Void, Error> = Task.detached(priority: .utility) {
+            if let previous {
+                _ = try? await previous.value
+            }
             do {
-                try database.replaceAnnotations(entries)
+                try operation(database)
             } catch {
                 print("Failed to persist annotations: \(error)")
+                throw error
             }
         }
+        persistenceTask = task
+        return task
     }
 
     private func load() {
@@ -142,12 +180,16 @@ final class WorkoutAnnotationsManager: ObservableObject {
     // No-op placeholder: legacy code used to carry non-gym fields. Left intentionally blank.
 
     private func removeLegacyFile() {
-        let url = fileURL()
-        guard FileManager.default.fileExists(atPath: url.path) else { return }
         do {
-            try FileManager.default.removeItem(at: url)
+            try removeLegacyFileIfPresent()
         } catch {
             print("Failed to delete workout annotations store: \(error)")
         }
+    }
+
+    private func removeLegacyFileIfPresent() throws {
+        let url = fileURL()
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        try FileManager.default.removeItem(at: url)
     }
 }

@@ -3,7 +3,7 @@ import SwiftUI
 
 /// Minimal per-workout annotation state.
 /// Intentionally excludes subjective check-ins (stress/caffeine/mood/soreness).
-nonisolated struct WorkoutAnnotation: Identifiable, Codable {
+nonisolated struct WorkoutAnnotation: Identifiable, Codable, Sendable {
     let workoutId: UUID
     var gymProfileId: UUID?
 
@@ -22,7 +22,6 @@ enum ProgressContributionCategory: String, Codable {
 }
 
 struct ProgressContribution: Identifiable {
-    let id = UUID()
     let name: String
     let delta: Double
     let current: Double
@@ -30,16 +29,19 @@ struct ProgressContribution: Identifiable {
     let percentChange: Double
     let category: ProgressContributionCategory
     let tint: Color
+
+    var id: String { "\(category.rawValue):\(name)" }
 }
 
 struct ChangeMetric: Identifiable, Hashable {
-    let id = UUID()
     let title: String
     let current: Double
     let previous: Double
     let delta: Double
     let percentChange: Double
     let isPositive: Bool
+
+    var id: String { title }
 }
 
 struct ChangeMetricWindow {
@@ -63,21 +65,23 @@ struct ExerciseConsistencySummary: Identifiable, Hashable {
 }
 
 struct RepRangeBucket: Identifiable {
-    let id = UUID()
     let label: String
     let range: ClosedRange<Int>
     let count: Int
     let percent: Double
     let tint: Color
+
+    var id: String { label }
 }
 
 struct IntensityZoneBucket: Identifiable {
-    let id = UUID()
     let label: String
     let range: ClosedRange<Double>
     let count: Int
     let percent: Double
     let tint: Color
+
+    var id: String { label }
 }
 
 // MARK: - Streak Runs

@@ -60,6 +60,16 @@ final class WorkoutIdentityStore {
 
     @discardableResult
     func mergeMissing(_ entries: [String: UUID]) -> Int {
+        do {
+            return try mergeMissingReportingErrors(entries)
+        } catch {
+            print("Failed to persist workout identity map: \(error)")
+            return 0
+        }
+    }
+
+    @discardableResult
+    func mergeMissingReportingErrors(_ entries: [String: UUID]) throws -> Int {
         guard !entries.isEmpty else { return 0 }
         var inserted = 0
         for (key, value) in entries where cache[key] == nil {
@@ -67,15 +77,23 @@ final class WorkoutIdentityStore {
             inserted += 1
         }
         if inserted > 0 {
-            persist()
+            try persistReportingErrors()
         }
         return inserted
     }
 
     func clear() {
+        do {
+            try clearReportingErrors()
+        } catch {
+            print("Failed to clear workout identity map: \(error)")
+        }
+    }
+
+    func clearReportingErrors() throws {
         cache.removeAll()
-        try? database.clearWorkoutIdentities()
-        removeLegacyFile()
+        try database.clearWorkoutIdentities()
+        try removeLegacyFileIfPresent()
     }
 
     func reload() {
@@ -99,21 +117,29 @@ final class WorkoutIdentityStore {
 
     private func persist() {
         do {
-            let entries = cache.compactMapValues(UUID.init(uuidString:))
-            try database.mergeWorkoutIdentities(entries)
-            removeLegacyFile()
+            try persistReportingErrors()
         } catch {
             print("Failed to persist workout identity map: \(error)")
         }
     }
 
+    private func persistReportingErrors() throws {
+        let entries = cache.compactMapValues(UUID.init(uuidString:))
+        try database.mergeWorkoutIdentities(entries)
+        try removeLegacyFileIfPresent()
+    }
+
     private func removeLegacyFile() {
-        let url = fileURL()
-        guard FileManager.default.fileExists(atPath: url.path) else { return }
         do {
-            try FileManager.default.removeItem(at: url)
+            try removeLegacyFileIfPresent()
         } catch {
             print("Failed to delete workout identity map: \(error)")
         }
+    }
+
+    private func removeLegacyFileIfPresent() throws {
+        let url = fileURL()
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        try FileManager.default.removeItem(at: url)
     }
 }

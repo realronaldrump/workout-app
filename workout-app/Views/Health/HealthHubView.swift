@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 
 struct HealthHubView: View {
@@ -14,10 +15,6 @@ struct HealthHubView: View {
 
     private var earliestDate: Date? {
         healthManager.dailyHealthStore.keys.min()
-    }
-
-    private var currentRange: DateInterval {
-        dateRangeContext.resolvedRange(earliest: earliestDate)
     }
 
     private var rangeLabel: String {
@@ -50,6 +47,20 @@ struct HealthHubView: View {
         let dayCount = cachedDailyData.count
         let countLabel = dayCount == 1 ? "1 day with data" : "\(dayCount) days with data"
         return "\(rangeLabel) • \(countLabel)"
+    }
+
+    private var headlineInsight: String? {
+        guard let card = cachedSummaryCards
+            .filter({ $0.delta != nil })
+            .max(by: {
+                abs($0.delta?.percentChange ?? 0) < abs($1.delta?.percentChange ?? 0)
+            }),
+            let delta = card.delta else { return nil }
+        let direction = delta.isFlat ? "held steady" : (delta.percentChange > 0 ? "rose" : "fell")
+        let change = Int(abs(delta.percentChange).rounded())
+        let changeText = delta.isFlat ? "" : " \(change)%"
+        let unit = card.unit.isEmpty ? "" : " \(card.unit)"
+        return "\(card.metric.title) averaged \(card.value)\(unit) — \(direction)\(changeText) vs the prior period."
     }
 
     var body: some View {
@@ -107,8 +118,8 @@ struct HealthHubView: View {
         .onChange(of: timelineSortOrder) { _, _ in
             refreshTimelineRows()
         }
-        .onReceive(healthManager.$dailyHealthStore) { _ in
-            refreshCachedContent()
+        .onReceive(healthManager.$dailyHealthStore.dropFirst()) { store in
+            refreshCachedContent(from: store)
         }
     }
 
@@ -118,7 +129,6 @@ struct HealthHubView: View {
                 Text("Health")
                     .font(Theme.Typography.screenTitle)
                     .foregroundStyle(Theme.Colors.textPrimary)
-                    .tracking(1.5)
 
                 Text(headerSubtitle)
                     .font(Theme.Typography.body)
@@ -163,9 +173,15 @@ struct HealthHubView: View {
     private var summarySection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             Text("Overview")
-                .font(Theme.Typography.sectionHeader)
+                .font(Theme.Typography.sectionHeader2)
                 .foregroundStyle(Theme.Colors.textPrimary)
-                .tracking(1.0)
+
+            if let headlineInsight {
+                Text(headlineInsight)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: Theme.Spacing.md) {
@@ -188,9 +204,8 @@ struct HealthHubView: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             HStack {
                 Text("Daily Timeline")
-                    .font(Theme.Typography.sectionHeader)
+                    .font(Theme.Typography.sectionHeader2)
                     .foregroundStyle(Theme.Colors.textPrimary)
-                    .tracking(1.0)
 
                 Spacer()
 
@@ -204,8 +219,6 @@ struct HealthHubView: View {
                     }
                     .font(Theme.Typography.metricLabel)
                     .foregroundStyle(Theme.Colors.accent)
-                    .textCase(.uppercase)
-                    .tracking(0.8)
                 }
             }
 
@@ -269,8 +282,6 @@ struct HealthHubView: View {
                 Text(timelineSortOrder.shortTitle)
                     .font(Theme.Typography.captionBold)
                     .foregroundStyle(Theme.Colors.textPrimary)
-                    .textCase(.uppercase)
-                    .tracking(0.8)
             }
             .padding(.horizontal, Theme.Spacing.sm)
             .frame(minHeight: 36)
@@ -283,9 +294,8 @@ struct HealthHubView: View {
     private var categorySection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             Text("Explore Health")
-                .font(Theme.Typography.sectionHeader)
+                .font(Theme.Typography.sectionHeader2)
                 .foregroundStyle(Theme.Colors.textPrimary)
-                .tracking(1.0)
 
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: Theme.Spacing.md) {
                 ForEach(HealthHubCategory.allCases) { category in
@@ -425,86 +435,49 @@ struct HealthHubView: View {
         }
     }
 
-    private func buildSummaryCards(from dailyData: [DailyHealthData]) -> [HealthSummaryCardModel] {
-        let avgSteps = average(dailyData.compactMap { $0.steps })
-        let avgSleep = average(dailyData.compactMap { $0.sleepSummary?.totalHours })
-        let avgRestingHR = average(dailyData.compactMap { $0.restingHeartRate })
-        let avgHRV = average(dailyData.compactMap { $0.heartRateVariability })
-        let avgEnergy = average(dailyData.compactMap { $0.activeEnergy })
+    private func buildSummaryCards(
+        from comparisonData: [DailyHealthData],
+        fallbackData: [DailyHealthData],
+        previousData: [DailyHealthData]
+    ) -> [HealthSummaryCardModel] {
+        let configurations: [HealthSummaryConfiguration] = [
+            HealthSummaryConfiguration(metric: .steps, title: "Avg Steps", tint: Theme.Colors.warning, higherIsBetter: true),
+            HealthSummaryConfiguration(metric: .sleep, title: "Avg Sleep", tint: Theme.Colors.accentSecondary, higherIsBetter: true),
+            HealthSummaryConfiguration(metric: .restingHeartRate, title: "Resting HR", tint: Theme.Colors.error, higherIsBetter: false),
+            HealthSummaryConfiguration(metric: .heartRateVariability, title: "Avg HRV", tint: Theme.Colors.accent, higherIsBetter: true),
+            HealthSummaryConfiguration(metric: .activeEnergy, title: "Active Energy", tint: Theme.Colors.warning, higherIsBetter: true)
+        ]
 
-        var cards: [HealthSummaryCardModel] = []
-
-        if let avgSteps {
-            cards.append(
-                HealthSummaryCardModel(
-                    id: "avgSteps",
-                    metric: .steps,
-                    title: "Avg Steps",
-                    value: "\(Int(avgSteps))",
-                    unit: "steps",
-                    icon: "figure.walk",
-                    tint: Theme.Colors.warning
-                )
+        return configurations.compactMap { configuration in
+            let metric = configuration.metric
+            let comparisonValues = comparisonData.compactMap { $0.value(for: metric) }
+            let usesFallback = comparisonValues.isEmpty
+            let values = usesFallback
+                ? fallbackData.compactMap { $0.value(for: metric) }
+                : comparisonValues
+            guard let currentAverage = average(values) else { return nil }
+            let previousAverage = usesFallback
+                ? nil
+                : average(previousData.compactMap { $0.value(for: metric) })
+            return HealthSummaryCardModel(
+                id: metric.id,
+                metric: metric,
+                title: configuration.title,
+                value: metric.format(currentAverage),
+                unit: metric.displayUnit,
+                icon: metric.icon,
+                tint: configuration.tint,
+                average: currentAverage,
+                delta: previousAverage.flatMap {
+                    TrendDelta(
+                        current: currentAverage,
+                        previous: $0,
+                        higherIsBetter: configuration.higherIsBetter
+                    )
+                },
+                sparklineValues: values
             )
         }
-
-        if let avgSleep {
-            cards.append(
-                HealthSummaryCardModel(
-                    id: "avgSleep",
-                    metric: .sleep,
-                    title: "Avg Sleep",
-                    value: String(format: "%.1f", avgSleep),
-                    unit: "h",
-                    icon: "moon.zzz.fill",
-                    tint: Theme.Colors.accentSecondary
-                )
-            )
-        }
-
-        if let avgRestingHR {
-            cards.append(
-                HealthSummaryCardModel(
-                    id: "avgRestingHr",
-                    metric: .restingHeartRate,
-                    title: "Resting HR",
-                    value: "\(Int(avgRestingHR))",
-                    unit: "bpm",
-                    icon: "heart",
-                    tint: Theme.Colors.error
-                )
-            )
-        }
-
-        if let avgHRV {
-            cards.append(
-                HealthSummaryCardModel(
-                    id: "avgHrv",
-                    metric: .heartRateVariability,
-                    title: "Avg HRV",
-                    value: "\(Int(avgHRV))",
-                    unit: "ms",
-                    icon: "waveform.path.ecg",
-                    tint: Theme.Colors.accent
-                )
-            )
-        }
-
-        if let avgEnergy {
-            cards.append(
-                HealthSummaryCardModel(
-                    id: "avgEnergy",
-                    metric: .activeEnergy,
-                    title: "Active Energy",
-                    value: "\(Int(avgEnergy))",
-                    unit: "cal",
-                    icon: "flame.fill",
-                    tint: Theme.Colors.warning
-                )
-            )
-        }
-
-        return cards
     }
 
     private func average(_ values: [Double]) -> Double? {
@@ -516,15 +489,38 @@ struct HealthHubView: View {
         HealthHubFormatters.mediumDateTime.string(from: date)
     }
 
-    private func refreshCachedContent() {
-        // Resolve once. `currentRange` also resolves the earliest stored date, so
-        // evaluating it from the filter closure turns this scan quadratic.
-        let resolvedRange = currentRange
-        let filtered = healthManager.dailyHealthStore.values
-            .filter { resolvedRange.contains($0.dayStart) }
-            .sorted { $0.dayStart < $1.dayStart }
+    private func refreshCachedContent(from emittedStore: [Date: DailyHealthData]? = nil) {
+        let store = emittedStore ?? healthManager.dailyHealthStore
+        let resolvedRange = dateRangeContext.resolvedRange(earliest: store.keys.min())
+        let ranges = HealthDayComparisonRanges(
+            resolvedRange: resolvedRange,
+            comparesPreviousPeriod: dateRangeContext.selectedRange != .allTime
+        )
+        var filtered: [DailyHealthData] = []
+        var currentComparison: [DailyHealthData] = []
+        var previous: [DailyHealthData] = []
+
+        for day in store.values {
+            let dayStart = Calendar.current.startOfDay(for: day.dayStart)
+            if ranges.display.contains(dayStart) {
+                filtered.append(day)
+            }
+            if ranges.currentComparison?.contains(dayStart) == true {
+                currentComparison.append(day)
+            } else if ranges.previousComparison?.contains(dayStart) == true {
+                previous.append(day)
+            }
+        }
+
+        filtered.sort { $0.dayStart < $1.dayStart }
+        currentComparison.sort { $0.dayStart < $1.dayStart }
+        previous.sort { $0.dayStart < $1.dayStart }
         cachedDailyData = filtered
-        cachedSummaryCards = buildSummaryCards(from: filtered)
+        cachedSummaryCards = buildSummaryCards(
+            from: currentComparison,
+            fallbackData: filtered,
+            previousData: previous
+        )
         refreshTimelineRows(from: filtered)
     }
 
@@ -542,6 +538,16 @@ private struct HealthSummaryCardModel: Identifiable {
     let unit: String
     let icon: String
     let tint: Color
+    let average: Double
+    let delta: TrendDelta?
+    let sparklineValues: [Double]
+}
+
+private struct HealthSummaryConfiguration {
+    let metric: HealthMetric
+    let title: String
+    let tint: Color
+    let higherIsBetter: Bool
 }
 
 enum TimelineDensity {
@@ -655,6 +661,13 @@ private struct HealthSummaryCard: View {
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Colors.textTertiary)
             }
+
+            if let delta = model.delta {
+                DeltaTag(delta: delta, suffix: "vs prior")
+            }
+
+            Sparkline(values: model.sparklineValues, tint: model.tint)
+                .frame(height: 34)
         }
         .padding(Theme.Spacing.md)
         .frame(width: 160, alignment: .leading)
@@ -699,7 +712,8 @@ private struct HealthCategoryCard: View {
                 .font(Theme.Typography.caption)
                 .foregroundStyle(Theme.Colors.textSecondary)
         }
-        .padding(Theme.Spacing.md)
+        .padding(.horizontal, Theme.Spacing.md)
+        .padding(.vertical, Theme.Spacing.sm)
         .softCard(elevation: 1)
     }
 }
@@ -707,6 +721,7 @@ private struct HealthCategoryCard: View {
 private struct DailyTimelineStatModel: Identifiable, Equatable {
     let id: String
     let label: String
+    let icon: String
     let value: String
     let unit: String
 }
@@ -753,6 +768,7 @@ private struct DailyTimelineRowModel: Identifiable, Equatable {
                 DailyTimelineStatModel(
                     id: "sleep",
                     label: "Sleep",
+                    icon: "moon.zzz.fill",
                     value: String(format: "%.1f", sleep),
                     unit: "h"
                 )
@@ -764,6 +780,7 @@ private struct DailyTimelineRowModel: Identifiable, Equatable {
                 DailyTimelineStatModel(
                     id: "steps",
                     label: "Steps",
+                    icon: "figure.walk",
                     value: "\(Int(steps))",
                     unit: ""
                 )
@@ -775,6 +792,7 @@ private struct DailyTimelineRowModel: Identifiable, Equatable {
                 DailyTimelineStatModel(
                     id: "energy",
                     label: "Energy",
+                    icon: "flame.fill",
                     value: "\(Int(activeEnergy))",
                     unit: "cal"
                 )
@@ -786,6 +804,7 @@ private struct DailyTimelineRowModel: Identifiable, Equatable {
                 DailyTimelineStatModel(
                     id: "resting",
                     label: "Resting",
+                    icon: "heart.fill",
                     value: "\(Int(restingHeartRate))",
                     unit: "bpm"
                 )
@@ -852,13 +871,18 @@ private struct DailyTimelineRow: View, Equatable {
                     ViewThatFits(in: .horizontal) {
                         HStack(spacing: Theme.Spacing.sm) {
                             ForEach(model.stats) { stat in
-                                DailyTimelineStat(label: stat.label, value: stat.value, unit: stat.unit)
+                                timelineStat(stat)
+                                    .fixedSize(horizontal: true, vertical: false)
                             }
                         }
 
-                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: Theme.Spacing.sm) {
+                        LazyVGrid(
+                            columns: [GridItem(.adaptive(minimum: 96), alignment: .leading)],
+                            alignment: .leading,
+                            spacing: Theme.Spacing.sm
+                        ) {
                             ForEach(model.stats) { stat in
-                                DailyTimelineStat(label: stat.label, value: stat.value, unit: stat.unit)
+                                timelineStat(stat)
                             }
                         }
                     }
@@ -867,6 +891,25 @@ private struct DailyTimelineRow: View, Equatable {
         }
         .padding(Theme.Spacing.md)
         .softCard(elevation: 1)
+    }
+
+    private func timelineStat(_ stat: DailyTimelineStatModel) -> some View {
+        InlineStat(
+            icon: stat.icon,
+            value: stat.value + stat.unit,
+            label: stat.label,
+            tint: statTint(for: stat.id)
+        )
+    }
+
+    private func statTint(for id: String) -> Color {
+        switch id {
+        case "sleep": return Theme.Colors.accentTertiary
+        case "steps": return Theme.Colors.success
+        case "energy": return Theme.Colors.accentSecondary
+        case "resting": return Theme.Colors.error
+        default: return Theme.Colors.accent
+        }
     }
 }
 
@@ -902,47 +945,4 @@ private enum HealthHubFormatters {
         formatter.dateFormat = "MMM"
         return formatter
     }()
-}
-
-private struct DailyTimelineStat: View {
-    let label: String
-    let value: String
-    let unit: String
-
-    private var statColor: Color {
-        switch label {
-        case "Sleep": return Theme.Colors.accentTertiary
-        case "Steps": return Theme.Colors.success
-        case "Energy": return Theme.Colors.accentSecondary
-        case "Resting": return Theme.Colors.error
-        default: return Theme.Colors.accent
-        }
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(label)
-                .font(Theme.Typography.metricLabel)
-                .foregroundStyle(statColor)
-                .textCase(.uppercase)
-                .tracking(0.8)
-            HStack(alignment: .lastTextBaseline, spacing: 2) {
-                Text(value)
-                    .font(Theme.Typography.numberSmall)
-                    .foregroundStyle(Theme.Colors.textPrimary)
-                if !unit.isEmpty {
-                    Text(unit)
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textTertiary)
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, 6)
-        .padding(.horizontal, Theme.Spacing.sm)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                .fill(statColor.opacity(0.04))
-        )
-    }
 }

@@ -1,5 +1,6 @@
-import SwiftUI
 import Charts
+import Combine
+import SwiftUI
 
 struct PerformanceLabView: View {
     private enum TimeFilter: String, CaseIterable {
@@ -21,11 +22,11 @@ struct PerformanceLabView: View {
     }
 
     @ObservedObject var dataManager: WorkoutDataManager
-    @EnvironmentObject var healthManager: HealthKitManager
-    @EnvironmentObject var annotationsManager: WorkoutAnnotationsManager
-    @EnvironmentObject var gymProfilesManager: GymProfilesManager
+    let annotationsManager: WorkoutAnnotationsManager
+    let gymProfilesManager: GymProfilesManager
     @EnvironmentObject var intentionalBreaksManager: IntentionalBreaksManager
     @EnvironmentObject var variantEngine: WorkoutVariantEngine
+    @ObservedObject private var metadataManager = ExerciseMetadataManager.shared
     @ObservedObject private var relationshipManager = ExerciseRelationshipManager.shared
     @AppStorage("intentionalRestDays") private var intentionalRestDays: Int = 1
 
@@ -36,6 +37,8 @@ struct PerformanceLabView: View {
     @State private var selectedWorkout: Workout?
     @State private var selectedExercise: ExerciseSelection?
     @State private var selectedChangeMetric: ChangeMetric?
+    @State private var derivedAnalytics = DerivedAnalytics()
+    @State private var derivedRefreshTask: Task<Void, Never>?
 
     private let maxContentWidth: CGFloat = 820
 
@@ -51,13 +54,30 @@ struct PerformanceLabView: View {
         var deltaShare: Double { currentShare - previousShare }
     }
 
-    private var workouts: [Workout] {
-        dataManager.workouts
+    private struct DerivedAnalytics {
+        var selectedRangeWorkouts: [Workout] = []
+        var averageWorkoutsPerWeek = 0.0
+        var currentStreak = 0
+        var bestStreak = 0
+        var changeMetrics: [ChangeMetric] = []
+        var strengthContributions: [ProgressContribution] = []
+        var muscleBuckets: [PerformanceMuscleVolumeBucket] = []
+        var muscleWorkChanges: [MuscleWorkChange] = []
+        var weeklyCounts: [PerformanceWeeklyCount] = []
     }
 
-    private var muscleMapping: [String: [MuscleTag]] {
-        let names = Set(workouts.flatMap { $0.exercises.map { $0.name } })
-        return ExerciseMetadataManager.shared.resolvedMappings(for: names)
+    init(
+        dataManager: WorkoutDataManager,
+        annotationsManager: WorkoutAnnotationsManager,
+        gymProfilesManager: GymProfilesManager
+    ) {
+        self.dataManager = dataManager
+        self.annotationsManager = annotationsManager
+        self.gymProfilesManager = gymProfilesManager
+    }
+
+    private var workouts: [Workout] {
+        dataManager.workouts
     }
 
     private var timeFilterOptions: [(label: String, value: TimeFilter)] {
@@ -86,10 +106,8 @@ struct PerformanceLabView: View {
 
     private var selectedRangeDetailLabel: String {
         guard let selectedRangeInterval else { return "--" }
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMM d, yyyy"
-        let start = formatter.string(from: selectedRangeInterval.start)
-        let end = formatter.string(from: selectedRangeInterval.end)
+        let start = PerformanceLabFormatters.rangeDate.string(from: selectedRangeInterval.start)
+        let end = PerformanceLabFormatters.rangeDate.string(from: selectedRangeInterval.end)
         return start == end ? start : "\(start) - \(end)"
     }
 
@@ -103,7 +121,10 @@ struct PerformanceLabView: View {
     }
 
     private var selectedWindowWeeks: Int {
-        max(1, Int(ceil(Double(selectedRangeDayCount) / 7.0)))
+        if let days = selectedTimeFilter.days {
+            return max(days / 7, 1)
+        }
+        return max(1, Int(ceil(Double(selectedRangeDayCount) / 7.0)))
     }
 
     private var selectedWindowTrendSubtitle: String {
@@ -119,8 +140,10 @@ struct PerformanceLabView: View {
         let today = Date()
 
         if let days = selectedTimeFilter.days {
-            let start = calendar.date(byAdding: .day, value: -days, to: today) ?? today
-            return DateInterval(start: start, end: today)
+            let todayStart = calendar.startOfDay(for: today)
+            let start = calendar.date(byAdding: .day, value: -(max(days, 1) - 1), to: todayStart) ?? todayStart
+            let end = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: todayStart) ?? today
+            return DateInterval(start: start, end: end)
         }
 
         let earliest = earliestWorkoutDate ?? today
@@ -131,13 +154,7 @@ struct PerformanceLabView: View {
     }
 
     private var selectedRangeWorkouts: [Workout] {
-        guard let selectedRangeInterval else { return [] }
-        return workouts.filter { selectedRangeInterval.contains($0.date) }
-    }
-
-    private var workoutsThroughRangeEnd: [Workout] {
-        guard let selectedRangeInterval else { return workouts }
-        return workouts.filter { $0.date <= selectedRangeInterval.end }
+        derivedAnalytics.selectedRangeWorkouts
     }
 
     private var selectedChangeWindow: ChangeMetricWindow? {
@@ -150,30 +167,7 @@ struct PerformanceLabView: View {
     }
 
     private var muscleWorkChanges: [MuscleWorkChange] {
-        guard let selectedChangeWindow else { return [] }
-
-        let currentWorkouts = workouts.filter { selectedChangeWindow.current.contains($0.date) }
-        let previousWorkouts = workouts.filter { selectedChangeWindow.previous.contains($0.date) }
-
-        let currentTotals = muscleEffortTotals(for: currentWorkouts)
-        let previousTotals = muscleEffortTotals(for: previousWorkouts)
-        let currentTotalEffort = max(1, currentTotals.values.reduce(0, +))
-        let previousTotalEffort = max(1, previousTotals.values.reduce(0, +))
-
-        let allTags = Set(currentTotals.keys).union(previousTotals.keys)
-        return allTags.compactMap { tag in
-            let currentEffort = currentTotals[tag] ?? 0
-            let previousEffort = previousTotals[tag] ?? 0
-            guard currentEffort > 0 || previousEffort > 0 else { return nil }
-            return MuscleWorkChange(
-                tag: tag,
-                currentEffort: currentEffort,
-                previousEffort: previousEffort,
-                currentShare: currentEffort / currentTotalEffort,
-                previousShare: previousEffort / previousTotalEffort
-            )
-        }
-        .sorted { abs($0.deltaEffort) > abs($1.deltaEffort) }
+        derivedAnalytics.muscleWorkChanges
     }
 
     var body: some View {
@@ -235,9 +229,36 @@ struct PerformanceLabView: View {
         }
         .onAppear {
             synchronizeCustomRange()
+            refreshDerivedAnalytics()
         }
-        .onChange(of: latestWorkoutDate) { _, _ in
-            synchronizeCustomRange()
+        .onReceive(dataManager.$workouts.dropFirst()) { _ in
+            scheduleDerivedAnalyticsRefresh(synchronizesCustomRange: true)
+        }
+        .onChange(of: selectedTimeFilter) { _, _ in
+            scheduleDerivedAnalyticsRefresh()
+        }
+        .onChange(of: customStartDate) { _, _ in
+            guard selectedTimeFilter == .custom else { return }
+            scheduleDerivedAnalyticsRefresh()
+        }
+        .onChange(of: customEndDate) { _, _ in
+            guard selectedTimeFilter == .custom else { return }
+            scheduleDerivedAnalyticsRefresh()
+        }
+        .onChange(of: intentionalRestDays) { _, _ in
+            scheduleDerivedAnalyticsRefresh()
+        }
+        .onReceive(intentionalBreaksManager.$savedBreaks.dropFirst()) { _ in
+            scheduleDerivedAnalyticsRefresh()
+        }
+        .onReceive(metadataManager.$muscleTagOverrides.dropFirst()) { _ in
+            scheduleDerivedAnalyticsRefresh()
+        }
+        .onReceive(relationshipManager.$relationships.dropFirst()) { _ in
+            scheduleDerivedAnalyticsRefresh()
+        }
+        .onDisappear {
+            derivedRefreshTask?.cancel()
         }
     }
 
@@ -311,20 +332,9 @@ struct PerformanceLabView: View {
     // MARK: - At a Glance
 
     private var atAGlanceSection: some View {
-        let streakRuns = WorkoutAnalytics.streakRuns(
-            for: selectedRangeWorkouts,
-            intentionalRestDays: intentionalRestDays,
-            intentionalBreakRanges: intentionalBreaksManager.savedBreaks
-        )
-        let currentStreak = streakRuns.last?.workoutDayCount ?? 0
-        let bestStreak = streakRuns.map(\.workoutDayCount).max() ?? 0
-        let rangeStats = selectedRangeWorkouts.isEmpty
-            ? nil
-            : dataManager.calculateStats(
-                for: selectedRangeWorkouts,
-                intentionalBreakRanges: intentionalBreaksManager.savedBreaks
-            )
-        let avgPerWeekText = String(format: "%.1f", rangeStats?.workoutsPerWeek ?? 0)
+        let currentStreak = derivedAnalytics.currentStreak
+        let bestStreak = derivedAnalytics.bestStreak
+        let avgPerWeekText = String(format: "%.1f", derivedAnalytics.averageWorkoutsPerWeek)
 
         return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             Text("At a Glance")
@@ -409,8 +419,7 @@ struct PerformanceLabView: View {
 
     private var comparisonSection: some View {
         let window = selectedChangeWindow
-        let resolver = relationshipManager.resolverSnapshot()
-        let changes = window.map { WorkoutAnalytics.changeMetrics(for: workouts, window: $0, resolver: resolver) } ?? []
+        let changes = derivedAnalytics.changeMetrics
 
         return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             Text("Trending")
@@ -450,13 +459,7 @@ struct PerformanceLabView: View {
     // MARK: - Strength Gains
 
     private var strengthGainsSection: some View {
-        let contributions = WorkoutAnalytics.progressContributions(
-            workouts: workoutsThroughRangeEnd,
-            weeks: selectedWindowWeeks,
-            mappings: muscleMapping,
-            resolver: relationshipManager.resolverSnapshot()
-        )
-        let exerciseGains = contributions
+        let exerciseGains = derivedAnalytics.strengthContributions
             .filter { $0.category == .exercise }
             .sorted { $0.delta > $1.delta }
         let gainers = Array(exerciseGains.filter { $0.delta > 0 }.prefix(5))
@@ -578,7 +581,7 @@ struct PerformanceLabView: View {
     // MARK: - Muscle Balance
 
     private var muscleBalanceSection: some View {
-        let buckets = muscleVolumeBuckets()
+        let buckets = derivedAnalytics.muscleBuckets
         let changes = muscleWorkChanges
 
         return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
@@ -631,9 +634,9 @@ struct PerformanceLabView: View {
         }
     }
 
-    private func muscleVolumeBuckets() -> [PerformanceMuscleVolumeBucket] {
-        let groupVolumes = muscleEffortTotals(for: selectedRangeWorkouts)
-
+    private func muscleVolumeBuckets(
+        from groupVolumes: [MuscleTag: Double]
+    ) -> [PerformanceMuscleVolumeBucket] {
         let total = groupVolumes.values.reduce(0, +)
         guard total > 0 else { return [] }
 
@@ -651,13 +654,16 @@ struct PerformanceLabView: View {
         }
     }
 
-    private func muscleEffortTotals(for sourceWorkouts: [Workout]) -> [MuscleTag: Double] {
+    private func muscleEffortTotals(
+        for sourceWorkouts: [Workout],
+        mappings: [String: [MuscleTag]],
+        resolver: ExerciseIdentityResolver
+    ) -> [MuscleTag: Double] {
         var totals: [MuscleTag: Double] = [:]
-        let resolver = relationshipManager.resolverSnapshot()
         for workout in sourceWorkouts {
             for exercise in ExerciseAggregation.aggregateExercises(in: workout, resolver: resolver) {
-                let tags = muscleMapping[exercise.name]
-                    ?? ExerciseMetadataManager.shared.resolvedTags(for: exercise.name)
+                let tags = mappings[exercise.name]
+                    ?? metadataManager.resolvedTags(for: exercise.name)
                 guard !tags.isEmpty else { continue }
                 let effort = exerciseEffortScore(exercise)
                 guard effort > 0 else { continue }
@@ -667,6 +673,29 @@ struct PerformanceLabView: View {
             }
         }
         return totals
+    }
+
+    private func makeMuscleWorkChanges(
+        currentTotals: [MuscleTag: Double],
+        previousTotals: [MuscleTag: Double]
+    ) -> [MuscleWorkChange] {
+        let currentTotalEffort = max(1, currentTotals.values.reduce(0, +))
+        let previousTotalEffort = max(1, previousTotals.values.reduce(0, +))
+        let allTags = Set(currentTotals.keys).union(previousTotals.keys)
+
+        return allTags.compactMap { tag in
+            let currentEffort = currentTotals[tag] ?? 0
+            let previousEffort = previousTotals[tag] ?? 0
+            guard currentEffort > 0 || previousEffort > 0 else { return nil }
+            return MuscleWorkChange(
+                tag: tag,
+                currentEffort: currentEffort,
+                previousEffort: previousEffort,
+                currentShare: currentEffort / currentTotalEffort,
+                previousShare: previousEffort / previousTotalEffort
+            )
+        }
+        .sorted { abs($0.deltaEffort) > abs($1.deltaEffort) }
     }
 
     private func muscleChangeRow(_ change: MuscleWorkChange) -> some View {
@@ -702,7 +731,7 @@ struct PerformanceLabView: View {
     // MARK: - Weekly Activity
 
     private var weeklyActivitySection: some View {
-        let weeks = weeklyWorkoutCounts()
+        let weeks = derivedAnalytics.weeklyCounts
 
         return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             Text("Weekly Activity")
@@ -723,20 +752,22 @@ struct PerformanceLabView: View {
         }
     }
 
-    private func weeklyWorkoutCounts() -> [PerformanceWeeklyCount] {
+    private func weeklyWorkoutCounts(
+        workouts: [Workout],
+        range: DateInterval
+    ) -> [PerformanceWeeklyCount] {
         let calendar = Calendar.current
-        guard let selectedRangeInterval else { return [] }
 
         var counts: [Date: Int] = [:]
 
-        for workout in selectedRangeWorkouts {
+        for workout in workouts {
             let comps = calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: workout.date)
             guard let weekStart = calendar.date(from: comps) else { continue }
             counts[weekStart, default: 0] += 1
         }
 
-        let rangeStartComps = calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: selectedRangeInterval.start)
-        let rangeEndComps = calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: selectedRangeInterval.end)
+        let rangeStartComps = calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: range.start)
+        let rangeEndComps = calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: range.end)
         guard var cursor = calendar.date(from: rangeStartComps),
               let latestWeekStart = calendar.date(from: rangeEndComps) else { return [] }
 
@@ -748,6 +779,99 @@ struct PerformanceLabView: View {
         }
 
         return result
+    }
+
+    private func scheduleDerivedAnalyticsRefresh(
+        synchronizesCustomRange: Bool = false
+    ) {
+        derivedRefreshTask?.cancel()
+        derivedRefreshTask = Task { @MainActor in
+            // @Published sends before its stored value changes. Yield once so a burst of
+            // related manager publications collapses into one snapshot of committed state.
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+            if synchronizesCustomRange {
+                synchronizeCustomRange()
+            }
+            refreshDerivedAnalytics()
+        }
+    }
+
+    private func refreshDerivedAnalytics() {
+        guard let range = selectedRangeInterval,
+              let window = selectedChangeWindow else {
+            derivedAnalytics = DerivedAnalytics()
+            return
+        }
+
+        var currentWorkouts: [Workout] = []
+        var previousWorkouts: [Workout] = []
+        currentWorkouts.reserveCapacity(workouts.count)
+        previousWorkouts.reserveCapacity(workouts.count)
+
+        for workout in workouts {
+            if range.contains(workout.date) {
+                currentWorkouts.append(workout)
+            } else if window.previous.contains(workout.date) {
+                previousWorkouts.append(workout)
+            }
+        }
+
+        let resolver = relationshipManager.resolverSnapshot()
+        let exerciseNames = Set(
+            (currentWorkouts + previousWorkouts).flatMap { workout in
+                workout.exercises.map(\.name)
+            }
+        )
+        let mappings = metadataManager.resolvedMappings(for: exerciseNames)
+        let streakRuns = WorkoutAnalytics.streakRuns(
+            for: currentWorkouts,
+            intentionalRestDays: intentionalRestDays,
+            intentionalBreakRanges: intentionalBreaksManager.savedBreaks
+        )
+        let currentMuscleTotals = muscleEffortTotals(
+            for: currentWorkouts,
+            mappings: mappings,
+            resolver: resolver
+        )
+        let previousMuscleTotals = muscleEffortTotals(
+            for: previousWorkouts,
+            mappings: mappings,
+            resolver: resolver
+        )
+
+        derivedAnalytics = DerivedAnalytics(
+            selectedRangeWorkouts: currentWorkouts,
+            averageWorkoutsPerWeek: WorkoutAnalytics.workoutsPerWeek(
+                for: currentWorkouts,
+                in: range,
+                intentionalBreakRanges: intentionalBreaksManager.savedBreaks
+            ),
+            currentStreak: WorkoutAnalytics.currentDayStreak(
+                for: currentWorkouts,
+                intentionalRestDays: intentionalRestDays,
+                intentionalBreakRanges: intentionalBreaksManager.savedBreaks,
+                referenceDate: min(range.end, Date())
+            ),
+            bestStreak: streakRuns.map(\.workoutDayCount).max() ?? 0,
+            changeMetrics: WorkoutAnalytics.changeMetrics(
+                current: currentWorkouts,
+                previous: previousWorkouts,
+                resolver: resolver
+            ),
+            strengthContributions: WorkoutAnalytics.progressContributions(
+                current: currentWorkouts,
+                previous: previousWorkouts,
+                mappings: mappings,
+                resolver: resolver
+            ),
+            muscleBuckets: muscleVolumeBuckets(from: currentMuscleTotals),
+            muscleWorkChanges: makeMuscleWorkChanges(
+                currentTotals: currentMuscleTotals,
+                previousTotals: previousMuscleTotals
+            ),
+            weeklyCounts: weeklyWorkoutCounts(workouts: currentWorkouts, range: range)
+        )
     }
 
     // MARK: - Helpers
@@ -798,8 +922,25 @@ struct PerformanceLabView: View {
     }
 
     private func previousInterval(matching current: DateInterval) -> DateInterval {
-        let previousEnd = current.start.addingTimeInterval(-0.001)
-        let previousStart = previousEnd.addingTimeInterval(-max(current.duration, 1))
+        let calendar = Calendar.current
+        let currentStartDay = calendar.startOfDay(for: current.start)
+        let currentEndDay = calendar.startOfDay(for: current.end)
+        let dayCount = max(
+            (calendar.dateComponents([.day], from: currentStartDay, to: currentEndDay).day ?? 0) + 1,
+            1
+        )
+        let previousEndDay = calendar.date(byAdding: .day, value: -1, to: currentStartDay) ?? currentStartDay
+        let previousStart = calendar.date(
+            byAdding: .day,
+            value: -(dayCount - 1),
+            to: previousEndDay
+        ) ?? previousEndDay
+        let previousEnd = calendar.date(
+            bySettingHour: 23,
+            minute: 59,
+            second: 59,
+            of: previousEndDay
+        ) ?? previousEndDay
         return DateInterval(start: previousStart, end: previousEnd)
     }
 
@@ -828,6 +969,14 @@ struct PerformanceLabView: View {
         }
         return "\(Int(round(value))) lbs"
     }
+}
+
+private enum PerformanceLabFormatters {
+    static let rangeDate: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d, yyyy"
+        return formatter
+    }()
 }
 
 // MARK: - Comparison Row

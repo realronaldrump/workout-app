@@ -73,7 +73,7 @@ enum HealthHubCategory: String, CaseIterable, Identifiable {
     }
 }
 
-enum HealthMetric: String, CaseIterable, Identifiable {
+enum HealthMetric: String, CaseIterable, Identifiable, Sendable {
     case steps
     case activeEnergy
     case basalEnergy
@@ -316,7 +316,7 @@ enum HealthMetric: String, CaseIterable, Identifiable {
         }
     }
 
-    var valueMultiplier: Double {
+    nonisolated var valueMultiplier: Double {
         switch self {
         case .bloodOxygen:
             return 100
@@ -325,7 +325,7 @@ enum HealthMetric: String, CaseIterable, Identifiable {
         }
     }
 
-    func storedValue(from raw: Double) -> Double {
+    nonisolated func storedValue(from raw: Double) -> Double {
         raw * valueMultiplier
     }
 
@@ -420,7 +420,7 @@ enum HealthMetric: String, CaseIterable, Identifiable {
     }
 }
 
-struct HealthMetricSample: Identifiable, Codable {
+struct HealthMetricSample: Identifiable, Codable, Sendable {
     let id: UUID
     let timestamp: Date
     let value: Double

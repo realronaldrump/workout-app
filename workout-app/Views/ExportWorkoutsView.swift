@@ -1509,64 +1509,59 @@ private extension ExportWorkoutsView {
         let range = effectiveDayRange
         let healthRange = healthExportDateInterval
 
-        Task {
+        Task { @MainActor in
+            var writer: HealthCSVExporter.MetricSamplesStreamWriter?
             do {
                 try await ensureHealthAuthorization()
-
-                var samplesByMetric: [HealthMetric: [HealthMetricSample]] = [:]
-                for metric in metrics {
-                    let samples = try await healthManager.fetchMetricSamples(metric: metric, range: healthRange)
-                    if !samples.isEmpty {
-                        samplesByMetric[metric] = samples
-                    }
-                }
-
                 let storageSnapshot = iCloudManager.storageSnapshot()
+                guard let directory = storageSnapshot.url else {
+                    throw iCloudError.containerNotAvailable
+                }
 
-                Task.detached(priority: .userInitiated) {
-                    do {
-                        guard let directory = storageSnapshot.url else {
-                            throw iCloudError.containerNotAvailable
-                        }
+                let fileName = try HealthCSVExporter.makeMetricSamplesExportFileName(
+                    startDate: range.start,
+                    endDateInclusive: range.endInclusive,
+                    metricCount: metrics.count
+                )
+                let fileURL = directory.appendingPathComponent(fileName)
+                let streamWriter = try HealthCSVExporter.MetricSamplesStreamWriter(fileURL: fileURL)
+                writer = streamWriter
+                let calendar = Calendar.current
 
-                        let data = try HealthCSVExporter.exportMetricSamplesCSV(
-                            samplesByMetric: samplesByMetric,
-                            startDate: range.start,
-                            endDateInclusive: range.endInclusive
+                for metric in metrics {
+                    var chunkStart = healthRange.start
+                    while chunkStart < healthRange.end {
+                        try Task.checkCancellation()
+                        let proposedEnd = calendar.date(byAdding: .day, value: 31, to: chunkStart)
+                            ?? healthRange.end
+                        let chunkEnd = min(proposedEnd, healthRange.end)
+                        guard chunkEnd > chunkStart else { break }
+                        let samples = try await healthManager.fetchMetricSamples(
+                            metric: metric,
+                            range: DateInterval(start: chunkStart, end: chunkEnd)
                         )
-
-                        let fileName = try HealthCSVExporter.makeMetricSamplesExportFileName(
-                            startDate: range.start,
-                            endDateInclusive: range.endInclusive,
-                            metricCount: metrics.count
-                        )
-
-                        try iCloudDocumentManager.saveWorkoutFile(data: data, in: directory, fileName: fileName)
-                        let fileURL = directory.appendingPathComponent(fileName)
-
-                        await MainActor.run {
-                            healthExportFileURL = fileURL
-                            healthExportStatusMessage = storageSnapshot.isUsingLocalFallback
-                                ? "Saved on-device (iCloud unavailable)"
-                                : "Saved to iCloud Drive"
-                            isExportingHealth = false
-                            trackExportCompleted(
-                                kind: "healthMetricSamples",
-                                itemCount: samplesByMetric.values.reduce(0) { $0 + $1.count },
-                                extra: ["Export.metricCount": "\(metrics.count)"]
-                            )
-                            presentShare(fileURL)
-                            Haptics.notify(.success)
-                        }
-                    } catch {
-                        await MainActor.run {
-                            isExportingHealth = false
-                            trackExportFailed(kind: "healthMetricSamples", error: error)
-                            showError(error)
-                        }
+                        try Task.checkCancellation()
+                        try await streamWriter.append(metric: metric, samples: samples)
+                        chunkStart = chunkEnd
                     }
                 }
+
+                let exportedCount = try await streamWriter.finish()
+                writer = nil
+                healthExportFileURL = fileURL
+                healthExportStatusMessage = storageSnapshot.isUsingLocalFallback
+                    ? "Saved on-device (iCloud unavailable)"
+                    : "Saved to iCloud Drive"
+                isExportingHealth = false
+                trackExportCompleted(
+                    kind: "healthMetricSamples",
+                    itemCount: exportedCount,
+                    extra: ["Export.metricCount": "\(metrics.count)"]
+                )
+                presentShare(fileURL)
+                Haptics.notify(.success)
             } catch {
+                await writer?.discard()
                 isExportingHealth = false
                 trackExportFailed(kind: "healthMetricSamples", error: error)
                 showError(error)

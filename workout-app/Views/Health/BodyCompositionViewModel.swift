@@ -48,9 +48,56 @@ final class BodyCompositionViewModel: ObservableObject {
         let analysisRange = BodyCompositionAnalytics.bufferedAnalysisRange(for: displayRange, bufferDays: 35)
         let rawSamples = localSamples(from: dailyEntries, metricKind: metricKind, range: analysisRange)
 
+        apply(
+            rawSamples: rawSamples,
+            earliestSampleDate: earliestSampleDate,
+            displayRange: displayRange,
+            reportGranularity: reportGranularity,
+            preservesStoredDayStarts: true
+        )
+    }
+
+    /// Loads true HealthKit samples, preserving multiple readings and their timestamps.
+    func load(
+        rawSamples: [BodyRawSample],
+        earliestSampleDate earliestHint: Date? = nil,
+        displayRange: DateInterval,
+        reportGranularity: ReportGranularity
+    ) {
+        let earliestRawSampleDate = rawSamples.map(\.timestamp).min()
+        let earliestSampleDate = [earliestHint, earliestRawSampleDate]
+            .compactMap { $0 }
+            .min()
+        let analysisRange = BodyCompositionAnalytics.bufferedAnalysisRange(for: displayRange, bufferDays: 35)
+        let scopedSamples = rawSamples
+            .filter { analysisRange.contains($0.timestamp) }
+            .sorted { $0.timestamp < $1.timestamp }
+
+        apply(
+            rawSamples: scopedSamples,
+            earliestSampleDate: earliestSampleDate,
+            displayRange: displayRange,
+            reportGranularity: reportGranularity,
+            preservesStoredDayStarts: false
+        )
+    }
+
+    func reportLoadFailure(_ error: Error) {
+        snapshot = Snapshot(errorMessage: error.localizedDescription)
+    }
+
+    private func apply(
+        rawSamples: [BodyRawSample],
+        earliestSampleDate: Date?,
+        displayRange: DateInterval,
+        reportGranularity: ReportGranularity,
+        preservesStoredDayStarts: Bool
+    ) {
         let sampleCountInDisplayRange = rawSamples.filter { displayRange.contains($0.timestamp) }.count
 
-        let daily = dailyRepresentativesPreservingStoredDayStarts(from: rawSamples)
+        let daily = preservesStoredDayStarts
+            ? dailyRepresentativesPreservingStoredDayStarts(from: rawSamples)
+            : BodyCompositionAnalytics.dailyRepresentatives(from: rawSamples)
         let repsInDisplayRange = daily.filter { displayRange.contains($0.dayStart) }
 
         guard !repsInDisplayRange.isEmpty else {
@@ -185,21 +232,18 @@ final class BodyCompositionViewModel: ObservableObject {
     ) -> [BodyCompositionAnalytics.DailyRepresentative] {
         guard !samples.isEmpty else { return [] }
 
-        let grouped = Dictionary(grouping: samples) { sample in
-            sample.timestamp
-        }
-
-        let representatives: [BodyCompositionAnalytics.DailyRepresentative] = grouped.compactMap { entry in
-            let sorted = entry.value.sorted { $0.timestamp < $1.timestamp }
+        let grouped = Dictionary(grouping: samples, by: \.timestamp)
+        return grouped.compactMap { dayStart, daySamples in
+            let sorted = daySamples.sorted { $0.timestamp < $1.timestamp }
             guard let first = sorted.first else { return nil }
             return BodyCompositionAnalytics.DailyRepresentative(
-                dayStart: entry.key,
+                dayStart: dayStart,
                 timestamp: first.timestamp,
                 value: first.value,
                 samples: sorted
             )
         }
-
-        return representatives.sorted { $0.dayStart < $1.dayStart }
+        .sorted { $0.dayStart < $1.dayStart }
     }
+
 }

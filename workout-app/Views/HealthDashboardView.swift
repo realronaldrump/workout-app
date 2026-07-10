@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 import Charts
 
@@ -134,10 +135,10 @@ struct HealthDashboardView: View {
             derivedRefreshTask?.cancel()
             derivedRefreshTask = nil
         }
-        .onReceive(healthManager.$healthDataStore) { _ in
+        .onReceive(healthManager.$healthDataStore.dropFirst()) { _ in
             scheduleDerivedDataRefresh()
         }
-        .onReceive(healthManager.$workouts) { _ in
+        .onReceive(healthManager.$workouts.dropFirst()) { _ in
             scheduleDerivedDataRefresh()
         }
         .onChange(of: dateRangeContext.selectedRange) { _, _ in

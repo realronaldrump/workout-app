@@ -12,23 +12,30 @@ struct ExerciseListView: View {
     @State private var showingQuickStart = false
     @State private var quickStartExercise: String?
     @State private var cachedExercises: [(name: String, stats: ExerciseStats)] = []
+    @State private var cachedFavoriteExercises: Set<String> = []
+    @State private var cachedFavoriteExerciseRows: [(name: String, stats: ExerciseStats)] = []
+    @State private var cachedNonFavoriteExerciseRows: [(name: String, stats: ExerciseStats)] = []
+    @State private var cachedFavoriteRollupNames: Set<String> = []
     @AppStorage("favoriteExercises") private var favoriteExercisesData: String = "[]"
 
-    private var favoriteExercises: Set<String> {
-        guard let data = favoriteExercisesData.data(using: .utf8),
+    private static func decodeFavoriteExercises(_ encoded: String) -> Set<String> {
+        guard let data = encoded.data(using: .utf8),
               let array = try? JSONDecoder().decode([String].self, from: data) else { return [] }
         return Set(array)
     }
 
     private func toggleFavorite(_ name: String) {
-        var favorites = favoriteExercises
+        var favorites = cachedFavoriteExercises
         let rollupNames = favoriteRollupNames(for: name)
         if !favorites.isDisjoint(with: rollupNames) {
             favorites.subtract(rollupNames)
         } else {
             favorites.insert(name)
         }
-        if let data = try? JSONEncoder().encode(Array(favorites)),
+        cachedFavoriteExercises = favorites
+        rebuildCachedExerciseRows(exercises: cachedExercises, favorites: favorites)
+
+        if let data = try? JSONEncoder().encode(favorites.sorted()),
            let string = String(data: data, encoding: .utf8) {
             favoriteExercisesData = string
         }
@@ -55,34 +62,24 @@ struct ExerciseListView: View {
 
         switch sortOrder {
         case .alphabetical:
-                            return filtered.map { ($0.name, $0.stats) }
+            return filtered.map { ($0.name, $0.stats) }
         case .volume:
-                            return filtered
+            return filtered
                 .sorted { $0.stats.totalVolume > $1.stats.totalVolume }
                 .map { ($0.name, $0.stats) }
         case .frequency:
-                            return filtered
+            return filtered
                 .sorted { $0.stats.frequency > $1.stats.frequency }
                 .map { ($0.name, $0.stats) }
         case .recent:
-                            return filtered
+            return filtered
                 .sorted { ($0.stats.lastPerformed ?? .distantPast) > ($1.stats.lastPerformed ?? .distantPast) }
                 .map { ($0.name, $0.stats) }
         }
     }
 
-    private var favoriteExerciseRows: [(name: String, stats: ExerciseStats)] {
-        guard searchText.isEmpty else { return [] }
-        return cachedExercises.filter { isFavoriteRollup($0.name) }
-    }
-
-    private var nonFavoriteExerciseRows: [(name: String, stats: ExerciseStats)] {
-        guard searchText.isEmpty else { return cachedExercises }
-        return cachedExercises.filter { !isFavoriteRollup($0.name) }
-    }
-
     private func isFavoriteRollup(_ name: String) -> Bool {
-        !favoriteExercises.isDisjoint(with: favoriteRollupNames(for: name))
+        cachedFavoriteRollupNames.contains(name)
     }
 
     private func favoriteRollupNames(for name: String) -> Set<String> {
@@ -91,6 +88,49 @@ struct ExerciseListView: View {
             names.insert(child.exerciseName)
         }
         return names
+    }
+
+    private func refreshExercises(favorites: Set<String>? = nil) {
+        let exercises = buildExercises()
+        let favorites = favorites ?? cachedFavoriteExercises
+        cachedExercises = exercises
+        rebuildCachedExerciseRows(exercises: exercises, favorites: favorites)
+    }
+
+    private func refreshFavorites(from encoded: String) {
+        let favorites = Self.decodeFavoriteExercises(encoded)
+        cachedFavoriteExercises = favorites
+        rebuildCachedExerciseRows(exercises: cachedExercises, favorites: favorites)
+    }
+
+    private func rebuildCachedExerciseRows(
+        exercises: [(name: String, stats: ExerciseStats)],
+        favorites: Set<String>
+    ) {
+        var favoriteRows: [(name: String, stats: ExerciseStats)] = []
+        var otherRows: [(name: String, stats: ExerciseStats)] = []
+        var favoriteRollupNames: Set<String> = []
+
+        favoriteRows.reserveCapacity(exercises.count)
+        otherRows.reserveCapacity(exercises.count)
+        favoriteRollupNames.reserveCapacity(favorites.count)
+
+        for exercise in exercises {
+            let isFavorite = !favorites.isDisjoint(with: self.favoriteRollupNames(for: exercise.name))
+            if isFavorite {
+                favoriteRollupNames.insert(exercise.name)
+            }
+
+            if searchText.isEmpty && isFavorite {
+                favoriteRows.append(exercise)
+            } else {
+                otherRows.append(exercise)
+            }
+        }
+
+        cachedFavoriteExerciseRows = searchText.isEmpty ? favoriteRows : []
+        cachedNonFavoriteExerciseRows = otherRows
+        cachedFavoriteRollupNames = favoriteRollupNames
     }
 
     var body: some View {
@@ -107,18 +147,18 @@ struct ExerciseListView: View {
 
                 ScrollView(showsIndicators: false) {
                     LazyVStack(spacing: Theme.Spacing.sm) {
-                        if !favoriteExerciseRows.isEmpty {
+                        if !cachedFavoriteExerciseRows.isEmpty {
                             Text("Favorites")
                                 .sectionHeaderStyle()
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(.horizontal, Theme.Spacing.xs)
                                 .padding(.top, Theme.Spacing.sm)
 
-                            ForEach(favoriteExerciseRows, id: \.name) { exercise in
+                            ForEach(cachedFavoriteExerciseRows, id: \.name) { exercise in
                                 exerciseRow(exercise, showsInlineFavoriteControl: true)
                             }
 
-                            if !nonFavoriteExerciseRows.isEmpty {
+                            if !cachedNonFavoriteExerciseRows.isEmpty {
                                 Text("All")
                                     .sectionHeaderStyle()
                                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -136,7 +176,7 @@ struct ExerciseListView: View {
                             )
                             .padding(.top, Theme.Spacing.xl)
                         } else {
-                            ForEach(nonFavoriteExerciseRows, id: \.name) { exercise in
+                            ForEach(cachedNonFavoriteExerciseRows, id: \.name) { exercise in
                                 exerciseRow(exercise)
                             }
                         }
@@ -160,20 +200,25 @@ struct ExerciseListView: View {
             QuickStartView(exerciseName: quickStartExercise)
         }
         .onAppear {
-            cachedExercises = buildExercises()
+            let favorites = Self.decodeFavoriteExercises(favoriteExercisesData)
+            cachedFavoriteExercises = favorites
+            refreshExercises(favorites: favorites)
         }
         .onChange(of: searchText) { _, _ in
-            cachedExercises = buildExercises()
+            refreshExercises()
         }
         .onChange(of: sortOrder) { _, _ in
-            cachedExercises = buildExercises()
+            refreshExercises()
         }
         .onChange(of: dataManager.workouts) { _, _ in
-            cachedExercises = buildExercises()
+            refreshExercises()
         }
         .onChange(of: relationshipManager.relationships) { _, _ in
             dataManager.refreshExerciseIdentityDerivedState()
-            cachedExercises = buildExercises()
+            refreshExercises()
+        }
+        .onChange(of: favoriteExercisesData) { _, newValue in
+            refreshFavorites(from: newValue)
         }
     }
 
@@ -365,10 +410,16 @@ struct ExerciseRowView: View {
     }
 
     private func relativeDateString(for date: Date) -> String {
+        ExerciseListFormatters.relativeDate.localizedString(for: date, relativeTo: Date())
+    }
+}
+
+private enum ExerciseListFormatters {
+    static let relativeDate: RelativeDateTimeFormatter = {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .abbreviated
-        return formatter.localizedString(for: date, relativeTo: Date())
-    }
+        return formatter
+    }()
 }
 
 private struct ExerciseRowCardModifier: ViewModifier {

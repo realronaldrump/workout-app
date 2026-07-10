@@ -22,11 +22,16 @@ final class WorkoutSimilarityEngine: ObservableObject {
         let workoutsSnapshot = workouts
         let resolver = ExerciseRelationshipManager.shared.resolverSnapshot()
 
-        let result = await Task.detached(priority: .userInitiated) {
+        let analysisTask = Task.detached(priority: .userInitiated) {
             WorkoutSimilarityAnalyzer.buildLibrary(workouts: workoutsSnapshot, resolver: resolver)
-        }.value
+        }
+        let result = await withTaskCancellationHandler {
+            await analysisTask.value
+        } onCancel: {
+            analysisTask.cancel()
+        }
 
-        guard currentGeneration == generation else { return }
+        guard !Task.isCancelled, currentGeneration == generation else { return }
         library = result
         isAnalyzing = false
     }
@@ -67,6 +72,7 @@ private enum WorkoutSimilarityAnalyzer {
         workouts: [Workout],
         resolver: ExerciseIdentityResolver = .empty
     ) -> WorkoutSimilarityLibrary {
+        guard !Task.isCancelled else { return .empty }
         let snapshots = workouts
             .map { snapshot(for: $0, resolver: resolver) }
             .sorted(by: snapshotSort)
@@ -80,6 +86,7 @@ private enum WorkoutSimilarityAnalyzer {
         var candidateIdsByExercise: [String: Set<UUID>] = [:]
 
         for snapshot in snapshots {
+            guard !Task.isCancelled else { return .empty }
             let exactOrderMatches = buildExactMatches(
                 selected: snapshot,
                 priorSnapshots: exactOrderIndex[snapshot.orderedSignature] ?? [],

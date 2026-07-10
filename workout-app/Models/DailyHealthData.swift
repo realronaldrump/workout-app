@@ -77,7 +77,7 @@ nonisolated struct DailyHealthData: Identifiable, Codable {
 
 extension DailyHealthData {
     // swiftlint:disable:next cyclomatic_complexity
-    func value(for metric: HealthMetric) -> Double? {
+    nonisolated func value(for metric: HealthMetric) -> Double? {
         switch metric {
         case .steps:
             return steps
@@ -121,7 +121,7 @@ extension DailyHealthData {
     }
 
     // swiftlint:disable:next cyclomatic_complexity
-    mutating func setValue(_ value: Double?, for metric: HealthMetric) {
+    nonisolated mutating func setValue(_ value: Double?, for metric: HealthMetric) {
         switch metric {
         case .steps:
             steps = value

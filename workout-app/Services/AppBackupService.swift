@@ -51,7 +51,7 @@ nonisolated struct AppBackupImportResult {
 
 nonisolated struct BigBeautifulWorkoutBackup: Codable {
     static let currentFormatIdentifier = "com.davis.big-beautiful-workout.backup"
-    static let currentSchemaVersion = 2
+    static let currentSchemaVersion = 3
 
     var formatIdentifier: String
     var schemaVersion: Int
@@ -89,6 +89,7 @@ nonisolated struct AppBackupPayload: Codable {
     var exerciseTagOverrides: [String: [MuscleTag]]
     var exerciseMetricPreferences: [String: ExerciseCardioMetricPreferences]
     var exerciseRelationships: [ExerciseRelationship]
+    var suppressedDefaultExerciseRelationships: [String]
     var intentionalBreakRanges: [IntentionalBreakRange]
     var dismissedIntentionalBreakSuggestions: [IntentionalBreakRange]
     var favoriteExercises: [String]
@@ -107,6 +108,7 @@ nonisolated struct AppBackupPayload: Codable {
         exerciseTagOverrides: [String: [MuscleTag]] = [:],
         exerciseMetricPreferences: [String: ExerciseCardioMetricPreferences] = [:],
         exerciseRelationships: [ExerciseRelationship] = [],
+        suppressedDefaultExerciseRelationships: [String] = [],
         intentionalBreakRanges: [IntentionalBreakRange] = [],
         dismissedIntentionalBreakSuggestions: [IntentionalBreakRange] = [],
         favoriteExercises: [String] = [],
@@ -124,6 +126,7 @@ nonisolated struct AppBackupPayload: Codable {
         self.exerciseTagOverrides = exerciseTagOverrides
         self.exerciseMetricPreferences = exerciseMetricPreferences
         self.exerciseRelationships = exerciseRelationships
+        self.suppressedDefaultExerciseRelationships = suppressedDefaultExerciseRelationships
         self.intentionalBreakRanges = intentionalBreakRanges
         self.dismissedIntentionalBreakSuggestions = dismissedIntentionalBreakSuggestions
         self.favoriteExercises = favoriteExercises
@@ -152,6 +155,10 @@ nonisolated struct AppBackupPayload: Codable {
         exerciseRelationships = try container.decodeIfPresent(
             [ExerciseRelationship].self,
             forKey: .exerciseRelationships
+        ) ?? []
+        suppressedDefaultExerciseRelationships = try container.decodeIfPresent(
+            [String].self,
+            forKey: .suppressedDefaultExerciseRelationships
         ) ?? []
         intentionalBreakRanges = try container.decodeIfPresent(
             [IntentionalBreakRange].self,
@@ -227,6 +234,7 @@ enum AppBackupService {
             exerciseRelationships: exerciseRelationshipManager.relationships.values.sorted {
                 $0.exerciseName.localizedCaseInsensitiveCompare($1.exerciseName) == .orderedAscending
             },
+            suppressedDefaultExerciseRelationships: exerciseRelationshipManager.suppressedDefaultExerciseNames,
             intentionalBreakRanges: intentionalBreaksManager.savedBreaks,
             dismissedIntentionalBreakSuggestions: intentionalBreaksManager.dismissedSuggestionRanges,
             favoriteExercises: favoriteExercises(userDefaults: userDefaults),
@@ -364,6 +372,9 @@ enum AppBackupService {
                 }
                 try $0.field("settings") {
                     try writeEncoded(payload.settings)
+                }
+                try $0.field("suppressedDefaultExerciseRelationships") {
+                    try writeArray(payload.suppressedDefaultExerciseRelationships)
                 }
                 try $0.field("workoutAnnotations") {
                     try writeArray(payload.workoutAnnotations)
@@ -518,8 +529,9 @@ enum AppBackupImporter {
         exerciseMetricManager: ExerciseMetricManager? = nil,
         exerciseRelationshipManager: ExerciseRelationshipManager? = nil,
         featureGuideManager: FeatureGuideManager? = nil,
-        userDefaults: UserDefaults = .standard
-    ) throws -> AppBackupImportResult {
+        userDefaults: UserDefaults = .standard,
+        userDefaultsPersistentDomainName: String? = nil
+    ) async throws -> AppBackupImportResult {
         _ = policy
         let exerciseMetadataManager = exerciseMetadataManager ?? .shared
         let exerciseMetricManager = exerciseMetricManager ?? .shared
@@ -531,9 +543,12 @@ enum AppBackupImporter {
         let loggedMerge = logStore.mergeWorkoutsFromBackup(backup.payload.loggedWorkouts)
         result.insertedLoggedWorkouts = loggedMerge.inserted
         result.skippedLoggedWorkouts = loggedMerge.skipped
-        dataManager.setLoggedWorkouts(logStore.workouts)
+        dataManager.setLoggedWorkouts(logStore.workouts, refreshDerivedState: false)
 
-        let importedMerge = dataManager.mergeImportedWorkoutsFromBackup(backup.payload.importedWorkouts)
+        let importedMerge = try dataManager.mergeImportedWorkoutsFromBackup(
+            backup.payload.importedWorkouts,
+            refreshDerivedState: false
+        )
         result.insertedWorkouts = importedMerge.inserted
         result.skippedWorkouts = importedMerge.skipped
         var workoutIdMap = importedMerge.idMap
@@ -541,7 +556,7 @@ enum AppBackupImporter {
             workoutIdMap[logged.id] = logStore.workout(id: logged.id)?.id ?? logged.id
         }
 
-        let identityInserted = dataManager.mergeWorkoutIdentitiesFromBackup(
+        let identityInserted = try dataManager.mergeWorkoutIdentitiesFromBackup(
             backup.payload.workoutIdentities,
             workoutIdMap: workoutIdMap
         )
@@ -575,6 +590,9 @@ enum AppBackupImporter {
         _ = exerciseMetadataManager.mergeOverridesFromBackup(backup.payload.exerciseTagOverrides)
         _ = exerciseMetricManager.mergePreferencesFromBackup(backup.payload.exerciseMetricPreferences)
         _ = exerciseRelationshipManager.mergeRelationshipsFromBackup(backup.payload.exerciseRelationships)
+        _ = exerciseRelationshipManager.mergeSuppressedDefaultsFromBackup(
+            backup.payload.suppressedDefaultExerciseRelationships
+        )
         dataManager.refreshExerciseIdentityDerivedState()
         _ = intentionalBreaksManager.mergeBreaksFromBackup(backup.payload.intentionalBreakRanges)
         _ = intentionalBreaksManager.mergeDismissedSuggestionsFromBackup(
@@ -587,8 +605,17 @@ enum AppBackupImporter {
             healthManager: healthManager,
             gymProfilesManager: gymProfilesManager,
             gymIdMap: gymMerge.idMap,
-            userDefaults: userDefaults
+            userDefaults: userDefaults,
+            persistentDomainName: userDefaultsPersistentDomainName
         )
+
+        // The merge methods publish their in-memory changes immediately but persist on
+        // ordered background queues. Do not report a successful restore (or acknowledge
+        // its source file) until every queue containing backup data has reached disk.
+        try await logStore.waitForPendingPersistence()
+        try await gymProfilesManager.waitForPendingPersistence()
+        try await annotationsManager.waitForPendingPersistence()
+        try await healthManager.waitForPendingCachePersistence()
 
         result.warnings = warnings
         return result
@@ -616,51 +643,103 @@ enum AppBackupImporter {
         healthManager: HealthKitManager,
         gymProfilesManager: GymProfilesManager,
         gymIdMap: [UUID: UUID],
-        userDefaults: UserDefaults
+        userDefaults: UserDefaults,
+        persistentDomainName: String?
     ) -> Int {
+        let persistedValues = persistedValues(
+            in: userDefaults,
+            persistentDomainName: persistentDomainName
+        )
         var filled = 0
-        filled += setIfMissingOrEmpty(settings.profileName, forKey: "profileName", userDefaults: userDefaults)
-        filled += setIfMissing(settings.hasSeenOnboarding, forKey: "hasSeenOnboarding", userDefaults: userDefaults)
-        filled += setIfMissing(settings.weightIncrement, forKey: "weightIncrement", userDefaults: userDefaults)
-        filled += setIfMissing(settings.intentionalRestDays, forKey: "intentionalRestDays", userDefaults: userDefaults)
-        filled += setIfMissing(settings.sessionsPerWeekGoal, forKey: "sessionsPerWeekGoal", userDefaults: userDefaults)
-        filled += setIfMissing(settings.appearanceMode, forKey: "appearanceMode", userDefaults: userDefaults)
+        filled += setIfMissingOrEmpty(
+            settings.profileName,
+            forKey: "profileName",
+            userDefaults: userDefaults,
+            persistedValues: persistedValues
+        )
+        filled += setIfMissing(
+            settings.hasSeenOnboarding,
+            forKey: "hasSeenOnboarding",
+            userDefaults: userDefaults,
+            persistedValues: persistedValues
+        )
+        filled += setIfMissing(
+            settings.weightIncrement,
+            forKey: "weightIncrement",
+            userDefaults: userDefaults,
+            persistedValues: persistedValues
+        )
+        filled += setIfMissing(
+            settings.intentionalRestDays,
+            forKey: "intentionalRestDays",
+            userDefaults: userDefaults,
+            persistedValues: persistedValues
+        )
+        filled += setIfMissing(
+            settings.sessionsPerWeekGoal,
+            forKey: "sessionsPerWeekGoal",
+            userDefaults: userDefaults,
+            persistedValues: persistedValues
+        )
+        filled += setIfMissing(
+            settings.appearanceMode,
+            forKey: "appearanceMode",
+            userDefaults: userDefaults,
+            persistedValues: persistedValues
+        )
         filled += setIfMissingOrEmpty(
             settings.preferredSleepSourceKey,
             forKey: healthManager.preferredSleepSourceKey,
-            userDefaults: userDefaults
+            userDefaults: userDefaults,
+            persistedValues: persistedValues
         )
         filled += setIfMissingOrEmpty(
             settings.preferredSleepSourceName,
             forKey: healthManager.preferredSleepSourceNameKey,
-            userDefaults: userDefaults
+            userDefaults: userDefaults,
+            persistedValues: persistedValues
         )
-        filled += setIfMissing(settings.dismissedUntaggedCount, forKey: "dismissedUntaggedCount", userDefaults: userDefaults)
+        filled += setIfMissing(
+            settings.dismissedUntaggedCount,
+            forKey: "dismissedUntaggedCount",
+            userDefaults: userDefaults,
+            persistedValues: persistedValues
+        )
         filled += setIfMissing(
             settings.analyticsCollectionEnabled,
             forKey: AppAnalytics.collectionEnabledKey,
-            userDefaults: userDefaults
+            userDefaults: userDefaults,
+            persistedValues: persistedValues
         )
-        filled += setIfMissing(settings.lastHealthSyncDate, forKey: healthManager.lastSyncKey, userDefaults: userDefaults)
+        filled += setIfMissing(
+            settings.lastHealthSyncDate,
+            forKey: healthManager.lastSyncKey,
+            userDefaults: userDefaults,
+            persistedValues: persistedValues
+        )
         filled += setIfMissing(
             settings.lastDailyHealthSyncDate,
             forKey: healthManager.lastDailySyncKey,
-            userDefaults: userDefaults
+            userDefaults: userDefaults,
+            persistedValues: persistedValues
         )
         filled += setIfMissing(
             settings.earliestAvailableDailyHealthDate,
             forKey: healthManager.earliestAvailableDailyHealthDateKey,
-            userDefaults: userDefaults
+            userDefaults: userDefaults,
+            persistedValues: persistedValues
         )
         filled += setIfMissing(
             settings.dailyHealthStoreVersion,
             forKey: healthManager.dailyHealthStoreVersionKey,
-            userDefaults: userDefaults
+            userDefaults: userDefaults,
+            persistedValues: persistedValues
         )
         filled += setIfMissing(
             settings.pendingWorkoutSleepSummaryRefresh,
             forKey: healthManager.pendingWorkoutSleepSummaryRefreshKey,
-            userDefaults: userDefaults
+            userDefaults: userDefaults,
+            persistedValues: persistedValues
         )
 
         if gymProfilesManager.lastUsedGymProfileId == nil,
@@ -678,16 +757,36 @@ enum AppBackupImporter {
         return filled
     }
 
-    private static func setIfMissing<T>(_ value: T?, forKey key: String, userDefaults: UserDefaults) -> Int {
+    static func persistedValues(
+        in userDefaults: UserDefaults,
+        persistentDomainName: String?
+    ) -> [String: Any] {
+        guard let domainName = persistentDomainName ?? Bundle.main.bundleIdentifier else {
+            return [:]
+        }
+        return userDefaults.persistentDomain(forName: domainName) ?? [:]
+    }
+
+    static func setIfMissing<T>(
+        _ value: T?,
+        forKey key: String,
+        userDefaults: UserDefaults,
+        persistedValues: [String: Any]
+    ) -> Int {
         guard let value else { return 0 }
-        guard userDefaults.object(forKey: key) == nil else { return 0 }
+        guard persistedValues[key] == nil else { return 0 }
         userDefaults.set(value, forKey: key)
         return 1
     }
 
-    private static func setIfMissingOrEmpty(_ value: String?, forKey key: String, userDefaults: UserDefaults) -> Int {
+    private static func setIfMissingOrEmpty(
+        _ value: String?,
+        forKey key: String,
+        userDefaults: UserDefaults,
+        persistedValues: [String: Any]
+    ) -> Int {
         guard let value, !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return 0 }
-        let existing = userDefaults.string(forKey: key)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let existing = (persistedValues[key] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard existing.isEmpty else { return 0 }
         userDefaults.set(value, forKey: key)
         return 1

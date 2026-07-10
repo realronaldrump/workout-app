@@ -5,6 +5,7 @@ struct BackupFilesView: View {
     @State private var sections: [BackupFileSection] = []
     @State private var selectedFile: URL?
     @State private var showingDeleteAlert = false
+    @State private var deletionErrorMessage: String?
 
     var body: some View {
         ZStack {
@@ -48,20 +49,35 @@ struct BackupFilesView: View {
             Button("Cancel", role: .cancel) {}
             Button("Delete", role: .destructive) {
                 if let file = selectedFile {
-                    try? iCloudManager.deleteFile(at: file)
-                    removeFile(file)
+                    Task {
+                        await deleteFileAndCopies(file)
+                    }
                 }
             }
         } message: {
             Text("Are you sure you want to delete this backup file?")
         }
+        .alert(
+            "Unable to Delete File",
+            isPresented: Binding(
+                get: { deletionErrorMessage != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        deletionErrorMessage = nil
+                    }
+                }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(deletionErrorMessage ?? "The file could not be deleted.")
+        }
     }
 
     @MainActor
     private func loadFiles() async {
-        let directoryURL = iCloudManager.storageSnapshot().url
-        sections = await Task.detached(priority: .userInitiated) { [directoryURL] in
-            let files = directoryURL.map { iCloudDocumentManager.listExportAndBackupFiles(in: $0) } ?? []
+        let files = await iCloudManager.exportAndBackupFiles()
+        sections = await Task.detached(priority: .userInitiated) { [files] in
             return BackupFileSection.sections(from: files)
         }.value
     }
@@ -71,8 +87,23 @@ struct BackupFilesView: View {
             from: sections
                 .flatMap(\.files)
                 .map(\.url)
-                .filter { $0 != file }
+                .filter { $0.lastPathComponent != file.lastPathComponent }
         )
+    }
+
+    @MainActor
+    private func deleteFileAndCopies(_ file: URL) async {
+        do {
+            try await iCloudManager.deleteAllCopies(ofExportOrBackup: file)
+            removeFile(file)
+            selectedFile = nil
+        } catch {
+            // A partial failure can still remove one physical copy. Reload so the
+            // inventory accurately reflects whatever remains before showing the error.
+            await loadFiles()
+            selectedFile = nil
+            deletionErrorMessage = error.localizedDescription
+        }
     }
 }
 
@@ -325,7 +356,7 @@ nonisolated enum BackupFileDateParser {
 }
 
 private extension String {
-    var deletingPathExtension: String {
+    nonisolated var deletingPathExtension: String {
         (self as NSString).deletingPathExtension
     }
 }

@@ -149,7 +149,8 @@ extension HealthKitManager {
     func syncHealthDataForWorkout(
         _ workout: Workout,
         persist: Bool = true,
-        appleWorkoutCandidates: [HKWorkout]? = nil
+        appleWorkoutCandidates: [HKWorkout]? = nil,
+        cacheResult: Bool = true
     ) async throws -> WorkoutHealthData {
         guard healthStore != nil else {
             throw HealthKitError.notAvailable
@@ -170,6 +171,8 @@ extension HealthKitManager {
         try await populateWorkoutWindowMetrics(&healthData, for: workout, startTime: startTime, endTime: endTime)
         try await populateWorkoutDayMetrics(&healthData, workoutDate: workout.date)
         try await populateAppleWorkoutMetrics(&healthData, for: workout, candidates: appleWorkoutCandidates)
+        healthData.captureRawSampleSummaries()
+        guard cacheResult else { return healthData }
         return cacheSyncedHealthData(healthData, workoutID: workout.id, persist: persist)
     }
 
@@ -179,7 +182,91 @@ extension HealthKitManager {
         startTime: Date,
         endTime: Date
     ) async throws {
-        let heartRateSamples = try await fetchHeartRateSamples(from: startTime, to: endTime)
+        // Every query in this phase uses the same workout window and is independent. Starting
+        // them together removes a long serial waterfall while bulk workout sync remains serial.
+        async let heartRateSamplesQuery = fetchHeartRateSamples(from: startTime, to: endTime)
+        async let activeCaloriesQuery = fetchQuantitySum(
+            type: .activeEnergyBurned,
+            from: startTime,
+            to: endTime,
+            unit: HKUnit.kilocalorie()
+        )
+        async let basalCaloriesQuery = fetchQuantitySum(
+            type: .basalEnergyBurned,
+            from: startTime,
+            to: endTime,
+            unit: HKUnit.kilocalorie()
+        )
+        async let distanceQuery = fetchQuantitySum(
+            type: .distanceWalkingRunning,
+            from: startTime,
+            to: endTime,
+            unit: HKUnit.meter()
+        )
+        async let swimmingDistanceQuery = fetchQuantitySum(
+            type: .distanceSwimming,
+            from: startTime,
+            to: endTime,
+            unit: HKUnit.meter()
+        )
+        async let wheelchairDistanceQuery = fetchQuantitySum(
+            type: .distanceWheelchair,
+            from: startTime,
+            to: endTime,
+            unit: HKUnit.meter()
+        )
+        async let snowSportsDistanceQuery = fetchQuantitySum(
+            type: .distanceDownhillSnowSports,
+            from: startTime,
+            to: endTime,
+            unit: HKUnit.meter()
+        )
+        async let stepsQuery = fetchQuantitySum(
+            type: .stepCount,
+            from: startTime,
+            to: endTime,
+            unit: HKUnit.count()
+        )
+        async let flightsQuery = fetchQuantitySum(
+            type: .flightsClimbed,
+            from: startTime,
+            to: endTime,
+            unit: HKUnit.count()
+        )
+        async let swimmingStrokesQuery = fetchQuantitySum(
+            type: .swimmingStrokeCount,
+            from: startTime,
+            to: endTime,
+            unit: HKUnit.count()
+        )
+        async let wheelchairPushesQuery = fetchQuantitySum(
+            type: .pushCount,
+            from: startTime,
+            to: endTime,
+            unit: HKUnit.count()
+        )
+        async let hrvSamplesQuery = fetchHRVSamples(from: startTime, to: endTime)
+        async let restingHeartRateQuery = fetchLatestQuantity(
+            type: .restingHeartRate,
+            from: Calendar.current.startOfDay(for: workout.date),
+            to: endTime,
+            unit: HKUnit(from: "count/min")
+        )
+
+        let heartRateSamples = try await heartRateSamplesQuery
+        let activeCalories = try await activeCaloriesQuery
+        let basalCalories = try await basalCaloriesQuery
+        let distance = try await distanceQuery
+        let swimmingDistance = try await swimmingDistanceQuery
+        let wheelchairDistance = try await wheelchairDistanceQuery
+        let snowSportsDistance = try await snowSportsDistanceQuery
+        let steps = try await stepsQuery
+        let flights = try await flightsQuery
+        let swimmingStrokes = try await swimmingStrokesQuery
+        let wheelchairPushes = try await wheelchairPushesQuery
+        let hrvSamples = try await hrvSamplesQuery
+        let restingHeartRate = try await restingHeartRateQuery
+
         healthData.heartRateSamples = heartRateSamples
         if !heartRateSamples.isEmpty {
             let values = heartRateSamples.map { $0.value }
@@ -187,84 +274,18 @@ extension HealthKitManager {
             healthData.maxHeartRate = values.max()
             healthData.minHeartRate = values.min()
         }
-
-        // Fetch calories
-        healthData.activeCalories = try await fetchQuantitySum(
-            type: .activeEnergyBurned,
-            from: startTime,
-            to: endTime,
-            unit: .kilocalorie()
-        )
-
-        healthData.basalCalories = try await fetchQuantitySum(
-            type: .basalEnergyBurned,
-            from: startTime,
-            to: endTime,
-            unit: .kilocalorie()
-        )
-
-        // Fetch distance
-        healthData.distance = try await fetchQuantitySum(
-            type: .distanceWalkingRunning,
-            from: startTime,
-            to: endTime,
-            unit: .meter()
-        )
-
-        healthData.distanceSwimming = try await fetchQuantitySum(
-            type: .distanceSwimming, from: startTime, to: endTime, unit: .meter()
-        )
-
-        healthData.distanceWheelchair = try await fetchQuantitySum(
-            type: .distanceWheelchair, from: startTime, to: endTime, unit: .meter()
-        )
-
-        healthData.distanceDownhillSnowSports = try await fetchQuantitySum(
-            type: .distanceDownhillSnowSports, from: startTime, to: endTime, unit: .meter()
-        )
-
-        // Fetch step count
-        if let steps = try await fetchQuantitySum(
-            type: .stepCount,
-            from: startTime,
-            to: endTime,
-            unit: .count()
-        ) {
-            healthData.stepCount = Int(steps)
-        }
-
-        // Fetch flights climbed
-        if let flights = try await fetchQuantitySum(
-            type: .flightsClimbed,
-            from: startTime,
-            to: endTime,
-            unit: .count()
-        ) {
-            healthData.flightsClimbed = Int(flights)
-        }
-
-        if let strokes = try await fetchQuantitySum(
-            type: .swimmingStrokeCount, from: startTime, to: endTime, unit: .count()
-        ) {
-            healthData.swimmingStrokeCount = Int(strokes)
-        }
-
-        if let pushes = try await fetchQuantitySum(
-            type: .pushCount, from: startTime, to: endTime, unit: .count()
-        ) {
-            healthData.pushCount = Int(pushes)
-        }
-
-        // Fetch HRV samples
-        healthData.hrvSamples = try await fetchHRVSamples(from: startTime, to: endTime)
-
-        // Fetch resting heart rate (from day of workout)
-        healthData.restingHeartRate = try await fetchLatestQuantity(
-            type: .restingHeartRate,
-            from: Calendar.current.startOfDay(for: workout.date),
-            to: endTime,
-            unit: HKUnit(from: "count/min")
-        )
+        healthData.activeCalories = activeCalories
+        healthData.basalCalories = basalCalories
+        healthData.distance = distance
+        healthData.distanceSwimming = swimmingDistance
+        healthData.distanceWheelchair = wheelchairDistance
+        healthData.distanceDownhillSnowSports = snowSportsDistance
+        healthData.stepCount = steps.map { Int($0) }
+        healthData.flightsClimbed = flights.map { Int($0) }
+        healthData.swimmingStrokeCount = swimmingStrokes.map { Int($0) }
+        healthData.pushCount = wheelchairPushes.map { Int($0) }
+        healthData.hrvSamples = hrvSamples
+        healthData.restingHeartRate = restingHeartRate
     }
 
     private func populateWorkoutDayMetrics(
@@ -273,143 +294,169 @@ extension HealthKitManager {
     ) async throws {
         let startTime = healthData.workoutStartTime
         let endTime = healthData.workoutEndTime
-        healthData.bloodOxygenSamples = try await fetchBloodOxygenSamples(from: startTime, to: endTime)
-        healthData.respiratoryRateSamples = try await fetchRespiratoryRateSamples(from: startTime, to: endTime)
         let dayStart = Calendar.current.startOfDay(for: workoutDate)
         let dayEnd = Calendar.current.date(byAdding: .day, value: 1, to: dayStart)
             ?? dayStart.addingTimeInterval(60 * 60 * 24)
-
-        healthData.bodyMass = try await fetchLatestQuantity(
-            type: .bodyMass,
-            from: dayStart,
-            to: dayEnd,
-            unit: .gramUnit(with: .kilo)
-        )
-
-        healthData.bodyFatPercentage = try await fetchLatestQuantity(
-            type: .bodyFatPercentage,
-            from: dayStart,
-            to: dayEnd,
-            unit: .percent()
-        )
-
-        healthData.bodyTemperature = try await fetchLatestQuantity(
-            type: .bodyTemperature,
-            from: dayStart,
-            to: dayEnd,
-            unit: .degreeCelsius()
-        )
-
-        healthData.bloodPressureSystolic = try await fetchLatestQuantity(
-            type: .bloodPressureSystolic, from: dayStart, to: dayEnd, unit: HKUnit.millimeterOfMercury()
-        )
-
-        healthData.bloodPressureDiastolic = try await fetchLatestQuantity(
-            type: .bloodPressureDiastolic, from: dayStart, to: dayEnd, unit: HKUnit.millimeterOfMercury()
-        )
-
-        healthData.bloodGlucose = try await fetchLatestQuantity(
-            type: .bloodGlucose, from: dayStart, to: dayEnd, unit: HKUnit(from: "mg/dL")
-        )
-
-        healthData.basalBodyTemperature = try await fetchLatestQuantity(
-            type: .basalBodyTemperature, from: dayStart, to: dayEnd, unit: .degreeCelsius()
-        )
 
         let sleepWindow = sleepSummaryWindow(
             startTime: healthData.workoutStartTime,
             workoutDate: workoutDate
         )
-        healthData.sleepSummary = try await fetchSleepSummary(
+
+        // Phase one: samples, body measurements, and sleep.
+        async let bloodOxygenSamplesQuery = fetchBloodOxygenSamples(from: startTime, to: endTime)
+        async let respiratoryRateSamplesQuery = fetchRespiratoryRateSamples(from: startTime, to: endTime)
+        async let bodyMassQuery = fetchLatestQuantity(
+            type: .bodyMass,
+            from: dayStart,
+            to: dayEnd,
+            unit: .gramUnit(with: .kilo)
+        )
+        async let bodyFatQuery = fetchLatestQuantity(
+            type: .bodyFatPercentage,
+            from: dayStart,
+            to: dayEnd,
+            unit: .percent()
+        )
+        async let bodyTemperatureQuery = fetchLatestQuantity(
+            type: .bodyTemperature,
+            from: dayStart,
+            to: dayEnd,
+            unit: .degreeCelsius()
+        )
+        async let systolicQuery = fetchLatestQuantity(
+            type: .bloodPressureSystolic, from: dayStart, to: dayEnd, unit: HKUnit.millimeterOfMercury()
+        )
+        async let diastolicQuery = fetchLatestQuantity(
+            type: .bloodPressureDiastolic, from: dayStart, to: dayEnd, unit: HKUnit.millimeterOfMercury()
+        )
+        async let bloodGlucoseQuery = fetchLatestQuantity(
+            type: .bloodGlucose, from: dayStart, to: dayEnd, unit: HKUnit(from: "mg/dL")
+        )
+        async let basalBodyTemperatureQuery = fetchLatestQuantity(
+            type: .basalBodyTemperature, from: dayStart, to: dayEnd, unit: .degreeCelsius()
+        )
+        async let sleepSummaryQuery = fetchSleepSummary(
             from: sleepWindow.start,
             to: sleepWindow.end
         )
 
-        healthData.dailyActiveEnergy = try await fetchQuantitySum(
+        healthData.bloodOxygenSamples = try await bloodOxygenSamplesQuery
+        healthData.respiratoryRateSamples = try await respiratoryRateSamplesQuery
+        healthData.bodyMass = try await bodyMassQuery
+        healthData.bodyFatPercentage = try await bodyFatQuery
+        healthData.bodyTemperature = try await bodyTemperatureQuery
+        healthData.bloodPressureSystolic = try await systolicQuery
+        healthData.bloodPressureDiastolic = try await diastolicQuery
+        healthData.bloodGlucose = try await bloodGlucoseQuery
+        healthData.basalBodyTemperature = try await basalBodyTemperatureQuery
+        healthData.sleepSummary = try await sleepSummaryQuery
+
+        // Phase two: daily activity, nutrition, and mindfulness aggregates.
+        async let dailyActiveEnergyQuery = fetchQuantitySum(
             type: .activeEnergyBurned,
             from: dayStart,
             to: dayEnd,
             unit: .kilocalorie()
         )
-
-        healthData.dailyBasalEnergy = try await fetchQuantitySum(
+        async let dailyBasalEnergyQuery = fetchQuantitySum(
             type: .basalEnergyBurned,
             from: dayStart,
             to: dayEnd,
             unit: .kilocalorie()
         )
-
-        healthData.dietaryWater = try await fetchQuantitySum(
+        async let dietaryWaterQuery = fetchQuantitySum(
             type: .dietaryWater, from: dayStart, to: dayEnd, unit: .liter()
         )
-        healthData.dietaryEnergyConsumed = try await fetchQuantitySum(
+        async let dietaryEnergyQuery = fetchQuantitySum(
             type: .dietaryEnergyConsumed, from: dayStart, to: dayEnd, unit: .kilocalorie()
         )
-        healthData.dietaryProtein = try await fetchQuantitySum(
+        async let dietaryProteinQuery = fetchQuantitySum(
             type: .dietaryProtein, from: dayStart, to: dayEnd, unit: .gram()
         )
-        healthData.dietaryCarbohydrates = try await fetchQuantitySum(
+        async let dietaryCarbohydratesQuery = fetchQuantitySum(
             type: .dietaryCarbohydrates, from: dayStart, to: dayEnd, unit: .gram()
         )
-        healthData.dietaryFatTotal = try await fetchQuantitySum(
+        async let dietaryFatQuery = fetchQuantitySum(
             type: .dietaryFatTotal, from: dayStart, to: dayEnd, unit: .gram()
         )
-
-        healthData.mindfulSessionDuration = try await fetchCategoryDurationSum(
+        async let mindfulDurationQuery = fetchCategoryDurationSum(
             type: .mindfulSession, from: dayStart, to: dayEnd
         )
-
-        if let steps = try await fetchQuantitySum(
+        async let dailyStepsQuery = fetchQuantitySum(
             type: .stepCount,
             from: dayStart,
             to: dayEnd,
             unit: .count()
-        ) {
-            healthData.dailySteps = Int(steps)
-        }
-
-        healthData.dailyExerciseMinutes = try await fetchQuantitySum(
+        )
+        async let exerciseMinutesQuery = fetchQuantitySum(
             type: .appleExerciseTime,
             from: dayStart,
             to: dayEnd,
             unit: .minute()
         )
-
-        healthData.dailyMoveMinutes = try await fetchQuantitySum(
+        async let moveMinutesQuery = fetchQuantitySum(
             type: .appleMoveTime,
             from: dayStart,
             to: dayEnd,
             unit: .minute()
         )
-
-        healthData.dailyStandMinutes = try await fetchQuantitySum(
+        async let standMinutesQuery = fetchQuantitySum(
             type: .appleStandTime,
             from: dayStart,
             to: dayEnd,
             unit: .minute()
         )
 
+        let dailyActiveEnergy = try await dailyActiveEnergyQuery
+        let dailyBasalEnergy = try await dailyBasalEnergyQuery
+        let dietaryWater = try await dietaryWaterQuery
+        let dietaryEnergy = try await dietaryEnergyQuery
+        let dietaryProtein = try await dietaryProteinQuery
+        let dietaryCarbohydrates = try await dietaryCarbohydratesQuery
+        let dietaryFat = try await dietaryFatQuery
+        let mindfulDuration = try await mindfulDurationQuery
+        let dailySteps = try await dailyStepsQuery
+        let exerciseMinutes = try await exerciseMinutesQuery
+        let moveMinutes = try await moveMinutesQuery
+        let standMinutes = try await standMinutesQuery
+
+        healthData.dailyActiveEnergy = dailyActiveEnergy
+        healthData.dailyBasalEnergy = dailyBasalEnergy
+        healthData.dietaryWater = dietaryWater
+        healthData.dietaryEnergyConsumed = dietaryEnergy
+        healthData.dietaryProtein = dietaryProtein
+        healthData.dietaryCarbohydrates = dietaryCarbohydrates
+        healthData.dietaryFatTotal = dietaryFat
+        healthData.mindfulSessionDuration = mindfulDuration
+        healthData.dailySteps = dailySteps.map { Int($0) }
+        healthData.dailyExerciseMinutes = exerciseMinutes
+        healthData.dailyMoveMinutes = moveMinutes
+        healthData.dailyStandMinutes = standMinutes
+
         let vo2WindowStart = Calendar.current.date(byAdding: .day, value: -45, to: dayStart) ?? dayStart
-        healthData.vo2Max = try await fetchLatestQuantity(
+        async let vo2MaxQuery = fetchLatestQuantity(
             type: .vo2Max,
             from: vo2WindowStart,
             to: dayEnd,
             unit: HKUnit(from: "ml/(kg*min)")
         )
-
-        healthData.heartRateRecovery = try await fetchLatestQuantity(
+        async let heartRateRecoveryQuery = fetchLatestQuantity(
             type: .heartRateRecoveryOneMinute,
             from: vo2WindowStart,
             to: dayEnd,
             unit: HKUnit(from: "count/min")
         )
-
-        healthData.walkingHeartRateAverage = try await fetchLatestQuantity(
+        async let walkingHeartRateQuery = fetchLatestQuantity(
             type: .walkingHeartRateAverage,
             from: vo2WindowStart,
             to: dayEnd,
             unit: HKUnit(from: "count/min")
         )
+
+        healthData.vo2Max = try await vo2MaxQuery
+        healthData.heartRateRecovery = try await heartRateRecoveryQuery
+        healthData.walkingHeartRateAverage = try await walkingHeartRateQuery
     }
 
     private func populateAppleWorkoutMetrics(
@@ -457,8 +504,6 @@ extension HealthKitManager {
         workoutID: UUID,
         persist: Bool
     ) -> WorkoutHealthData {
-        var healthData = healthData
-        healthData.captureRawSampleSummaries()
         healthDataStore[workoutID] = healthData
         if persist {
             persistData(changedWorkoutIDs: [workoutID])
@@ -466,6 +511,15 @@ extension HealthKitManager {
             userDefaults.set(lastSyncDate, forKey: lastSyncKey)
         }
         return healthData
+    }
+
+    private func publishSyncedWorkoutEntries(_ entries: [WorkoutHealthData]) {
+        guard !entries.isEmpty else { return }
+        var updatedStore = healthDataStore
+        for entry in entries {
+            updatedStore[entry.workoutId] = entry
+        }
+        healthDataStore = updatedStore
     }
 
     func loadDetailedSamplesIfNeeded(for workoutID: UUID, force: Bool = false) async throws -> WorkoutHealthData? {
@@ -485,7 +539,16 @@ extension HealthKitManager {
         let start = cached.workoutStartTime
         let end = cached.workoutEndTime
 
-        let heartRateSamples = try await fetchHeartRateSamples(from: start, to: end)
+        async let heartRateSamplesQuery = fetchHeartRateSamples(from: start, to: end)
+        async let hrvSamplesQuery = fetchHRVSamples(from: start, to: end)
+        async let bloodOxygenSamplesQuery = fetchBloodOxygenSamples(from: start, to: end)
+        async let respiratoryRateSamplesQuery = fetchRespiratoryRateSamples(from: start, to: end)
+
+        let heartRateSamples = try await heartRateSamplesQuery
+        let hrvSamples = try await hrvSamplesQuery
+        let bloodOxygenSamples = try await bloodOxygenSamplesQuery
+        let respiratoryRateSamples = try await respiratoryRateSamplesQuery
+
         cached.heartRateSamples = heartRateSamples
         if !heartRateSamples.isEmpty {
             let values = heartRateSamples.map(\.value)
@@ -494,9 +557,9 @@ extension HealthKitManager {
             cached.minHeartRate = values.min()
         }
 
-        cached.hrvSamples = try await fetchHRVSamples(from: start, to: end)
-        cached.bloodOxygenSamples = try await fetchBloodOxygenSamples(from: start, to: end)
-        cached.respiratoryRateSamples = try await fetchRespiratoryRateSamples(from: start, to: end)
+        cached.hrvSamples = hrvSamples
+        cached.bloodOxygenSamples = bloodOxygenSamples
+        cached.respiratoryRateSamples = respiratoryRateSamples
         cached.captureRawSampleSummaries()
 
         healthDataStore[workoutID] = cached
@@ -523,14 +586,17 @@ extension HealthKitManager {
         syncedWorkoutsCount = 0
 
         let appleWorkoutCandidates = try? await prefetchedAppleWorkoutCandidates(for: recentMissing)
+        var syncedEntries: [WorkoutHealthData] = []
 
         for (index, workout) in recentMissing.enumerated() {
             do {
-                _ = try await syncHealthDataForWorkout(
+                let healthData = try await syncHealthDataForWorkout(
                     workout,
                     persist: false,
-                    appleWorkoutCandidates: appleWorkoutCandidates
+                    appleWorkoutCandidates: appleWorkoutCandidates,
+                    cacheResult: false
                 )
+                syncedEntries.append(healthData)
             } catch {
                 print("Auto sync failed for workout \(workout.id): \(error)")
             }
@@ -541,7 +607,8 @@ extension HealthKitManager {
 
         lastSyncDate = Date()
         userDefaults.set(lastSyncDate, forKey: lastSyncKey)
-        persistData(changedWorkoutIDs: recentMissing.map(\.id))
+        publishSyncedWorkoutEntries(syncedEntries)
+        persistData(changedWorkoutIDs: syncedEntries.map(\.workoutId))
     }
 
     /// Sync health data for all workouts
@@ -585,7 +652,8 @@ extension HealthKitManager {
                 let healthData = try await syncHealthDataForWorkout(
                     workout,
                     persist: false,
-                    appleWorkoutCandidates: appleWorkoutCandidates
+                    appleWorkoutCandidates: appleWorkoutCandidates,
+                    cacheResult: false
                 )
                 results.append(healthData)
             } catch {
@@ -601,7 +669,9 @@ extension HealthKitManager {
         lastSyncDate = Date()
         userDefaults.set(lastSyncDate, forKey: lastSyncKey)
 
-        // Persist final result
+        // Publish the completed batch once. Replacing the published dictionary for every
+        // workout caused Health and statistics views to recompute throughout long syncs.
+        publishSyncedWorkoutEntries(results)
         persistData(changedWorkoutIDs: results.map(\.workoutId))
 
         return results
@@ -646,11 +716,12 @@ extension HealthKitManager {
         let appleByUUID = Dictionary(uniqueKeysWithValues: appleWorkouts.map { ($0.uuid, $0) })
         var locationByAppleUUID: [UUID: ResolvedWorkoutLocation] = [:]
         var appleUUIDsWithNoLocation: Set<UUID> = []
+        var updatedStore = healthDataStore
         var updated = 0
         var updatedWorkoutIDs: [UUID] = []
 
         for workout in targets {
-            let cached = healthDataStore[workout.id]
+            let cached = updatedStore[workout.id]
             let appleWorkout = matchingAppleWorkout(
                 for: workout,
                 cachedAppleWorkoutUUID: cached?.appleWorkoutUUID,
@@ -674,12 +745,13 @@ extension HealthKitManager {
                 appleWorkout: appleWorkout,
                 resolvedLocation: resolvedLocation
             )
-            healthDataStore[workout.id] = healthData
+            updatedStore[workout.id] = healthData
             updated += 1
             updatedWorkoutIDs.append(workout.id)
         }
 
         if updated > 0 {
+            healthDataStore = updatedStore
             persistData(changedWorkoutIDs: updatedWorkoutIDs)
         }
 

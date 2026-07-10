@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 import Charts
 
@@ -6,60 +7,42 @@ struct HealthCategoryDetailView: View {
 
     @EnvironmentObject var healthManager: HealthViewStore
     @EnvironmentObject private var dateRangeContext: HealthDateRangeContext
-
-    private var earliestDate: Date? {
-        healthManager.dailyHealthStore.keys.min()
-    }
-
-    private var range: DateInterval {
-        dateRangeContext.resolvedRange(earliest: earliestDate)
-    }
-
-    private var rangeLabel: String {
-        dateRangeContext.rangeLabel(earliest: earliestDate)
-    }
-
-    private var dailyData: [DailyHealthData] {
-        // Resolve once. `range` computes the earliest stored date, making a
-        // per-element lookup here O(n²) over the full cache.
-        let resolvedRange = range
-        return healthManager.dailyHealthStore.values
-            .filter { resolvedRange.contains($0.dayStart) }
-            .sorted { $0.dayStart < $1.dayStart }
-    }
+    @State private var cachedPresentation: HealthCategoryPresentation?
 
     var body: some View {
-        let presentation = HealthCategoryPresentation(
-            category: category,
-            dailyData: dailyData
-        )
-
         ZStack {
             AdaptiveBackground()
 
             ScrollView(showsIndicators: false) {
                 LazyVStack(alignment: .leading, spacing: Theme.Spacing.xl) {
-                    categoryHeader
-                        .staggeredAppear(index: 0)
+                    if let presentation = cachedPresentation {
+                        categoryHeader(rangeLabel: presentation.rangeLabel)
+                            .staggeredAppear(index: 0)
 
-                    if presentation.dailyData.isEmpty || presentation.metricsWithData.isEmpty {
-                        emptyState
+                        if presentation.dailyData.isEmpty || presentation.metricsWithData.isEmpty {
+                            emptyState
+                        } else {
+                            spotlightSection(presentation.spotlight)
+                                .staggeredAppear(index: 1)
+
+                            if let insightText = generateInsight(for: presentation.spotlight) {
+                                insightBanner(insightText)
+                                    .staggeredAppear(index: 2)
+                            }
+
+                            if !presentation.secondaryMetrics.isEmpty {
+                                secondarySection(presentation.secondaryMetrics)
+                            }
+
+                            if !presentation.unavailableMetrics.isEmpty {
+                                unavailableMetricsDisclosure(presentation.unavailableMetrics)
+                            }
+                        }
                     } else {
-                        spotlightSection(presentation.spotlight)
-                            .staggeredAppear(index: 1)
-
-                        if let insightText = generateInsight(for: presentation.spotlight) {
-                            insightBanner(insightText)
-                                .staggeredAppear(index: 2)
-                        }
-
-                        if !presentation.secondaryMetrics.isEmpty {
-                            secondarySection(presentation.secondaryMetrics)
-                        }
-
-                        if !presentation.unavailableMetrics.isEmpty {
-                            unavailableMetricsDisclosure(presentation.unavailableMetrics)
-                        }
+                        ProgressView()
+                            .tint(category.tint)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, Theme.Spacing.xxl)
                     }
                 }
                 .padding(.vertical, Theme.Spacing.xxl)
@@ -70,14 +53,24 @@ struct HealthCategoryDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                HealthDateRangeToolbarMenu(earliestDate: earliestDate)
+                HealthDateRangeToolbarMenu(earliestDate: cachedPresentation?.earliestDate)
             }
+        }
+        .onAppear { refreshPresentation() }
+        .onChange(of: dateRangeContext.selectedRange) { _, _ in refreshPresentation() }
+        .onChange(of: dateRangeContext.customRange) { _, _ in
+            if dateRangeContext.selectedRange == .custom {
+                refreshPresentation()
+            }
+        }
+        .onReceive(healthManager.$dailyHealthStore.dropFirst()) { store in
+            refreshPresentation(from: store)
         }
     }
 
     // MARK: - Category Header
 
-    private var categoryHeader: some View {
+    private func categoryHeader(rangeLabel: String) -> some View {
         HStack(spacing: Theme.Spacing.md) {
             Image(systemName: category.icon)
                 .font(Theme.Iconography.title2)
@@ -372,6 +365,21 @@ struct HealthCategoryDetailView: View {
             return "Your \(name) is \(direction) \(pct) — a notable shift from the first half of this period."
         }
     }
+
+    private func refreshPresentation(from emittedStore: [Date: DailyHealthData]? = nil) {
+        let store = emittedStore ?? healthManager.dailyHealthStore
+        let earliestDate = store.keys.min()
+        let resolvedRange = dateRangeContext.resolvedRange(earliest: earliestDate)
+        var dailyData = store.values.filter { resolvedRange.contains($0.dayStart) }
+        dailyData.sort { $0.dayStart < $1.dayStart }
+
+        cachedPresentation = HealthCategoryPresentation(
+            category: category,
+            dailyData: dailyData,
+            earliestDate: earliestDate,
+            rangeLabel: dateRangeContext.rangeLabel(earliest: earliestDate)
+        )
+    }
 }
 
 private struct HealthCategoryMetricSnapshot: Identifiable {
@@ -420,13 +428,22 @@ private struct HealthCategoryMetricSnapshot: Identifiable {
 
 private struct HealthCategoryPresentation {
     let dailyData: [DailyHealthData]
+    let earliestDate: Date?
+    let rangeLabel: String
     let metricsWithData: [HealthCategoryMetricSnapshot]
     let unavailableMetrics: [HealthMetric]
     let spotlight: HealthCategoryMetricSnapshot
     let secondaryMetrics: [HealthCategoryMetricSnapshot]
 
-    init(category: HealthHubCategory, dailyData: [DailyHealthData]) {
+    init(
+        category: HealthHubCategory,
+        dailyData: [DailyHealthData],
+        earliestDate: Date?,
+        rangeLabel: String
+    ) {
         self.dailyData = dailyData
+        self.earliestDate = earliestDate
+        self.rangeLabel = rangeLabel
 
         let metrics = HealthMetric.metrics(for: category)
         let snapshots = metrics.map {

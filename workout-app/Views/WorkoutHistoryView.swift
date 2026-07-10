@@ -1,8 +1,394 @@
+import Charts
 import SwiftUI
+
+nonisolated struct HistoryRowMetrics: Hashable, Sendable {
+    let volume: Double
+    let exerciseCount: Int
+    let gymName: String?
+    let gymIsDeleted: Bool
+}
+
+nonisolated struct HistoryRowModel: Identifiable, Hashable, Sendable {
+    let workout: Workout
+    let metrics: HistoryRowMetrics
+
+    var id: UUID { workout.id }
+}
+
+nonisolated struct HistoryMonthSection: Identifiable, Hashable, Sendable {
+    let id: Date
+    let title: String
+    let count: Int
+    let volume: Double
+    let delta: TrendDelta?
+    let rows: [HistoryRowModel]
+}
+
+nonisolated struct HistoryMonthChartPoint: Identifiable, Hashable, Sendable {
+    let monthStart: Date
+    let count: Int
+
+    var id: Date { monthStart }
+}
+
+nonisolated struct HistoryDerivedState: Sendable {
+    let monthSections: [HistoryMonthSection]
+    let locationOptions: [HistoryLocationOption]
+    let exerciseOptions: [HistoryExerciseOption]
+    let locationBreakdown: [HistoryLocationBreakdownItem]
+    let monthlyChart: [HistoryMonthChartPoint]
+    let filteredCount: Int
+    let totalCount: Int
+    let totalVolume: Double
+    let averageDurationMinutes: Double
+    let firstWorkoutDate: Date?
+    let isReady: Bool
+
+    static let empty = HistoryDerivedState(
+        monthSections: [],
+        locationOptions: [],
+        exerciseOptions: [],
+        locationBreakdown: [],
+        monthlyChart: [],
+        filteredCount: 0,
+        totalCount: 0,
+        totalVolume: 0,
+        averageDurationMinutes: 0,
+        firstWorkoutDate: nil,
+        isReady: false
+    )
+}
+
+private nonisolated struct HistoryGymSnapshot: Hashable, Sendable {
+    let name: String
+    let address: String?
+}
+
+private nonisolated struct HistoryRowMetricsInput: Hashable, Sendable {
+    let workout: Workout
+    let resolver: ExerciseIdentityResolver
+    let gymID: UUID?
+    let gymName: String?
+}
+
+private nonisolated struct HistoryDerivedSnapshot: Sendable {
+    let workouts: [Workout]
+    let searchText: String
+    let dateWindow: HistoryDateWindow
+    let selectedLocations: Set<HistoryLocationOption>?
+    let selectedExercises: Set<HistoryExerciseOption>?
+    let selectedDurationBands: Set<HistoryDurationBand>?
+    let gymIDByWorkout: [UUID: UUID]
+    let gymsByID: [UUID: HistoryGymSnapshot]
+    let resolver: ExerciseIdentityResolver
+    let referenceDate: Date
+}
+
+private nonisolated struct HistorySectionDraft: Sendable {
+    let date: Date
+    let title: String
+    let volume: Double
+    let rows: [HistoryRowModel]
+}
+
+private nonisolated enum HistoryDerivedStateBuilder {
+    static func build(from snapshot: HistoryDerivedSnapshot) throws -> HistoryDerivedState {
+        let calendar = Calendar.current
+        let locationOptions = try buildLocationOptions(from: snapshot)
+        let exerciseOptions = try buildExerciseOptions(from: snapshot)
+        let query = snapshot.searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        var filtered: [Workout] = []
+        filtered.reserveCapacity(snapshot.workouts.count)
+        for (index, workout) in snapshot.workouts.enumerated() {
+            try checkCancellation(at: index)
+            let names = exerciseFilterNames(for: workout, resolver: snapshot.resolver)
+            let isMatch = matchesSearch(workout, names: names, query: query)
+                && snapshot.dateWindow.contains(
+                    workout.date,
+                    referenceDate: snapshot.referenceDate,
+                    calendar: calendar
+                )
+                && matchesLocation(workout, snapshot: snapshot)
+                && matchesExercises(names, selected: snapshot.selectedExercises)
+                && matchesDuration(workout, selected: snapshot.selectedDurationBands)
+            if isMatch {
+                filtered.append(workout)
+            }
+        }
+
+        let grouped = Dictionary(grouping: filtered) { workout in
+            calendar.dateInterval(of: .month, for: workout.date)?.start
+                ?? calendar.startOfDay(for: workout.date)
+        }
+        let sortedGroups = grouped.sorted { $0.key > $1.key }
+
+        var sectionDrafts: [HistorySectionDraft] = []
+        sectionDrafts.reserveCapacity(sortedGroups.count)
+
+        for (groupIndex, group) in sortedGroups.enumerated() {
+            try checkCancellation(at: groupIndex)
+            let monthStart = group.key
+            let workouts = group.value.sorted { $0.date > $1.date }
+            var rows: [HistoryRowModel] = []
+            rows.reserveCapacity(workouts.count)
+            for (index, workout) in workouts.enumerated() {
+                try checkCancellation(at: index)
+                let summary = ExerciseAggregation.summary(for: workout, resolver: snapshot.resolver)
+                let gymID = snapshot.gymIDByWorkout[workout.id]
+                let gym = gymID.flatMap { snapshot.gymsByID[$0] }
+                rows.append(
+                    HistoryRowModel(
+                        workout: workout,
+                        metrics: HistoryRowMetrics(
+                            volume: summary.volume,
+                            exerciseCount: summary.exerciseCount,
+                            gymName: gym?.name ?? (gymID == nil ? nil : "Deleted gym"),
+                            gymIsDeleted: gymID != nil && gym == nil
+                        )
+                    )
+                )
+            }
+            sectionDrafts.append(
+                HistorySectionDraft(
+                    date: monthStart,
+                    title: monthStart.formatted(.dateTime.year().month(.wide)),
+                    volume: rows.reduce(0) { $0 + $1.metrics.volume },
+                    rows: rows
+                )
+            )
+        }
+
+        let sections = sectionDrafts.enumerated().map { index, draft in
+            let olderVolume = sectionDrafts.indices.contains(index + 1)
+                ? sectionDrafts[index + 1].volume
+                : 0
+            return HistoryMonthSection(
+                id: draft.date,
+                title: draft.title,
+                count: draft.rows.count,
+                volume: draft.volume,
+                delta: TrendDelta(
+                    current: draft.volume,
+                    previous: olderVolume,
+                    higherIsBetter: true
+                ),
+                rows: draft.rows
+            )
+        }
+
+        let totalVolume = sections.reduce(0) { $0 + $1.volume }
+        let averageDuration = filtered.isEmpty
+            ? 0
+            : Double(filtered.reduce(0) { $0 + $1.estimatedDurationMinutes() }) / Double(filtered.count)
+        let locationBreakdown = try buildLocationBreakdown(from: filtered, snapshot: snapshot)
+
+        return HistoryDerivedState(
+            monthSections: sections,
+            locationOptions: locationOptions,
+            exerciseOptions: exerciseOptions,
+            locationBreakdown: locationBreakdown,
+            monthlyChart: sections.prefix(12).reversed().map {
+                HistoryMonthChartPoint(monthStart: $0.id, count: $0.count)
+            },
+            filteredCount: filtered.count,
+            totalCount: snapshot.workouts.count,
+            totalVolume: totalVolume,
+            averageDurationMinutes: averageDuration,
+            firstWorkoutDate: snapshot.workouts.map(\.date).min(),
+            isReady: true
+        )
+    }
+
+    private static func matchesSearch(
+        _ workout: Workout,
+        names: Set<String>,
+        query: String
+    ) -> Bool {
+        guard !query.isEmpty else { return true }
+        return workout.name.localizedCaseInsensitiveContains(query)
+            || names.contains { $0.localizedCaseInsensitiveContains(query) }
+    }
+
+    private static func matchesLocation(
+        _ workout: Workout,
+        snapshot: HistoryDerivedSnapshot
+    ) -> Bool {
+        guard let selected = snapshot.selectedLocations else { return true }
+        guard !selected.isEmpty else { return false }
+        return selected.contains(locationOption(for: workout, snapshot: snapshot))
+    }
+
+    private static func matchesExercises(
+        _ names: Set<String>,
+        selected: Set<HistoryExerciseOption>?
+    ) -> Bool {
+        guard let selected else { return true }
+        guard !selected.isEmpty else { return false }
+        let normalizedNames = Set(names.map(ExerciseIdentityResolver.normalizedName))
+        return selected.contains {
+            normalizedNames.contains(ExerciseIdentityResolver.normalizedName($0.name))
+        }
+    }
+
+    private static func matchesDuration(
+        _ workout: Workout,
+        selected: Set<HistoryDurationBand>?
+    ) -> Bool {
+        guard let selected else { return true }
+        guard !selected.isEmpty else { return false }
+        let minutes = workout.estimatedDurationMinutes()
+        return selected.contains { $0.contains(minutes: minutes) }
+    }
+
+    private static func exerciseFilterNames(
+        for workout: Workout,
+        resolver: ExerciseIdentityResolver
+    ) -> Set<String> {
+        workout.exercises.reduce(into: Set<String>()) { names, exercise in
+            let rawName = ExerciseIdentityResolver.trimmedName(exercise.name)
+            guard !rawName.isEmpty else { return }
+            names.insert(rawName)
+            names.insert(resolver.aggregateName(for: rawName))
+        }
+    }
+
+    private static func buildLocationOptions(
+        from snapshot: HistoryDerivedSnapshot
+    ) throws -> [HistoryLocationOption] {
+        var countsByID: [String: Int] = [:]
+        var optionByID: [String: HistoryLocationOption] = [:]
+
+        for (index, workout) in snapshot.workouts.enumerated() {
+            try checkCancellation(at: index)
+            let option = locationOption(for: workout, snapshot: snapshot)
+            countsByID[option.id, default: 0] += 1
+            optionByID[option.id] = option
+        }
+
+        return optionByID.values
+            .map { option in
+                HistoryLocationOption(
+                    kind: option.kind,
+                    title: option.title,
+                    subtitle: optionSubtitle(
+                        baseSubtitle: option.subtitle,
+                        workoutCount: countsByID[option.id, default: 0]
+                    ),
+                    sortOrder: option.sortOrder
+                )
+            }
+            .sorted { lhs, rhs in
+                if lhs.sortOrder != rhs.sortOrder { return lhs.sortOrder < rhs.sortOrder }
+                return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
+            }
+    }
+
+    private static func buildExerciseOptions(
+        from snapshot: HistoryDerivedSnapshot
+    ) throws -> [HistoryExerciseOption] {
+        var counts: [String: Int] = [:]
+
+        for (index, workout) in snapshot.workouts.enumerated() {
+            try checkCancellation(at: index)
+            for name in exerciseFilterNames(for: workout, resolver: snapshot.resolver) {
+                counts[name, default: 0] += 1
+            }
+        }
+
+        return counts.map { name, count in
+            HistoryExerciseOption(
+                name: name,
+                workoutCount: count,
+                subtitle: optionSubtitle(baseSubtitle: nil, workoutCount: count)
+            )
+        }
+        .sorted { lhs, rhs in
+            if lhs.workoutCount != rhs.workoutCount { return lhs.workoutCount > rhs.workoutCount }
+            return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+        }
+    }
+
+    private static func buildLocationBreakdown(
+        from workouts: [Workout],
+        snapshot: HistoryDerivedSnapshot
+    ) throws -> [HistoryLocationBreakdownItem] {
+        var grouped: [HistoryLocationOption: [Workout]] = [:]
+        for (index, workout) in workouts.enumerated() {
+            try checkCancellation(at: index)
+            grouped[locationOption(for: workout, snapshot: snapshot), default: []].append(workout)
+        }
+
+        var items: [HistoryLocationBreakdownItem] = []
+        items.reserveCapacity(grouped.count)
+        for (index, entry) in grouped.enumerated() {
+            try checkCancellation(at: index)
+            guard let lastDate = entry.value.map(\.date).max() else { continue }
+            items.append(
+                HistoryLocationBreakdownItem(
+                    option: entry.key,
+                    workoutCount: entry.value.count,
+                    lastWorkoutDate: lastDate
+                )
+            )
+        }
+
+        return items.sorted { lhs, rhs in
+            if lhs.workoutCount != rhs.workoutCount { return lhs.workoutCount > rhs.workoutCount }
+            if lhs.lastWorkoutDate != rhs.lastWorkoutDate { return lhs.lastWorkoutDate > rhs.lastWorkoutDate }
+            if lhs.option.sortOrder != rhs.option.sortOrder {
+                return lhs.option.sortOrder < rhs.option.sortOrder
+            }
+            return lhs.option.title.localizedCaseInsensitiveCompare(rhs.option.title) == .orderedAscending
+        }
+    }
+
+    private static func locationOption(
+        for workout: Workout,
+        snapshot: HistoryDerivedSnapshot
+    ) -> HistoryLocationOption {
+        guard let gymID = snapshot.gymIDByWorkout[workout.id] else {
+            return HistoryLocationOption(
+                kind: .unassigned,
+                title: "Unassigned",
+                subtitle: "No gym attached",
+                sortOrder: 90
+            )
+        }
+
+        if let gym = snapshot.gymsByID[gymID] {
+            return HistoryLocationOption(
+                kind: .gym(gymID),
+                title: gym.name,
+                subtitle: gym.address ?? "Saved gym",
+                sortOrder: 0
+            )
+        }
+
+        return HistoryLocationOption(
+            kind: .deleted,
+            title: "Deleted Gym",
+            subtitle: "Original gym no longer saved",
+            sortOrder: 95
+        )
+    }
+
+    private static func optionSubtitle(baseSubtitle: String?, workoutCount: Int) -> String {
+        let count = "\(workoutCount) workout" + (workoutCount == 1 ? "" : "s")
+        guard let baseSubtitle, !baseSubtitle.isEmpty else { return count }
+        return "\(baseSubtitle) • \(count)"
+    }
+
+    private static func checkCancellation(at index: Int) throws {
+        if index.isMultiple(of: 64) {
+            try Task.checkCancellation()
+        }
+    }
+}
 
 struct WorkoutHistoryView: View {
     let workouts: [Workout]
-    var showsBackButton: Bool = false
+    var showsBackButton = false
 
     @State private var searchText = ""
     @State private var selectedTimeWindow: HistoryDateWindow = .allTime
@@ -11,13 +397,10 @@ struct WorkoutHistoryView: View {
     @State private var selectedDurationBands: Set<HistoryDurationBand>?
     @State private var presentedFilterSheet: HistoryFilterSheet?
     @State private var presentedSummarySheet: HistorySummarySheet?
-    @State private var cachedFilteredWorkouts: [Workout] = []
-    @State private var cachedGroupedWorkouts: [(month: String, workouts: [Workout])] = []
-    @State private var cachedLocationBreakdownItems: [HistoryLocationBreakdownItem] = []
-    @State private var cachedAvailableLocationOptions: [HistoryLocationOption] = []
-    @State private var cachedAvailableExerciseOptions: [HistoryExerciseOption] = []
+    @State private var derivedState = HistoryDerivedState.empty
     @State private var locallyDeletedWorkoutIDs: Set<UUID> = []
     @State private var derivedRefreshTask: Task<Void, Never>?
+    @State private var derivedWorkerTask: Task<HistoryDerivedState?, Never>?
 
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var annotationsManager: WorkoutAnnotationsManager
@@ -25,11 +408,6 @@ struct WorkoutHistoryView: View {
     @ObservedObject private var relationshipManager = ExerciseRelationshipManager.shared
 
     var body: some View {
-        let currentWorkouts = visibleWorkouts
-        let filteredWorkouts = cachedFilteredWorkouts
-        let groupedWorkouts = cachedGroupedWorkouts
-        let locationBreakdownItems = cachedLocationBreakdownItems
-
         ZStack {
             AdaptiveBackground()
 
@@ -37,15 +415,11 @@ struct WorkoutHistoryView: View {
                 LazyVStack(alignment: .leading, spacing: Theme.Spacing.xl) {
                     header
 
-                    if !currentWorkouts.isEmpty {
-                        resultsOverviewCard(
-                            filteredWorkouts: filteredWorkouts,
-                            locationBreakdownItems: locationBreakdownItems
-                        )
-                        filterDeck
+                    if derivedState.isReady && derivedState.totalCount > 0 {
+                        filterChips
                     }
 
-                    contentSection(groupedWorkouts: groupedWorkouts)
+                    content
                 }
                 .padding(.horizontal, Theme.Spacing.lg)
                 .padding(.vertical, Theme.Spacing.xl)
@@ -59,7 +433,7 @@ struct WorkoutHistoryView: View {
             case .location:
                 MultiSelectSheet(
                     title: "Filter Locations",
-                    items: availableLocationOptions,
+                    items: derivedState.locationOptions,
                     selectedItems: $selectedLocations,
                     itemTitle: { $0.title },
                     itemSubtitle: { $0.subtitle }
@@ -67,7 +441,7 @@ struct WorkoutHistoryView: View {
             case .exercise:
                 MultiSelectSheet(
                     title: "Filter Exercises",
-                    items: availableExerciseOptions,
+                    items: derivedState.exerciseOptions,
                     selectedItems: $selectedExercises,
                     itemTitle: { $0.name },
                     itemSubtitle: { $0.subtitle }
@@ -85,27 +459,17 @@ struct WorkoutHistoryView: View {
         .sheet(item: $presentedSummarySheet) { sheet in
             switch sheet {
             case .locations:
-                HistoryLocationBreakdownSheet(items: locationBreakdownItems)
+                HistoryLocationBreakdownSheet(items: derivedState.locationBreakdown)
                     .presentationDetents([.medium, .large])
                     .presentationDragIndicator(.visible)
             }
         }
-        .onAppear(perform: refreshDerivedState)
-        .onChange(of: searchText) { _, _ in
-            scheduleDerivedStateRefresh()
-        }
-        .onChange(of: selectedTimeWindow) { _, _ in
-            scheduleDerivedStateRefresh()
-        }
-        .onChange(of: selectedLocations) { _, _ in
-            scheduleDerivedStateRefresh()
-        }
-        .onChange(of: selectedExercises) { _, _ in
-            scheduleDerivedStateRefresh()
-        }
-        .onChange(of: selectedDurationBands) { _, _ in
-            scheduleDerivedStateRefresh()
-        }
+        .onAppear { scheduleDerivedStateRefresh(debounceNs: 0) }
+        .onChange(of: searchText) { _, _ in scheduleDerivedStateRefresh() }
+        .onChange(of: selectedTimeWindow) { _, _ in scheduleDerivedStateRefresh() }
+        .onChange(of: selectedLocations) { _, _ in scheduleDerivedStateRefresh() }
+        .onChange(of: selectedExercises) { _, _ in scheduleDerivedStateRefresh() }
+        .onChange(of: selectedDurationBands) { _, _ in scheduleDerivedStateRefresh() }
         .onChange(of: workouts) { _, newWorkouts in
             locallyDeletedWorkoutIDs.formIntersection(Set(newWorkouts.map(\.id)))
             scheduleDerivedStateRefresh(debounceNs: 0)
@@ -121,6 +485,7 @@ struct WorkoutHistoryView: View {
         }
         .onDisappear {
             derivedRefreshTask?.cancel()
+            derivedWorkerTask?.cancel()
         }
     }
 
@@ -140,15 +505,21 @@ struct WorkoutHistoryView: View {
                 Text("History")
                     .font(Theme.Typography.screenTitle)
                     .foregroundStyle(Theme.Colors.textPrimary)
-                    .tracking(1.5)
 
-                Text("Search, then stack filters by place, movement, session length, and recency.")
+                Text(historySubtitle)
                     .font(Theme.Typography.microcopy)
                     .foregroundStyle(Theme.Colors.textSecondary)
             }
 
             searchField
         }
+    }
+
+    private var historySubtitle: String {
+        let count = derivedState.isReady ? derivedState.totalCount : workouts.count
+        let workoutLabel = "\(count) workout" + (count == 1 ? "" : "s")
+        guard let date = derivedState.firstWorkoutDate else { return workoutLabel }
+        return "\(workoutLabel) · since \(date.formatted(.dateTime.month(.abbreviated).year()))"
     }
 
     private var searchField: some View {
@@ -180,242 +551,215 @@ struct WorkoutHistoryView: View {
         .glassBackground(cornerRadius: Theme.CornerRadius.xlarge, elevation: 1)
     }
 
-    private func resultsOverviewCard(
-        filteredWorkouts: [Workout],
-        locationBreakdownItems: [HistoryLocationBreakdownItem]
-    ) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-            HStack(alignment: .top, spacing: Theme.Spacing.md) {
-                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                    Text("TRAINING ARCHIVE")
-                        .font(Theme.Typography.metricLabel)
-                        .foregroundStyle(Theme.Colors.textTertiary)
-                        .tracking(1.0)
-
-                    Text(resultsHeadline(filteredWorkouts: filteredWorkouts))
-                        .font(Theme.Typography.bodyBold)
-                        .foregroundStyle(Theme.Colors.textPrimary)
-
-                    Text(resultsSubheadline(filteredWorkouts: filteredWorkouts))
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Spacer(minLength: Theme.Spacing.md)
-
-                if activeFilterCount > 0 {
-                    Text("\(activeFilterCount) LIVE")
-                        .font(Theme.Typography.metricLabel)
-                        .foregroundStyle(Theme.Colors.accent)
-                        .padding(.horizontal, Theme.Spacing.md)
-                        .padding(.vertical, Theme.Spacing.xs)
-                        .background(
-                            Capsule()
-                                .fill(Theme.Colors.accentTint)
-                        )
-                        .overlay(
-                            Capsule()
-                                .strokeBorder(Theme.Colors.accent.opacity(0.16), lineWidth: 1)
-                        )
-                }
-            }
-
-            LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: 120), spacing: Theme.Spacing.sm)],
-                spacing: Theme.Spacing.sm
-            ) {
-                HistorySummaryMetricTile(
-                    title: "Shown",
-                    value: "\(filteredWorkouts.count)",
-                    tint: Theme.Colors.accent
-                )
-
-                HistorySummaryMetricTile(
-                    title: "Locations",
-                    value: "\(uniqueLocationCount(in: filteredWorkouts))",
-                    tint: Theme.Colors.accentSecondary,
-                    action: {
-                        Haptics.selection()
-                        presentedSummarySheet = .locations
+    private var filterChips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            LazyHStack(spacing: Theme.Spacing.sm) {
+                Menu {
+                    ForEach(HistoryDateWindow.allCases, id: \.self) { window in
+                        Button {
+                            selectedTimeWindow = window
+                            Haptics.selection()
+                        } label: {
+                            if selectedTimeWindow == window {
+                                Label(window.title, systemImage: "checkmark")
+                            } else {
+                                Text(window.title)
+                            }
+                        }
                     }
-                )
-
-                HistorySummaryMetricTile(
-                    title: "Avg Length",
-                    value: averageDurationLabel(for: filteredWorkouts),
-                    tint: Theme.Colors.success
-                )
-            }
-        }
-        .padding(Theme.Spacing.lg)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            Theme.Colors.surface,
-                            Theme.Colors.accentTint,
-                            Theme.Colors.surfaceRaised
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
+                } label: {
+                    HistoryFilterChipLabel(
+                        title: selectedTimeWindow.title,
+                        systemImage: "calendar",
+                        isActive: selectedTimeWindow != .allTime,
+                        showsChevron: true
                     )
-                )
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge)
-                .strokeBorder(Theme.Colors.border.opacity(0.45), lineWidth: 1)
-        )
-    }
+                }
 
-    private var filterDeck: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                Text("REFINE THE FEED")
-                    .font(Theme.Typography.metricLabel)
-                    .foregroundStyle(Theme.Colors.textTertiary)
-                    .tracking(1.0)
-
-                Text("Dial the archive down to where you trained, what you did, and how long the session ran.")
-                    .font(Theme.Typography.bodyBold)
-                    .foregroundStyle(Theme.Colors.textPrimary)
-
-                Text("Exercise filtering matches any selected movement, so chest days, run days, or mixed sessions stay easy to surface.")
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            TimeRangePillPicker(
-                options: HistoryDateWindow.allCases,
-                selected: $selectedTimeWindow,
-                label: { $0.title }
-            )
-
-            LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: 156, maximum: 260), spacing: Theme.Spacing.sm)],
-                spacing: Theme.Spacing.sm
-            ) {
-                HistoryFilterLauncherCard(
-                    title: "Location",
-                    value: locationSummary,
-                    detail: "Saved gyms, deleted gyms, and unassigned sessions.",
+                filterChip(
+                    title: selectionTitle("Location", count: selectedLocations?.count),
                     systemImage: "mappin.and.ellipse",
-                    tint: Theme.Colors.accentSecondary,
                     isActive: selectedLocations != nil
                 ) {
                     presentedFilterSheet = .location
                 }
 
-                HistoryFilterLauncherCard(
-                    title: "Exercises",
-                    value: exerciseSummary,
-                    detail: "Any selected movement counts as a match.",
+                filterChip(
+                    title: selectionTitle("Exercises", count: selectedExercises?.count),
                     systemImage: "figure.strengthtraining.traditional",
-                    tint: Theme.Colors.accent,
                     isActive: selectedExercises != nil
                 ) {
                     presentedFilterSheet = .exercise
                 }
 
-                HistoryFilterLauncherCard(
-                    title: "Duration",
-                    value: durationSummary,
-                    detail: "Short lifts through long-session grind days.",
-                    systemImage: "clock.badge.checkmark",
-                    tint: Theme.Colors.success,
+                filterChip(
+                    title: selectionTitle("Duration", count: selectedDurationBands?.count),
+                    systemImage: "clock",
                     isActive: selectedDurationBands != nil
                 ) {
                     presentedFilterSheet = .duration
                 }
-            }
 
-            if hasActiveFilters {
+                if hasActiveFilters {
+                    Button {
+                        clearFilters()
+                        Haptics.selection()
+                    } label: {
+                        Text("Reset")
+                            .font(Theme.Typography.captionStrong)
+                            .foregroundStyle(Theme.Colors.accent)
+                            .frame(minHeight: 44)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .scrollClipDisabled()
+    }
+
+    private func filterChip(
+        title: String,
+        systemImage: String,
+        isActive: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button {
+            Haptics.selection()
+            action()
+        } label: {
+            HistoryFilterChipLabel(
+                title: title,
+                systemImage: systemImage,
+                isActive: isActive
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if !derivedState.isReady {
+            ProgressView()
+                .tint(Theme.Colors.accent)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, Theme.Spacing.xxl)
+        } else if derivedState.totalCount == 0 {
+            EmptyStateCard(
+                icon: "clock.badge.exclamationmark",
+                tint: Theme.Colors.accent,
+                title: "No History Yet",
+                message: "Import workouts or finish a session to start your history."
+            )
+            .padding(.top, Theme.Spacing.lg)
+        } else if derivedState.monthSections.isEmpty {
+            VStack(spacing: Theme.Spacing.md) {
+                EmptyStateCard(
+                    icon: "line.3.horizontal.decrease.circle",
+                    tint: Theme.Colors.accentSecondary,
+                    title: "No Matches",
+                    message: "Broaden your search or reset the active filters."
+                )
+
                 AppPillButton(
-                    title: "Clear All Filters",
-                    systemImage: "line.3.horizontal.decrease.circle",
-                    variant: .subtle
+                    title: "Reset Filters",
+                    systemImage: "arrow.counterclockwise",
+                    variant: .accent
                 ) {
                     clearFilters()
                     Haptics.selection()
                 }
             }
+            .frame(maxWidth: .infinity)
+        } else {
+            overviewStrip
+
+            ForEach(derivedState.monthSections) { section in
+                monthSection(section)
+            }
         }
-        .padding(Theme.Spacing.lg)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge)
-                .fill(Theme.Colors.surface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge)
-                .strokeBorder(Theme.Colors.border.opacity(0.45), lineWidth: 1)
-        )
-        .shadow(color: Color.black.opacity(0.03), radius: 10, x: 0, y: 4)
     }
 
-    private func contentSection(
-        groupedWorkouts: [(month: String, workouts: [Workout])]
-    ) -> some View {
-        Group {
-            if visibleWorkouts.isEmpty {
-                EmptyStateCard(
-                    icon: "clock.badge.exclamationmark",
-                    tint: Theme.Colors.accent,
-                    title: "No History Yet",
-                    message: "Import from Strong or start a session to see your workouts here."
-                )
-                .padding(.top, Theme.Spacing.xl)
-            } else if groupedWorkouts.isEmpty {
-                VStack(alignment: .center, spacing: Theme.Spacing.md) {
-                    EmptyStateCard(
-                        icon: "line.3.horizontal.decrease.circle",
-                        tint: Theme.Colors.accentSecondary,
-                        title: "No Matches",
-                        message: "Try a wider date window, remove a few filters, or search with a broader term."
-                    )
-
-                    if hasActiveFilters {
-                        AppPillButton(
-                            title: "Reset Filters",
-                            systemImage: "arrow.counterclockwise",
-                            variant: .accent
-                        ) {
-                            clearFilters()
-                            Haptics.selection()
-                        }
-                    }
+    private var overviewStrip: some View {
+        HStack(alignment: .center, spacing: Theme.Spacing.lg) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                Button {
+                    Haptics.selection()
+                    presentedSummarySheet = .locations
+                } label: {
+                    Text("\(derivedState.filteredCount) workout" + (derivedState.filteredCount == 1 ? "" : "s"))
+                        .font(Theme.Typography.bodyBold)
+                        .foregroundStyle(Theme.Colors.textPrimary)
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.top, Theme.Spacing.xl)
-            } else {
-                VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
-                    // Inline active filter summary — stays visible when scrolled past the filter deck
-                    if hasActiveFilters {
-                        activeFilterSummaryBar
-                    }
+                .buttonStyle(.plain)
+                .accessibilityHint("Show location breakdown")
 
-                    ForEach(groupedWorkouts, id: \.month) { group in
-                        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                            Text(group.month.uppercased())
-                                .font(Theme.Typography.metricLabel)
-                                .foregroundStyle(Theme.Colors.textTertiary)
-                                .tracking(1.2)
-                                .padding(.leading, 4)
+                Text(
+                    "avg \(SharedFormatters.durationMinutes(derivedState.averageDurationMinutes))"
+                    + (derivedState.totalVolume > 0
+                        ? " · \(SharedFormatters.volumeWithUnit(derivedState.totalVolume))"
+                        : "")
+                )
+                .font(Theme.Typography.captionStrong)
+                .foregroundStyle(Theme.Colors.textSecondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+            }
 
-                            VStack(spacing: Theme.Spacing.sm) {
-                                ForEach(group.workouts) { workout in
-                                    WorkoutHistoryRow(
-                                        workout: workout,
-                                        onDeleted: { loggedWorkoutDeleted(workout.id) }
-                                    )
-                                }
-                            }
-                        }
-                    }
+            Spacer(minLength: Theme.Spacing.sm)
+
+            Chart(derivedState.monthlyChart) { point in
+                BarMark(
+                    x: .value("Month", point.monthStart, unit: .month),
+                    y: .value("Workouts", point.count)
+                )
+                .foregroundStyle(Theme.Colors.accent.gradient)
+                .cornerRadius(3)
+            }
+            .chartXAxis(.hidden)
+            .chartYAxis(.hidden)
+            .frame(width: 124, height: 56)
+            .accessibilityLabel("Workouts per month for the current results")
+        }
+        .padding(Theme.Spacing.md)
+        .softCard(elevation: 1)
+    }
+
+    private func monthSection(_ section: HistoryMonthSection) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            HStack(alignment: .center, spacing: Theme.Spacing.sm) {
+                Text(section.title)
+                    .font(Theme.Typography.sectionHeader2)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                    .lineLimit(1)
+
+                Spacer(minLength: Theme.Spacing.xs)
+
+                Text(monthSummary(section))
+                    .font(Theme.Typography.captionStrong)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .lineLimit(1)
+
+                if let delta = section.delta {
+                    DeltaTag(delta: delta)
+                }
+            }
+
+            VStack(spacing: Theme.Spacing.sm) {
+                ForEach(section.rows) { row in
+                    WorkoutHistoryRow(
+                        workout: row.workout,
+                        onDeleted: { loggedWorkoutDeleted(row.id) },
+                        precomputedMetrics: row.metrics
+                    )
                 }
             }
         }
+    }
+
+    private func monthSummary(_ section: HistoryMonthSection) -> String {
+        let count = "\(section.count)"
+        guard section.volume > 0 else { return count }
+        return "\(count) · \(SharedFormatters.volumeWithUnit(section.volume))"
     }
 
     private var visibleWorkouts: [Workout] {
@@ -423,361 +767,24 @@ struct WorkoutHistoryView: View {
         return workouts.filter { !locallyDeletedWorkoutIDs.contains($0.id) }
     }
 
-    private var availableLocationOptions: [HistoryLocationOption] {
-        cachedAvailableLocationOptions
-    }
-
-    private func buildAvailableLocationOptions() -> [HistoryLocationOption] {
-        var countsByID: [String: Int] = [:]
-        var optionByID: [String: HistoryLocationOption] = [:]
-
-        for workout in visibleWorkouts {
-            let option = locationOption(for: workout)
-            countsByID[option.id, default: 0] += 1
-            optionByID[option.id] = option
-        }
-
-        return optionByID.values
-            .map { option in
-                HistoryLocationOption(
-                    kind: option.kind,
-                    title: option.title,
-                    subtitle: optionSubtitle(
-                        baseSubtitle: option.subtitle,
-                        workoutCount: countsByID[option.id, default: 0]
-                    ),
-                    sortOrder: option.sortOrder
-                )
-            }
-            .sorted { lhs, rhs in
-                if lhs.sortOrder != rhs.sortOrder {
-                    return lhs.sortOrder < rhs.sortOrder
-                }
-                return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
-            }
-    }
-
-    private var availableExerciseOptions: [HistoryExerciseOption] {
-        cachedAvailableExerciseOptions
-    }
-
-    private func buildAvailableExerciseOptions() -> [HistoryExerciseOption] {
-        var counts: [String: Int] = [:]
-        let resolver = relationshipManager.resolverSnapshot()
-
-        for workout in visibleWorkouts {
-            for exerciseName in exerciseFilterNames(for: workout, resolver: resolver) {
-                counts[exerciseName, default: 0] += 1
-            }
-        }
-
-        return counts.map { name, workoutCount in
-            HistoryExerciseOption(
-                name: name,
-                workoutCount: workoutCount,
-                subtitle: optionSubtitle(baseSubtitle: nil, workoutCount: workoutCount)
-            )
-        }
-        .sorted { lhs, rhs in
-            if lhs.workoutCount != rhs.workoutCount {
-                return lhs.workoutCount > rhs.workoutCount
-            }
-            return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
-        }
-    }
-
     private var hasActiveFilters: Bool {
         !searchText.isEmpty
-        || selectedTimeWindow != .allTime
-        || selectedLocations != nil
-        || selectedExercises != nil
-        || selectedDurationBands != nil
+            || selectedTimeWindow != .allTime
+            || selectedLocations != nil
+            || selectedExercises != nil
+            || selectedDurationBands != nil
     }
 
-    private var activeFilterSummaryBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: Theme.Spacing.sm) {
-                Image(systemName: "line.3.horizontal.decrease.circle.fill")
-                    .font(Theme.Typography.captionBold)
-                    .foregroundStyle(Theme.Colors.accentSecondary)
-
-                if selectedTimeWindow != .allTime {
-                    filterPill(selectedTimeWindow.title, tint: Theme.Colors.accentSecondary)
-                }
-                if selectedLocations != nil {
-                    filterPill(locationSummary, tint: Theme.Colors.accentSecondary)
-                }
-                if selectedExercises != nil {
-                    filterPill(exerciseSummary, tint: Theme.Colors.accentSecondary)
-                }
-                if selectedDurationBands != nil {
-                    filterPill(durationSummary, tint: Theme.Colors.accentSecondary)
-                }
-                if !searchText.isEmpty {
-                    filterPill("\"\(searchText)\"", tint: Theme.Colors.textSecondary)
-                }
-
-                Button {
-                    clearFilters()
-                    Haptics.selection()
-                } label: {
-                    Text("Clear")
-                        .font(Theme.Typography.captionBold)
-                        .foregroundStyle(Theme.Colors.error)
-                }
-                .buttonStyle(.plain)
-            }
-        }
-    }
-
-    private func filterPill(_ text: String, tint: Color) -> some View {
-        Text(text)
-            .font(Theme.Typography.captionBold)
-            .foregroundStyle(tint)
-            .padding(.horizontal, Theme.Spacing.sm)
-            .padding(.vertical, Theme.Spacing.xs)
-            .background(
-                Capsule().fill(tint.opacity(Theme.Opacity.subtleFill))
-            )
-            .lineLimit(1)
-    }
-
-    private var activeFilterCount: Int {
-        [
-            !searchText.isEmpty,
-            selectedTimeWindow != .allTime,
-            selectedLocations != nil,
-            selectedExercises != nil,
-            selectedDurationBands != nil
-        ]
-        .filter { $0 }
-        .count
-    }
-
-    private var locationSummary: String {
-        selectionSummary(
-            selected: selectedLocations,
-            allLabel: "All places",
-            emptyLabel: "No places",
-            singularTransform: { $0.title },
-            pluralLabel: "places"
-        )
-    }
-
-    private var exerciseSummary: String {
-        selectionSummary(
-            selected: selectedExercises,
-            allLabel: "All movements",
-            emptyLabel: "No movements",
-            singularTransform: { $0.name },
-            pluralLabel: "movements"
-        )
-    }
-
-    private var durationSummary: String {
-        selectionSummary(
-            selected: selectedDurationBands,
-            allLabel: "Any length",
-            emptyLabel: "No lengths",
-            singularTransform: { $0.title },
-            pluralLabel: "bands"
-        )
-    }
-
-    private func filteredWorkouts() -> [Workout] {
-        visibleWorkouts.filter { workout in
-            matchesSearch(workout)
-            && matchesTimeWindow(workout)
-            && matchesLocation(workout)
-            && matchesExercises(workout)
-            && matchesDuration(workout)
-        }
-    }
-
-    private func buildGroupedWorkouts(from workouts: [Workout]) -> [(month: String, workouts: [Workout])] {
-        let grouped = Dictionary(grouping: workouts) { workout in
-            let calendar = Calendar.current
-            return calendar.dateInterval(of: .month, for: workout.date)?.start
-                ?? calendar.startOfDay(for: workout.date)
-        }
-
-        return grouped
-            .sorted { $0.key > $1.key }
-            .map { monthStart, workouts in
-                (
-                    month: monthStart.formatted(.dateTime.year().month(.wide)),
-                    workouts: workouts.sorted { $0.date > $1.date }
-                )
-            }
-    }
-
-    private func matchesSearch(_ workout: Workout) -> Bool {
-        guard !searchText.isEmpty else { return true }
-        let resolver = relationshipManager.resolverSnapshot()
-        return workout.name.localizedCaseInsensitiveContains(searchText)
-            || exerciseFilterNames(for: workout, resolver: resolver).contains {
-                $0.localizedCaseInsensitiveContains(searchText)
-            }
-    }
-
-    private func matchesTimeWindow(_ workout: Workout) -> Bool {
-        selectedTimeWindow.contains(
-            workout.date,
-            referenceDate: Date(),
-            calendar: Calendar.current
-        )
-    }
-
-    private func matchesLocation(_ workout: Workout) -> Bool {
-        guard let selectedLocations else { return true }
-        guard !selectedLocations.isEmpty else { return false }
-        return selectedLocations.contains(locationOption(for: workout))
-    }
-
-    private func matchesExercises(_ workout: Workout) -> Bool {
-        guard let selectedExercises else { return true }
-        guard !selectedExercises.isEmpty else { return false }
-
-        let resolver = relationshipManager.resolverSnapshot()
-        let names = Set(exerciseFilterNames(for: workout, resolver: resolver).map(ExerciseIdentityResolver.normalizedName))
-        return selectedExercises.contains {
-            names.contains(ExerciseIdentityResolver.normalizedName($0.name))
-        }
-    }
-
-    private func exerciseFilterNames(for workout: Workout, resolver: ExerciseIdentityResolver) -> Set<String> {
-        workout.exercises.reduce(into: Set<String>()) { names, exercise in
-            let rawName = ExerciseIdentityResolver.trimmedName(exercise.name)
-            guard !rawName.isEmpty else { return }
-            names.insert(rawName)
-            names.insert(resolver.aggregateName(for: rawName))
-        }
-    }
-
-    private func matchesDuration(_ workout: Workout) -> Bool {
-        guard let selectedDurationBands else { return true }
-        guard !selectedDurationBands.isEmpty else { return false }
-
-        let minutes = workout.estimatedDurationMinutes()
-        return selectedDurationBands.contains { $0.contains(minutes: minutes) }
+    private func selectionTitle(_ title: String, count: Int?) -> String {
+        guard let count else { return title }
+        return "\(title) · \(count)"
     }
 
     private func durationSubtitle(for band: HistoryDurationBand) -> String {
-        optionSubtitle(
-            baseSubtitle: band.subtitle,
-            workoutCount: visibleWorkouts.filter { band.contains(minutes: $0.estimatedDurationMinutes()) }.count
-        )
-    }
-
-    private func resultsHeadline(filteredWorkouts: [Workout]) -> String {
-        if hasActiveFilters {
-            if filteredWorkouts.isEmpty {
-                return "Nothing matches the current filter stack."
-            }
-            return "\(filteredWorkouts.count) of \(visibleWorkouts.count) workouts are in view."
-        }
-        return "\(visibleWorkouts.count) workouts ready to browse."
-    }
-
-    private func resultsSubheadline(filteredWorkouts: [Workout]) -> String {
-        if filteredWorkouts.isEmpty {
-            return "Try a broader search, a wider time window, or clear one of the filters below."
-        }
-
-        var fragments: [String] = []
-        if selectedTimeWindow != .allTime {
-            fragments.append(selectedTimeWindow.summaryLabel)
-        }
-        if let selectedLocations {
-            fragments.append(selectedLocations.isEmpty ? "0 places selected" : "\(selectedLocations.count) places selected")
-        }
-        if let selectedExercises {
-            fragments.append(selectedExercises.isEmpty ? "0 movements selected" : "\(selectedExercises.count) movements selected")
-        }
-        if let selectedDurationBands {
-            fragments.append(selectedDurationBands.isEmpty ? "0 length bands selected" : "\(selectedDurationBands.count) length bands selected")
-        }
-
-        if fragments.isEmpty {
-            return "Use the filters below to isolate a gym, a movement family, or a tighter training window."
-        }
-
-        return fragments.joined(separator: " • ")
-    }
-
-    private func averageDurationLabel(for workouts: [Workout]) -> String {
-        guard !workouts.isEmpty else { return "0m" }
-
-        let totalMinutes = workouts.reduce(0) { partialResult, workout in
-            partialResult + workout.estimatedDurationMinutes()
-        }
-        let averageMinutes = Double(totalMinutes) / Double(workouts.count)
-        return SharedFormatters.durationMinutes(averageMinutes)
-    }
-
-    private func uniqueLocationCount(in workouts: [Workout]) -> Int {
-        Set(workouts.map { locationOption(for: $0).id }).count
-    }
-
-    private func buildLocationBreakdownItems(from workouts: [Workout]) -> [HistoryLocationBreakdownItem] {
-        let grouped = Dictionary(grouping: workouts, by: locationOption(for:))
-
-        return grouped.compactMap { option, groupedWorkouts in
-            guard let lastWorkoutDate = groupedWorkouts.map(\.date).max() else { return nil }
-
-            return HistoryLocationBreakdownItem(
-                option: option,
-                workoutCount: groupedWorkouts.count,
-                lastWorkoutDate: lastWorkoutDate
-            )
-        }
-        .sorted { lhs, rhs in
-            if lhs.workoutCount != rhs.workoutCount {
-                return lhs.workoutCount > rhs.workoutCount
-            }
-            if lhs.lastWorkoutDate != rhs.lastWorkoutDate {
-                return lhs.lastWorkoutDate > rhs.lastWorkoutDate
-            }
-            if lhs.option.sortOrder != rhs.option.sortOrder {
-                return lhs.option.sortOrder < rhs.option.sortOrder
-            }
-            return lhs.option.title.localizedCaseInsensitiveCompare(rhs.option.title) == .orderedAscending
-        }
-    }
-
-    private func locationOption(for workout: Workout) -> HistoryLocationOption {
-        let gymId = annotationsManager.annotation(for: workout.id)?.gymProfileId
-
-        guard let gymId else {
-            return HistoryLocationOption(
-                kind: .unassigned,
-                title: "Unassigned",
-                subtitle: "No gym attached",
-                sortOrder: 90
-            )
-        }
-
-        if let gym = gymProfilesManager.gyms.first(where: { $0.id == gymId }) {
-            return HistoryLocationOption(
-                kind: .gym(gym.id),
-                title: gym.name,
-                subtitle: gym.address ?? "Saved gym",
-                sortOrder: 0
-            )
-        }
-
-        return HistoryLocationOption(
-            kind: .deleted,
-            title: "Deleted Gym",
-            subtitle: "Original gym no longer saved",
-            sortOrder: 95
-        )
-    }
-
-    private func optionSubtitle(baseSubtitle: String?, workoutCount: Int) -> String {
-        let countLabel = "\(workoutCount) workout" + (workoutCount == 1 ? "" : "s")
-        guard let baseSubtitle, !baseSubtitle.isEmpty else { return countLabel }
-        return "\(baseSubtitle) • \(countLabel)"
+        let count = visibleWorkouts.filter {
+            band.contains(minutes: $0.estimatedDurationMinutes())
+        }.count
+        return "\(band.subtitle) • \(count) workout" + (count == 1 ? "" : "s")
     }
 
     private func clearFilters() {
@@ -786,38 +793,60 @@ struct WorkoutHistoryView: View {
         selectedLocations = nil
         selectedExercises = nil
         selectedDurationBands = nil
-        refreshDerivedState()
+        scheduleDerivedStateRefresh(debounceNs: 0)
     }
 
     private func loggedWorkoutDeleted(_ id: UUID) {
         locallyDeletedWorkoutIDs.insert(id)
-        refreshDerivedState()
-    }
-
-    private func sanitizeSelections() {
-        selectedLocations = sanitizedSelection(selectedLocations, validItems: cachedAvailableLocationOptions)
-        selectedExercises = sanitizedSelection(selectedExercises, validItems: cachedAvailableExerciseOptions)
+        scheduleDerivedStateRefresh(debounceNs: 0)
     }
 
     private func scheduleDerivedStateRefresh(debounceNs: UInt64 = 120_000_000) {
         derivedRefreshTask?.cancel()
+        derivedWorkerTask?.cancel()
         derivedRefreshTask = Task { @MainActor in
             if debounceNs > 0 {
                 try? await Task.sleep(nanoseconds: debounceNs)
             }
             guard !Task.isCancelled else { return }
-            refreshDerivedState()
+
+            let snapshot = HistoryDerivedSnapshot(
+                workouts: visibleWorkouts,
+                searchText: searchText,
+                dateWindow: selectedTimeWindow,
+                selectedLocations: selectedLocations,
+                selectedExercises: selectedExercises,
+                selectedDurationBands: selectedDurationBands,
+                gymIDByWorkout: annotationsManager.annotations.compactMapValues(\.gymProfileId),
+                gymsByID: Dictionary(uniqueKeysWithValues: gymProfilesManager.gyms.map {
+                    ($0.id, HistoryGymSnapshot(name: $0.name, address: $0.address))
+                }),
+                resolver: relationshipManager.resolverSnapshot(),
+                referenceDate: Date()
+            )
+
+            let worker = Task.detached(priority: .userInitiated) {
+                try? HistoryDerivedStateBuilder.build(from: snapshot)
+            }
+            derivedWorkerTask = worker
+            guard let state = await worker.value else { return }
+
+            guard !Task.isCancelled else { return }
+            derivedWorkerTask = nil
+            derivedState = state
+            sanitizeSelections()
         }
     }
 
-    private func refreshDerivedState() {
-        cachedAvailableLocationOptions = buildAvailableLocationOptions()
-        cachedAvailableExerciseOptions = buildAvailableExerciseOptions()
-        sanitizeSelections()
-        let filtered = filteredWorkouts()
-        cachedFilteredWorkouts = filtered
-        cachedGroupedWorkouts = buildGroupedWorkouts(from: filtered)
-        cachedLocationBreakdownItems = buildLocationBreakdownItems(from: filtered)
+    private func sanitizeSelections() {
+        selectedLocations = sanitizedSelection(
+            selectedLocations,
+            validItems: derivedState.locationOptions
+        )
+        selectedExercises = sanitizedSelection(
+            selectedExercises,
+            validItems: derivedState.exerciseOptions
+        )
     }
 
     private func sanitizedSelection<Item: Hashable>(
@@ -825,51 +854,89 @@ struct WorkoutHistoryView: View {
         validItems: [Item]
     ) -> Set<Item>? {
         guard let selection else { return nil }
-        let validSet = Set(validItems)
-
-        guard !validSet.isEmpty else { return nil }
+        let valid = Set(validItems)
+        guard !valid.isEmpty else { return nil }
         if selection.isEmpty { return [] }
-
-        let sanitized = selection.intersection(validSet)
-        if sanitized.isEmpty { return nil }
-        if sanitized.count == validSet.count { return nil }
+        let sanitized = selection.intersection(valid)
+        if sanitized.isEmpty || sanitized.count == valid.count { return nil }
         return sanitized
     }
+}
 
-    private func selectionSummary<Item>(
-        selected: Set<Item>?,
-        allLabel: String,
-        emptyLabel: String,
-        singularTransform: (Item) -> String,
-        pluralLabel: String
-    ) -> String {
-        guard let selected else { return allLabel }
-        guard !selected.isEmpty else { return emptyLabel }
-        if selected.count == 1, let item = selected.first {
-            return singularTransform(item)
+private struct HistoryFilterChipLabel: View {
+    let title: String
+    let systemImage: String
+    let isActive: Bool
+    var showsChevron = false
+
+    var body: some View {
+        HStack(spacing: Theme.Spacing.xs) {
+            Image(systemName: systemImage)
+                .accessibilityHidden(true)
+            Text(title)
+                .lineLimit(1)
+            if showsChevron {
+                Image(systemName: "chevron.down")
+                    .font(Theme.Typography.microLabel)
+                    .accessibilityHidden(true)
+            }
         }
-        return "\(selected.count) \(pluralLabel)"
+        .font(Theme.Typography.captionStrong)
+        .foregroundStyle(isActive ? Theme.Colors.accent : Theme.Colors.textSecondary)
+        .padding(.horizontal, Theme.Spacing.md)
+        .frame(minHeight: 44)
+        .background(
+            Capsule().fill(isActive ? Theme.Colors.accentTint : Theme.Colors.surface)
+        )
+        .overlay(
+            Capsule().strokeBorder(
+                isActive ? Theme.Colors.accent.opacity(0.24) : Theme.Colors.border.opacity(0.7),
+                lineWidth: 1
+            )
+        )
     }
 }
 
 struct WorkoutHistoryRow: View {
     let workout: Workout
     var onDeleted: (() -> Void)?
-    @EnvironmentObject var healthManager: HealthKitManager
-    @EnvironmentObject var annotationsManager: WorkoutAnnotationsManager
-    @EnvironmentObject var gymProfilesManager: GymProfilesManager
-    @EnvironmentObject var sessionManager: WorkoutSessionManager
-    @EnvironmentObject var dataManager: WorkoutDataManager
-    @EnvironmentObject var logStore: WorkoutLogStore
-    @AppStorage("weightIncrement") private var weightIncrement: Double = 2.5
-    @State private var showingDeleteAlert = false
+    let precomputedMetrics: HistoryRowMetrics?
 
-    private var normalizedVolume: Double {
-        ExerciseAggregation.totalVolume(for: workout, resolver: ExerciseIdentityResolver.current)
+    @EnvironmentObject private var healthManager: HealthKitManager
+    @EnvironmentObject private var annotationsManager: WorkoutAnnotationsManager
+    @EnvironmentObject private var gymProfilesManager: GymProfilesManager
+    @EnvironmentObject private var sessionManager: WorkoutSessionManager
+    @EnvironmentObject private var dataManager: WorkoutDataManager
+    @EnvironmentObject private var logStore: WorkoutLogStore
+    @ObservedObject private var relationshipManager = ExerciseRelationshipManager.shared
+    @AppStorage("weightIncrement") private var weightIncrement = 2.5
+    @State private var showingDeleteAlert = false
+    @State private var fallbackMetrics: HistoryRowMetrics?
+    @State private var pendingRepeatWorkout: Workout?
+
+    init(
+        workout: Workout,
+        onDeleted: (() -> Void)? = nil,
+        precomputedMetrics: HistoryRowMetrics? = nil
+    ) {
+        self.workout = workout
+        self.onDeleted = onDeleted
+        self.precomputedMetrics = precomputedMetrics
+        _fallbackMetrics = State(initialValue: precomputedMetrics)
     }
 
-    private var normalizedExerciseCount: Int {
-        ExerciseAggregation.exerciseCount(for: workout, resolver: ExerciseIdentityResolver.current)
+    private var metrics: HistoryRowMetrics? {
+        precomputedMetrics ?? fallbackMetrics
+    }
+
+    private var fallbackMetricsInput: HistoryRowMetricsInput {
+        let gymID = annotationsManager.annotation(for: workout.id)?.gymProfileId
+        return HistoryRowMetricsInput(
+            workout: workout,
+            resolver: relationshipManager.resolverSnapshot(),
+            gymID: gymID,
+            gymName: gymProfilesManager.gymName(for: gymID)
+        )
     }
 
     private var isLoggedWorkout: Bool {
@@ -877,74 +944,53 @@ struct WorkoutHistoryRow: View {
     }
 
     var body: some View {
-        HStack(spacing: Theme.Spacing.md) {
-            NavigationLink(destination: WorkoutDetailView(workout: workout)) {
-                HStack(spacing: Theme.Spacing.md) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            Text(workout.name)
-                                .font(Theme.Typography.bodyBold)
-                                .foregroundStyle(Theme.Colors.textPrimary)
-                                .lineLimit(1)
+        NavigationLink(destination: WorkoutDetailView(workout: workout)) {
+            HStack(alignment: .top, spacing: Theme.Spacing.md) {
+                dateBlock
 
-                            Spacer()
+                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                    Text(workout.name)
+                        .font(Theme.Typography.bodyBold)
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                        .lineLimit(1)
 
-                            Text(workout.date.formatted(date: .omitted, time: .shortened))
-                                .font(Theme.Typography.caption)
-                                .foregroundStyle(Theme.Colors.textTertiary)
-                        }
+                    InlineStat(
+                        icon: "clock",
+                        value: metricsLine,
+                        tint: Theme.Colors.accentSecondary
+                    )
 
-                        Text(workout.date.formatted(.dateTime.weekday(.wide).month(.wide).day()))
-                            .font(Theme.Typography.subheadline)
-                            .foregroundStyle(Theme.Colors.textSecondary)
-
-                        GymBadge(text: gymLabel, style: gymBadgeStyle)
-
-                        HStack(spacing: 12) {
-                            metric(workout.duration, systemImage: "clock")
-                            metric("\(normalizedExerciseCount) exercises", systemImage: "figure.strengthtraining.traditional")
-                            metric(SharedFormatters.volumeWithUnit(normalizedVolume), systemImage: "scalemass")
-                        }
-                        .font(Theme.Typography.captionBold)
-                        .padding(.top, 4)
-
-                        if let data = healthManager.getHealthData(for: workout.id) {
-                            HealthDataSummaryView(healthData: data)
-                                .padding(.top, Theme.Spacing.xs)
-                        }
+                    if let gymName = metrics?.gymName {
+                        InlineStat(
+                            icon: metrics?.gymIsDeleted == true
+                                ? "exclamationmark.triangle.fill"
+                                : "mappin.and.ellipse",
+                            value: gymName,
+                            tint: metrics?.gymIsDeleted == true
+                                ? Theme.Colors.warning
+                                : Theme.Colors.accent
+                        )
                     }
 
-                    Spacer()
-
-                    Image(systemName: "chevron.right")
-                        .font(Theme.Typography.captionBold)
-                        .foregroundStyle(Theme.Colors.textTertiary)
+                    if let healthData = healthManager.getHealthData(for: workout.id) {
+                        HealthDataSummaryView(healthData: healthData)
+                    }
                 }
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel(
-                    "\(workout.name), \(workout.date.formatted(date: .abbreviated, time: .shortened)), "
-                    + "\(workout.duration), \(normalizedExerciseCount) exercises, "
-                    + "\(SharedFormatters.volumeWithUnit(normalizedVolume))"
-                )
-                .accessibilityHint(accessibilityHint)
-            }
-            .buttonStyle(.plain)
 
-            Button {
-                Haptics.selection()
-                repeatThisWorkout()
-            } label: {
-                Image(systemName: "arrow.counterclockwise")
-                    .font(Theme.Typography.caption2Bold)
-                    .foregroundColor(Theme.Colors.accent)
-                    .frame(width: 44, height: 44)
-                    .background(Theme.Colors.accentTint)
-                    .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
+                Spacer(minLength: Theme.Spacing.xs)
+
+                Image(systemName: "chevron.right")
+                    .font(Theme.Typography.captionBold)
+                    .foregroundStyle(Theme.Colors.textTertiary)
+                    .padding(.top, Theme.Spacing.md)
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Repeat \(workout.name)")
+            .contentShape(Rectangle())
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(accessibilityLabel)
+            .accessibilityHint(accessibilityHint)
         }
-        .padding(Theme.Spacing.lg)
+        .buttonStyle(.plain)
+        .padding(Theme.Spacing.md)
         .softCard(elevation: 1)
         .contextMenu {
             Button {
@@ -988,76 +1034,111 @@ struct WorkoutHistoryRow: View {
         } message: {
             Text("This permanently deletes this logged workout.")
         }
+        .alert(
+            "Replace active session?",
+            isPresented: repeatReplacementAlertBinding,
+            presenting: pendingRepeatWorkout
+        ) { workout in
+            Button("Cancel", role: .cancel) {
+                pendingRepeatWorkout = nil
+            }
+            Button("Replace", role: .destructive) {
+                pendingRepeatWorkout = nil
+                replaceActiveSessionAndRepeat(workout)
+            }
+        } message: { _ in
+            Text("This will discard your current in-progress session and repeat this workout.")
+        }
+        .task(id: fallbackMetricsInput) {
+            guard precomputedMetrics == nil else { return }
+            let input = fallbackMetricsInput
+            let summary = ExerciseAggregation.summary(
+                for: input.workout,
+                resolver: input.resolver
+            )
+            fallbackMetrics = HistoryRowMetrics(
+                volume: summary.volume,
+                exerciseCount: summary.exerciseCount,
+                gymName: input.gymName ?? (input.gymID == nil ? nil : "Deleted gym"),
+                gymIsDeleted: input.gymID != nil && input.gymName == nil
+            )
+        }
+    }
+
+    private var dateBlock: some View {
+        VStack(spacing: 1) {
+            Text(workout.date.formatted(.dateTime.weekday(.abbreviated)).uppercased())
+                .font(Theme.Typography.microLabel)
+            Text(workout.date.formatted(.dateTime.day()))
+                .font(Theme.Typography.title3)
+        }
+        .foregroundStyle(Theme.Colors.accent)
+        .frame(width: 42, height: 42)
+        .background(
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                .fill(Theme.Colors.accentTint)
+        )
+        .accessibilityHidden(true)
+    }
+
+    private var metricsLine: String {
+        var values = [
+            workout.date.formatted(date: .omitted, time: .shortened),
+            SharedFormatters.durationMinutes(Double(workout.estimatedDurationMinutes()))
+        ]
+        if let metrics {
+            values.append("\(metrics.exerciseCount) exercise" + (metrics.exerciseCount == 1 ? "" : "s"))
+            if metrics.volume > 0 {
+                values.append(SharedFormatters.volumeWithUnit(metrics.volume))
+            }
+        }
+        return values.joined(separator: " · ")
+    }
+
+    private var accessibilityLabel: String {
+        "\(workout.name), \(workout.date.formatted(date: .abbreviated, time: .shortened)), \(metricsLine)"
     }
 
     private var accessibilityHint: String {
-        if isLoggedWorkout {
-            return "Double tap for workout details, swipe left for repeat or delete, long press for actions"
-        }
-        return "Double tap for workout details, swipe left to repeat, long press for actions"
-    }
-
-    private func metric(_ value: String, systemImage: String) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: systemImage)
-                .font(Theme.Typography.captionStrong)
-                .foregroundStyle(Theme.Colors.accentSecondary)
-                .frame(width: 14)
-                .accessibilityHidden(true)
-            Text(value)
-                .foregroundStyle(Theme.Colors.textSecondary)
-        }
-    }
-
-    private var gymLabel: String {
-        let gymId = annotationsManager.annotation(for: workout.id)?.gymProfileId
-        if let name = gymProfilesManager.gymName(for: gymId) {
-            return name
-        }
-        return gymId == nil ? "Unassigned" : "Deleted gym"
-    }
-
-    private var gymBadgeStyle: GymBadgeStyle {
-        let gymId = annotationsManager.annotation(for: workout.id)?.gymProfileId
-        if gymId == nil {
-            return .unassigned
-        }
-        return gymProfilesManager.gymName(for: gymId) == nil ? .deleted : .assigned
+        isLoggedWorkout
+            ? "Double tap for details, swipe left for repeat or delete, long press for actions"
+            : "Double tap for details, swipe left to repeat, long press for actions"
     }
 
     private func repeatThisWorkout() {
-        let exercises = workout.exercises.map { $0.name }
-        let gymId = annotationsManager.annotation(for: workout.id)?.gymProfileId
-
-        sessionManager.startSession(
-            name: workout.name,
-            gymProfileId: gymId
+        let outcome = WorkoutRepeatHelper.repeatWorkout(
+            workout,
+            gymProfileId: annotationsManager.annotation(for: workout.id)?.gymProfileId,
+            weightIncrement: weightIncrement,
+            sessionManager: sessionManager,
+            dataManager: dataManager
         )
-
-        let increment = weightIncrement > 0 ? weightIncrement : 2.5
-        for exerciseName in exercises {
-            let tags = ExerciseMetadataManager.shared.resolvedTags(for: exerciseName)
-            let isCardio = tags.contains(where: { $0.builtInGroup == .cardio })
-
-            if isCardio {
-                sessionManager.addExercise(name: exerciseName)
-            } else {
-                let history = dataManager.getExerciseHistory(for: exerciseName)
-                let rec = ExerciseRecommendationEngine.recommend(
-                    exerciseName: exerciseName,
-                    history: history,
-                    weightIncrement: increment
-                )
-                let midReps = (rec.repRange.lowerBound + rec.repRange.upperBound) / 2
-                sessionManager.addExercise(
-                    name: exerciseName,
-                    initialSetPrefill: SetPrefill(weight: rec.suggestedWeight, reps: midReps)
-                )
-            }
+        if outcome == .requiresActiveSessionReplacement {
+            pendingRepeatWorkout = workout
         }
+    }
 
-        sessionManager.isPresentingSessionUI = true
-        Haptics.notify(.success)
+    private var repeatReplacementAlertBinding: Binding<Bool> {
+        Binding(
+            get: { pendingRepeatWorkout != nil },
+            set: { isPresented in
+                if !isPresented {
+                    pendingRepeatWorkout = nil
+                }
+            }
+        )
+    }
+
+    private func replaceActiveSessionAndRepeat(_ workout: Workout) {
+        Task { @MainActor in
+            await WorkoutRepeatHelper.replaceActiveSessionAndRepeat(
+                workout,
+                gymProfileId: annotationsManager.annotation(for: workout.id)?.gymProfileId,
+                weightIncrement: weightIncrement,
+                sessionManager: sessionManager,
+                dataManager: dataManager
+            )
+        }
     }
 
     private func deleteLoggedWorkout() {

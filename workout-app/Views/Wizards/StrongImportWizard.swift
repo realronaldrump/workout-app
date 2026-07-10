@@ -873,16 +873,12 @@ struct StrongImportWizard: View {
         try await Task.detached(priority: .utility) {
             try AppBackupService.exportBackup(to: savedURL, backup: backup)
         }.value
-        AppBackupService.persistNativeBackupSourceSignature(
-            AppBackupService.importSourceSignature(for: savedURL)
-        )
-
         storageStatusMessage = isUsingLocalFallback
             ? "Saved on-device only (iCloud unavailable)"
             : "Saved to iCloud Drive"
         importPhase = .processing
 
-        let result = try AppBackupImporter.importBackup(
+        let result = try await AppBackupImporter.importBackup(
             backup,
             dataManager: dataManager,
             logStore: logStore,
@@ -890,6 +886,9 @@ struct StrongImportWizard: View {
             annotationsManager: annotationsManager,
             gymProfilesManager: gymProfilesManager,
             intentionalBreaksManager: intentionalBreaksManager
+        )
+        AppBackupService.persistNativeBackupSourceSignature(
+            AppBackupService.importSourceSignature(for: savedURL)
         )
 
         healthSyncState = .synced(Date())

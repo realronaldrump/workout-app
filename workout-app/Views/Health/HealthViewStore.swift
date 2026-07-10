@@ -75,4 +75,11 @@ final class HealthViewStore: ObservableObject {
     func syncDailyHealthData(range: DateInterval) async throws {
         try await healthManager.syncDailyHealthData(range: range)
     }
+
+    func fetchMetricSamples(
+        metric: HealthMetric,
+        range: DateInterval
+    ) async throws -> [HealthMetricSample] {
+        try await healthManager.fetchMetricSamples(metric: metric, range: range)
+    }
 }

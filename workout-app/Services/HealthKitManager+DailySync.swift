@@ -121,6 +121,84 @@ struct DailyHealthCoveragePlanner {
     }
 }
 
+private struct DailyMetricSyncResult {
+    let metric: HealthMetric
+    let values: [Date: Double]
+}
+
+private enum DailyHealthQueryPlan {
+    /// HealthKit can service independent statistics queries concurrently, but an all-history
+    /// sync should not enqueue every requested type at once.
+    static let maximumConcurrentQueries = 4
+}
+
+private nonisolated struct DailyHealthMergePayload: @unchecked Sendable {
+    let existingStore: [Date: DailyHealthData]
+    let existingCoverage: Set<Date>
+    let metrics: [HealthMetric]
+    let metricValues: [HealthMetric: [Date: Double]]
+    let sleepSummaries: [Date: SleepSummary]
+    let days: [Date]
+    let today: Date
+}
+
+private nonisolated struct DailyHealthMergeResult: @unchecked Sendable {
+    let store: [Date: DailyHealthData]
+    let coverage: Set<Date>
+}
+
+private nonisolated enum DailyHealthStoreMerger {
+    static func merge(_ payload: DailyHealthMergePayload) -> DailyHealthMergeResult {
+        var updatedStore = payload.existingStore
+        var updatedCoverage = payload.existingCoverage
+
+        for day in payload.days {
+            var entry = DailyHealthData(dayStart: day)
+            for metric in payload.metrics {
+                entry.setValue(payload.metricValues[metric]?[day], for: metric)
+            }
+            entry.sleepSummary = payload.sleepSummaries[day]
+
+            if entryHasData(entry) {
+                updatedStore[day] = entry
+            } else {
+                updatedStore.removeValue(forKey: day)
+            }
+
+            // Today's totals are incomplete and must remain eligible for refresh.
+            if day < payload.today {
+                updatedCoverage.insert(day)
+            } else {
+                updatedCoverage.remove(day)
+            }
+        }
+
+        return DailyHealthMergeResult(store: updatedStore, coverage: updatedCoverage)
+    }
+
+    private static func entryHasData(_ entry: DailyHealthData) -> Bool {
+        entry.steps != nil ||
+        entry.activeEnergy != nil ||
+        entry.basalEnergy != nil ||
+        entry.exerciseMinutes != nil ||
+        entry.moveMinutes != nil ||
+        entry.standMinutes != nil ||
+        entry.distanceWalkingRunning != nil ||
+        entry.flightsClimbed != nil ||
+        entry.sleepSummary != nil ||
+        entry.restingHeartRate != nil ||
+        entry.walkingHeartRateAverage != nil ||
+        entry.heartRateVariability != nil ||
+        entry.heartRateRecovery != nil ||
+        entry.bloodOxygen != nil ||
+        entry.respiratoryRate != nil ||
+        entry.bodyTemperature != nil ||
+        entry.vo2Max != nil ||
+        entry.bodyMass != nil ||
+        entry.bodyFatPercentage != nil
+    }
+}
+
 extension HealthKitManager {
     /// Sync daily aggregate health data for the given range
     func syncDailyHealthData(range: DateInterval) async throws {
@@ -130,9 +208,35 @@ extension HealthKitManager {
         guard authorizationStatus == .authorized else {
             throw HealthKitError.authorizationFailed("Health access is not authorized.")
         }
-        guard !isDailySyncing else { return }
         guard range.start < range.end else { return }
 
+        if let activeTask = dailyHealthSyncTask {
+            let activeRange = dailyHealthSyncRange
+            try await activeTask.value
+
+            // Callers requesting data already covered by the in-flight operation can share
+            // its result. A disjoint request starts after it instead of being silently dropped.
+            if let activeRange,
+               activeRange.start <= range.start,
+               activeRange.end >= range.end {
+                return
+            }
+            return try await syncDailyHealthData(range: range)
+        }
+
+        let task = Task { @MainActor in
+            defer {
+                self.dailyHealthSyncTask = nil
+                self.dailyHealthSyncRange = nil
+            }
+            try await self.performDailyHealthSync(range: range)
+        }
+        dailyHealthSyncRange = range
+        dailyHealthSyncTask = task
+        try await task.value
+    }
+
+    private func performDailyHealthSync(range: DateInterval) async throws {
         isDailySyncing = true
         dailySyncProgress = 0
 
@@ -143,58 +247,67 @@ extension HealthKitManager {
         var completedSteps = 0.0
 
         var metricValues: [HealthMetric: [Date: Double]] = [:]
+        var metricIterator = metrics.makeIterator()
 
-        for metric in metrics {
-            guard let type = metric.quantityType,
-                  let unit = metric.unit,
-                  let options = metric.statisticsOption else {
-                continue
+        try await withThrowingTaskGroup(of: DailyMetricSyncResult?.self) { group in
+            func enqueueNextMetric() {
+                guard let metric = metricIterator.next() else { return }
+                group.addTask { @MainActor in
+                    guard let type = metric.quantityType,
+                          let unit = metric.unit,
+                          let options = metric.statisticsOption else {
+                        return nil
+                    }
+
+                    let rawValues = try await self.fetchDailyStatistics(
+                        type: type,
+                        from: range.start,
+                        to: range.end,
+                        unit: unit,
+                        options: options
+                    )
+                    let normalized = await Task.detached(priority: .utility) {
+                        rawValues.mapValues { metric.storedValue(from: $0) }
+                    }.value
+                    return DailyMetricSyncResult(metric: metric, values: normalized)
+                }
             }
 
-            let rawValues = try await fetchDailyStatistics(
-                type: type,
-                from: range.start,
-                to: range.end,
-                unit: unit,
-                options: options
-            )
+            for _ in 0..<min(DailyHealthQueryPlan.maximumConcurrentQueries, metrics.count) {
+                enqueueNextMetric()
+            }
 
-            let normalized = rawValues.mapValues { metric.storedValue(from: $0) }
-            metricValues[metric] = normalized
-
-            completedSteps += 1
-            dailySyncProgress = completedSteps / totalSteps
+            while let result = try await group.next() {
+                if let result {
+                    metricValues[result.metric] = result.values
+                }
+                completedSteps += 1
+                dailySyncProgress = completedSteps / totalSteps
+                enqueueNextMetric()
+            }
         }
 
         let sleepSummaries = try await fetchDailySleepSummaries(from: range.start, to: range.end)
         completedSteps += 1
         dailySyncProgress = completedSteps / totalSteps
 
-        var updatedStore = dailyHealthStore
-        var updatedCoverage = dailyHealthCoverage
         let days = DailyHealthCoveragePlanner.dayStarts(in: range)
+        let today = Calendar.current.startOfDay(for: Date())
+        let mergePayload = DailyHealthMergePayload(
+            existingStore: dailyHealthStore,
+            existingCoverage: dailyHealthCoverage,
+            metrics: metrics,
+            metricValues: metricValues,
+            sleepSummaries: sleepSummaries,
+            days: days,
+            today: today
+        )
+        let mergeResult = await Task.detached(priority: .userInitiated) {
+            DailyHealthStoreMerger.merge(mergePayload)
+        }.value
 
-        for day in days {
-            var entry = DailyHealthData(dayStart: day)
-
-            for metric in metrics {
-                entry.setValue(metricValues[metric]?[day], for: metric)
-            }
-
-            // Always set (including nil) so stale cached sleep doesn't persist when resyncing.
-            entry.sleepSummary = sleepSummaries[day]
-
-            if entryHasData(entry) {
-                updatedStore[day] = entry
-            } else {
-                updatedStore.removeValue(forKey: day)
-            }
-
-            updatedCoverage.insert(day)
-        }
-
-        dailyHealthStore = updatedStore
-        dailyHealthCoverage = updatedCoverage
+        dailyHealthStore = mergeResult.store
+        dailyHealthCoverage = mergeResult.coverage
         lastDailySyncDate = Date()
         userDefaults.set(lastDailySyncDate, forKey: lastDailySyncKey)
         persistDailyHealthData()
@@ -299,28 +412,11 @@ extension HealthKitManager {
 
         return samples.map { sample in
             let raw = sample.quantity.doubleValue(for: unit)
-            return HealthMetricSample(timestamp: sample.startDate, value: metric.storedValue(from: raw))
+            return HealthMetricSample(
+                id: sample.uuid,
+                timestamp: sample.startDate,
+                value: metric.storedValue(from: raw)
+            )
         }
-    }
-    private func entryHasData(_ entry: DailyHealthData) -> Bool {
-        entry.steps != nil ||
-        entry.activeEnergy != nil ||
-        entry.basalEnergy != nil ||
-        entry.exerciseMinutes != nil ||
-        entry.moveMinutes != nil ||
-        entry.standMinutes != nil ||
-        entry.distanceWalkingRunning != nil ||
-        entry.flightsClimbed != nil ||
-        entry.sleepSummary != nil ||
-        entry.restingHeartRate != nil ||
-        entry.walkingHeartRateAverage != nil ||
-        entry.heartRateVariability != nil ||
-        entry.heartRateRecovery != nil ||
-        entry.bloodOxygen != nil ||
-        entry.respiratoryRate != nil ||
-        entry.bodyTemperature != nil ||
-        entry.vo2Max != nil ||
-        entry.bodyMass != nil ||
-        entry.bodyFatPercentage != nil
     }
 }

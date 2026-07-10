@@ -27,11 +27,28 @@ class HealthKitManager: ObservableObject {
 
     var authorizationTask: Task<Void, Error>?
     var workoutRouteAuthorizationTask: Task<Void, Error>?
+    var dailyHealthSyncTask: Task<Void, Error>?
+    var dailyHealthSyncRange: DateInterval?
 
     // MARK: - Internal Properties (Used Across Multi-File Extensions)
 
     let healthStore: HKHealthStore?
-    let userDefaults = UserDefaults.standard
+    let userDefaults: UserDefaults
+    private var resolvedCachePersistenceCoordinator: HealthCachePersistenceCoordinator?
+    var cachePersistenceCoordinator: HealthCachePersistenceCoordinator {
+        if let resolvedCachePersistenceCoordinator {
+            return resolvedCachePersistenceCoordinator
+        }
+        let coordinator = HealthCachePersistenceCoordinator()
+        resolvedCachePersistenceCoordinator = coordinator
+        return coordinator
+    }
+    var persistedCacheBootstrapTask: Task<Void, Never>?
+    var latestCachePersistenceOperation: Task<Void, Error>?
+    var pendingCachePersistenceFailure: Error?
+    var hasBootstrappedPersistedCache = false
+    var discardWorkoutBootstrapSnapshot = false
+    var discardDailyBootstrapSnapshot = false
     let lastSyncKey = "lastHealthSyncDate"
     let healthDataKey = "syncedHealthData"
     let lastDailySyncKey = "lastDailyHealthSyncDate"
@@ -164,11 +181,15 @@ class HealthKitManager: ObservableObject {
 
     // MARK: - Initialization
 
-    init() {
+    init(
+        userDefaults: UserDefaults = .standard,
+        cachePersistenceCoordinator: HealthCachePersistenceCoordinator? = nil
+    ) {
+        self.userDefaults = userDefaults
+        self.resolvedCachePersistenceCoordinator = cachePersistenceCoordinator
+
         if HKHealthStore.isHealthDataAvailable() {
             self.healthStore = HKHealthStore()
-            loadPersistedData()
-            loadPersistedDailyHealthData()
             checkAuthorizationStatus()
         } else {
             self.healthStore = nil

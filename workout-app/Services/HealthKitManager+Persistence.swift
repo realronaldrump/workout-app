@@ -1,5 +1,203 @@
 import Foundation
 
+/// Narrow persistence surface used by the Health cache coordinator.
+///
+/// Keeping this protocol nonisolated lets the coordinator own the blocking Core Data
+/// adapter without accidentally inheriting the app's default `MainActor` isolation.
+nonisolated protocol HealthCacheDatabase: Sendable {
+    func loadWorkoutHealthData() throws -> [WorkoutHealthData]
+    func saveWorkoutHealthData(_ entries: [WorkoutHealthData]) throws
+    func deleteWorkoutHealthData(ids: [UUID]) throws
+    func clearWorkoutHealthData() throws
+
+    func loadDailyHealthData() throws -> [DailyHealthData]
+    func saveDailyHealthData(_ entries: [DailyHealthData]) throws
+    func clearDailyHealthData() throws
+
+    func loadDailyHealthCoverage() throws -> Set<Date>
+    func saveDailyHealthCoverage(_ coveredDays: Set<Date>) throws
+    func clearDailyHealthCoverage() throws
+}
+
+extension AppDatabase: HealthCacheDatabase {}
+
+/// Immutable transfer values are safe to move from the persistence actor to MainActor.
+/// The wrapped model graph consists only of value types and is discarded by the actor
+/// after it returns, so no mutable reference is shared across isolation domains.
+nonisolated struct HealthCacheBootstrapSnapshot: @unchecked Sendable {
+    let workoutData: [UUID: WorkoutHealthData]
+    let dailyData: [Date: DailyHealthData]
+    let dailyCoverage: Set<Date>
+    let didLoadWorkoutData: Bool
+    let didLoadDailyData: Bool
+    let didLoadDailyCoverage: Bool
+    let didResetDailyStore: Bool
+    let prunedWorkoutCount: Int
+    let errors: [String]
+}
+
+nonisolated struct WorkoutHealthPersistencePayload: @unchecked Sendable {
+    let entries: [WorkoutHealthData]
+    let removedIDs: [UUID]
+    let referenceDate: Date
+}
+
+nonisolated struct DailyHealthPersistencePayload: @unchecked Sendable {
+    let entries: [DailyHealthData]
+}
+
+nonisolated struct DailyHealthCoveragePersistencePayload: @unchecked Sendable {
+    let coveredDays: Set<Date>
+}
+
+/// Serializes all Health cache access away from MainActor.
+///
+/// `AppDatabase` internally uses `performAndWait`. Calling it from this actor means that
+/// wait can no longer freeze SwiftUI, while the manager's task chain preserves invocation
+/// order before operations reach this actor.
+actor HealthCachePersistenceCoordinator {
+    private let databaseProvider: @Sendable () -> any HealthCacheDatabase
+    private var resolvedDatabase: (any HealthCacheDatabase)?
+
+    init(
+        databaseProvider: @escaping @Sendable () -> any HealthCacheDatabase = { AppDatabase.shared }
+    ) {
+        self.databaseProvider = databaseProvider
+    }
+
+    func loadSnapshot(
+        resetDailyStore: Bool,
+        referenceDate: Date = Date()
+    ) -> HealthCacheBootstrapSnapshot {
+        let database = database()
+        var errors: [String] = []
+        var workoutData: [UUID: WorkoutHealthData] = [:]
+        var dailyData: [Date: DailyHealthData] = [:]
+        var dailyCoverage: Set<Date> = []
+        var didLoadWorkoutData = false
+        var didLoadDailyData = false
+        var didLoadDailyCoverage = false
+        var didResetDailyStore = false
+        var prunedEntries: [WorkoutHealthData] = []
+
+        do {
+            let stored = try database.loadWorkoutHealthData()
+            workoutData.reserveCapacity(stored.count)
+
+            for entry in stored {
+                let shouldPrune = entry.hasRawSamples &&
+                    !HealthKitManager.shouldPersistRawSamples(
+                        for: entry.workoutDate,
+                        reference: referenceDate
+                    )
+                let prepared = HealthKitManager.preparedWorkoutCacheEntry(
+                    entry,
+                    reference: referenceDate
+                )
+                workoutData[prepared.workoutId] = prepared
+                if shouldPrune {
+                    prunedEntries.append(prepared)
+                }
+            }
+            didLoadWorkoutData = true
+
+            if !prunedEntries.isEmpty {
+                do {
+                    // Persist the retention policy so old raw payloads are not decoded again
+                    // on every launch.
+                    try database.saveWorkoutHealthData(prunedEntries)
+                } catch {
+                    errors.append("Failed to persist pruned workout health data: \(error)")
+                }
+            }
+        } catch {
+            errors.append("Failed to load persisted workout health data: \(error)")
+        }
+
+        if resetDailyStore {
+            do {
+                try database.clearDailyHealthData()
+                try database.clearDailyHealthCoverage()
+                didResetDailyStore = true
+            } catch {
+                errors.append("Failed to reset the versioned daily health cache: \(error)")
+            }
+        } else {
+            do {
+                let stored = try database.loadDailyHealthData()
+                dailyData.reserveCapacity(stored.count)
+                for entry in stored {
+                    dailyData[entry.dayStart] = entry
+                }
+                didLoadDailyData = true
+            } catch {
+                errors.append("Failed to load persisted daily health data: \(error)")
+            }
+
+            do {
+                dailyCoverage = try database.loadDailyHealthCoverage()
+                didLoadDailyCoverage = true
+            } catch {
+                errors.append("Failed to load persisted daily health coverage: \(error)")
+            }
+        }
+
+        return HealthCacheBootstrapSnapshot(
+            workoutData: workoutData,
+            dailyData: dailyData,
+            dailyCoverage: dailyCoverage,
+            didLoadWorkoutData: didLoadWorkoutData,
+            didLoadDailyData: didLoadDailyData,
+            didLoadDailyCoverage: didLoadDailyCoverage,
+            didResetDailyStore: didResetDailyStore,
+            prunedWorkoutCount: prunedEntries.count,
+            errors: errors
+        )
+    }
+
+    func persistWorkoutData(_ payload: WorkoutHealthPersistencePayload) throws {
+        let database = database()
+        let preparedEntries = payload.entries.map {
+            HealthKitManager.preparedWorkoutCacheEntry($0, reference: payload.referenceDate)
+        }
+
+        if !preparedEntries.isEmpty {
+            try database.saveWorkoutHealthData(preparedEntries)
+        }
+        if !payload.removedIDs.isEmpty {
+            try database.deleteWorkoutHealthData(ids: payload.removedIDs)
+        }
+    }
+
+    func persistDailyData(_ payload: DailyHealthPersistencePayload) throws {
+        try database().saveDailyHealthData(payload.entries)
+    }
+
+    func persistDailyCoverage(_ payload: DailyHealthCoveragePersistencePayload) throws {
+        try database().saveDailyHealthCoverage(payload.coveredDays)
+    }
+
+    func clearAllHealthData() throws {
+        let database = database()
+        try database.clearWorkoutHealthData()
+        try database.clearDailyHealthData()
+        try database.clearDailyHealthCoverage()
+    }
+
+    func clearWorkoutHealthData() throws {
+        try database().clearWorkoutHealthData()
+    }
+
+    private func database() -> any HealthCacheDatabase {
+        if let resolvedDatabase {
+            return resolvedDatabase
+        }
+        let database = databaseProvider()
+        resolvedDatabase = database
+        return database
+    }
+}
+
 struct HealthCacheClearResult {
     let removedWorkoutEntries: Int
     let removedDailyEntries: Int
@@ -19,7 +217,6 @@ struct HealthBackupMergeResult {
 }
 
 extension HealthKitManager {
-    private var database: AppDatabase { AppDatabase.shared }
 
     private func getDocumentsDirectory() -> URL {
         let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
@@ -65,13 +262,13 @@ extension HealthKitManager {
         removeLegacyItem(at: dailyCoverageFileURL)
     }
 
-    private nonisolated static func shouldPersistRawSamples(for workoutDate: Date, reference: Date = Date()) -> Bool {
+    fileprivate nonisolated static func shouldPersistRawSamples(for workoutDate: Date, reference: Date = Date()) -> Bool {
         let cutoff = Calendar.current.date(byAdding: .day, value: -180, to: reference)
             ?? reference
         return workoutDate >= cutoff
     }
 
-    private nonisolated static func preparedWorkoutCacheEntry(
+    fileprivate nonisolated static func preparedWorkoutCacheEntry(
         _ entry: WorkoutHealthData,
         reference: Date = Date()
     ) -> WorkoutHealthData {
@@ -86,53 +283,138 @@ extension HealthKitManager {
         return prepared
     }
 
-    func persistData(changedWorkoutIDs: [UUID]? = nil, removedWorkoutIDs: [UUID] = []) {
-        let snapshot = healthDataStore
-        let idsToPersist = changedWorkoutIDs ?? Array(snapshot.keys)
-        let idsToRemove = removedWorkoutIDs
-        let database = database
-        let preparedEntries = idsToPersist.compactMap { workoutID in
-            snapshot[workoutID].map { Self.preparedWorkoutCacheEntry($0) }
+    /// Enqueues a workout-cache write and returns a handle callers can await when their
+    /// success UI depends on the data being durable.
+    @discardableResult
+    func persistData(
+        changedWorkoutIDs: [UUID]? = nil,
+        removedWorkoutIDs: [UUID] = []
+    ) -> Task<Void, Error> {
+        let bootstrap = startPersistedCacheBootstrapIfNeeded()
+        let previous = latestCachePersistenceOperation
+        let coordinator = cachePersistenceCoordinator
+
+        let operation = Task<Void, Error> { @MainActor in
+            await bootstrap.value
+            if let previous {
+                _ = try? await previous.value
+            }
+
+            // Take the snapshot only after earlier writes and cache bootstrap complete. That
+            // prevents a delayed old snapshot from landing after a newer in-memory mutation.
+            let idsToPersist = changedWorkoutIDs ?? Array(self.healthDataStore.keys)
+            let entries = idsToPersist.compactMap { self.healthDataStore[$0] }
+            let payload = WorkoutHealthPersistencePayload(
+                entries: entries,
+                removedIDs: removedWorkoutIDs,
+                referenceDate: Date()
+            )
+            do {
+                try await coordinator.persistWorkoutData(payload)
+            } catch {
+                self.recordCachePersistenceFailure(error)
+                throw error
+            }
+            self.removeLegacyWorkoutPersistenceFiles()
         }
 
-        // Keep persistence work ordered so older snapshots cannot land after newer ones.
-        Task { @MainActor in
-            do {
-                if !preparedEntries.isEmpty {
-                    try database.saveWorkoutHealthData(preparedEntries)
-                }
-                if !idsToRemove.isEmpty {
-                    try database.deleteWorkoutHealthData(ids: idsToRemove)
-                }
-                removeLegacyWorkoutPersistenceFiles()
-            } catch {
-                print("Failed to persist health data: \(error)")
+        trackPersistenceOperation(operation, label: "workout health data")
+        return operation
+    }
+
+    /// Enqueues a daily-cache write in the same total order as workout and coverage writes.
+    @discardableResult
+    func persistDailyHealthData() -> Task<Void, Error> {
+        let bootstrap = startPersistedCacheBootstrapIfNeeded()
+        let previous = latestCachePersistenceOperation
+        let coordinator = cachePersistenceCoordinator
+
+        let operation = Task<Void, Error> { @MainActor in
+            await bootstrap.value
+            if let previous {
+                _ = try? await previous.value
             }
+
+            let payload = DailyHealthPersistencePayload(
+                entries: Array(self.dailyHealthStore.values)
+            )
+            do {
+                try await coordinator.persistDailyData(payload)
+            } catch {
+                self.recordCachePersistenceFailure(error)
+                throw error
+            }
+            self.removeLegacyDailyDataFile()
+        }
+
+        trackPersistenceOperation(operation, label: "daily health data")
+        return operation
+    }
+
+    /// Enqueues a coverage write in the same total order as every other Health cache write.
+    @discardableResult
+    func persistDailyHealthCoverage() -> Task<Void, Error> {
+        let bootstrap = startPersistedCacheBootstrapIfNeeded()
+        let previous = latestCachePersistenceOperation
+        let coordinator = cachePersistenceCoordinator
+
+        let operation = Task<Void, Error> { @MainActor in
+            await bootstrap.value
+            if let previous {
+                _ = try? await previous.value
+            }
+
+            let payload = DailyHealthCoveragePersistencePayload(
+                coveredDays: self.dailyHealthCoverage
+            )
+            do {
+                try await coordinator.persistDailyCoverage(payload)
+            } catch {
+                self.recordCachePersistenceFailure(error)
+                throw error
+            }
+            self.removeLegacyDailyCoverageFile()
+        }
+
+        trackPersistenceOperation(operation, label: "daily health coverage")
+        return operation
+    }
+
+    /// Waits for the most recently enqueued cache write. New writes always wait for their
+    /// predecessor, so awaiting this handle drains the current ordered queue.
+    func waitForPendingCachePersistence() async throws {
+        var latestFailure: Error?
+        if let latestCachePersistenceOperation {
+            do {
+                try await latestCachePersistenceOperation.value
+            } catch {
+                latestFailure = error
+            }
+        }
+
+        let failure = pendingCachePersistenceFailure ?? latestFailure
+        pendingCachePersistenceFailure = nil
+        if let failure {
+            throw failure
         }
     }
 
-    func persistDailyHealthData() {
-        let entries = Array(dailyHealthStore.values)
-        let database = database
-        Task { @MainActor in
-            do {
-                try database.saveDailyHealthData(entries)
-                removeLegacyDailyDataFile()
-            } catch {
-                print("Failed to persist daily health data: \(error)")
-            }
+    private func recordCachePersistenceFailure(_ error: Error) {
+        if pendingCachePersistenceFailure == nil {
+            pendingCachePersistenceFailure = error
         }
     }
 
-    func persistDailyHealthCoverage() {
-        let coveredDays = dailyHealthCoverage
-        let database = database
+    private func trackPersistenceOperation(
+        _ operation: Task<Void, Error>,
+        label: String
+    ) {
+        latestCachePersistenceOperation = operation
         Task { @MainActor in
             do {
-                try database.saveDailyHealthCoverage(coveredDays)
-                removeLegacyDailyCoverageFile()
+                try await operation.value
             } catch {
-                print("Failed to persist daily health coverage: \(error)")
+                print("Failed to persist \(label): \(error)")
             }
         }
     }
@@ -142,6 +424,23 @@ extension HealthKitManager {
         includeWorkoutData: Bool = true,
         includeDailyData: Bool = true
     ) -> HealthCacheClearResult {
+        if range == nil, includeWorkoutData, includeDailyData {
+            let result = HealthCacheClearResult(
+                removedWorkoutEntries: healthDataStore.count,
+                removedDailyEntries: dailyHealthStore.count,
+                removedCoveredDays: dailyHealthCoverage.count
+            )
+            // The database can contain records that an in-flight bootstrap has not published
+            // yet, so an all-cache clear must issue a real database clear even when memory is empty.
+            clearAllData()
+            return result
+        }
+
+        if !hasBootstrappedPersistedCache, range == nil {
+            if includeWorkoutData { discardWorkoutBootstrapSnapshot = true }
+            if includeDailyData { discardDailyBootstrapSnapshot = true }
+        }
+
         var removedWorkoutEntries = 0
         var removedDailyEntries = 0
         var removedCoveredDays = 0
@@ -158,13 +457,8 @@ extension HealthKitManager {
                     persistData(changedWorkoutIDs: [], removedWorkoutIDs: workoutIDsToRemove)
                 }
             } else {
-                let allWorkoutIDs = Array(healthDataStore.keys)
                 removedWorkoutEntries = healthDataStore.count
-                healthDataStore.removeAll()
-
-                if removedWorkoutEntries > 0 {
-                    persistData(changedWorkoutIDs: [], removedWorkoutIDs: allWorkoutIDs)
-                }
+                clearAllWorkoutHealthData()
             }
 
             if removedWorkoutEntries > 0 {
@@ -193,7 +487,9 @@ extension HealthKitManager {
                 removedCoveredDays = dailyHealthCoverage.count
                 dailyHealthStore.removeAll()
                 dailyHealthCoverage.removeAll()
-                didMutateDailyCache = removedDailyEntries > 0 || removedCoveredDays > 0
+                // Persist an empty snapshot even if memory was empty: persisted records may
+                // still be waiting in an in-flight bootstrap.
+                didMutateDailyCache = true
             }
 
             if didMutateDailyCache {
@@ -212,7 +508,41 @@ extension HealthKitManager {
         )
     }
 
+    /// Clears every cached workout-health record and exposes persistence failures to callers.
+    /// This is used when workout history is deleted while daily Health history is retained.
+    @discardableResult
+    func clearAllWorkoutHealthData() -> Task<Void, Error> {
+        if !hasBootstrappedPersistedCache {
+            discardWorkoutBootstrapSnapshot = true
+        }
+
+        healthDataStore.removeAll()
+        lastSyncDate = nil
+        syncProgress = 0
+        syncedWorkoutsCount = 0
+        syncError = nil
+        userDefaults.removeObject(forKey: lastSyncKey)
+        userDefaults.removeObject(forKey: pendingWorkoutSleepSummaryRefreshKey)
+
+        let bootstrap = startPersistedCacheBootstrapIfNeeded()
+        let previous = latestCachePersistenceOperation
+        let coordinator = cachePersistenceCoordinator
+        let operation = Task<Void, Error> { @MainActor in
+            await bootstrap.value
+            if let previous {
+                _ = try? await previous.value
+            }
+            try await coordinator.clearWorkoutHealthData()
+            self.removeLegacyWorkoutPersistenceFiles()
+        }
+        trackPersistenceOperation(operation, label: "cleared workout health data")
+        return operation
+    }
+
     func invalidateDailyHealthCache() {
+        if !hasBootstrappedPersistedCache {
+            discardDailyBootstrapSnapshot = true
+        }
         dailyHealthStore.removeAll()
         dailyHealthCoverage.removeAll()
         lastDailySyncDate = nil
@@ -294,75 +624,131 @@ extension HealthKitManager {
         )
     }
 
-    func loadPersistedData() {
-        cleanupLegacyUserDefaults()
-
-        do {
-            let stored = try database.loadWorkoutHealthData()
-            let preparedEntries = stored.map { Self.preparedWorkoutCacheEntry($0) }
-            healthDataStore = Dictionary(uniqueKeysWithValues: preparedEntries.map { ($0.workoutId, $0) })
-            removeLegacyWorkoutPersistenceFiles()
-            print("Loaded \(healthDataStore.count) health records")
-        } catch {
-            print("Failed to load persisted health data: \(error)")
-        }
-
-        lastSyncDate = userDefaults.object(forKey: lastSyncKey) as? Date
+    /// Loads every persisted Health cache in one off-main operation and applies the result
+    /// without an intervening suspension on MainActor.
+    func bootstrapPersistedDataIfNeeded() async {
+        await startPersistedCacheBootstrapIfNeeded().value
     }
 
+    /// Compatibility entry point for callers being migrated to
+    /// `await bootstrapPersistedDataIfNeeded()`.
+    func loadPersistedData() {
+        startPersistedCacheBootstrapIfNeeded()
+    }
+
+    /// Compatibility entry point for callers being migrated to
+    /// `await bootstrapPersistedDataIfNeeded()`.
     func loadPersistedDailyHealthData() {
+        startPersistedCacheBootstrapIfNeeded()
+    }
+
+    @discardableResult
+    func startPersistedCacheBootstrapIfNeeded() -> Task<Void, Never> {
+        if hasBootstrappedPersistedCache {
+            return Task<Void, Never> {}
+        }
+        if let persistedCacheBootstrapTask {
+            return persistedCacheBootstrapTask
+        }
+
         cleanupLegacyUserDefaults()
-        earliestAvailableDailyHealthDate = userDefaults.object(forKey: earliestAvailableDailyHealthDateKey) as? Date
-        let storedVersion = userDefaults.integer(forKey: dailyHealthStoreVersionKey)
-        if storedVersion < currentDailyHealthStoreVersion {
-            // Daily sleep aggregation logic changed; discard old cached daily store to avoid showing inflated sleep.
-            dailyHealthStore.removeAll()
-            dailyHealthCoverage.removeAll()
+        let resetDailyStore = userDefaults.integer(forKey: dailyHealthStoreVersionKey) <
+            currentDailyHealthStoreVersion
+        let coordinator = cachePersistenceCoordinator
+        let referenceDate = Date()
+
+        let task = Task<Void, Never> { @MainActor in
+            let snapshot = await coordinator.loadSnapshot(
+                resetDailyStore: resetDailyStore,
+                referenceDate: referenceDate
+            )
+            self.applyPersistedCacheBootstrapSnapshot(
+                snapshot,
+                resetDailyStore: resetDailyStore
+            )
+        }
+        persistedCacheBootstrapTask = task
+        return task
+    }
+
+    private func applyPersistedCacheBootstrapSnapshot(
+        _ snapshot: HealthCacheBootstrapSnapshot,
+        resetDailyStore: Bool
+    ) {
+        // A sync may have produced a value while the disk snapshot was loading. Merge that
+        // newer in-memory value over the loaded cache rather than overwriting it.
+        var mergedWorkoutData = snapshot.workoutData
+        if discardWorkoutBootstrapSnapshot {
+            mergedWorkoutData = healthDataStore
+        } else {
+            mergedWorkoutData.merge(healthDataStore) { _, current in current }
+        }
+
+        var mergedDailyData = snapshot.dailyData
+        var mergedCoverage = snapshot.dailyCoverage
+        if discardDailyBootstrapSnapshot {
+            mergedDailyData = dailyHealthStore
+            mergedCoverage = dailyHealthCoverage
+        } else {
+            mergedDailyData.merge(dailyHealthStore) { _, current in current }
+            mergedCoverage.formUnion(dailyHealthCoverage)
+        }
+
+        // Apply the complete value graph synchronously. There is no await between these
+        // assignments, so consumers never render a partially loaded cache on another turn.
+        healthDataStore = mergedWorkoutData
+        dailyHealthStore = mergedDailyData
+        dailyHealthCoverage = mergedCoverage
+        lastSyncDate = userDefaults.object(forKey: lastSyncKey) as? Date
+        earliestAvailableDailyHealthDate = userDefaults.object(
+            forKey: earliestAvailableDailyHealthDateKey
+        ) as? Date
+
+        if resetDailyStore {
             lastDailySyncDate = nil
             userDefaults.removeObject(forKey: lastDailySyncKey)
-
-            do {
-                try database.clearDailyHealthData()
-                try database.clearDailyHealthCoverage()
-                if FileManager.default.fileExists(atPath: dailyDataFileURL.path) {
-                    try FileManager.default.removeItem(at: dailyDataFileURL)
-                    print("Deleted daily health data store file (version bump)")
-                }
-                if FileManager.default.fileExists(atPath: dailyCoverageFileURL.path) {
-                    try FileManager.default.removeItem(at: dailyCoverageFileURL)
-                    print("Deleted daily health coverage file (version bump)")
-                }
-            } catch {
-                print("Failed to delete daily health data file during version bump: \(error)")
+            if snapshot.didResetDailyStore {
+                userDefaults.set(currentDailyHealthStoreVersion, forKey: dailyHealthStoreVersionKey)
+                removeLegacyDailyDataFile()
+                removeLegacyDailyCoverageFile()
             }
-
-            userDefaults.set(currentDailyHealthStoreVersion, forKey: dailyHealthStoreVersionKey)
-            return
+        } else {
+            lastDailySyncDate = userDefaults.object(forKey: lastDailySyncKey) as? Date
         }
 
-        do {
-            let stored = try database.loadDailyHealthData()
-            dailyHealthStore = Dictionary(uniqueKeysWithValues: stored.map { ($0.dayStart, $0) })
+        if snapshot.didLoadWorkoutData {
+            removeLegacyWorkoutPersistenceFiles()
+        }
+        if snapshot.didLoadDailyData {
             removeLegacyDailyDataFile()
-            print("Loaded \(dailyHealthStore.count) daily health records")
-        } catch {
-            print("Failed to load persisted daily health data: \(error)")
         }
-
-        do {
-            dailyHealthCoverage = try database.loadDailyHealthCoverage()
+        if snapshot.didLoadDailyCoverage {
             removeLegacyDailyCoverageFile()
-            print("Loaded \(dailyHealthCoverage.count) covered daily health days")
-        } catch {
-            dailyHealthCoverage = []
-            print("Failed to load persisted daily health coverage: \(error)")
         }
 
-        lastDailySyncDate = userDefaults.object(forKey: lastDailySyncKey) as? Date
+        print("Loaded \(healthDataStore.count) health records")
+        print("Loaded \(dailyHealthStore.count) daily health records")
+        print("Loaded \(dailyHealthCoverage.count) covered daily health days")
+        if snapshot.prunedWorkoutCount > 0 {
+            print("Pruned raw samples from \(snapshot.prunedWorkoutCount) persisted health records")
+        }
+        snapshot.errors.forEach { print($0) }
+
+        discardWorkoutBootstrapSnapshot = false
+        discardDailyBootstrapSnapshot = false
+        hasBootstrappedPersistedCache = true
+        persistedCacheBootstrapTask = nil
     }
 
-    /// Clears all health data from memory and disk
-    func clearAllData() {
+    /// Clears all health data from memory and enqueues an ordered off-main disk clear.
+    @discardableResult
+    func clearAllData() -> Task<Void, Error> {
+        if !hasBootstrappedPersistedCache {
+            // Prevent an in-flight bootstrap from repopulating memory after the user clears it.
+            discardWorkoutBootstrapSnapshot = true
+            discardDailyBootstrapSnapshot = true
+        }
+
         // Clear memory
         healthDataStore.removeAll()
         lastSyncDate = nil
@@ -383,29 +769,22 @@ extension HealthKitManager {
         userDefaults.removeObject(forKey: earliestAvailableDailyHealthDateKey)
         userDefaults.removeObject(forKey: pendingWorkoutSleepSummaryRefreshKey)
 
-        do {
-            try database.clearWorkoutHealthData()
-            try database.clearDailyHealthData()
-            try database.clearDailyHealthCoverage()
-            if FileManager.default.fileExists(atPath: workoutDataDirectoryURL.path) {
-                try FileManager.default.removeItem(at: workoutDataDirectoryURL)
-                print("Deleted health data store directory")
+        let bootstrap = startPersistedCacheBootstrapIfNeeded()
+        let previous = latestCachePersistenceOperation
+        let coordinator = cachePersistenceCoordinator
+        let operation = Task<Void, Error> { @MainActor in
+            await bootstrap.value
+            if let previous {
+                _ = try? await previous.value
             }
-            if FileManager.default.fileExists(atPath: dataFileURL.path) {
-                try FileManager.default.removeItem(at: dataFileURL)
-                print("Deleted health data store file")
-            }
-            if FileManager.default.fileExists(atPath: dailyDataFileURL.path) {
-                try FileManager.default.removeItem(at: dailyDataFileURL)
-                print("Deleted daily health data store file")
-            }
-            if FileManager.default.fileExists(atPath: dailyCoverageFileURL.path) {
-                try FileManager.default.removeItem(at: dailyCoverageFileURL)
-                print("Deleted daily health coverage file")
-            }
-        } catch {
-            print("Failed to delete health data file: \(error)")
+            try await coordinator.clearAllHealthData()
+
+            self.removeLegacyWorkoutPersistenceFiles()
+            self.removeLegacyDailyDataFile()
+            self.removeLegacyDailyCoverageFile()
         }
+        trackPersistenceOperation(operation, label: "cleared health data")
+        return operation
     }
 
     func cleanupLegacyUserDefaults() {

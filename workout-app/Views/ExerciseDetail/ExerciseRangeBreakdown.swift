@@ -56,19 +56,21 @@ struct ExerciseRangeBreakdown: View {
     }
 
     private struct SnapshotMetric: Identifiable {
-        let id = UUID()
         let label: String
         let value: String
         let icon: String
         let tint: Color
+
+        var id: String { label }
     }
 
     private struct PanelMetric: Identifiable {
-        let id = UUID()
         let label: String
         let value: String
         let detail: String
         let tint: Color
+
+        var id: String { label }
     }
 
     private let metricColumns = [
@@ -115,7 +117,7 @@ struct ExerciseRangeBreakdown: View {
             ),
             RepRangeDescriptor(
                 label: "21+",
-                range: 21...100,
+                range: 21...Int.max,
                 tint: Theme.Colors.textSecondary,
                 title: "Burnout",
                 detail: "Finishers and metabolic sets"
@@ -127,35 +129,35 @@ struct ExerciseRangeBreakdown: View {
         [
             IntensityZoneDescriptor(
                 label: "<50%",
-                range: 0.0...0.49,
+                range: 0.0...0.5,
                 tint: Theme.Colors.textSecondary,
                 title: "Primer",
                 detail: "Warm-up or technique emphasis"
             ),
             IntensityZoneDescriptor(
                 label: "50-65%",
-                range: 0.50...0.65,
+                range: 0.5...0.65,
                 tint: Theme.Colors.accentSecondary,
                 title: "Base",
                 detail: "Comfortable submax work"
             ),
             IntensityZoneDescriptor(
                 label: "65-75%",
-                range: 0.66...0.75,
+                range: 0.65...0.75,
                 tint: Theme.Colors.accent,
                 title: "Build",
                 detail: "Moderate tension and accumulation"
             ),
             IntensityZoneDescriptor(
                 label: "75-85%",
-                range: 0.76...0.85,
+                range: 0.75...0.85,
                 tint: Theme.Colors.warning,
                 title: "Working",
                 detail: "Productive heavy sets"
             ),
             IntensityZoneDescriptor(
                 label: "85%+",
-                range: 0.86...1.5,
+                range: 0.85...Double.greatestFiniteMagnitude,
                 tint: Theme.Colors.error,
                 title: "Peak",
                 detail: "Near-limit effort"
@@ -170,7 +172,7 @@ struct ExerciseRangeBreakdown: View {
     private var repBuckets: [RepRangeBucket] {
         let descriptors = repDescriptors
         let counts = derived.repBucketCounts
-        let total = max(derived.allSetsCount, 1)
+        let total = max(counts.reduce(0, +), 1)
         return descriptors.enumerated().map { index, descriptor in
             let count = index < counts.count ? counts[index] : 0
             return RepRangeBucket(
@@ -231,11 +233,8 @@ struct ExerciseRangeBreakdown: View {
         let repDescs = repDescriptors
         var repCounts = Array(repeating: 0, count: repDescs.count)
         for set in allSets {
-            for (i, descriptor) in repDescs.enumerated() {
-                if descriptor.range.contains(set.reps) {
-                    repCounts[i] += 1
-                    break
-                }
+            if let index = WorkoutAnalytics.repRangeBucketIndex(for: set.reps) {
+                repCounts[index] += 1
             }
         }
 
@@ -252,11 +251,8 @@ struct ExerciseRangeBreakdown: View {
                 )
                 intensitySum += intensity
                 intensityCount += 1
-                for (i, descriptor) in intensityDescs.enumerated() {
-                    if descriptor.range.contains(intensity) {
-                        intensityCounts[i] += 1
-                        break
-                    }
+                if let index = WorkoutAnalytics.intensityZoneBucketIndex(for: intensity) {
+                    intensityCounts[index] += 1
                 }
             }
         }
@@ -311,7 +307,7 @@ struct ExerciseRangeBreakdown: View {
 
     private var hardIntensityShare: Double {
         let hardSetCount = intensityBuckets
-            .filter { $0.range.lowerBound >= 0.76 }
+            .filter { $0.range.lowerBound >= 0.75 }
             .reduce(0) { $0 + $1.count }
         let total = intensityBuckets.reduce(0) { $0 + $1.count }
         guard total > 0 else { return 0 }

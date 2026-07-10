@@ -168,21 +168,218 @@ final class WorkoutAnalyticsTests: XCTestCase {
         XCTAssertEqual(streak, 2)
     }
 
+    func testRepRangeDistributionIncludesUnboundedHighRepsAndExcludesInvalidReps() {
+        let workout = Workout(
+            date: Date(),
+            name: "High Rep Day",
+            duration: "45m",
+            exercises: [
+                Exercise(
+                    name: "Bench Press",
+                    sets: [0, 1, 4, 7, 11, 16, 21, 101].map { reps in
+                        makeSet(weight: 100, reps: reps, exerciseName: "Bench Press")
+                    }
+                )
+            ]
+        )
+
+        let buckets = WorkoutAnalytics.repRangeDistribution(for: [workout])
+
+        XCTAssertEqual(buckets.map(\.count), [1, 1, 1, 1, 1, 2])
+        XCTAssertEqual(buckets.reduce(0) { $0 + $1.percent }, 1, accuracy: 0.001)
+    }
+
+    func testIntensityZoneClassifierHasNoBoundaryGaps() {
+        let valuesAndExpectedBuckets: [(Double, Int)] = [
+            (0.495, 0),
+            (0.5, 1),
+            (0.655, 2),
+            (0.755, 3),
+            (0.855, 4),
+            (2.0, 4)
+        ]
+
+        for (value, expectedBucket) in valuesAndExpectedBuckets {
+            XCTAssertEqual(
+                WorkoutAnalytics.intensityZoneBucketIndex(for: value),
+                expectedBucket,
+                "Unexpected bucket for \(value)"
+            )
+        }
+    }
+
+    func testExplicitProgressWindowDoesNotReanchorToStaleLatestWorkout() {
+        let calendar = makeCalendar()
+        let oldWorkout = makeWorkout(
+            on: date(2026, 5, 1, hour: 8, calendar: calendar),
+            exercises: [
+                Exercise(
+                    name: "Bench Press",
+                    sets: [makeSet(weight: 200, reps: 5, exerciseName: "Bench Press")]
+                )
+            ]
+        )
+        let window = ChangeMetricWindow(
+            label: "Recent",
+            current: DateInterval(
+                start: date(2026, 7, 1, hour: 0, calendar: calendar),
+                end: date(2026, 7, 14, hour: 23, calendar: calendar)
+            ),
+            previous: DateInterval(
+                start: date(2026, 6, 17, hour: 0, calendar: calendar),
+                end: date(2026, 6, 30, hour: 23, calendar: calendar)
+            )
+        )
+
+        let contributions = WorkoutAnalytics.progressContributions(
+            workouts: [oldWorkout],
+            window: window,
+            mappings: [:]
+        )
+
+        XCTAssertTrue(contributions.isEmpty)
+    }
+
+    func testSinglePassProgressAggregationMatchesNormalAndAssistedLoadSemantics() {
+        let calendar = makeCalendar()
+        let previous = makeWorkout(
+            on: date(2026, 6, 20, hour: 8, calendar: calendar),
+            exercises: [
+                Exercise(
+                    name: "Bench Press",
+                    sets: [makeSet(weight: 180, reps: 5, exerciseName: "Bench Press")]
+                ),
+                Exercise(
+                    name: "Assisted Pull Up",
+                    sets: [makeSet(weight: 40, reps: 8, exerciseName: "Assisted Pull Up")]
+                )
+            ]
+        )
+        let current = makeWorkout(
+            on: date(2026, 7, 5, hour: 8, calendar: calendar),
+            exercises: [
+                Exercise(
+                    name: "Bench Press",
+                    sets: [makeSet(weight: 200, reps: 5, exerciseName: "Bench Press")]
+                ),
+                Exercise(
+                    name: "Assisted Pull Up",
+                    sets: [makeSet(weight: 30, reps: 8, exerciseName: "Assisted Pull Up")]
+                )
+            ]
+        )
+
+        let contributions = WorkoutAnalytics.progressContributions(
+            current: [current],
+            previous: [previous],
+            mappings: [:]
+        )
+        let exerciseContributions = Dictionary(
+            uniqueKeysWithValues: contributions
+                .filter { $0.category == .exercise }
+                .map { ($0.name, $0) }
+        )
+
+        XCTAssertEqual(exerciseContributions["Bench Press"]?.delta, 20)
+        XCTAssertEqual(exerciseContributions["Assisted Pull Up"]?.delta, 10)
+        XCTAssertEqual(
+            exerciseContributions["Bench Press"]?.id,
+            "exercise:Bench Press"
+        )
+    }
+
+    func testStrengthContributionsRequireExerciseInBothPeriods() {
+        let current = makeWorkout(
+            on: Date(),
+            exercises: [
+                Exercise(
+                    name: "New Bench Press",
+                    sets: [makeSet(weight: 200, reps: 5, exerciseName: "New Bench Press")]
+                )
+            ]
+        )
+        let previous = makeWorkout(
+            on: Date().addingTimeInterval(-86_400),
+            exercises: [
+                Exercise(
+                    name: "Old Assisted Pull Up",
+                    sets: [makeSet(weight: 40, reps: 8, exerciseName: "Old Assisted Pull Up")]
+                )
+            ]
+        )
+
+        let contributions = WorkoutAnalytics.progressContributions(
+            current: [current],
+            previous: [previous],
+            mappings: [:]
+        )
+
+        XCTAssertTrue(contributions.filter { $0.category == .exercise }.isEmpty)
+    }
+
+    func testCurrentDayStreakExpiresAfterAllowedRestGap() {
+        let calendar = makeCalendar()
+        let workout = makeWorkout(on: date(2026, 1, 5, hour: 8, calendar: calendar))
+
+        let streak = WorkoutAnalytics.currentDayStreak(
+            for: [workout],
+            intentionalRestDays: 1,
+            intentionalBreakRanges: [],
+            referenceDate: date(2026, 1, 8, hour: 12, calendar: calendar),
+            calendar: calendar
+        )
+
+        XCTAssertEqual(streak, 0)
+    }
+
+    func testWorkoutsPerWeekUsesFullSelectedRange() {
+        let calendar = makeCalendar()
+        let range = DateInterval(
+            start: date(2026, 1, 1, hour: 0, calendar: calendar),
+            end: date(2026, 3, 25, hour: 23, calendar: calendar)
+        )
+        let workouts = [
+            makeWorkout(on: date(2026, 3, 20, hour: 8, calendar: calendar)),
+            makeWorkout(on: date(2026, 3, 20, hour: 17, calendar: calendar))
+        ]
+        let effectiveWeeks = max(
+            IntentionalBreaksAnalytics.effectiveWeekUnits(in: range, breakDays: [], calendar: calendar),
+            1
+        )
+
+        let result = WorkoutAnalytics.workoutsPerWeek(
+            for: workouts,
+            in: range,
+            intentionalBreakRanges: [],
+            calendar: calendar
+        )
+
+        XCTAssertEqual(result, Double(workouts.count) / effectiveWeeks, accuracy: 0.001)
+    }
+
     private func makeWorkout(on date: Date) -> Workout {
+        makeWorkout(on: date, exercises: [])
+    }
+
+    private func makeWorkout(on date: Date, exercises: [Exercise]) -> Workout {
         Workout(
             date: date,
             name: "Workout",
             duration: "45m",
-            exercises: []
+            exercises: exercises
         )
     }
 
-    private func makeSet(weight: Double, reps: Int) -> WorkoutSet {
+    private func makeSet(
+        weight: Double,
+        reps: Int,
+        exerciseName: String = "Exercise"
+    ) -> WorkoutSet {
         WorkoutSet(
             date: Date(timeIntervalSince1970: 0),
             workoutName: "Workout",
             duration: "45m",
-            exerciseName: "Exercise",
+            exerciseName: exerciseName,
             setOrder: 1,
             weight: weight,
             reps: reps,

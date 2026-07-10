@@ -31,6 +31,7 @@ struct ExerciseDetailView: View {
     @State private var progressReview: ExerciseProgressReview?
     @State private var isLoadingProgressReview = false
     @State private var progressReviewTask: Task<Void, Never>?
+    @State private var progressReviewGeneration: UInt64 = 0
     @State private var relationshipEditorRequest: ExerciseRelationshipEditorRequest?
 
     enum ChartType: String, CaseIterable, Hashable {
@@ -1149,11 +1150,15 @@ struct ExerciseDetailView: View {
             refreshScopedHistory()
             scheduleProgressReviewRefresh()
         }
-        .onReceive(metadataManager.objectWillChange) { _ in
+        .onChange(of: metadataManager.muscleTagOverrides) { _, _ in
             refreshScopedHistory()
+            scheduleExerciseDetailRefresh()
+            scheduleProgressReviewRefresh()
         }
-        .onReceive(metricManager.objectWillChange) { _ in
+        .onChange(of: metricManager.cardioOverrides) { _, _ in
             refreshScopedHistory()
+            scheduleExerciseDetailRefresh()
+            scheduleProgressReviewRefresh()
         }
         .onChange(of: relationshipManager.relationships) { _, _ in
             dataManager.refreshExerciseIdentityDerivedState()
@@ -1170,6 +1175,7 @@ struct ExerciseDetailView: View {
         .onDisappear {
             exerciseDetailTask?.cancel()
             progressReviewTask?.cancel()
+            progressReviewGeneration &+= 1
         }
     }
 
@@ -1223,7 +1229,8 @@ struct ExerciseDetailView: View {
         }
     }
 
-    private func refreshProgressReview() async {
+    private func refreshProgressReview(generation: UInt64) async {
+        guard generation == progressReviewGeneration, !Task.isCancelled else { return }
         guard !isCardio, !showsAggregateBreakdown else {
             progressReview = nil
             isLoadingProgressReview = false
@@ -1257,6 +1264,8 @@ struct ExerciseDetailView: View {
             bodyMassSamples = []
         }
 
+        guard generation == progressReviewGeneration, !Task.isCancelled else { return }
+
         progressReview = ProgressReviewEngine.review(
             for: exerciseName,
             workouts: workouts,
@@ -1268,10 +1277,12 @@ struct ExerciseDetailView: View {
 
     private func scheduleProgressReviewRefresh(debounceNs: UInt64 = 200_000_000) {
         progressReviewTask?.cancel()
+        progressReviewGeneration &+= 1
+        let generation = progressReviewGeneration
         progressReviewTask = Task {
             try? await Task.sleep(nanoseconds: debounceNs)
             guard !Task.isCancelled else { return }
-            await refreshProgressReview()
+            await refreshProgressReview(generation: generation)
         }
     }
 }

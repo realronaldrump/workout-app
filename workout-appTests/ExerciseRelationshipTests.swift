@@ -3,6 +3,10 @@ import XCTest
 
 @MainActor
 final class ExerciseRelationshipTests: XCTestCase {
+    /// The production manager is a process-lifetime singleton. Retain isolated fixtures likewise because
+    /// Xcode 26's actor/Combine teardown crashes while deallocating short-lived ObservableObject managers.
+    private static var retainedIsolatedManagers: [ExerciseRelationshipManager] = []
+
     override func setUp() {
         super.setUp()
         ExerciseRelationshipManager.shared.clearRelationships()
@@ -15,6 +19,95 @@ final class ExerciseRelationshipTests: XCTestCase {
         ExerciseMetadataManager.shared.clearOverrides()
         ExerciseMetricManager.shared.clearOverrides()
         super.tearDown()
+    }
+
+    func testFreshManagerLoadsCSVRelationshipsByDefault() {
+        let fixture = makeIsolatedRelationshipManager()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+
+        XCTAssertEqual(fixture.manager.relationships.count, 44)
+        XCTAssertEqual(
+            fixture.manager.relationship(for: "Bayesian Curl - Left"),
+            ExerciseRelationship(
+                exerciseName: "Bayesian Curl - Left",
+                parentName: "Bayesian Curl",
+                laterality: .left
+            )
+        )
+        XCTAssertEqual(
+            fixture.manager.relationship(for: "Single Leg Seated Leg Curl (Right)")?.parentName,
+            "Seated Leg Curl (Machine)"
+        )
+    }
+
+    func testCustomizedDefaultSideWinsAcrossManagerReload() {
+        let fixture = makeIsolatedRelationshipManager()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+
+        XCTAssertTrue(fixture.manager.setRelationship(
+            exerciseName: "Custom Bayesian Curl - Left",
+            parentName: "Bayesian Curl",
+            laterality: .left,
+            replacingExerciseName: "Bayesian Curl - Left"
+        ))
+
+        let reloaded = retainedRelationshipManager(userDefaults: fixture.defaults)
+        XCTAssertNil(reloaded.relationship(for: "Bayesian Curl - Left"))
+        XCTAssertEqual(
+            reloaded.relationship(for: "Custom Bayesian Curl - Left")?.parentName,
+            "Bayesian Curl"
+        )
+        XCTAssertNotNil(reloaded.relationship(for: "Bayesian Curl - Right"))
+    }
+
+    func testRemovedDefaultSideStaysRemovedAcrossManagerReload() {
+        let fixture = makeIsolatedRelationshipManager()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+
+        fixture.manager.removeRelationship(for: "Bayesian Curl - Left")
+        XCTAssertEqual(fixture.manager.suppressedDefaultExerciseNames, ["Bayesian Curl - Left"])
+
+        let reloaded = retainedRelationshipManager(userDefaults: fixture.defaults)
+        XCTAssertNil(reloaded.relationship(for: "Bayesian Curl - Left"))
+        XCTAssertNotNil(reloaded.relationship(for: "Bayesian Curl - Right"))
+    }
+
+    func testImportedLegacySidesReplaceUnobservedCSVDefaults() {
+        let fixture = makeIsolatedRelationshipManager()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+
+        let result = fixture.manager.autoLinkSideRelationships(observedExerciseNames: [
+            "Seated Leg Curl (Machine)",
+            "Single Leg Leg Curl (Left)",
+            "Single Leg Leg Curl (Right)"
+        ])
+
+        XCTAssertEqual(result.created.map(\.exerciseName).sorted(), [
+            "Single Leg Leg Curl (Left)",
+            "Single Leg Leg Curl (Right)"
+        ])
+        XCTAssertNil(fixture.manager.relationship(for: "Single Leg Seated Leg Curl (Left)"))
+        XCTAssertNil(fixture.manager.relationship(for: "Single Leg Seated Leg Curl (Right)"))
+    }
+
+    func testBackupCustomizationCanReplaceUnmodifiedCSVDefault() {
+        let fixture = makeIsolatedRelationshipManager()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+
+        let result = fixture.manager.mergeRelationshipsFromBackup([
+            ExerciseRelationship(
+                exerciseName: "Backup Bayesian Curl - Left",
+                parentName: "Bayesian Curl",
+                laterality: .left
+            )
+        ])
+
+        XCTAssertEqual(result.inserted, 1)
+        XCTAssertNil(fixture.manager.relationship(for: "Bayesian Curl - Left"))
+        XCTAssertEqual(
+            fixture.manager.relationship(for: "Backup Bayesian Curl - Left")?.parentName,
+            "Bayesian Curl"
+        )
     }
 
     func testResolverRollsExplicitSideVariantsToParentButKeepsPerformanceTracksExact() {
@@ -637,6 +730,29 @@ final class ExerciseRelationshipTests: XCTestCase {
 
         let quads = engine.frequencyInsights(for: .allTime).first { $0.muscleGroup == MuscleGroup.quads.displayName }
         XCTAssertEqual(quads?.weeksHit, 1)
+    }
+
+    private struct IsolatedRelationshipManagerFixture {
+        let manager: ExerciseRelationshipManager
+        let defaults: UserDefaults
+        let suiteName: String
+    }
+
+    private func makeIsolatedRelationshipManager() -> IsolatedRelationshipManagerFixture {
+        let suiteName = "ExerciseRelationshipTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        return IsolatedRelationshipManagerFixture(
+            manager: retainedRelationshipManager(userDefaults: defaults),
+            defaults: defaults,
+            suiteName: suiteName
+        )
+    }
+
+    private func retainedRelationshipManager(userDefaults: UserDefaults) -> ExerciseRelationshipManager {
+        let manager = ExerciseRelationshipManager(userDefaults: userDefaults)
+        Self.retainedIsolatedManagers.append(manager)
+        return manager
     }
 
     private func makeDate(day: Int) -> Date {

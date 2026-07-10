@@ -21,6 +21,7 @@ struct SelectiveDataClearSheet: View {
     @State private var isClearing = false
     @State private var workoutFileCount: Int?
     @State private var exportAndBackupFileCount: Int?
+    @State private var clearErrorMessage: String?
 
     private var plan: AppDataClearPlan {
         AppDataClearPlan(requestedCategories: selectedCategories)
@@ -62,6 +63,19 @@ struct SelectiveDataClearSheet: View {
                 }
             } message: {
                 Text(confirmationMessage)
+            }
+            .alert(
+                "Unable to Clear Selected Data",
+                isPresented: Binding(
+                    get: { clearErrorMessage != nil },
+                    set: { if !$0 { clearErrorMessage = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) {
+                    clearErrorMessage = nil
+                }
+            } message: {
+                Text(clearErrorMessage ?? "The selected data could not be fully removed.")
             }
         }
     }
@@ -200,22 +214,30 @@ struct SelectiveDataClearSheet: View {
         isClearing = true
 
         Task { @MainActor in
-            await AppDataClearService.clear(
-                plan: plan,
-                context: AppDataClearContext(
-                    dataManager: dataManager,
-                    iCloudManager: iCloudManager,
-                    logStore: logStore,
-                    sessionManager: sessionManager,
-                    healthManager: healthManager,
-                    intentionalBreaksManager: intentionalBreaksManager,
-                    annotationsManager: annotationsManager,
-                    gymProfilesManager: gymProfilesManager
-                ),
-                setHasSeenOnboarding: { hasSeenOnboarding = $0 }
-            )
-            isClearing = false
-            dismiss()
+            do {
+                try await AppDataClearService.clear(
+                    plan: plan,
+                    context: AppDataClearContext(
+                        dataManager: dataManager,
+                        iCloudManager: iCloudManager,
+                        logStore: logStore,
+                        sessionManager: sessionManager,
+                        healthManager: healthManager,
+                        intentionalBreaksManager: intentionalBreaksManager,
+                        annotationsManager: annotationsManager,
+                        gymProfilesManager: gymProfilesManager
+                    ),
+                    setHasSeenOnboarding: { hasSeenOnboarding = $0 }
+                )
+                isClearing = false
+                dismiss()
+            } catch {
+                isClearing = false
+                clearErrorMessage = error.localizedDescription
+                workoutFileCount = nil
+                exportAndBackupFileCount = nil
+                await refreshFileCounts()
+            }
         }
     }
 
@@ -232,9 +254,15 @@ struct SelectiveDataClearSheet: View {
         case .workoutHistory:
             let importedCount = dataManager.importedWorkouts.count
             let loggedCount = logStore.workouts.count
-            let fileCount = workoutFileCount
+            let filesHaveSeparateCategory = plan.effectiveCategories.contains(.importExportFiles)
+            let fileCount = filesHaveSeparateCategory ? 0 : workoutFileCount
             let total = importedCount + loggedCount + (fileCount ?? 0)
-            let fileText = fileCount.map { "\($0) file\($0 == 1 ? "" : "s")" } ?? "counting files"
+            let fileText: String
+            if filesHaveSeparateCategory {
+                fileText = "files counted under Import & Backup Files"
+            } else {
+                fileText = fileCount.map { "\($0) file\($0 == 1 ? "" : "s")" } ?? "counting files"
+            }
             return DataClearCategoryPreview(
                 count: fileCount == nil ? nil : total,
                 detail: "\(importedCount) imported, \(loggedCount) logged, \(fileText)"

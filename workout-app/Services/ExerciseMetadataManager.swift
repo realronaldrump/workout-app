@@ -5,7 +5,21 @@ class ExerciseMetadataManager: ObservableObject {
     static let shared = ExerciseMetadataManager()
 
     /// A curated list of built-in exercises that should appear in pickers even before any workouts exist.
-    static let defaultExerciseNames: [String] = defaultExerciseCatalog.map(\.name)
+    /// CSV entries lead the list; still-valid legacy entries remain available without duplicating renamed rows.
+    static let defaultExerciseNames: [String] = {
+        let hiddenLegacyNames: Set<String> = [
+            "Single Arm Tricep Extension (dumbell)",
+            "Single Leg Leg Curl (Left)",
+            "Single Leg Leg Curl (Right)"
+        ]
+        var seen = Set<String>()
+        return (DefaultExerciseCatalog.entries.map(\.name) + defaultExerciseCatalog.map(\.name))
+            .filter { !hiddenLegacyNames.contains($0) }
+            .filter { seen.insert(ExerciseIdentityResolver.normalizedName($0)).inserted }
+    }()
+
+    /// Parent/side relationships that ship with the built-in exercise catalog.
+    static let defaultExerciseRelationships: [ExerciseRelationship] = DefaultExerciseCatalog.relationships
 
     /// User overrides. If a key is present with an empty array, that exercise is explicitly untagged.
     @Published private(set) var muscleTagOverrides: [String: [MuscleTag]] = [:]
@@ -18,8 +32,7 @@ class ExerciseMetadataManager: ObservableObject {
         let groups: [MuscleGroup]
     }
 
-    /// This is the default exercise list requested by the user (names + built-in muscle-group tags).
-    /// This list is also used to populate the exercise picker when there are no logged workouts yet.
+    /// Legacy built-ins retained for compatibility and for valid exercises omitted from the latest CSV.
     private static let defaultExerciseCatalog: [CatalogEntry] = [
         .init(name: "45\u{00B0} Donkey Calf", groups: [.calves]),
         .init(name: "Arnold Press (Dumbbell)", groups: [.shoulders, .triceps]),
@@ -158,7 +171,7 @@ class ExerciseMetadataManager: ObservableObject {
         groups.map { MuscleTag.builtIn($0) }
     }
 
-    /// Default mappings are derived from the curated catalog above.
+    /// Default mappings merge the legacy catalog with the latest CSV. CSV values win when a row was revised.
     /// Additional keys below preserve common import/name variants without creating duplicate picker entries.
     private static let defaultMappings: [String: [MuscleTag]] = {
         var mappings: [String: [MuscleTag]] = Dictionary(
@@ -166,6 +179,10 @@ class ExerciseMetadataManager: ObservableObject {
                 (entry.name, builtInTags(entry.groups))
             }
         )
+
+        for entry in DefaultExerciseCatalog.entries {
+            mappings[entry.name] = builtInTags(entry.groups)
+        }
 
         let compatibilityMappings: [String: [MuscleTag]] = [
             "Push Ups": builtInTags([.chest, .triceps, .shoulders]),

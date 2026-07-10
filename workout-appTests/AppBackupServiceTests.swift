@@ -78,6 +78,7 @@ final class AppBackupServiceTests: XCTestCase {
                         laterality: .left
                     )
                 ],
+                suppressedDefaultExerciseRelationships: ["Bayesian Curl - Left"],
                 intentionalBreakRanges: [breakRange],
                 dismissedIntentionalBreakSuggestions: [breakRange],
                 favoriteExercises: ["Bench Press"],
@@ -119,6 +120,7 @@ final class AppBackupServiceTests: XCTestCase {
         XCTAssertEqual(decoded.payload.exerciseRelationships.first?.exerciseName, "Leg Extension (Machine) - Left")
         XCTAssertEqual(decoded.payload.exerciseRelationships.first?.parentName, "Leg Extension (Machine)")
         XCTAssertEqual(decoded.payload.exerciseRelationships.first?.laterality, .left)
+        XCTAssertEqual(decoded.payload.suppressedDefaultExerciseRelationships, ["Bayesian Curl - Left"])
         XCTAssertEqual(decoded.payload.favoriteExercises, ["Bench Press"])
         XCTAssertEqual(decoded.payload.completedFeatureGuideIDs, ["dashboard"])
         XCTAssertEqual(decoded.payload.settings.profileName, "Davis")
@@ -233,6 +235,54 @@ final class AppBackupServiceTests: XCTestCase {
 
         XCTAssertEqual(section.kind, .workoutExport)
         XCTAssertEqual(section.files.map(\.fileName), [newWorkoutExport, oldWorkoutExport])
+    }
+
+    @MainActor
+    func testRegisteredDefaultDoesNotBlockRestoringBackupSetting() throws {
+        let suiteName = "AppBackupServiceTests.registered-default.\(UUID().uuidString)"
+        let userDefaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { userDefaults.removePersistentDomain(forName: suiteName) }
+        userDefaults.register(defaults: ["weightIncrement": 2.5])
+
+        XCTAssertEqual(userDefaults.double(forKey: "weightIncrement"), 2.5)
+        let persistedValues = AppBackupImporter.persistedValues(
+            in: userDefaults,
+            persistentDomainName: suiteName
+        )
+        XCTAssertNil(persistedValues["weightIncrement"])
+
+        let restored = AppBackupImporter.setIfMissing(
+            5.0,
+            forKey: "weightIncrement",
+            userDefaults: userDefaults,
+            persistedValues: persistedValues
+        )
+
+        XCTAssertEqual(restored, 1)
+        XCTAssertEqual(userDefaults.double(forKey: "weightIncrement"), 5.0)
+    }
+
+    @MainActor
+    func testPersistedSettingWinsOverBackupSetting() throws {
+        let suiteName = "AppBackupServiceTests.persisted-setting.\(UUID().uuidString)"
+        let userDefaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { userDefaults.removePersistentDomain(forName: suiteName) }
+        userDefaults.register(defaults: ["weightIncrement": 2.5])
+        userDefaults.set(3.0, forKey: "weightIncrement")
+
+        let persistedValues = AppBackupImporter.persistedValues(
+            in: userDefaults,
+            persistentDomainName: suiteName
+        )
+        let restored = AppBackupImporter.setIfMissing(
+            5.0,
+            forKey: "weightIncrement",
+            userDefaults: userDefaults,
+            persistedValues: persistedValues
+        )
+
+        XCTAssertEqual(restored, 0)
+        XCTAssertEqual(userDefaults.double(forKey: "weightIncrement"), 3.0)
     }
 
     private func makeTemporaryDirectory() throws -> URL {

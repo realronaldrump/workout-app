@@ -27,16 +27,21 @@ final class WorkoutVariantEngine: ObservableObject {
         let gymNamesSnapshot = gymNames
         let resolver = ExerciseRelationshipManager.shared.resolverSnapshot()
 
-        let result = await Task.detached(priority: .userInitiated) {
+        let analysisTask = Task.detached(priority: .userInitiated) {
             WorkoutVariantAnalyzer.buildLibrary(
                 workouts: workoutsSnapshot,
                 annotations: annotationsSnapshot,
                 gymNames: gymNamesSnapshot,
                 resolver: resolver
             )
-        }.value
+        }
+        let result = await withTaskCancellationHandler {
+            await analysisTask.value
+        } onCancel: {
+            analysisTask.cancel()
+        }
 
-        guard currentGeneration == generation else { return }
+        guard !Task.isCancelled, currentGeneration == generation else { return }
         library = result
         isAnalyzing = false
     }
@@ -67,6 +72,7 @@ private enum WorkoutVariantAnalyzer {
         gymNames: [UUID: String],
         resolver: ExerciseIdentityResolver = .empty
     ) -> WorkoutVariantLibrary {
+        guard !Task.isCancelled else { return .empty }
         let snapshots = workouts.map {
             snapshot(for: $0, annotations: annotations, gymNames: gymNames, resolver: resolver)
         }
@@ -76,6 +82,7 @@ private enum WorkoutVariantAnalyzer {
         var patterns: [WorkoutVariantPattern] = []
 
         for groupedSnapshots in groups.values {
+            guard !Task.isCancelled else { return .empty }
             guard groupedSnapshots.count >= minimumWorkoutGroupCount else { continue }
             guard let context = buildContext(
                 groupLabel: groupedSnapshots.first?.comparisonGroupLabel ?? "Workout Structure",
@@ -85,6 +92,7 @@ private enum WorkoutVariantAnalyzer {
             }
 
             for snapshot in groupedSnapshots {
+                guard !Task.isCancelled else { return .empty }
                 if let review = buildReview(for: snapshot, context: context) {
                     reviewsByWorkoutId[review.workout.id] = review
                 }

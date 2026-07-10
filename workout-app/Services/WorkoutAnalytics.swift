@@ -20,12 +20,12 @@ struct WorkoutAnalytics {
     static func streakRuns(
         for workouts: [Workout],
         intentionalRestDays: Int,
-        intentionalBreakRanges: [IntentionalBreakRange]? = nil
+        intentionalBreakRanges: [IntentionalBreakRange]? = nil,
+        calendar: Calendar = .current
     ) -> [StreakRun] {
         guard !workouts.isEmpty else { return [] }
 
         let allowedGapDays = max(0, intentionalRestDays) + 1
-        let calendar = Calendar.current
         let uniqueDays = Set(workouts.map { calendar.startOfDay(for: $0.date) })
         let breakDays = IntentionalBreaksAnalytics.breakDaySet(
             from: intentionalBreakRanges ?? IntentionalBreaksStore.load(
@@ -63,6 +63,77 @@ struct WorkoutAnalytics {
 
         runs.append(StreakRun(start: runStart, end: runEnd, workoutDayCount: count))
         return runs
+    }
+
+    /// Returns the final day-based streak only while it can still be continued at
+    /// `referenceDate`. An old historical run is not presented as a live streak.
+    static func currentDayStreak(
+        for workouts: [Workout],
+        intentionalRestDays: Int,
+        intentionalBreakRanges: [IntentionalBreakRange]? = nil,
+        referenceDate: Date = Date(),
+        calendar: Calendar = .current
+    ) -> Int {
+        let referenceDay = calendar.startOfDay(for: referenceDate)
+        let eligibleWorkouts = workouts.filter { calendar.startOfDay(for: $0.date) <= referenceDay }
+        let breaks = intentionalBreakRanges ?? IntentionalBreaksStore.load(
+            key: IntentionalBreaksStore.savedBreaksKey
+        )
+        guard let finalRun = streakRuns(
+            for: eligibleWorkouts,
+            intentionalRestDays: intentionalRestDays,
+            intentionalBreakRanges: breaks,
+            calendar: calendar
+        ).last else {
+            return 0
+        }
+
+        let workoutDays = Set(eligibleWorkouts.map { calendar.startOfDay(for: $0.date) })
+        let breakDays = IntentionalBreaksAnalytics.breakDaySet(
+            from: breaks,
+            excluding: workoutDays,
+            within: finalRun.end...referenceDay,
+            calendar: calendar
+        )
+        let effectiveGap = IntentionalBreaksAnalytics.effectiveGapDays(
+            from: finalRun.end,
+            to: referenceDay,
+            breakDays: breakDays,
+            includeEnd: true,
+            calendar: calendar
+        )
+        let allowedGapDays = max(0, intentionalRestDays) + 1
+        return effectiveGap <= allowedGapDays ? finalRun.workoutDayCount : 0
+    }
+
+    /// Normalizes activity to the selected UI range rather than the distance between
+    /// its first and last workout.
+    static func workoutsPerWeek(
+        for workouts: [Workout],
+        in range: DateInterval,
+        intentionalBreakRanges: [IntentionalBreakRange],
+        calendar: Calendar = .current
+    ) -> Double {
+        guard !workouts.isEmpty, range.start < range.end else { return 0 }
+
+        let workoutDays = Set(workouts.map { calendar.startOfDay(for: $0.date) })
+        let rangeStart = calendar.startOfDay(for: range.start)
+        let rangeEnd = calendar.startOfDay(for: range.end)
+        let breakDays = IntentionalBreaksAnalytics.breakDaySet(
+            from: intentionalBreakRanges,
+            excluding: workoutDays,
+            within: rangeStart...max(rangeStart, rangeEnd),
+            calendar: calendar
+        )
+        let effectiveWeeks = max(
+            IntentionalBreaksAnalytics.effectiveWeekUnits(
+                in: range,
+                breakDays: breakDays,
+                calendar: calendar
+            ),
+            1
+        )
+        return Double(workouts.count) / effectiveWeeks
     }
 
     /// Returns the current Sunday-start calendar-week streak.
@@ -172,19 +243,28 @@ struct WorkoutAnalytics {
                     .contains(where: { $0.builtInGroup == .cardio })
             }
         )
-        let strengthSets = allSets.filter { !cardioNames.contains($0.exerciseName) }
+        let strengthSets = allSets.filter {
+            !cardioNames.contains($0.exerciseName) && $0.reps > 0
+        }
         let buckets: [RepRangeDescriptor] = [
             RepRangeDescriptor(label: "1-3", range: 1...3, tint: Theme.Colors.error),
             RepRangeDescriptor(label: "4-6", range: 4...6, tint: Theme.Colors.warning),
             RepRangeDescriptor(label: "7-10", range: 7...10, tint: Theme.Colors.accent),
             RepRangeDescriptor(label: "11-15", range: 11...15, tint: Theme.Colors.accentSecondary),
             RepRangeDescriptor(label: "16-20", range: 16...20, tint: Theme.Colors.success),
-            RepRangeDescriptor(label: "21+", range: 21...100, tint: Theme.Colors.textSecondary)
+            RepRangeDescriptor(label: "21+", range: 21...Int.max, tint: Theme.Colors.textSecondary)
         ]
 
+        var counts = Array(repeating: 0, count: buckets.count)
+        for set in strengthSets {
+            if let index = repRangeBucketIndex(for: set.reps) {
+                counts[index] += 1
+            }
+        }
+
         let total = max(strengthSets.count, 1)
-        return buckets.map { bucket in
-            let count = strengthSets.filter { bucket.range.contains($0.reps) }.count
+        return buckets.enumerated().map { index, bucket in
+            let count = counts[index]
             return RepRangeBucket(
                 label: bucket.label,
                 range: bucket.range,
@@ -209,11 +289,15 @@ struct WorkoutAnalytics {
 
         let allSets = allExercises.flatMap { $0.sets }
         let zones: [IntensityZoneDescriptor] = [
-            IntensityZoneDescriptor(label: "<50%", range: 0.0...0.49, tint: Theme.Colors.textSecondary),
-            IntensityZoneDescriptor(label: "50-65%", range: 0.50...0.65, tint: Theme.Colors.accentSecondary),
-            IntensityZoneDescriptor(label: "65-75%", range: 0.66...0.75, tint: Theme.Colors.accent),
-            IntensityZoneDescriptor(label: "75-85%", range: 0.76...0.85, tint: Theme.Colors.warning),
-            IntensityZoneDescriptor(label: "85%+", range: 0.86...1.5, tint: Theme.Colors.error)
+            IntensityZoneDescriptor(label: "<50%", range: 0.0...0.5, tint: Theme.Colors.textSecondary),
+            IntensityZoneDescriptor(label: "50-65%", range: 0.5...0.65, tint: Theme.Colors.accentSecondary),
+            IntensityZoneDescriptor(label: "65-75%", range: 0.65...0.75, tint: Theme.Colors.accent),
+            IntensityZoneDescriptor(label: "75-85%", range: 0.75...0.85, tint: Theme.Colors.warning),
+            IntensityZoneDescriptor(
+                label: "85%+",
+                range: 0.85...Double.greatestFiniteMagnitude,
+                tint: Theme.Colors.error
+            )
         ]
 
         var zoneCounts = Array(repeating: 0, count: zones.count)
@@ -226,7 +310,7 @@ struct WorkoutAnalytics {
                 referenceWeight: reference,
                 exerciseName: set.exerciseName
             )
-            if let index = zones.firstIndex(where: { $0.range.contains(intensity) }) {
+            if let index = intensityZoneBucketIndex(for: intensity) {
                 zoneCounts[index] += 1
                 total += 1
             }
@@ -258,11 +342,67 @@ struct WorkoutAnalytics {
         let current = workouts.filter { $0.date >= currentStart }
         let previous = workouts.filter { $0.date >= previousStart && $0.date < currentStart }
 
-        let exerciseDeltas = progressDeltaByExercise(current: current, previous: previous, resolver: resolver)
+        return progressContributions(
+            current: current,
+            previous: previous,
+            mappings: mappings,
+            resolver: resolver
+        )
+    }
 
-        let exerciseContributions = exerciseDeltas.map { name, delta in
-            let previousValue = previousExerciseValue(previous, exerciseName: name, resolver: resolver)
-            let currentValue = currentExerciseValue(current, exerciseName: name, resolver: resolver)
+    /// Computes progress against an explicit UI window instead of anchoring the result to
+    /// the most recent workout. This keeps an empty recent period empty after a training gap.
+    static func progressContributions(
+        workouts: [Workout],
+        window: ChangeMetricWindow,
+        mappings: [String: [MuscleTag]],
+        resolver: ExerciseIdentityResolver = .empty
+    ) -> [ProgressContribution] {
+        var current: [Workout] = []
+        var previous: [Workout] = []
+        current.reserveCapacity(workouts.count)
+        previous.reserveCapacity(workouts.count)
+
+        for workout in workouts {
+            if window.current.contains(workout.date) {
+                current.append(workout)
+            } else if window.previous.contains(workout.date) {
+                previous.append(workout)
+            }
+        }
+
+        return progressContributions(
+            current: current,
+            previous: previous,
+            mappings: mappings,
+            resolver: resolver
+        )
+    }
+
+    /// Single-pass aggregation for each comparison period. Every workout hierarchy is
+    /// rolled up once, avoiding the previous exercise-count × workout-count rescans.
+    static func progressContributions(
+        current: [Workout],
+        previous: [Workout],
+        mappings: [String: [MuscleTag]],
+        resolver: ExerciseIdentityResolver = .empty
+    ) -> [ProgressContribution] {
+        let currentTotals = progressPeriodTotals(for: current, resolver: resolver)
+        let previousTotals = progressPeriodTotals(for: previous, resolver: resolver)
+        // Strength is only comparable when the exercise was performed in both periods.
+        // Treating an absent lift as zero creates false regressions and reverses the
+        // meaning of assisted exercises, where less assistance is better.
+        let exerciseNames = Set(currentTotals.bestExerciseValues.keys)
+            .intersection(previousTotals.bestExerciseValues.keys)
+
+        var exerciseDeltas: [String: Double] = [:]
+        exerciseDeltas.reserveCapacity(exerciseNames.count)
+
+        let exerciseContributions = exerciseNames.map { name in
+            let currentValue = currentTotals.bestExerciseValues[name] ?? 0
+            let previousValue = previousTotals.bestExerciseValues[name] ?? 0
+            let delta = currentValue - previousValue
+            exerciseDeltas[name] = delta
             let percent = percentChange(current: currentValue, previous: previousValue)
             return ProgressContribution(
                 name: name,
@@ -295,14 +435,18 @@ struct WorkoutAnalytics {
             )
         }
 
-        let workoutTypeDeltas = progressDeltaByWorkoutName(current: current, previous: previous, resolver: resolver)
-        let workoutContributions = workoutTypeDeltas.map { name, delta in
-            ProgressContribution(
+        let workoutNames = Set(currentTotals.volumeByWorkoutName.keys)
+            .union(previousTotals.volumeByWorkoutName.keys)
+        let workoutContributions = workoutNames.map { name in
+            let currentValue = currentTotals.volumeByWorkoutName[name] ?? 0
+            let previousValue = previousTotals.volumeByWorkoutName[name] ?? 0
+            let delta = currentValue - previousValue
+            return ProgressContribution(
                 name: name,
                 delta: delta,
-                current: max(delta, 0),
-                previous: 0,
-                percentChange: 0,
+                current: currentValue,
+                previous: previousValue,
+                percentChange: percentChange(current: currentValue, previous: previousValue),
                 category: .workoutType,
                 tint: Theme.Colors.accentSecondary
             )
@@ -310,6 +454,27 @@ struct WorkoutAnalytics {
 
         return (exerciseContributions + muscleContributions + workoutContributions)
             .sorted { abs($0.delta) > abs($1.delta) }
+    }
+
+    static func repRangeBucketIndex(for reps: Int) -> Int? {
+        guard reps > 0 else { return nil }
+        switch reps {
+        case 1...3: return 0
+        case 4...6: return 1
+        case 7...10: return 2
+        case 11...15: return 3
+        case 16...20: return 4
+        default: return 5
+        }
+    }
+
+    static func intensityZoneBucketIndex(for intensity: Double) -> Int? {
+        guard intensity.isFinite, intensity >= 0 else { return nil }
+        if intensity < 0.5 { return 0 }
+        if intensity < 0.65 { return 1 }
+        if intensity < 0.75 { return 2 }
+        if intensity < 0.85 { return 3 }
+        return 4
     }
 
     static func exerciseConsistencySummaries(workouts: [Workout], weeks: Int) -> [ExerciseConsistencySummary] {
@@ -364,6 +529,15 @@ struct WorkoutAnalytics {
         let current = workouts.filter { currentRange.contains($0.date) }
         let previous = workouts.filter { previousRange.contains($0.date) }
 
+        return changeMetrics(current: current, previous: previous, resolver: resolver)
+    }
+
+    static func changeMetrics(
+        current: [Workout],
+        previous: [Workout],
+        resolver: ExerciseIdentityResolver = .empty
+    ) -> [ChangeMetric] {
+
         let currentVolume = ExerciseAggregation.totalVolume(for: current, resolver: resolver)
         let previousVolume = ExerciseAggregation.totalVolume(for: previous, resolver: resolver)
 
@@ -404,28 +578,45 @@ struct WorkoutAnalytics {
 
     // MARK: - Helpers
 
-    private static func progressDeltaByExercise(
-        current: [Workout],
-        previous: [Workout],
+    private struct ProgressPeriodTotals {
+        var bestExerciseValues: [String: Double] = [:]
+        var volumeByWorkoutName: [String: Double] = [:]
+    }
+
+    private static func progressPeriodTotals(
+        for workouts: [Workout],
         resolver: ExerciseIdentityResolver
-    ) -> [String: Double] {
-        let currentExercises = current.flatMap {
-            ExerciseAggregation.aggregateExercises(in: $0, resolver: resolver).map(\.name)
-        }
-        let previousExercises = previous.flatMap {
-            ExerciseAggregation.aggregateExercises(in: $0, resolver: resolver).map(\.name)
-        }
-        let exercises = Set(currentExercises + previousExercises)
-        var deltas: [String: Double] = [:]
+    ) -> ProgressPeriodTotals {
+        var totals = ProgressPeriodTotals()
 
-        for name in exercises {
-            let currentValue = currentExerciseValue(current, exerciseName: name, resolver: resolver)
-            let previousValue = previousExerciseValue(previous, exerciseName: name, resolver: resolver)
-            let delta = currentValue - previousValue
-            deltas[name] = delta
+        for workout in workouts {
+            let exercises = ExerciseAggregation.aggregateExercises(in: workout, resolver: resolver)
+            var workoutVolume = 0.0
+
+            for exercise in exercises {
+                workoutVolume += exercise.totalVolume
+                guard let bestWeight = ExerciseLoad.bestWeight(
+                    in: exercise.sets.map(\.weight),
+                    exerciseName: exercise.name
+                ) else {
+                    continue
+                }
+
+                let value = ExerciseLoad.comparisonValue(
+                    for: bestWeight,
+                    exerciseName: exercise.name
+                )
+                if let existing = totals.bestExerciseValues[exercise.name] {
+                    totals.bestExerciseValues[exercise.name] = max(existing, value)
+                } else {
+                    totals.bestExerciseValues[exercise.name] = value
+                }
+            }
+
+            totals.volumeByWorkoutName[workout.name, default: 0] += workoutVolume
         }
 
-        return deltas
+        return totals
     }
 
     private static func exerciseConsistencySummaries(
@@ -476,54 +667,6 @@ struct WorkoutAnalytics {
         return calendar.date(from: components)
     }
 
-    private static func progressDeltaByWorkoutName(
-        current: [Workout],
-        previous: [Workout],
-        resolver: ExerciseIdentityResolver
-    ) -> [String: Double] {
-        let names = Set(current.map { $0.name } + previous.map { $0.name })
-        var deltas: [String: Double] = [:]
-
-        for name in names {
-            let currentVolume = ExerciseAggregation.totalVolume(
-                for: current.filter { $0.name == name },
-                resolver: resolver
-            )
-            let previousVolume = ExerciseAggregation.totalVolume(
-                for: previous.filter { $0.name == name },
-                resolver: resolver
-            )
-            deltas[name] = currentVolume - previousVolume
-        }
-
-        return deltas
-    }
-
-    private static func currentExerciseValue(
-        _ workouts: [Workout],
-        exerciseName: String,
-        resolver: ExerciseIdentityResolver
-    ) -> Double {
-        let sets = workouts.flatMap { workout in
-            ExerciseAggregation.aggregateExercises(in: workout, resolver: resolver)
-                .filter { $0.name == exerciseName }
-                .flatMap { $0.sets }
-        }
-        guard let bestWeight = ExerciseLoad.bestWeight(in: sets.map(\.weight), exerciseName: exerciseName) else {
-            return 0
-        }
-        // Return a comparison-space value so assisted lifts improve when assistance decreases.
-        return ExerciseLoad.comparisonValue(for: bestWeight, exerciseName: exerciseName)
-    }
-
-    private static func previousExerciseValue(
-        _ workouts: [Workout],
-        exerciseName: String,
-        resolver: ExerciseIdentityResolver
-    ) -> Double {
-        currentExerciseValue(workouts, exerciseName: exerciseName, resolver: resolver)
-    }
-
     private static func changeMetric(title: String, current: Double, previous: Double) -> ChangeMetric {
         let delta = current - previous
         let percent = percentChange(current: current, previous: previous)
@@ -541,8 +684,4 @@ struct WorkoutAnalytics {
         ExerciseLoad.performancePercentChange(current: current, previous: previous)
     }
 
-    private static func average(_ values: [Double]) -> Double {
-        guard !values.isEmpty else { return 0 }
-        return values.reduce(0, +) / Double(values.count)
-    }
 }

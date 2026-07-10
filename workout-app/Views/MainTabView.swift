@@ -126,6 +126,7 @@ struct MainTabView: View {
     @StateObject private var variantEngine = WorkoutVariantEngine()
     @StateObject private var similarityEngine = WorkoutSimilarityEngine()
     @StateObject private var migrationManager = LegacyDataMigrationManager()
+    @StateObject private var changelogStore = ChangelogStore()
     @ObservedObject private var relationshipManager = ExerciseRelationshipManager.shared
     @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
     @State private var showingOnboarding = false
@@ -135,6 +136,7 @@ struct MainTabView: View {
     @State private var hasCompletedInitialLoad = false
     @State private var hasStartedLaunchFlow = false
     @State private var hasBootstrappedStores = false
+    @State private var changelogPresentation: ChangelogPresentation?
     @State private var insightsRefreshTask: Task<Void, Never>?
     @State private var variantAnalysisTask: Task<Void, Never>?
     @State private var similarityAnalysisTask: Task<Void, Never>?
@@ -295,6 +297,34 @@ struct MainTabView: View {
                 hasSeenOnboarding: $hasSeenOnboarding
             )
         }
+        .sheet(item: $changelogPresentation) { presentation in
+            WhatsNewSheetView(presentation: presentation) {
+                changelogStore.markSeen(version: presentation.latestVersion)
+            }
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+            .presentationCornerRadius(Theme.CornerRadius.xlarge)
+        }
+        .onChange(of: showSplash) { _, isShowing in
+            if !isShowing {
+                presentChangelogIfReady()
+            }
+        }
+        .onChange(of: showingOnboarding) { _, isShowing in
+            if !isShowing {
+                presentChangelogIfReady()
+            }
+        }
+        .onChange(of: hasCompletedInitialLoad) { _, isComplete in
+            if isComplete {
+                presentChangelogIfReady()
+            }
+        }
+        .onReceive(sessionManager.$isPresentingSessionUI.dropFirst()) { isPresented in
+            if !isPresented {
+                presentChangelogIfReady()
+            }
+        }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             ActiveSessionInset(sessionManager: sessionManager)
         }
@@ -314,6 +344,9 @@ struct MainTabView: View {
         }
 
         let shouldShow = !hasSeenOnboarding && dataManager.workouts.isEmpty
+        if shouldShow {
+            changelogStore.markCurrentVersionSeen()
+        }
         if showSplash {
             pendingOnboarding = shouldShow
         } else {
@@ -370,12 +403,12 @@ struct MainTabView: View {
 
         Task { @MainActor in
             LegacyProgramCleanup.runIfNeeded()
-            annotationsManager.reloadPersistedAnnotations()
             intentionalBreaksManager.reloadPersistedBreaks()
-            gymProfilesManager.reloadPersistedGyms()
-            healthManager.loadPersistedData()
-            healthManager.loadPersistedDailyHealthData()
-            await logStore.load()
+            async let annotationLoad: Void = annotationsManager.reloadPersistedAnnotations()
+            async let gymLoad: Void = gymProfilesManager.reloadPersistedGyms()
+            async let healthBootstrap: Void = healthManager.bootstrapPersistedDataIfNeeded()
+            async let loggedWorkoutLoad: Void = logStore.load()
+            _ = await (annotationLoad, gymLoad, healthBootstrap, loggedWorkoutLoad)
             await dataManager.setLoggedWorkoutsOffMain(logStore.workouts)
             await dataManager.reloadPersistedMigrationState()
             await importLatestNativeBackupIfNeeded()
@@ -397,7 +430,18 @@ struct MainTabView: View {
 
             hasCompletedInitialLoad = true
             refreshOnboardingState()
+            presentChangelogIfReady()
         }
+    }
+
+    private func presentChangelogIfReady() {
+        guard hasCompletedInitialLoad else { return }
+        guard !showSplash, !pendingOnboarding, !showingOnboarding else { return }
+        guard !migrationManager.blocksLaunch else { return }
+        guard !sessionManager.isPresentingSessionUI else { return }
+        guard changelogPresentation == nil else { return }
+
+        changelogPresentation = changelogStore.pendingPresentation()
     }
 
     private func importLatestNativeBackupIfNeeded() async {
@@ -412,7 +456,7 @@ struct MainTabView: View {
                 try Data(contentsOf: backupFile)
             }.value
             let backup = try AppBackupService.decodeBackup(from: backupData)
-            _ = try AppBackupImporter.importBackup(
+            _ = try await AppBackupImporter.importBackup(
                 backup,
                 dataManager: dataManager,
                 logStore: logStore,

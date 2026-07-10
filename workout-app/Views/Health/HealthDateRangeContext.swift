@@ -47,6 +47,58 @@ final class HealthDateRangeContext: ObservableObject {
     }
 }
 
+nonisolated struct HealthDayComparisonRanges: Equatable, Sendable {
+    let display: ClosedRange<Date>
+    let currentComparison: ClosedRange<Date>?
+    let previousComparison: ClosedRange<Date>?
+    let comparisonDayCount: Int
+
+    init(
+        resolvedRange: DateInterval,
+        comparesPreviousPeriod: Bool,
+        calendar: Calendar = .current
+    ) {
+        let displayStart = calendar.startOfDay(for: resolvedRange.start)
+        let displayEnd = calendar.startOfDay(for: resolvedRange.end)
+        display = displayStart...max(displayStart, displayEnd)
+
+        let endTime = calendar.dateComponents([.hour, .minute, .second], from: resolvedRange.end)
+        let includesCompleteEndDay = endTime.hour == 23
+            && endTime.minute == 59
+            && endTime.second == 59
+        let excludesPartialEndDay = !includesCompleteEndDay
+        let comparisonEnd = excludesPartialEndDay
+            ? (calendar.date(byAdding: .day, value: -1, to: displayEnd) ?? displayEnd)
+            : displayEnd
+
+        guard comparisonEnd >= displayStart else {
+            currentComparison = nil
+            previousComparison = nil
+            comparisonDayCount = 0
+            return
+        }
+
+        currentComparison = displayStart...comparisonEnd
+        comparisonDayCount = max(
+            (calendar.dateComponents([.day], from: displayStart, to: comparisonEnd).day ?? 0) + 1,
+            1
+        )
+
+        guard comparesPreviousPeriod,
+              let previousEnd = calendar.date(byAdding: .day, value: -1, to: displayStart),
+              let previousStart = calendar.date(
+                byAdding: .day,
+                value: -(comparisonDayCount - 1),
+                to: previousEnd
+              ) else {
+            previousComparison = nil
+            return
+        }
+
+        previousComparison = previousStart...previousEnd
+    }
+}
+
 struct HealthDateRangeSection: View {
     @EnvironmentObject private var dateRangeContext: HealthDateRangeContext
 

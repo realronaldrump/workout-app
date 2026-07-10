@@ -118,6 +118,7 @@ enum Theme {
         static let quads           = adaptive(light: 0x16A34A, dark: 0x4ADE80)
         static let hamstrings      = adaptive(light: 0x14B8A6, dark: 0x2DD4BF)
         static let glutes          = adaptive(light: 0x8B5CF6, dark: 0xA78BFA)
+        static let hipFlexors      = adaptive(light: 0x0D9488, dark: 0x2DD4BF)
         static let calves          = adaptive(light: 0x06B6D4, dark: 0x22D3EE)
         static let core            = adaptive(light: 0xF59E0B, dark: 0xFBBF24)
         static let cardio          = adaptive(light: 0x06B6D4, dark: 0x22D3EE)
@@ -141,6 +142,7 @@ enum Theme {
             case .quads: return quads
             case .hamstrings: return hamstrings
             case .glutes: return glutes
+            case .hipFlexors: return hipFlexors
             case .adductors: return glutes
             case .calves: return calves
             case .core: return core
@@ -807,6 +809,7 @@ extension MuscleGroup {
         case .quads: return Theme.Colors.quads
         case .hamstrings: return Theme.Colors.hamstrings
         case .glutes: return Theme.Colors.glutes
+        case .hipFlexors: return Theme.Colors.hipFlexors
         case .adductors: return Theme.Colors.glutes
         case .calves: return Theme.Colors.calves
         case .core: return Theme.Colors.core
@@ -826,6 +829,7 @@ extension MuscleGroup {
         case .quads: return "figure.walk"
         case .hamstrings: return "figure.run"
         case .glutes: return "figure.cooldown"
+        case .hipFlexors: return "figure.flexibility"
         case .adductors: return "figure.flexibility"
         case .calves: return "shoeprints.fill"
         case .core: return "circle.hexagongrid"
@@ -845,6 +849,7 @@ extension MuscleGroup {
         case .quads: return "Quads"
         case .hamstrings: return "Hams"
         case .glutes: return "Glutes"
+        case .hipFlexors: return "Hip Flexors"
         case .adductors: return "Adductors"
         case .calves: return "Calves"
         case .core: return "Core"

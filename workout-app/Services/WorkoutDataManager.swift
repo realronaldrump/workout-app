@@ -92,11 +92,16 @@ class WorkoutDataManager: ObservableObject {
         return autoLinkResult
     }
 
-    func setLoggedWorkouts(_ logged: [LoggedWorkout]) {
+    func setLoggedWorkouts(
+        _ logged: [LoggedWorkout],
+        refreshDerivedState: Bool = true
+    ) {
         let mapped = logged.map(Self.mapLoggedWorkoutToAnalyticsWorkout)
         loggedWorkouts = mapped.sorted { $0.date > $1.date }
         loggedWorkoutIds = Set(logged.map(\.id))
-        mergeSources()
+        if refreshDerivedState {
+            mergeSources()
+        }
     }
 
     func setLoggedWorkoutsOffMain(_ logged: [LoggedWorkout]) async {
@@ -225,21 +230,17 @@ class WorkoutDataManager: ObservableObject {
     }
 
     nonisolated static func latestWorkoutFile(in directories: [URL]) -> URL? {
-        for directory in directories {
-            let files = listNewestFirst(iCloudDocumentManager.listStrongImportFiles(in: directory))
-            if let latest = files.first {
-                return latest
-            }
+        let strongImports = directories.flatMap {
+            iCloudDocumentManager.listStrongImportFiles(in: $0)
+        }
+        if let latestStrongImport = listNewestFirst(strongImports).first {
+            return latestStrongImport
         }
 
-        for directory in directories {
-            let files = listNewestFirst(iCloudDocumentManager.listWorkoutFiles(in: directory))
-            if let latest = files.first {
-                return latest
-            }
+        let workoutFiles = directories.flatMap {
+            iCloudDocumentManager.listWorkoutFiles(in: $0)
         }
-
-        return nil
+        return listNewestFirst(workoutFiles).first
     }
 
     nonisolated static func importSourceSignature(for fileURL: URL?) -> String? {
@@ -250,9 +251,16 @@ class WorkoutDataManager: ObservableObject {
 
     nonisolated private static func listNewestFirst(_ files: [URL]) -> [URL] {
         files.sorted { url1, url2 in
-            let date1 = (try? url1.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? Date.distantPast
-            let date2 = (try? url2.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? Date.distantPast
-            return date1 > date2
+            let values1 = try? url1.resourceValues(forKeys: [.contentModificationDateKey, .creationDateKey])
+            let values2 = try? url2.resourceValues(forKeys: [.contentModificationDateKey, .creationDateKey])
+            let date1 = values1?.contentModificationDate ?? values1?.creationDate ?? .distantPast
+            let date2 = values2?.contentModificationDate ?? values2?.creationDate ?? .distantPast
+            if date1 != date2 {
+                return date1 > date2
+            }
+            return url1.standardizedFileURL.path.localizedStandardCompare(
+                url2.standardizedFileURL.path
+            ) == .orderedAscending
         }
     }
 
@@ -524,6 +532,14 @@ class WorkoutDataManager: ObservableObject {
     }
 
     func clearWorkoutHistory() {
+        do {
+            try clearWorkoutHistoryReportingErrors()
+        } catch {
+            print("Failed to clear workout history: \(error)")
+        }
+    }
+
+    func clearWorkoutHistoryReportingErrors() throws {
         workouts = []
         importedWorkouts = []
         loggedWorkouts = []
@@ -535,16 +551,19 @@ class WorkoutDataManager: ObservableObject {
         exerciseSummariesCache = []
         allExerciseNamesCache = []
         recentExerciseNamesCache = []
-        identityStore.clear()
+        try identityStore.clearReportingErrors()
         clearImportSourceSignature()
-        try? database.clearImportedWorkouts()
+        try database.clearImportedWorkouts()
     }
 
     func clearAllData() {
         clearWorkoutHistory()
     }
 
-    func mergeImportedWorkoutsFromBackup(_ backupWorkouts: [Workout]) -> (
+    func mergeImportedWorkoutsFromBackup(
+        _ backupWorkouts: [Workout],
+        refreshDerivedState: Bool = true
+    ) throws -> (
         idMap: [UUID: UUID],
         inserted: Int,
         skipped: Int
@@ -558,8 +577,12 @@ class WorkoutDataManager: ObservableObject {
         var inserted = 0
         var skipped = 0
         var mergedImported = importedWorkouts
-        var existingIds = Set(workouts.map(\.id))
-        var existingIdsByKey = Self.makeExistingIdsByKey(from: workouts, calendar: calendar)
+        let currentSourceWorkouts = importedWorkouts + loggedWorkouts
+        var existingIds = Set(currentSourceWorkouts.map(\.id))
+        var existingIdsByKey = Self.makeExistingIdsByKey(
+            from: currentSourceWorkouts,
+            calendar: calendar
+        )
         var identityEntries: [String: UUID] = [:]
 
         for backupWorkout in backupWorkouts {
@@ -593,24 +616,22 @@ class WorkoutDataManager: ObservableObject {
 
         if inserted > 0 {
             importedWorkouts = mergedImported.sorted { $0.date > $1.date }
-            mergeSources()
-            do {
-                try database.saveImportedWorkouts(importedWorkouts)
-            } catch {
-                print("Failed to persist imported backup workouts: \(error)")
+            if refreshDerivedState {
+                mergeSources()
             }
+            try database.saveImportedWorkouts(importedWorkouts)
         }
 
-        identityStore.mergeMissing(identityEntries)
+        try identityStore.mergeMissingReportingErrors(identityEntries)
         return (idMap, inserted, skipped)
     }
 
     func mergeWorkoutIdentitiesFromBackup(
         _ entries: [String: UUID],
         workoutIdMap: [UUID: UUID]
-    ) -> Int {
+    ) throws -> Int {
         let remapped = entries.mapValues { workoutIdMap[$0] ?? $0 }
-        return identityStore.mergeMissing(remapped)
+        return try identityStore.mergeMissingReportingErrors(remapped)
     }
 
     private func cachedImportSourceSignature() -> String? {

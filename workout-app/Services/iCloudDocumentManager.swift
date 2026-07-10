@@ -43,7 +43,7 @@ final class iCloudDocumentManager: ObservableObject {
                 do {
                     try Self.ensureDirectoryExists(at: iCloudURL)
                     if let localURL {
-                        try Self.migrateWorkoutFiles(from: localURL, to: iCloudURL)
+                        try Self.migrateExportAndBackupFiles(from: localURL, to: iCloudURL)
                     }
                 } catch {
                     print("Failed to prepare iCloud directory: \(error)")
@@ -115,53 +115,83 @@ final class iCloudDocumentManager: ObservableObject {
         try FileManager.default.removeItem(at: url)
     }
 
-    func deleteAllWorkoutFiles() async {
-        await deleteFiles(matchingExtensions: ["csv"])
+    /// Deletes every physical copy represented by a single logical inventory row.
+    /// Migration can leave the same filename in iCloud and local Documents; removing
+    /// only the displayed (preferred) URL would allow the hidden copy to reappear.
+    func deleteAllCopies(ofExportOrBackup url: URL) async throws {
+        let directories = await storageSearchDirectories()
+        guard !directories.isEmpty else { return }
+
+        let fileName = url.lastPathComponent
+        try await Task.detached(priority: .utility) { [directories, fileName] in
+            _ = try Self.deleteExportAndBackupFileCopies(
+                named: fileName,
+                in: directories
+            )
+        }.value
+
+        if fileName.hasPrefix("strong_workouts_") {
+            importedData = nil
+        }
     }
 
-    func deleteAllExportAndBackupFiles() async {
-        await deleteFiles(matchingExtensions: ["csv", AppBackupService.backupFileExtension])
+    func deleteAllWorkoutFiles() async throws {
+        try await deleteAllStrongImportFiles()
+    }
+
+    /// Deletes only Strong source imports. Generated exports and native backups are preserved.
+    func deleteAllStrongImportFiles() async throws {
+        let directories = await storageSearchDirectories()
+        guard !directories.isEmpty else { return }
+
+        try await Task.detached(priority: .utility) { [directories] in
+            _ = try Self.deleteStrongImportFiles(in: directories)
+        }.value
+
+        importedData = nil
+    }
+
+    func deleteAllExportAndBackupFiles() async throws {
+        try await deleteFiles(matchingExtensions: ["csv", AppBackupService.backupFileExtension])
     }
 
     func countWorkoutFiles() async -> Int {
-        await countFiles(matchingExtensions: ["csv"])
+        await countStrongImportFiles()
     }
 
-    func countExportAndBackupFiles() async -> Int {
-        await countFiles(matchingExtensions: ["csv", AppBackupService.backupFileExtension])
-    }
-
-    private func countFiles(matchingExtensions extensions: Set<String>) async -> Int {
+    /// Counts logical Strong imports once even when migration left a copy in both storage locations.
+    func countStrongImportFiles() async -> Int {
         let directories = await storageSearchDirectories()
         guard !directories.isEmpty else { return 0 }
 
-        let lowercasedExtensions = Set(extensions.map { $0.lowercased() })
-
-        return await Task.detached(priority: .utility) { [directories, lowercasedExtensions] in
-            var count = 0
-            for containerURL in directories {
-                do {
-                    let files = try FileManager.default.contentsOfDirectory(
-                        at: containerURL,
-                        includingPropertiesForKeys: [.nameKey],
-                        options: .skipsHiddenFiles
-                    )
-                    count += files.filter { lowercasedExtensions.contains($0.pathExtension.lowercased()) }.count
-                } catch {
-                    print("Failed to list files for count: \(error)")
-                }
-            }
-            return count
+        return await Task.detached(priority: .utility) { [directories] in
+            Self.countStrongImportFiles(in: directories)
         }.value
     }
 
-    private func deleteFiles(matchingExtensions extensions: Set<String>) async {
+    func countExportAndBackupFiles() async -> Int {
+        await exportAndBackupFiles().count
+    }
+
+    /// Returns a unified inventory across the active and fallback storage directories.
+    /// Files copied during migration are represented by the active-directory copy only.
+    func exportAndBackupFiles() async -> [URL] {
+        let directories = await storageSearchDirectories()
+        guard !directories.isEmpty else { return [] }
+
+        return await Task.detached(priority: .utility) { [directories] in
+            Self.listExportAndBackupFiles(in: directories)
+        }.value
+    }
+
+    private func deleteFiles(matchingExtensions extensions: Set<String>) async throws {
         let directories = await storageSearchDirectories()
         guard !directories.isEmpty else { return }
 
         let lowercasedExtensions = Set(extensions.map { $0.lowercased() })
 
-        await Task.detached(priority: .utility) { [directories, lowercasedExtensions] in
+        try await Task.detached(priority: .utility) { [directories, lowercasedExtensions] in
+            var failures: [String] = []
             for containerURL in directories {
                 do {
                     let files = try FileManager.default.contentsOfDirectory(
@@ -174,12 +204,16 @@ final class iCloudDocumentManager: ObservableObject {
                             try FileManager.default.removeItem(at: file)
                             print("Deleted file: \(file.lastPathComponent)")
                         } catch {
-                            print("Failed to delete file \(file.lastPathComponent): \(error)")
+                            failures.append("\(file.lastPathComponent): \(error.localizedDescription)")
                         }
                     }
                 } catch {
-                    print("Failed to list files for deletion: \(error)")
+                    failures.append("\(containerURL.lastPathComponent): \(error.localizedDescription)")
                 }
+            }
+
+            if !failures.isEmpty {
+                throw ICloudFileDeletionError(failures: failures)
             }
         }.value
 
@@ -258,6 +292,13 @@ final class iCloudDocumentManager: ObservableObject {
         listWorkoutFiles(in: directory) + listBackupFiles(in: directory)
     }
 
+    /// Combines storage directories in priority order and collapses migrated copies by filename.
+    nonisolated static func listExportAndBackupFiles(in directories: [URL]) -> [URL] {
+        deduplicatedFiles(
+            from: directories.flatMap { listExportAndBackupFiles(in: $0) }
+        )
+    }
+
     /// Strong imports are the canonical source the app auto-loads on launch.
     /// Exported CSVs share the same extension but may include partial ranges.
     nonisolated static func listStrongImportFiles(in directory: URL) -> [URL] {
@@ -265,15 +306,85 @@ final class iCloudDocumentManager: ObservableObject {
             .filter { $0.lastPathComponent.hasPrefix("strong_workouts_") }
     }
 
-    nonisolated static func latestBackupFile(in directories: [URL]) -> URL? {
+    nonisolated static func listStrongImportFiles(in directories: [URL]) -> [URL] {
+        deduplicatedFiles(
+            from: directories.flatMap { listStrongImportFiles(in: $0) }
+        )
+    }
+
+    nonisolated static func countStrongImportFiles(in directories: [URL]) -> Int {
+        listStrongImportFiles(in: directories).count
+    }
+
+    /// Deletes all physical copies of one logical export/backup inventory item.
+    @discardableResult
+    nonisolated static func deleteExportAndBackupFileCopies(
+        named fileName: String,
+        in directories: [URL]
+    ) throws -> Int {
+        let fileExtension = URL(fileURLWithPath: fileName).pathExtension.lowercased()
+        let allowedExtensions = ["csv", AppBackupService.backupFileExtension]
+        guard allowedExtensions.contains(fileExtension) else { return 0 }
+
+        var deletedCount = 0
+        var failures: [String] = []
+
         for directory in directories {
-            let files = listNewestFirst(listBackupFiles(in: directory))
-            if let latest = files.first {
-                return latest
+            do {
+                let files = try FileManager.default.contentsOfDirectory(
+                    at: directory,
+                    includingPropertiesForKeys: [.nameKey],
+                    options: .skipsHiddenFiles
+                )
+                for file in files where file.lastPathComponent == fileName {
+                    do {
+                        try FileManager.default.removeItem(at: file)
+                        deletedCount += 1
+                        print("Deleted file: \(file.lastPathComponent)")
+                    } catch {
+                        failures.append("\(file.path): \(error.localizedDescription)")
+                    }
+                }
+            } catch {
+                failures.append("\(directory.path): \(error.localizedDescription)")
             }
         }
 
-        return nil
+        if !failures.isEmpty {
+            throw ICloudFileDeletionError(failures: failures)
+        }
+        return deletedCount
+    }
+
+    /// Deletes every physical Strong-import copy so a fallback copy cannot reappear later.
+    @discardableResult
+    nonisolated static func deleteStrongImportFiles(in directories: [URL]) throws -> Int {
+        var deletedCount = 0
+        var failures: [String] = []
+
+        for directory in directories {
+            for file in listStrongImportFiles(in: directory) {
+                do {
+                    try FileManager.default.removeItem(at: file)
+                    deletedCount += 1
+                    print("Deleted file: \(file.lastPathComponent)")
+                } catch {
+                    failures.append("\(file.lastPathComponent): \(error.localizedDescription)")
+                }
+            }
+        }
+
+        if !failures.isEmpty {
+            throw ICloudFileDeletionError(failures: failures)
+        }
+        return deletedCount
+    }
+
+    nonisolated static func latestBackupFile(in directories: [URL]) -> URL? {
+        let files = deduplicatedFiles(
+            from: directories.flatMap { listBackupFiles(in: $0) }
+        )
+        return listNewestFirst(files).first
     }
 
     nonisolated static func saveWorkoutFile(data: Data, in directory: URL, fileName: String) throws {
@@ -333,6 +444,31 @@ final class iCloudDocumentManager: ObservableObject {
 
     @discardableResult
     nonisolated static func migrateWorkoutFiles(from sourceDirectory: URL, to destinationDirectory: URL) throws -> Int {
+        try migrateFiles(
+            listWorkoutFiles(in: sourceDirectory),
+            from: sourceDirectory,
+            to: destinationDirectory
+        )
+    }
+
+    /// Migrates both CSV exports/imports and native backups when iCloud becomes available.
+    @discardableResult
+    nonisolated static func migrateExportAndBackupFiles(
+        from sourceDirectory: URL,
+        to destinationDirectory: URL
+    ) throws -> Int {
+        try migrateFiles(
+            listExportAndBackupFiles(in: sourceDirectory),
+            from: sourceDirectory,
+            to: destinationDirectory
+        )
+    }
+
+    private nonisolated static func migrateFiles(
+        _ files: [URL],
+        from sourceDirectory: URL,
+        to destinationDirectory: URL
+    ) throws -> Int {
         let sourcePath = sourceDirectory.standardizedFileURL.path
         let destinationPath = destinationDirectory.standardizedFileURL.path
         guard sourcePath != destinationPath else { return 0 }
@@ -340,7 +476,7 @@ final class iCloudDocumentManager: ObservableObject {
         try ensureDirectoryExists(at: destinationDirectory)
 
         var migratedCount = 0
-        for fileURL in listWorkoutFiles(in: sourceDirectory) {
+        for fileURL in files {
             let destinationURL = destinationDirectory.appendingPathComponent(fileURL.lastPathComponent)
             guard !FileManager.default.fileExists(atPath: destinationURL.path) else { continue }
 
@@ -357,10 +493,23 @@ final class iCloudDocumentManager: ObservableObject {
 
     private nonisolated static func listNewestFirst(_ files: [URL]) -> [URL] {
         files.sorted { url1, url2 in
-            let date1 = (try? url1.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? Date.distantPast
-            let date2 = (try? url2.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? Date.distantPast
-            return date1 > date2
+            let date1 = fileSortDate(url1)
+            let date2 = fileSortDate(url2)
+            if date1 != date2 {
+                return date1 > date2
+            }
+            return url1.lastPathComponent.localizedStandardCompare(url2.lastPathComponent) == .orderedAscending
         }
+    }
+
+    private nonisolated static func deduplicatedFiles(from files: [URL]) -> [URL] {
+        var seenFileNames = Set<String>()
+        return files.filter { seenFileNames.insert($0.lastPathComponent).inserted }
+    }
+
+    private nonisolated static func fileSortDate(_ url: URL) -> Date {
+        let values = try? url.resourceValues(forKeys: [.contentModificationDateKey, .creationDateKey])
+        return values?.contentModificationDate ?? values?.creationDate ?? .distantPast
     }
 }
 
@@ -373,6 +522,19 @@ enum iCloudError: LocalizedError {
         case .containerNotAvailable:
             return "Storage container is not available."
         }
+    }
+}
+
+nonisolated struct ICloudFileDeletionError: LocalizedError, Sendable {
+    let failures: [String]
+
+    var errorDescription: String? {
+        let detail = failures.prefix(3).joined(separator: "\n")
+        let remaining = max(failures.count - 3, 0)
+        if remaining > 0 {
+            return "Some files could not be deleted:\n\(detail)\n…and \(remaining) more."
+        }
+        return "Some files could not be deleted:\n\(detail)"
     }
 }
 

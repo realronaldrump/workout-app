@@ -49,7 +49,11 @@ final class LegacyDataMigrationManager: ObservableObject {
     }
 
     func prepare() async {
-        if database.canSkipLegacyMigrationPresentation() {
+        let database = database
+        let canSkip = await Task.detached(priority: .userInitiated) {
+            database.canSkipLegacyMigrationPresentation()
+        }.value
+        if canSkip {
             phase = .notNeeded
             return
         }
@@ -57,7 +61,6 @@ final class LegacyDataMigrationManager: ObservableObject {
         phase = .checking
 
         do {
-            let database = database
             let plan = try await Task.detached(priority: .userInitiated) {
                 try database.legacyMigrationPlan()
             }.value

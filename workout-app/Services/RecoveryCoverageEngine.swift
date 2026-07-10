@@ -7,14 +7,29 @@ import Foundation
 @MainActor
 final class RecoveryCoverageEngine: ObservableObject {
 
-    @Published var recoverySignals: [RecoverySignal] = []
-    @Published var frequencyInsights: [FrequencyInsight] = []
-    @Published var isAnalyzing = false
+    @Published private(set) var isAnalyzing = false
 
-    private var cachedFrequencySource: FrequencyAnalysisSource?
+    private struct PublishedAnalysis {
+        let recoverySignals: [RecoverySignal]
+        let frequencyInsights: [FrequencyInsightWindow: [FrequencyInsight]]
+
+        static let empty = PublishedAnalysis(recoverySignals: [], frequencyInsights: [:])
+    }
+
+    @Published private var publishedAnalysis = PublishedAnalysis.empty
+    private var analysisGeneration = 0
+    private typealias AnalysisResult = (
+        recoverySignals: [RecoverySignal],
+        frequencyInsights: [FrequencyInsightWindow: [FrequencyInsight]]
+    )
+    private var backgroundAnalysisTask: Task<AnalysisResult, Never>?
+
+    var recoverySignals: [RecoverySignal] {
+        publishedAnalysis.recoverySignals
+    }
 
     var hasHistoricalFrequencyData: Bool {
-        !frequencyInsights(for: .allTime).isEmpty
+        !(publishedAnalysis.frequencyInsights[.allTime] ?? []).isEmpty
     }
 
     /// Run the recovery + coverage analysis. Call when workout or health data changes.
@@ -25,57 +40,80 @@ final class RecoveryCoverageEngine: ObservableObject {
         muscleMappings: [String: [MuscleTag]],
         intentionalBreakRanges: [IntentionalBreakRange] = []
     ) async {
+        analysisGeneration += 1
+        let currentGeneration = analysisGeneration
+        backgroundAnalysisTask?.cancel()
+        backgroundAnalysisTask = nil
+
         guard !workouts.isEmpty else {
-            cachedFrequencySource = nil
-            recoverySignals = []
-            frequencyInsights = []
+            publishedAnalysis = .empty
             isAnalyzing = false
             return
         }
 
         isAnalyzing = true
+        let workoutsSnapshot = workouts
+        let dailyHealthSnapshot = dailyHealth
+        let mappingsSnapshot = muscleMappings.mapValues { tags in
+            tags.map(\.displayName)
+        }
+        let breakRangesSnapshot = intentionalBreakRanges
         let resolver = ExerciseRelationshipManager.shared.resolverSnapshot()
+        let referenceDate = Date()
 
-        let result = await Task(priority: .userInitiated) {
-            let recoverySignals = Self.computeRecoverySignals(dailyHealth: dailyHealth)
-            let frequency = Self.analyzeFrequency(
-                workouts: workouts,
-                mappings: muscleMappings,
-                intentionalBreakRanges: intentionalBreakRanges,
-                window: .twelveWeeks,
-                resolver: resolver
+        let analysisTask = Task.detached(priority: .userInitiated) {
+            let recoverySignals = Self.computeRecoverySignals(dailyHealth: dailyHealthSnapshot)
+            var frequencyByWindow: [FrequencyInsightWindow: [FrequencyInsight]] = [:]
+            frequencyByWindow.reserveCapacity(FrequencyInsightWindow.presets.count)
+
+            for window in FrequencyInsightWindow.presets {
+                guard !Task.isCancelled else { break }
+                frequencyByWindow[window] = Self.analyzeFrequency(
+                    workouts: workoutsSnapshot,
+                    mappings: mappingsSnapshot,
+                    intentionalBreakRanges: breakRangesSnapshot,
+                    window: window,
+                    referenceDate: referenceDate,
+                    resolver: resolver
+                )
+            }
+
+            return AnalysisResult(
+                recoverySignals: recoverySignals,
+                frequencyInsights: frequencyByWindow
             )
+        }
+        backgroundAnalysisTask = analysisTask
 
-            return (recoverySignals, frequency)
-        }.value
+        let result = await withTaskCancellationHandler {
+            await analysisTask.value
+        } onCancel: {
+            analysisTask.cancel()
+        }
 
-        cachedFrequencySource = FrequencyAnalysisSource(
-            workouts: workouts,
-            mappings: muscleMappings,
-            intentionalBreakRanges: intentionalBreakRanges,
-            resolver: resolver
+        guard currentGeneration == analysisGeneration else { return }
+        backgroundAnalysisTask = nil
+        guard !Task.isCancelled else {
+            isAnalyzing = false
+            return
+        }
+
+        publishedAnalysis = PublishedAnalysis(
+            recoverySignals: result.recoverySignals,
+            frequencyInsights: result.frequencyInsights
         )
-        recoverySignals = result.0
-        frequencyInsights = result.1
         isAnalyzing = false
     }
 
     func frequencyInsights(for window: FrequencyInsightWindow) -> [FrequencyInsight] {
-        guard let cachedFrequencySource else { return [] }
-        return Self.analyzeFrequency(
-            workouts: cachedFrequencySource.workouts,
-            mappings: cachedFrequencySource.mappings,
-            intentionalBreakRanges: cachedFrequencySource.intentionalBreakRanges,
-            window: window,
-            resolver: cachedFrequencySource.resolver
-        )
+        publishedAnalysis.frequencyInsights[window] ?? []
     }
 
     // MARK: - Recovery Signals
 
     /// Computes transparent recovery signals by comparing the recent 7-day
     /// average to the prior 30-day baseline for each metric.
-    private static func computeRecoverySignals(
+    private nonisolated static func computeRecoverySignals(
         dailyHealth: [Date: DailyHealthData]
     ) -> [RecoverySignal] {
         let calendar = Calendar.current
@@ -154,21 +192,15 @@ final class RecoveryCoverageEngine: ObservableObject {
 
     // MARK: - Training Frequency Analysis
 
-    private struct FrequencyAnalysisSource {
-        let workouts: [Workout]
-        let mappings: [String: [MuscleTag]]
-        let intentionalBreakRanges: [IntentionalBreakRange]
-        let resolver: ExerciseIdentityResolver
-    }
-
-    private static func analyzeFrequency(
+    private nonisolated static func analyzeFrequency(
         workouts: [Workout],
-        mappings: [String: [MuscleTag]],
+        mappings: [String: [String]],
         intentionalBreakRanges: [IntentionalBreakRange],
         window: FrequencyInsightWindow,
         referenceDate: Date = Date(),
         resolver: ExerciseIdentityResolver = .empty
     ) -> [FrequencyInsight] {
+        guard !Task.isCancelled else { return [] }
         let calendar = Calendar.current
         guard let bounds = window.interval(for: workouts, referenceDate: referenceDate, calendar: calendar) else {
             return []
@@ -214,9 +246,9 @@ final class RecoveryCoverageEngine: ObservableObject {
 
         let trackedWeekSet = Set(trackedWeekStarts)
         var allMuscleGroups: Set<String> = []
-        for tags in mappings.values {
-            for tag in tags {
-                allMuscleGroups.insert(tag.displayName)
+        for muscleGroups in mappings.values {
+            for muscleGroup in muscleGroups {
+                allMuscleGroups.insert(muscleGroup)
             }
         }
         guard !allMuscleGroups.isEmpty else { return [] }
@@ -225,15 +257,15 @@ final class RecoveryCoverageEngine: ObservableObject {
         var muscleWeekSets: [String: Set<Date>] = [:]
 
         for workout in workoutsInWindow {
-            let weekStart = SharedFormatters.startOfWeekSunday(for: workout.date)
+            guard !Task.isCancelled else { return [] }
+            let weekStart = startOfWeekSunday(for: workout.date)
             guard trackedWeekSet.contains(weekStart) else { continue }
 
             for exercise in workout.exercises {
                 let aggregateName = resolver.aggregateName(for: exercise.name)
-                let tags = mappings[exercise.name] ?? mappings[aggregateName] ?? []
-                for tag in tags {
-                    let key = tag.displayName
-                    muscleWeekSets[key, default: Set()].insert(weekStart)
+                let muscleGroups = mappings[exercise.name] ?? mappings[aggregateName] ?? []
+                for muscleGroup in muscleGroups {
+                    muscleWeekSets[muscleGroup, default: Set()].insert(weekStart)
                 }
             }
         }
@@ -266,16 +298,22 @@ final class RecoveryCoverageEngine: ObservableObject {
 
     // MARK: - Math Helpers
 
-    private static func average(_ values: [Double]) -> Double? {
+    private nonisolated static func average(_ values: [Double]) -> Double? {
         guard !values.isEmpty else { return nil }
         return values.reduce(0, +) / Double(values.count)
+    }
+
+    private nonisolated static func startOfWeekSunday(for date: Date) -> Date {
+        var calendar = Calendar.current
+        calendar.firstWeekday = 1
+        calendar.minimumDaysInFirstWeek = 1
+        return calendar.dateInterval(of: .weekOfYear, for: date)?.start ?? calendar.startOfDay(for: date)
     }
 }
 
 // MARK: - Models
 
-struct RecoverySignal: Identifiable {
-    let id = UUID()
+nonisolated struct RecoverySignal: Identifiable, Sendable {
     let metric: String
     let icon: String
     let currentValue: Double
@@ -283,10 +321,11 @@ struct RecoverySignal: Identifiable {
     let unit: String
     /// Signed percent change from baseline.
     let percentChange: Double
+
+    var id: String { metric }
 }
 
-struct FrequencyInsight: Identifiable {
-    let id = UUID()
+nonisolated struct FrequencyInsight: Identifiable, Sendable {
     let muscleGroup: String
     let weeksHit: Int
     let totalWeeks: Int
@@ -294,6 +333,8 @@ struct FrequencyInsight: Identifiable {
     let coveredWeekStarts: [Date]
     let trackedWeekStarts: [Date]
     let windowWeekStarts: [Date]
+
+    var id: String { muscleGroup }
 
     var excusedWeeks: Int {
         max(windowWeeks - totalWeeks, 0)
@@ -401,13 +442,13 @@ struct FrequencyInsight: Identifiable {
     }
 }
 
-enum FrequencyCoverageState {
+nonisolated enum FrequencyCoverageState: Sendable {
     case trained
     case missed
     case excused
 }
 
-enum FrequencyInsightWindow: String, CaseIterable, Identifiable, Hashable {
+nonisolated enum FrequencyInsightWindow: String, CaseIterable, Identifiable, Hashable, Sendable {
     case fourWeeks = "4W"
     case eightWeeks = "8W"
     case twelveWeeks = "12W"
@@ -470,7 +511,7 @@ enum FrequencyInsightWindow: String, CaseIterable, Identifiable, Hashable {
         referenceDate: Date = Date(),
         calendar: Calendar = .current
     ) -> ClosedRange<Date>? {
-        let currentWeekStart = SharedFormatters.startOfWeekSunday(for: referenceDate)
+        let currentWeekStart = Self.startOfWeekSunday(for: referenceDate, calendar: calendar)
 
         if let weekCount {
             guard let start = calendar.date(byAdding: .day, value: -7 * (weekCount - 1), to: currentWeekStart) else {
@@ -492,7 +533,7 @@ enum FrequencyInsightWindow: String, CaseIterable, Identifiable, Hashable {
         referenceDate: Date = Date(),
         calendar: Calendar = .current
     ) -> [Date] {
-        let currentWeekStart = SharedFormatters.startOfWeekSunday(for: referenceDate)
+        let currentWeekStart = Self.startOfWeekSunday(for: referenceDate, calendar: calendar)
 
         if let weekCount {
             return (0..<weekCount).compactMap { index in
@@ -501,7 +542,7 @@ enum FrequencyInsightWindow: String, CaseIterable, Identifiable, Hashable {
         }
 
         guard let earliestWorkoutDate = workouts.map(\.date).min() else { return [] }
-        let earliestWeekStart = SharedFormatters.startOfWeekSunday(for: earliestWorkoutDate)
+        let earliestWeekStart = Self.startOfWeekSunday(for: earliestWorkoutDate, calendar: calendar)
         var weekStarts: [Date] = []
         var cursor = earliestWeekStart
 
@@ -512,5 +553,13 @@ enum FrequencyInsightWindow: String, CaseIterable, Identifiable, Hashable {
         }
 
         return weekStarts
+    }
+
+    private static func startOfWeekSunday(for date: Date, calendar: Calendar) -> Date {
+        var sundayCalendar = calendar
+        sundayCalendar.firstWeekday = 1
+        sundayCalendar.minimumDaysInFirstWeek = 1
+        return sundayCalendar.dateInterval(of: .weekOfYear, for: date)?.start
+            ?? sundayCalendar.startOfDay(for: date)
     }
 }

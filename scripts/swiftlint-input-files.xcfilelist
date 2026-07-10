@@ -1,5 +1,6 @@
 $(SRCROOT)/workout-app/Models/AnalyticsModels.swift
 $(SRCROOT)/workout-app/Models/DailyHealthData.swift
+$(SRCROOT)/workout-app/Models/DefaultExerciseCatalog.swift
 $(SRCROOT)/workout-app/Models/ExerciseMetricPreferences.swift
 $(SRCROOT)/workout-app/Models/GymProfile.swift
 $(SRCROOT)/workout-app/Models/HealthData.swift

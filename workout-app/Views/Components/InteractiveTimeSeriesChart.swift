@@ -17,6 +17,8 @@ struct InteractiveTimeSeriesChart: View {
     let fullDomain: ClosedRange<Date>?
     let clampYToZero: Bool
     let showsControls: Bool
+    let showsAverageLine: Bool
+    let averageLineValue: Double?
     let valueText: (Double) -> String
     let dateText: (Date) -> String
 
@@ -34,6 +36,8 @@ struct InteractiveTimeSeriesChart: View {
         fullDomain: ClosedRange<Date>? = nil,
         clampYToZero: Bool = true,
         showsControls: Bool = true,
+        showsAverageLine: Bool = false,
+        averageLineValue: Double? = nil,
         valueText: @escaping (Double) -> String,
         dateText: @escaping (Date) -> String = { $0.formatted(date: .abbreviated, time: .omitted) }
     ) {
@@ -45,6 +49,8 @@ struct InteractiveTimeSeriesChart: View {
         self.fullDomain = fullDomain
         self.clampYToZero = clampYToZero
         self.showsControls = showsControls
+        self.showsAverageLine = showsAverageLine
+        self.averageLineValue = averageLineValue
         self.valueText = valueText
         self.dateText = dateText
 
@@ -197,8 +203,8 @@ struct InteractiveTimeSeriesChart: View {
 
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             Text(headerText)
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Colors.textSecondary)
+                .font(selectedPoint == nil ? Theme.Typography.caption : Theme.Typography.calloutStrong)
+                .foregroundStyle(selectedPoint == nil ? Theme.Colors.textSecondary : Theme.Colors.textPrimary)
 
             Chart {
                 if areaFill {
@@ -230,6 +236,22 @@ struct InteractiveTimeSeriesChart: View {
                         .foregroundStyle(color)
                         .symbolSize(80)
                     }
+                }
+
+                if showsAverageLine, let average = averageLineValue ?? visibleAverage {
+                    RuleMark(y: .value("Average", average))
+                        .foregroundStyle(color.opacity(0.4))
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 4]))
+                        .annotation(position: .top, alignment: .trailing, spacing: 4) {
+                            Text("avg \(valueText(average))")
+                                .font(Theme.Typography.caption2Bold)
+                                .foregroundStyle(Theme.Colors.textSecondary)
+                                .padding(.horizontal, Theme.Spacing.xs)
+                                .padding(.vertical, 2)
+                                .background(
+                                    Capsule().fill(Theme.Colors.surface.opacity(0.86))
+                                )
+                        }
                 }
 
                 if let selectedPoint {
@@ -286,6 +308,11 @@ struct InteractiveTimeSeriesChart: View {
             return "\(dateText(selectedPoint.date)) | \(valueText(selectedPoint.value))"
         }
         return "\(dateText(visibleStart)) - \(dateText(effectiveVisibleEnd))"
+    }
+
+    private var visibleAverage: Double? {
+        guard !visiblePoints.isEmpty else { return nil }
+        return visiblePoints.reduce(0) { $0 + $1.value } / Double(visiblePoints.count)
     }
 
     @ViewBuilder

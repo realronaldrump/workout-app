@@ -140,6 +140,18 @@ struct ProfileView: View {
 
                 Divider().padding(.leading, 62)
 
+                NavigationLink(destination: ChangelogHistoryView()) {
+                    ProfileLinkRow(
+                        icon: "sparkles",
+                        color: Theme.Colors.accentTertiary,
+                        title: "What's New",
+                        subtitle: "Release notes and update history"
+                    )
+                }
+                .buttonStyle(PlainButtonStyle())
+
+                Divider().padding(.leading, 62)
+
                 NavigationLink(destination: GymProfilesView()) {
                     ProfileLinkRow(
                         icon: "mappin.and.ellipse",

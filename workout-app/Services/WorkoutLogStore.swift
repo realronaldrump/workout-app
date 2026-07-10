@@ -5,10 +5,18 @@ import Foundation
 final class WorkoutLogStore: ObservableObject {
     @Published private(set) var workouts: [LoggedWorkout] = []
 
-    private let database = AppDatabase.shared
+    private let database: AppDatabase
     private let fileName = "logged_workouts_v1.json"
+    private var persistenceTask: Task<Void, Error>?
+
+    init(database: AppDatabase = .shared) {
+        self.database = database
+    }
 
     func load() async {
+        if let persistenceTask {
+            _ = try? await persistenceTask.value
+        }
         do {
             let loaded = try await Task.detached(priority: .userInitiated) { [database] in
                 try database.loadLoggedWorkouts()
@@ -39,28 +47,32 @@ final class WorkoutLogStore: ObservableObject {
             workouts.append(copy)
         }
         workouts.sort { $0.startedAt > $1.startedAt }
-        persist()
+        let persistedWorkout = copy
+        _ = try? await enqueuePersistence { database in
+            try database.saveLoggedWorkout(persistedWorkout)
+        }.value
     }
 
     func delete(id: UUID) async {
         workouts.removeAll { $0.id == id }
-        persist()
+        _ = try? await enqueuePersistence { database in
+            try database.deleteLoggedWorkout(id: id)
+        }.value
     }
 
-    func clearAll() async {
+    func clearAll() async throws {
         workouts.removeAll()
-        do {
+        try await enqueuePersistence { database in
             try database.clearLoggedWorkouts()
-        } catch {
-            print("Failed to clear logged workouts store: \(error)")
-        }
-        let url = fileURL()
-        do {
-            if FileManager.default.fileExists(atPath: url.path) {
-                try FileManager.default.removeItem(at: url)
-            }
-        } catch {
-            print("Failed to delete logged workouts store: \(error)")
+        }.value
+        try removeLegacyFileIfPresent()
+    }
+
+    /// Waits until every write enqueued so far has completed and surfaces the
+    /// most recent persistence failure to callers that require durable state.
+    func waitForPendingPersistence() async throws {
+        if let persistenceTask {
+            try await persistenceTask.value
         }
     }
 
@@ -84,7 +96,7 @@ final class WorkoutLogStore: ObservableObject {
 
         if inserted > 0 {
             workouts.sort { $0.startedAt > $1.startedAt }
-            persist()
+            persistReplacement()
         }
 
         return (inserted, skipped)
@@ -99,25 +111,45 @@ final class WorkoutLogStore: ObservableObject {
         return documents.appendingPathComponent(fileName)
     }
 
-    private func persist() {
+    private func persistReplacement() {
         let snapshot = workouts
-        let database = database
-        Task.detached(priority: .utility) {
-            do {
-                try database.replaceLoggedWorkouts(snapshot)
-            } catch {
-                print("Failed to persist logged workouts: \(error)")
-            }
+        enqueuePersistence { database in
+            try database.replaceLoggedWorkouts(snapshot)
         }
     }
 
+    @discardableResult
+    private func enqueuePersistence(
+        _ operation: @escaping @Sendable (AppDatabase) throws -> Void
+    ) -> Task<Void, Error> {
+        let previous = persistenceTask
+        let database = database
+        let task: Task<Void, Error> = Task.detached(priority: .utility) {
+            if let previous {
+                _ = try? await previous.value
+            }
+            do {
+                try operation(database)
+            } catch {
+                print("Failed to persist logged workouts: \(error)")
+                throw error
+            }
+        }
+        persistenceTask = task
+        return task
+    }
+
     private func removeLegacyFile() {
-        let url = fileURL()
-        guard FileManager.default.fileExists(atPath: url.path) else { return }
         do {
-            try FileManager.default.removeItem(at: url)
+            try removeLegacyFileIfPresent()
         } catch {
             print("Failed to delete logged workouts store: \(error)")
         }
+    }
+
+    private func removeLegacyFileIfPresent() throws {
+        let url = fileURL()
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        try FileManager.default.removeItem(at: url)
     }
 }

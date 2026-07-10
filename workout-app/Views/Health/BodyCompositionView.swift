@@ -1,4 +1,5 @@
 import Charts
+import Combine
 import SwiftUI
 
 struct BodyCompositionView: View {
@@ -17,6 +18,8 @@ struct BodyCompositionView: View {
     @State private var showForecast = false
 
     @State private var expandedDays: Set<Date> = []
+    @State private var dataRefreshTask: Task<Void, Never>?
+    @State private var dataRefreshGeneration: UInt64 = 0
 
     private enum Tab: String, CaseIterable, Identifiable {
         case overview
@@ -101,8 +104,12 @@ struct BodyCompositionView: View {
                 refreshData()
             }
         }
-        .onReceive(healthManager.$dailyHealthStore) { _ in
+        .onReceive(healthManager.$dailyHealthStore.dropFirst()) { _ in
             refreshData()
+        }
+        .onDisappear {
+            dataRefreshTask?.cancel()
+            dataRefreshGeneration &+= 1
         }
     }
 
@@ -630,16 +637,46 @@ struct BodyCompositionView: View {
     // MARK: - Helpers
 
     private func refreshData() {
+        dataRefreshTask?.cancel()
+        dataRefreshGeneration &+= 1
+        let generation = dataRefreshGeneration
+
         guard healthManager.authorizationStatus == .authorized else {
             return
         }
 
-        model.load(
-            dailyEntries: Array(healthManager.dailyHealthStore.values),
-            metricKind: metricKind,
-            displayRange: displayRange,
-            reportGranularity: reportGranularity
-        )
+        let metric = metricKind.healthMetric
+        let range = displayRange
+        let granularity = reportGranularity
+        let earliestHint = healthManager.dailyHealthStore.keys.min()
+        let queryRange = BodyCompositionAnalytics.bufferedAnalysisRange(for: range, bufferDays: 35)
+
+        dataRefreshTask = Task { @MainActor in
+            // Coalesce the onAppear/authorization/store notifications produced together.
+            try? await Task.sleep(nanoseconds: 75_000_000)
+            guard generation == dataRefreshGeneration, !Task.isCancelled else { return }
+
+            do {
+                let samples = try await healthManager.fetchMetricSamples(metric: metric, range: queryRange)
+                guard generation == dataRefreshGeneration, !Task.isCancelled else { return }
+                let rawSamples = samples.map {
+                    BodyRawSample(
+                        id: $0.id,
+                        timestamp: $0.timestamp,
+                        value: metric.displayValue(from: $0.value)
+                    )
+                }
+                model.load(
+                    rawSamples: rawSamples,
+                    earliestSampleDate: earliestHint,
+                    displayRange: range,
+                    reportGranularity: granularity
+                )
+            } catch {
+                guard generation == dataRefreshGeneration, !Task.isCancelled else { return }
+                model.reportLoadFailure(error)
+            }
+        }
     }
 
     private func formatValue(_ value: Double) -> String {

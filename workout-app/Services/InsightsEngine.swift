@@ -34,7 +34,7 @@ class InsightsEngine: ObservableObject {
         let resolver = ExerciseRelationshipManager.shared.resolverSnapshot()
 
         // Run analysis in parallel
-        let newInsights = await Task.detached(priority: .userInitiated) {
+        let analysisTask = Task.detached(priority: .userInitiated) {
             return await withTaskGroup(of: [Insight].self) { group in
                 // Personal Records
                 group.addTask {
@@ -72,10 +72,15 @@ class InsightsEngine: ObservableObject {
                 }
                 return results
             }
-        }.value
+        }
+        let newInsights = await withTaskCancellationHandler {
+            await analysisTask.value
+        } onCancel: {
+            analysisTask.cancel()
+        }
 
         // Update on MainActor
-        guard currentGeneration == generation else { return }
+        guard !Task.isCancelled, currentGeneration == generation else { return }
         self.insights = newInsights.sorted { $0.priority > $1.priority }
     }
 
@@ -98,6 +103,7 @@ class InsightsEngine: ObservableObject {
         .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
 
         for exerciseName in exerciseNames {
+            guard !Task.isCancelled else { return [] }
             let isAssisted = ExerciseLoad.isAssistedExercise(exerciseName)
             let history = ExerciseAggregation
                 .historySessions(
@@ -205,6 +211,7 @@ class InsightsEngine: ObservableObject {
         let exerciseGroups = Dictionary(grouping: allExercises) { $0.name }
 
         for (exerciseName, _) in exerciseGroups {
+            guard !Task.isCancelled else { return [] }
             let sessions = workouts.compactMap { workout -> (date: Date, gymId: UUID?)? in
                 if ExerciseAggregation
                     .aggregateExercises(in: workout, resolver: resolver)
@@ -262,6 +269,7 @@ class InsightsEngine: ObservableObject {
         )
 
         for (name, dateExercises) in exerciseGroups {
+            guard !Task.isCancelled else { return [] }
             guard !ExerciseLoad.isAssistedExercise(name) else { continue }
             let sorted = dateExercises.sorted { $0.0 < $1.0 }
             guard sorted.count >= 4 else { continue }
@@ -307,6 +315,7 @@ class InsightsEngine: ObservableObject {
         in workouts: [Workout],
         resolver: ExerciseIdentityResolver
     ) -> [Insight] {
+        guard !Task.isCancelled else { return [] }
         var insights: [Insight] = []
 
         // Total lifetime volume milestones
@@ -358,6 +367,7 @@ class InsightsEngine: ObservableObject {
     // MARK: - Consistency Milestones
 
     private nonisolated func detectConsistencyMilestones(in workouts: [Workout]) -> [Insight] {
+        guard !Task.isCancelled else { return [] }
         var insights: [Insight] = []
         let calendar = Calendar.current
 
@@ -461,6 +471,7 @@ enum MuscleGroup: String, CaseIterable, Codable, Sendable {
     case quads
     case hamstrings
     case glutes
+    case hipFlexors
     case adductors
     case calves
     case core
@@ -498,6 +509,7 @@ enum MuscleGroup: String, CaseIterable, Codable, Sendable {
         case .quads: return "Quads"
         case .hamstrings: return "Hamstrings"
         case .glutes: return "Glutes"
+        case .hipFlexors: return "Hip Flexors"
         case .adductors: return "Adductors"
         case .calves: return "Calves"
         case .core: return "Core"

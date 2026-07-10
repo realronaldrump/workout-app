@@ -123,39 +123,28 @@ enum AppDataClearService {
         plan: AppDataClearPlan,
         context: AppDataClearContext,
         setHasSeenOnboarding: (Bool) -> Void
-    ) async {
+    ) async throws {
         let categories = plan.effectiveCategories
         guard !categories.isEmpty else { return }
 
-        if categories.contains(.importExportFiles) {
-            await context.iCloudManager.deleteAllExportAndBackupFiles()
-            AppBackupService.persistNativeBackupSourceSignature(nil, userDefaults: context.userDefaults)
-        } else if shouldMarkExistingBackupAsSeen(for: categories) {
-            await markLatestNativeBackupAsSeen(
-                iCloudManager: context.iCloudManager,
-                userDefaults: context.userDefaults
-            )
-        }
-
         if categories.contains(.workoutHistory) {
-            await context.iCloudManager.deleteAllWorkoutFiles()
-            await context.logStore.clearAll()
-            context.dataManager.clearWorkoutHistory()
+            try await context.logStore.clearAll()
+            try context.dataManager.clearWorkoutHistoryReportingErrors()
         }
 
         if categories.contains(.healthData) {
-            context.healthManager.clearAllData()
+            try await context.healthManager.clearAllData().value
             clearHealthPreferences(healthManager: context.healthManager, userDefaults: context.userDefaults)
         } else if categories.contains(.workoutHistory) {
-            _ = context.healthManager.clearCachedHealthData(includeWorkoutData: true, includeDailyData: false)
+            try await context.healthManager.clearAllWorkoutHealthData().value
         }
 
         if categories.contains(.gymProfiles) {
-            context.gymProfilesManager.clearAll()
+            try await context.gymProfilesManager.clearAll()
         }
 
         if categories.contains(.gymAssignments) {
-            context.annotationsManager.clearAll()
+            try await context.annotationsManager.clearAll()
         }
 
         if categories.contains(.intentionalBreaks) {
@@ -165,7 +154,7 @@ enum AppDataClearService {
         if categories.contains(.exerciseCustomization) {
             context.exerciseMetadataManager.clearOverrides()
             context.exerciseMetricManager.clearOverrides()
-            context.exerciseRelationshipManager.clearRelationships()
+            context.exerciseRelationshipManager.resetToDefaults()
             context.dataManager.refreshExerciseIdentityDerivedState()
             context.userDefaults.removeObject(forKey: "favoriteExercises")
         }
@@ -186,6 +175,23 @@ enum AppDataClearService {
 
         if categories.contains(.activeSessionDraft) {
             await context.sessionManager.discardDraft()
+        }
+
+        // Delete source and recovery files only after in-app stores have cleared successfully.
+        // A failed store clear must not remove the user's remaining recovery path or mark it seen.
+        if categories.contains(.importExportFiles) {
+            try await context.iCloudManager.deleteAllExportAndBackupFiles()
+            AppBackupService.persistNativeBackupSourceSignature(nil, userDefaults: context.userDefaults)
+        } else {
+            if categories.contains(.workoutHistory) {
+                try await context.iCloudManager.deleteAllStrongImportFiles()
+            }
+            if shouldMarkExistingBackupAsSeen(for: categories) {
+                await markLatestNativeBackupAsSeen(
+                    iCloudManager: context.iCloudManager,
+                    userDefaults: context.userDefaults
+                )
+            }
         }
     }
 

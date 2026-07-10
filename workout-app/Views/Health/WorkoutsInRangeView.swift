@@ -1,11 +1,12 @@
 import SwiftUI
 
 struct WorkoutsInRangeView: View {
-    let workouts: [Workout]
     let rangeLabel: String
+    private let sortedWorkouts: [Workout]
 
-    private var sortedWorkouts: [Workout] {
-        workouts.sorted { $0.date > $1.date }
+    init(workouts: [Workout], rangeLabel: String) {
+        self.rangeLabel = rangeLabel
+        sortedWorkouts = workouts.sorted { $0.date > $1.date }
     }
 
     var body: some View {

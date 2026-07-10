@@ -728,11 +728,29 @@ extension HealthKitManager {
     func fetchEarliestAvailableDailyHealthDate() async throws -> Date? {
         var earliestDate: Date?
 
-        for metric in HealthMetric.dailyQuantityMetrics {
-            guard let type = metric.quantityType else { continue }
-            if let sampleDate = try await fetchEarliestQuantitySampleDate(type: type) {
-                earliestDate = min(earliestDate ?? sampleDate, sampleDate)
+        // These are independent one-row queries. Running them in small batches avoids the
+        // serial latency waterfall without flooding HealthKit with every type at once.
+        let quantityTypes = HealthMetric.dailyQuantityMetrics.compactMap(\.quantityType)
+        let maximumConcurrentQueries = 4
+        var batchStart = quantityTypes.startIndex
+
+        while batchStart < quantityTypes.endIndex {
+            let batchEnd = min(batchStart + maximumConcurrentQueries, quantityTypes.endIndex)
+            let batch = quantityTypes[batchStart..<batchEnd]
+
+            try await withThrowingTaskGroup(of: Date?.self) { group in
+                for type in batch {
+                    group.addTask { @MainActor in
+                        try await self.fetchEarliestQuantitySampleDate(type: type)
+                    }
+                }
+
+                for try await sampleDate in group {
+                    guard let sampleDate else { continue }
+                    earliestDate = min(earliestDate ?? sampleDate, sampleDate)
+                }
             }
+            batchStart = batchEnd
         }
 
         if let sleepDate = try await fetchEarliestCategorySampleDate(type: .sleepAnalysis) {

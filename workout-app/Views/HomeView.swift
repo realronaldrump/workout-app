@@ -28,8 +28,9 @@ struct HomeView: View {
     @State private var showingMuscleBalance = false
     @State private var showingMuscleRecency = false
     @State private var showingConsistencyDetail = false
-    @State private var showRepeatWorkoutId: UUID?
+    @State private var pendingRepeatWorkout: Workout?
     @State private var cachedWeekBuckets: [HomeWeekBucket] = []
+    @State private var cachedExerciseCounts: [UUID: Int] = [:]
     @State private var cachedOverallStats: WorkoutStats?
     @State private var cachedCurrentWeekStreak = 0
     @State private var cachedWeeklyChangeMetrics: [ChangeMetric] = []
@@ -219,6 +220,21 @@ struct HomeView: View {
         .sheet(isPresented: $showingQuickStart) {
             QuickStartView(exerciseName: quickStartExercise)
         }
+        .alert(
+            "Replace active session?",
+            isPresented: repeatReplacementAlertBinding,
+            presenting: pendingRepeatWorkout
+        ) { workout in
+            Button("Cancel", role: .cancel) {
+                pendingRepeatWorkout = nil
+            }
+            Button("Replace", role: .destructive) {
+                pendingRepeatWorkout = nil
+                replaceActiveSessionAndRepeat(workout)
+            }
+        } message: { _ in
+            Text("This will discard your current in-progress session and repeat the selected workout.")
+        }
         .onAppear {
             refreshHomeDerivedState()
             rebuildHomeHighlights()
@@ -272,7 +288,6 @@ struct HomeView: View {
                     Text("Today")
                         .font(Theme.Typography.screenTitle)
                         .foregroundColor(Theme.Colors.textPrimary)
-                        .tracking(1.5)
                 }
 
                 Spacer()
@@ -497,9 +512,8 @@ struct HomeView: View {
         return VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             HStack(alignment: .firstTextBaseline) {
                 Text("Week View")
-                    .font(Theme.Typography.sectionHeader)
+                    .font(Theme.Typography.sectionHeader2)
                     .foregroundColor(Theme.Colors.textPrimary)
-                    .tracking(1.0)
                 Spacer()
                 if streak > 0 {
                     HStack(spacing: 5) {
@@ -577,12 +591,15 @@ struct HomeView: View {
                 VStack(alignment: .leading, spacing: Theme.Spacing.md) {
                     HStack {
                         Text("vs Last Week")
-                            .font(Theme.Typography.sectionHeader)
+                            .font(Theme.Typography.sectionHeader2)
                             .foregroundColor(Theme.Colors.textPrimary)
-                            .tracking(1.0)
                         Spacer()
                         NavigationLink {
-                            PerformanceLabView(dataManager: dataManager)
+                            PerformanceLabView(
+                                dataManager: dataManager,
+                                annotationsManager: annotationsManager,
+                                gymProfilesManager: gymProfilesManager
+                            )
                         } label: {
                             Text("More")
                                 .font(Theme.Typography.captionBold)
@@ -623,9 +640,8 @@ struct HomeView: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             HStack(alignment: .firstTextBaseline) {
                 Text("Recent Workouts")
-                    .font(Theme.Typography.sectionHeader)
+                    .font(Theme.Typography.sectionHeader2)
                     .foregroundColor(Theme.Colors.textPrimary)
-                    .tracking(1.0)
                 Spacer()
                 NavigationLink(destination: WorkoutHistoryView(workouts: dataManager.workouts, showsBackButton: true)) {
                     HStack(spacing: 4) {
@@ -642,6 +658,7 @@ struct HomeView: View {
                 ForEach(Array(dataManager.workouts.prefix(3).enumerated()), id: \.element.id) { _, workout in
                     HomeWorkoutRow(
                         workout: workout,
+                        exerciseCount: cachedExerciseCounts[workout.id] ?? workout.exercises.count,
                         onRepeat: { repeatWorkout(workout) },
                         onTap: { selectedWorkout = workout }
                     )
@@ -655,9 +672,8 @@ struct HomeView: View {
     private var exploreSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             Text("Explore")
-                .font(Theme.Typography.sectionHeader)
+                .font(Theme.Typography.sectionHeader2)
                 .foregroundColor(Theme.Colors.textPrimary)
-                .tracking(1.0)
 
             LazyVGrid(
                 columns: [
@@ -667,7 +683,11 @@ struct HomeView: View {
                 spacing: Theme.Spacing.md
             ) {
                 NavigationLink {
-                    PerformanceLabView(dataManager: dataManager)
+                    PerformanceLabView(
+                        dataManager: dataManager,
+                        annotationsManager: annotationsManager,
+                        gymProfilesManager: gymProfilesManager
+                    )
                 } label: {
                     ExploreRow(title: "Performance", subtitle: "Trends", icon: "chart.line.uptrend.xyaxis", tint: Theme.Colors.success)
                 }
@@ -840,39 +860,39 @@ struct HomeView: View {
     }
 
     private func repeatWorkout(_ workout: Workout) {
-        let exercises = workout.exercises.map { $0.name }
-        let gymId = annotationsManager.annotation(for: workout.id)?.gymProfileId
-
-        sessionManager.startSession(
-            name: workout.name,
-            gymProfileId: gymId
+        let outcome = WorkoutRepeatHelper.repeatWorkout(
+            workout,
+            gymProfileId: annotationsManager.annotation(for: workout.id)?.gymProfileId,
+            weightIncrement: weightIncrement,
+            sessionManager: sessionManager,
+            dataManager: dataManager
         )
-
-        // Add all exercises from the repeated workout with auto-prefilled weights
-        let increment = weightIncrement > 0 ? weightIncrement : 2.5
-        for exerciseName in exercises {
-            let tags = ExerciseMetadataManager.shared.resolvedTags(for: exerciseName)
-            let isCardio = tags.contains(where: { $0.builtInGroup == .cardio })
-
-            if isCardio {
-                sessionManager.addExercise(name: exerciseName)
-            } else {
-                let history = dataManager.getExerciseHistory(for: exerciseName)
-                let rec = ExerciseRecommendationEngine.recommend(
-                    exerciseName: exerciseName,
-                    history: history,
-                    weightIncrement: increment
-                )
-                let midReps = (rec.repRange.lowerBound + rec.repRange.upperBound) / 2
-                sessionManager.addExercise(
-                    name: exerciseName,
-                    initialSetPrefill: SetPrefill(weight: rec.suggestedWeight, reps: midReps)
-                )
-            }
+        if outcome == .requiresActiveSessionReplacement {
+            pendingRepeatWorkout = workout
         }
+    }
 
-        sessionManager.isPresentingSessionUI = true
-        Haptics.notify(.success)
+    private var repeatReplacementAlertBinding: Binding<Bool> {
+        Binding(
+            get: { pendingRepeatWorkout != nil },
+            set: { isPresented in
+                if !isPresented {
+                    pendingRepeatWorkout = nil
+                }
+            }
+        )
+    }
+
+    private func replaceActiveSessionAndRepeat(_ workout: Workout) {
+        Task { @MainActor in
+            await WorkoutRepeatHelper.replaceActiveSessionAndRepeat(
+                workout,
+                gymProfileId: annotationsManager.annotation(for: workout.id)?.gymProfileId,
+                weightIncrement: weightIncrement,
+                sessionManager: sessionManager,
+                dataManager: dataManager
+            )
+        }
     }
 
     private func triggerAutoHealthSync() {
@@ -908,9 +928,17 @@ struct HomeView: View {
 
         let workouts = dataManager.workouts
         let breaks = intentionalBreaksManager.savedBreaks
-        let weekBuckets = buildWeekBuckets(workouts: workouts, intentionalBreakRanges: breaks)
+        let resolver = relationshipManager.resolverSnapshot()
+        let weekBuckets = buildWeekBuckets(
+            workouts: workouts,
+            intentionalBreakRanges: breaks,
+            resolver: resolver
+        )
 
         cachedWeekBuckets = weekBuckets
+        cachedExerciseCounts = weekBuckets.reduce(into: [:]) { result, bucket in
+            result.merge(bucket.exerciseCounts) { current, _ in current }
+        }
         cachedCurrentWeekStreak = WorkoutAnalytics.currentWeeklyStreak(
             for: workouts,
             intentionalBreakRanges: breaks
@@ -919,7 +947,6 @@ struct HomeView: View {
             ? nil
             : dataManager.calculateStats(for: workouts, intentionalBreakRanges: breaks)
 
-        let resolver = relationshipManager.resolverSnapshot()
         let allMetrics = WorkoutAnalytics.changeMetrics(for: workouts, window: changeWindow, resolver: resolver)
         let preferredMetrics = allMetrics.filter {
             $0.title.contains("Sessions") || $0.title.contains("Volume")
@@ -1005,7 +1032,8 @@ struct HomeView: View {
 
     private func buildWeekBuckets(
         workouts: [Workout],
-        intentionalBreakRanges: [IntentionalBreakRange]
+        intentionalBreakRanges: [IntentionalBreakRange],
+        resolver: ExerciseIdentityResolver
     ) -> [HomeWeekBucket] {
         let now = Date()
         let calendar = Calendar.current
@@ -1022,6 +1050,7 @@ struct HomeView: View {
                     weekStart: currentWeekStart,
                     referenceDate: now,
                     workouts: [],
+                    exerciseCounts: [:],
                     stats: emptyStats,
                     trackedDayCount: max((calendar.dateComponents([.day], from: currentWeekStart, to: boundsEnd).day ?? 0) + 1, 0),
                     excludedDayCount: 0
@@ -1075,6 +1104,9 @@ struct HomeView: View {
                     weekStart: cursor,
                     referenceDate: now,
                     workouts: weekWorkouts,
+                    exerciseCounts: Dictionary(uniqueKeysWithValues: weekWorkouts.map {
+                        ($0.id, ExerciseAggregation.exerciseCount(for: $0, resolver: resolver))
+                    }),
                     stats: stats,
                     trackedDayCount: trackedDays,
                     excludedDayCount: excludedDays

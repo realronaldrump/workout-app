@@ -1,6 +1,9 @@
 import Combine
 import Foundation
 
+// Relationship resolution, aggregation, and persisted editing intentionally share this domain file.
+// swiftlint:disable file_length
+
 nonisolated enum ExerciseLaterality: String, Codable, CaseIterable, Hashable, Sendable {
     case left
     case right
@@ -391,6 +394,12 @@ nonisolated struct ExerciseIdentityResolver: Hashable, Sendable {
 }
 
 nonisolated enum ExerciseAggregation {
+    struct Summary: Hashable, Sendable {
+        let volume: Double
+        let exerciseCount: Int
+        let setCount: Int
+    }
+
     private struct Bucket {
         var entries: [(exercise: Exercise, relationship: ExerciseRelationship?)] = []
         var firstRank: Int = Int.max
@@ -441,15 +450,24 @@ nonisolated enum ExerciseAggregation {
     }
 
     static func totalVolume(for workout: Workout, resolver: ExerciseIdentityResolver) -> Double {
-        aggregateExercises(in: workout, resolver: resolver).reduce(0) { $0 + $1.totalVolume }
+        summary(for: workout, resolver: resolver).volume
     }
 
     static func totalSets(for workout: Workout, resolver: ExerciseIdentityResolver) -> Int {
-        aggregateExercises(in: workout, resolver: resolver).reduce(0) { $0 + $1.sets.count }
+        summary(for: workout, resolver: resolver).setCount
     }
 
     static func exerciseCount(for workout: Workout, resolver: ExerciseIdentityResolver) -> Int {
-        aggregateExercises(in: workout, resolver: resolver).count
+        summary(for: workout, resolver: resolver).exerciseCount
+    }
+
+    static func summary(for workout: Workout, resolver: ExerciseIdentityResolver) -> Summary {
+        let exercises = aggregateExercises(in: workout, resolver: resolver)
+        return Summary(
+            volume: exercises.reduce(0) { $0 + $1.totalVolume },
+            exerciseCount: exercises.count,
+            setCount: exercises.reduce(0) { $0 + $1.sets.count }
+        )
     }
 
     static func historySessions(
@@ -594,6 +612,14 @@ final class ExerciseRelationshipManager: ObservableObject {
 
     private let userDefaults: UserDefaults
     private let storageKey = "ExerciseRelationships"
+    private let suppressedDefaultsKey = "ExerciseRelationshipSuppressedDefaults"
+    private var suppressedDefaultIDs: Set<String> = []
+
+    private static let defaultRelationships = ExerciseMetadataManager.defaultExerciseRelationships
+    private static let defaultRelationshipIDs = Set(defaultRelationships.map(\.id))
+    private static let defaultRelationshipsByID = Dictionary(
+        uniqueKeysWithValues: defaultRelationships.map { ($0.id, $0) }
+    )
 
     init(userDefaults: UserDefaults = .standard) {
         self.userDefaults = userDefaults
@@ -610,6 +636,13 @@ final class ExerciseRelationshipManager: ObservableObject {
 
     func children(of parentName: String) -> [ExerciseRelationship] {
         resolverSnapshot().children(of: parentName)
+    }
+
+    var suppressedDefaultExerciseNames: [String] {
+        Self.defaultRelationships
+            .filter { suppressedDefaultIDs.contains($0.id) }
+            .map(\.exerciseName)
+            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
     }
 
     func suggestedRelationship(
@@ -657,10 +690,19 @@ final class ExerciseRelationshipManager: ObservableObject {
                 continue
             }
 
+            let replaceableDefault = unmodifiedDefaultRelationship(
+                parentName: suggestion.parentName,
+                laterality: suggestion.laterality
+            ).flatMap { relationship in
+                observed.contains(where: {
+                    ExerciseIdentityResolver.normalizedName($0) == relationship.id
+                }) ? nil : relationship
+            }
             let didSave = setRelationship(
                 exerciseName: suggestion.exerciseName,
                 parentName: suggestion.parentName,
-                laterality: suggestion.laterality
+                laterality: suggestion.laterality,
+                replacingExerciseName: replaceableDefault?.exerciseName
             )
             if didSave, let relationship = relationship(for: suggestion.exerciseName) {
                 created.append(relationship)
@@ -700,8 +742,10 @@ final class ExerciseRelationshipManager: ObservableObject {
         let replacedKey = ExerciseIdentityResolver.normalizedName(replacedName)
         if replacedKey != relationship.id {
             relationships.removeValue(forKey: replacedKey)
+            suppressDefaultIfNeeded(exerciseName: replacedName)
         }
         relationships[relationship.id] = relationship
+        suppressedDefaultIDs.remove(relationship.id)
         save()
         return true
     }
@@ -766,7 +810,11 @@ final class ExerciseRelationshipManager: ObservableObject {
     }
 
     func removeRelationship(for exerciseName: String) {
-        relationships.removeValue(forKey: ExerciseIdentityResolver.normalizedName(exerciseName))
+        let relationshipID = ExerciseIdentityResolver.normalizedName(exerciseName)
+        relationships.removeValue(forKey: relationshipID)
+        if Self.defaultRelationshipIDs.contains(relationshipID) {
+            suppressedDefaultIDs.insert(relationshipID)
+        }
         save()
     }
 
@@ -783,20 +831,35 @@ final class ExerciseRelationshipManager: ObservableObject {
                 laterality: relationship.laterality,
                 schemaVersion: relationship.schemaVersion
             )
+            guard relationships[canonical.id] == nil else {
+                skipped += 1
+                continue
+            }
+
+            let replaceableDefault = unmodifiedDefaultRelationship(
+                parentName: canonical.parentName,
+                laterality: canonical.laterality
+            )
+            if let replaceableDefault {
+                relationships.removeValue(forKey: replaceableDefault.id)
+            }
             guard isValidRelationship(
                 child: canonical.exerciseName,
                 parent: canonical.parentName,
                 laterality: canonical.laterality,
                 replacingChild: nil
             ) else {
+                if let replaceableDefault {
+                    relationships[replaceableDefault.id] = replaceableDefault
+                }
                 skipped += 1
                 continue
             }
-            guard relationships[canonical.id] == nil else {
-                skipped += 1
-                continue
+            if let replaceableDefault {
+                suppressedDefaultIDs.insert(replaceableDefault.id)
             }
             relationships[canonical.id] = canonical
+            suppressedDefaultIDs.remove(canonical.id)
             inserted += 1
         }
 
@@ -806,9 +869,42 @@ final class ExerciseRelationshipManager: ObservableObject {
         return (inserted, skipped)
     }
 
+    @discardableResult
+    func mergeSuppressedDefaultsFromBackup(_ exerciseNames: [String]) -> Int {
+        var changed = 0
+        for exerciseName in exerciseNames {
+            let relationshipID = ExerciseIdentityResolver.normalizedName(exerciseName)
+            guard let defaultRelationship = Self.defaultRelationshipsByID[relationshipID] else { continue }
+
+            if suppressedDefaultIDs.insert(relationshipID).inserted {
+                changed += 1
+            }
+            if relationships[relationshipID] == defaultRelationship {
+                relationships.removeValue(forKey: relationshipID)
+                changed += 1
+            }
+        }
+
+        if changed > 0 {
+            save()
+        }
+        return changed
+    }
+
     func clearRelationships() {
         relationships = [:]
+        suppressedDefaultIDs = Self.defaultRelationshipIDs
         userDefaults.removeObject(forKey: storageKey)
+        saveSuppressedDefaults()
+    }
+
+    /// Clears user customization while restoring the parent/side relationships shipped with the app.
+    func resetToDefaults() {
+        suppressedDefaultIDs = []
+        relationships = ExerciseIdentityResolver(
+            relationships: Dictionary(uniqueKeysWithValues: Self.defaultRelationships.map { ($0.id, $0) })
+        ).relationships
+        save()
     }
 
     static func standardVariantName(parentName: String, laterality: ExerciseLaterality) -> String {
@@ -845,16 +941,32 @@ final class ExerciseRelationshipManager: ObservableObject {
     }
 
     private func load() {
-        guard let data = userDefaults.data(forKey: storageKey) else { return }
-        if let decoded = try? JSONDecoder().decode([ExerciseRelationship].self, from: data) {
-            let keyed = decoded.reduce(into: [String: ExerciseRelationship]()) { result, relationship in
-                result[relationship.id] = relationship
+        suppressedDefaultIDs = Set(userDefaults.stringArray(forKey: suppressedDefaultsKey) ?? [])
+
+        if let data = userDefaults.data(forKey: storageKey) {
+            if let decoded = try? JSONDecoder().decode([ExerciseRelationship].self, from: data) {
+                let keyed = decoded.reduce(into: [String: ExerciseRelationship]()) { result, relationship in
+                    result[relationship.id] = relationship
+                }
+                relationships = ExerciseIdentityResolver(relationships: keyed).relationships
+            } else if let decoded = try? JSONDecoder().decode([String: ExerciseRelationship].self, from: data) {
+                relationships = ExerciseIdentityResolver(relationships: decoded).relationships
             }
-            relationships = ExerciseIdentityResolver(relationships: keyed).relationships
-            return
         }
-        if let decoded = try? JSONDecoder().decode([String: ExerciseRelationship].self, from: data) {
-            relationships = ExerciseIdentityResolver(relationships: decoded).relationships
+
+        installMissingDefaultRelationships()
+    }
+
+    private func installMissingDefaultRelationships() {
+        for relationship in Self.defaultRelationships where !suppressedDefaultIDs.contains(relationship.id) {
+            guard relationships[relationship.id] == nil else { continue }
+            guard isValidRelationship(
+                child: relationship.exerciseName,
+                parent: relationship.parentName,
+                laterality: relationship.laterality,
+                replacingChild: nil
+            ) else { continue }
+            relationships[relationship.id] = relationship
         }
     }
 
@@ -864,6 +976,34 @@ final class ExerciseRelationshipManager: ObservableObject {
         }
         if let data = try? JSONEncoder().encode(values) {
             userDefaults.set(data, forKey: storageKey)
+        }
+        saveSuppressedDefaults()
+    }
+
+    private func saveSuppressedDefaults() {
+        if suppressedDefaultIDs.isEmpty {
+            userDefaults.removeObject(forKey: suppressedDefaultsKey)
+        } else {
+            userDefaults.set(suppressedDefaultIDs.sorted(), forKey: suppressedDefaultsKey)
+        }
+    }
+
+    private func suppressDefaultIfNeeded(exerciseName: String) {
+        let relationshipID = ExerciseIdentityResolver.normalizedName(exerciseName)
+        if Self.defaultRelationshipIDs.contains(relationshipID) {
+            suppressedDefaultIDs.insert(relationshipID)
+        }
+    }
+
+    private func unmodifiedDefaultRelationship(
+        parentName: String,
+        laterality: ExerciseLaterality
+    ) -> ExerciseRelationship? {
+        let parentID = ExerciseIdentityResolver.normalizedName(parentName)
+        return relationships.values.first { relationship in
+            ExerciseIdentityResolver.normalizedName(relationship.parentName) == parentID &&
+                relationship.laterality == laterality &&
+                Self.defaultRelationshipsByID[relationship.id] == relationship
         }
     }
 

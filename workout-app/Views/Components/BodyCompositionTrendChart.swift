@@ -162,6 +162,17 @@ struct BodyCompositionTrendChart: View {
         let renderedRA30 = HealthChartPointSampler.sampled(ra30, limit: 400)
 
         return Chart {
+            if let average = averageValue {
+                RuleMark(y: .value("Average", average))
+                    .foregroundStyle(color.opacity(0.35))
+                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 4]))
+                    .annotation(position: .top, alignment: .trailing, spacing: 4) {
+                        Text("avg \(axisValueText(average))")
+                            .font(Theme.Typography.caption2Bold)
+                            .foregroundStyle(Theme.Colors.textSecondary)
+                    }
+            }
+
             // Area fill — gradient under the primary line
             if !renderedPoints.isEmpty {
                 ForEach(renderedPoints) { point in
@@ -379,6 +390,11 @@ struct BodyCompositionTrendChart: View {
                     )
             }
         }
+    }
+
+    private var averageValue: Double? {
+        guard !points.isEmpty else { return nil }
+        return points.reduce(0) { $0 + $1.value } / Double(points.count)
     }
 
     // MARK: - Selection

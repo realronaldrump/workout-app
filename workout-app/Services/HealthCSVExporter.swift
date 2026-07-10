@@ -24,6 +24,101 @@ enum HealthExportError: LocalizedError {
 }
 
 struct HealthCSVExporter {
+    /// Incremental writer for raw sample exports. It keeps only one query chunk and a
+    /// small text buffer in memory instead of materializing the entire CSV several times.
+    actor MetricSamplesStreamWriter {
+        private let fileURL: URL
+        private var fileHandle: FileHandle?
+        private var writtenSampleIDs = Set<UUID>()
+        private var writtenCount = 0
+        private let timestampFormatter: DateFormatter
+
+        init(fileURL: URL) throws {
+            self.fileURL = fileURL
+            let timestampFormatter = DateFormatter()
+            timestampFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+            timestampFormatter.timeZone = TimeZone.current
+            timestampFormatter.locale = Locale(identifier: "en_US_POSIX")
+            self.timestampFormatter = timestampFormatter
+            let fileManager = FileManager.default
+            try fileManager.createDirectory(
+                at: fileURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            if fileManager.fileExists(atPath: fileURL.path) {
+                try fileManager.removeItem(at: fileURL)
+            }
+            guard fileManager.createFile(atPath: fileURL.path, contents: nil) else {
+                throw CocoaError(.fileWriteUnknown)
+            }
+            try fileManager.setAttributes(
+                [.protectionKey: FileProtectionType.complete],
+                ofItemAtPath: fileURL.path
+            )
+            let handle = try FileHandle(forWritingTo: fileURL)
+            fileHandle = handle
+            guard let header = "Timestamp,Metric,Category,Value,Unit\n".data(using: .utf8) else {
+                throw CocoaError(.fileWriteInapplicableStringEncoding)
+            }
+            try handle.write(contentsOf: header)
+        }
+
+        func append(metric: HealthMetric, samples: [HealthMetricSample]) throws {
+            guard !samples.isEmpty else { return }
+            var buffer = ""
+            buffer.reserveCapacity(min(samples.count * 72, 128 * 1_024))
+
+            for sample in samples.sorted(by: { $0.timestamp < $1.timestamp }) {
+                // Adjacent HealthKit date chunks can both include a boundary sample.
+                guard writtenSampleIDs.insert(sample.id).inserted else { continue }
+                let displayValue = HealthCSVExporter.metricDisplayValue(metric, stored: sample.value)
+                let row = [
+                    timestampFormatter.string(from: sample.timestamp),
+                    HealthCSVExporter.metricTitle(metric),
+                    HealthCSVExporter.metricCategoryTitle(metric),
+                    HealthCSVExporter.metricFormatDisplay(metric, value: displayValue),
+                    HealthCSVExporter.metricDisplayUnit(metric)
+                ]
+                buffer += row.map(HealthCSVExporter.csvEscape).joined(separator: ",")
+                buffer += "\n"
+                writtenCount += 1
+
+                if buffer.utf8.count >= 64 * 1_024 {
+                    try write(buffer)
+                    buffer.removeAll(keepingCapacity: true)
+                }
+            }
+
+            if !buffer.isEmpty {
+                try write(buffer)
+            }
+        }
+
+        func finish() throws -> Int {
+            guard writtenCount > 0 else {
+                discard()
+                throw HealthExportError.noMetricSamples
+            }
+            try fileHandle?.synchronize()
+            try fileHandle?.close()
+            fileHandle = nil
+            return writtenCount
+        }
+
+        func discard() {
+            try? fileHandle?.close()
+            fileHandle = nil
+            try? FileManager.default.removeItem(at: fileURL)
+        }
+
+        private func write(_ value: String) throws {
+            guard let data = value.data(using: .utf8) else {
+                throw CocoaError(.fileWriteInapplicableStringEncoding)
+            }
+            try fileHandle?.write(contentsOf: data)
+        }
+    }
+
     nonisolated static func exportDailySummaryCSV(
         entries: [DailyHealthData],
         metrics: [HealthMetric],

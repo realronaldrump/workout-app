@@ -43,10 +43,6 @@ struct HealthDataSettingsView: View {
 
     // MARK: - Computed Properties
 
-    private static let allHistoryStart: Date = {
-        Calendar.current.date(from: DateComponents(year: 1970, month: 1, day: 1)) ?? Date(timeIntervalSince1970: 0)
-    }()
-
     private var isBusy: Bool {
         isWorking || healthManager.isSyncing || healthManager.isDailySyncing
     }
@@ -283,10 +279,7 @@ struct HealthDataSettingsView: View {
                     }
 
                     syncPill("All Available") {
-                        await syncDailyHistory(
-                            range: DateInterval(start: Self.allHistoryStart, end: syncEndDate),
-                            label: "All available history"
-                        )
+                        await syncAllAvailableDailyHistory()
                     }
 
                     Button {
@@ -667,6 +660,25 @@ struct HealthDataSettingsView: View {
         }
     }
 
+    private func syncAllAvailableDailyHistory() async {
+        guard healthManager.authorizationStatus == .authorized else {
+            errorMessage = "Connect Apple Health before syncing history."
+            return
+        }
+
+        syncNote = "Finding your earliest Apple Health data…"
+        await healthManager.ensureEarliestAvailableDailyHealthDate(force: true)
+        await syncDailyHistory(range: allAvailableDailyHistoryRange, label: "All available history")
+    }
+
+    private var allAvailableDailyHistoryRange: DateInterval {
+        let fallback = earliestWorkoutDate
+            ?? Calendar.current.date(byAdding: .year, value: -2, to: Date())
+            ?? Date()
+        let start = healthManager.allTimeDailyHealthStartDate ?? fallback
+        return DateInterval(start: Calendar.current.startOfDay(for: start), end: syncEndDate)
+    }
+
     private func relativeSyncRange(yearsBack: Int) -> DateInterval {
         let start = Calendar.current.date(byAdding: .year, value: -yearsBack, to: Date()) ?? Date()
         return DateInterval(start: Calendar.current.startOfDay(for: start), end: syncEndDate)
@@ -760,6 +772,7 @@ struct HealthDataSettingsView: View {
                     includeWorkoutData: true,
                     includeDailyData: false
                 )
+                try await healthManager.waitForPendingCachePersistence()
                 statusMessage = workoutResultMessage(from: result, scope: "selected range")
 
             case .clearDailyRange:
@@ -768,10 +781,12 @@ struct HealthDataSettingsView: View {
                     includeWorkoutData: false,
                     includeDailyData: true
                 )
+                try await healthManager.waitForPendingCachePersistence()
                 statusMessage = dailyResultMessage(from: result, scope: "selected range")
 
             case .clearBothRange:
                 let result = healthManager.clearCachedHealthData(in: boundedCacheRange)
+                try await healthManager.waitForPendingCachePersistence()
                 statusMessage = combinedResultMessage(from: result, scope: "selected range")
 
             case .clearWorkoutAll:
@@ -779,6 +794,7 @@ struct HealthDataSettingsView: View {
                     includeWorkoutData: true,
                     includeDailyData: false
                 )
+                try await healthManager.waitForPendingCachePersistence()
                 statusMessage = workoutResultMessage(from: result, scope: "all cached workouts")
 
             case .clearDailyAll:
@@ -786,10 +802,12 @@ struct HealthDataSettingsView: View {
                     includeWorkoutData: false,
                     includeDailyData: true
                 )
+                try await healthManager.waitForPendingCachePersistence()
                 statusMessage = dailyResultMessage(from: result, scope: "all cached daily history")
 
             case .clearAndResyncRange:
                 let cleared = healthManager.clearCachedHealthData(in: boundedCacheRange)
+                try await healthManager.waitForPendingCachePersistence()
                 guard healthManager.authorizationStatus == .authorized else {
                     statusMessage = combinedResultMessage(from: cleared, scope: "selected range") + " Connect Apple Health to re-sync."
                     return
@@ -803,13 +821,14 @@ struct HealthDataSettingsView: View {
 
             case .clearAndResyncAll:
                 _ = healthManager.clearCachedHealthData()
+                try await healthManager.waitForPendingCachePersistence()
                 guard healthManager.authorizationStatus == .authorized else {
                     statusMessage = "All cached data cleared. Connect Apple Health to re-sync."
                     return
                 }
                 if !workouts.isEmpty { _ = try await healthManager.syncAllWorkouts(workouts) }
-                let fullRange = DateInterval(start: Self.allHistoryStart, end: syncEndDate)
-                try await healthManager.syncDailyHealthData(range: fullRange)
+                await healthManager.ensureEarliestAvailableDailyHealthDate(force: true)
+                try await healthManager.syncDailyHealthData(range: allAvailableDailyHistoryRange)
                 statusMessage = "All health data refreshed."
             }
         } catch {
