@@ -61,6 +61,11 @@ class HealthKitManager: ObservableObject {
     let dailyHealthStoreVersionKey = "dailyHealthStoreVersion"
     let currentDailyHealthStoreVersion = 3
 
+    // The manager is scene-owned in production and has no custom teardown work. Explicitly
+    // opting out of isolated deinitialization also avoids a Swift 6.2 runtime invalid-free
+    // when short-lived instances are repeatedly released by XCTest on the iOS 26 simulator.
+    nonisolated deinit {}
+
     // MARK: - Health Data Types to Read
 
     /// All HealthKit data types the app will request read access to
@@ -167,7 +172,7 @@ class HealthKitManager: ObservableObject {
         return types
     }
 
-    static func normalizedAuthorizationReadTypes<S: Sequence>(
+    nonisolated static func normalizedAuthorizationReadTypes<S: Sequence>(
         for requestedTypes: S
     ) -> Set<HKObjectType> where S.Element == HKObjectType {
         var normalizedTypes = Set(requestedTypes)

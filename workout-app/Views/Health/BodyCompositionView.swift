@@ -1,8 +1,12 @@
 import Charts
 import Combine
 import SwiftUI
+import UIKit
 
 struct BodyCompositionView: View {
+    @Environment(\.openURL) private var openURL
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @EnvironmentObject private var healthManager: HealthViewStore
     @EnvironmentObject private var dateRangeContext: HealthDateRangeContext
 
@@ -20,6 +24,8 @@ struct BodyCompositionView: View {
     @State private var expandedDays: Set<Date> = []
     @State private var dataRefreshTask: Task<Void, Never>?
     @State private var dataRefreshGeneration: UInt64 = 0
+    @State private var isRequestingAuthorization = false
+    @State private var authorizationError: String?
 
     private enum Tab: String, CaseIterable, Identifiable {
         case overview
@@ -53,6 +59,12 @@ struct BodyCompositionView: View {
         metricKind == .weight ? "weigh-ins" : "readings"
     }
 
+    private var compactStatColumns: [GridItem] {
+        dynamicTypeSize.isAccessibilitySize
+            ? [GridItem(.flexible())]
+            : [GridItem(.flexible()), GridItem(.flexible())]
+    }
+
     var body: some View {
         ZStack {
             AdaptiveBackground()
@@ -71,6 +83,7 @@ struct BodyCompositionView: View {
                 }
                 .padding(.vertical, Theme.Spacing.xxl)
                 .padding(.horizontal, Theme.Spacing.lg)
+                .contentColumn()
             }
         }
         .navigationTitle("Body Composition")
@@ -146,7 +159,7 @@ struct BodyCompositionView: View {
                 .textCase(.uppercase)
                 .tracking(0.8)
 
-            BrutalistSegmentedPicker(
+            AppSegmentedPicker(
                 title: "Metric",
                 selection: $metricKind,
                 options: BodyCompositionMetricKind.allCases.map { ($0.title, $0) }
@@ -155,7 +168,7 @@ struct BodyCompositionView: View {
     }
 
     private var tabSection: some View {
-        BrutalistSegmentedPicker(
+        AppSegmentedPicker(
             title: "Section",
             selection: $selectedTab,
             options: Tab.allCases.map { ($0.title, $0) }
@@ -168,6 +181,8 @@ struct BodyCompositionView: View {
             unavailableCard
         } else if healthManager.authorizationStatus != .authorized {
             accessCard
+        } else if model.isLoading {
+            loadingCard
         } else if let error = model.errorMessage {
             errorCard(message: error)
         } else if model.representativeSeries.isEmpty {
@@ -224,7 +239,7 @@ struct BodyCompositionView: View {
                 }
             }
 
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: Theme.Spacing.md) {
+            LazyVGrid(columns: compactStatColumns, spacing: Theme.Spacing.md) {
                 ForEach(stats) { stat in
                     BodyStatCard(title: stat.title, value: stat.value, subtitle: stat.subtitle)
                 }
@@ -253,7 +268,7 @@ struct BodyCompositionView: View {
                         }
                     }
 
-                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: Theme.Spacing.md) {
+                    LazyVGrid(columns: compactStatColumns, spacing: Theme.Spacing.md) {
                         ForEach(model.intervalDeltas) { delta in
                             DeltaCard(title: delta.label, delta: delta.delta, baselineDate: delta.baselineDate, unit: metricKind.unitLabel)
                         }
@@ -350,7 +365,7 @@ struct BodyCompositionView: View {
         let active = isOn.wrappedValue && isEnabled
         return Button {
             guard isEnabled else { return }
-            withAnimation(.easeInOut(duration: 0.15)) {
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.15)) {
                 isOn.wrappedValue.toggle()
             }
             Haptics.selection()
@@ -368,6 +383,7 @@ struct BodyCompositionView: View {
             .foregroundStyle(active ? Theme.Colors.textPrimary : Theme.Colors.textTertiary)
             .padding(.horizontal, 12)
             .padding(.vertical, 7)
+            .frame(minHeight: Theme.Layout.minimumTapTarget)
             .background(
                 RoundedRectangle(cornerRadius: Theme.CornerRadius.pill)
                     .fill(active ? tint.opacity(0.12) : Theme.Colors.surface.opacity(0.5))
@@ -433,7 +449,7 @@ struct BodyCompositionView: View {
                 .foregroundStyle(Theme.Colors.textPrimary)
                 .tracking(1.0)
 
-            BrutalistSegmentedPicker(
+            AppSegmentedPicker(
                 title: "Granularity",
                 selection: $reportGranularity,
                 options: ReportGranularity.allCases.map { ($0.title, $0) }
@@ -588,6 +604,28 @@ struct BodyCompositionView: View {
             Text("Use Settings to connect and sync Apple Health before viewing your weigh-ins, trends, and forecasts here.")
                 .font(Theme.Typography.body)
                 .foregroundStyle(Theme.Colors.textSecondary)
+
+            if let authorizationError {
+                Text(authorizationError)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.error)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if healthManager.authorizationStatus == .denied {
+                AppPrimaryButton(title: "Open Settings", systemImage: "gear") {
+                    guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+                    openURL(url)
+                }
+            } else {
+                AppPrimaryButton(
+                    title: isRequestingAuthorization ? "Waiting for Apple Health…" : "Connect Apple Health",
+                    systemImage: isRequestingAuthorization ? nil : "heart.text.square.fill",
+                    isEnabled: !isRequestingAuthorization
+                ) {
+                    requestAuthorization()
+                }
+            }
         }
         .padding(Theme.Spacing.xl)
         .softCard(elevation: 1)
@@ -615,6 +653,12 @@ struct BodyCompositionView: View {
             Text(message)
                 .font(Theme.Typography.body)
                 .foregroundStyle(Theme.Colors.textSecondary)
+
+            Button("Try Again", systemImage: "arrow.clockwise") {
+                refreshData()
+            }
+            .font(Theme.Typography.bodyBold)
+            .frame(minHeight: Theme.Layout.minimumTapTarget)
         }
         .padding(Theme.Spacing.xl)
         .softCard(elevation: 1)
@@ -634,6 +678,26 @@ struct BodyCompositionView: View {
         .softCard(elevation: 1)
     }
 
+    private var loadingCard: some View {
+        HStack(spacing: Theme.Spacing.md) {
+            ProgressView()
+
+            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                Text("Loading \(metricKind.title.lowercased())")
+                    .font(Theme.Typography.bodyBold)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+
+                Text("Fetching the latest readings from Apple Health…")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Theme.Spacing.xl)
+        .softCard(elevation: 1)
+        .accessibilityElement(children: .combine)
+    }
+
     // MARK: - Helpers
 
     private func refreshData() {
@@ -644,6 +708,8 @@ struct BodyCompositionView: View {
         guard healthManager.authorizationStatus == .authorized else {
             return
         }
+
+        model.beginLoading()
 
         let metric = metricKind.healthMetric
         let range = displayRange
@@ -675,6 +741,23 @@ struct BodyCompositionView: View {
             } catch {
                 guard generation == dataRefreshGeneration, !Task.isCancelled else { return }
                 model.reportLoadFailure(error)
+            }
+        }
+    }
+
+    private func requestAuthorization() {
+        guard !isRequestingAuthorization else { return }
+        isRequestingAuthorization = true
+        authorizationError = nil
+
+        Task {
+            defer { isRequestingAuthorization = false }
+            do {
+                try await healthManager.requestAuthorization()
+                healthManager.refreshAuthorizationStatus()
+                refreshData()
+            } catch {
+                authorizationError = error.localizedDescription
             }
         }
     }
@@ -951,6 +1034,7 @@ private struct LogbookDayCard: View {
                                 .tracking(0.8)
                         }
                         .buttonStyle(.plain)
+                        .frame(minHeight: Theme.Layout.minimumTapTarget)
                         .padding(.top, Theme.Spacing.xs)
                     }
                 }

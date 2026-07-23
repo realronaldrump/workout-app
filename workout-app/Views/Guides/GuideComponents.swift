@@ -145,11 +145,14 @@ struct GuideFeatureCard: View {
 
 struct GuideFeatureGrid: View {
     let items: [FeatureGridItem]
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    private let columns = [
-        GridItem(.flexible(), spacing: Theme.Spacing.sm),
-        GridItem(.flexible(), spacing: Theme.Spacing.sm),
-    ]
+    private var columns: [GridItem] {
+        if dynamicTypeSize.isAccessibilitySize {
+            return [GridItem(.flexible(), spacing: Theme.Spacing.sm)]
+        }
+        return [GridItem(.adaptive(minimum: 140), spacing: Theme.Spacing.sm)]
+    }
 
     var body: some View {
         LazyVGrid(columns: columns, spacing: Theme.Spacing.sm) {
@@ -374,11 +377,13 @@ struct DemoSetLogger: View {
                             Image(systemName: "minus")
                                 .font(Theme.Typography.captionBold)
                                 .foregroundStyle(Theme.Colors.textSecondary)
-                                .frame(width: 32, height: 32)
+                                .frame(width: Theme.Layout.minimumTapTarget, height: Theme.Layout.minimumTapTarget)
                                 .background(Theme.Colors.surfaceRaised)
                                 .clipShape(Circle())
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel("Decrease weight")
+                        .accessibilityValue("\(Int(weight)) pounds")
 
                         Text("\(Int(weight))")
                             .font(Theme.Typography.number)
@@ -393,11 +398,13 @@ struct DemoSetLogger: View {
                             Image(systemName: "plus")
                                 .font(Theme.Typography.captionBold)
                                 .foregroundStyle(Theme.Colors.textSecondary)
-                                .frame(width: 32, height: 32)
+                                .frame(width: Theme.Layout.minimumTapTarget, height: Theme.Layout.minimumTapTarget)
                                 .background(Theme.Colors.surfaceRaised)
                                 .clipShape(Circle())
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel("Increase weight")
+                        .accessibilityValue("\(Int(weight)) pounds")
                     }
 
                     Text("lbs")
@@ -423,11 +430,13 @@ struct DemoSetLogger: View {
                             Image(systemName: "minus")
                                 .font(Theme.Typography.captionBold)
                                 .foregroundStyle(Theme.Colors.textSecondary)
-                                .frame(width: 32, height: 32)
+                                .frame(width: Theme.Layout.minimumTapTarget, height: Theme.Layout.minimumTapTarget)
                                 .background(Theme.Colors.surfaceRaised)
                                 .clipShape(Circle())
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel("Decrease repetitions")
+                        .accessibilityValue("\(reps) repetitions")
 
                         Text("\(reps)")
                             .font(Theme.Typography.number)
@@ -442,11 +451,13 @@ struct DemoSetLogger: View {
                             Image(systemName: "plus")
                                 .font(Theme.Typography.captionBold)
                                 .foregroundStyle(Theme.Colors.textSecondary)
-                                .frame(width: 32, height: 32)
+                                .frame(width: Theme.Layout.minimumTapTarget, height: Theme.Layout.minimumTapTarget)
                                 .background(Theme.Colors.surfaceRaised)
                                 .clipShape(Circle())
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel("Increase repetitions")
+                        .accessibilityValue("\(reps) repetitions")
                     }
 
                     Text("reps")
@@ -474,6 +485,7 @@ struct DemoSetLogger: View {
                 }
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
+                .frame(minHeight: Theme.Layout.minimumTapTarget)
                 .padding(.vertical, Theme.Spacing.md)
                 .background(justLogged ? Theme.Colors.success : Theme.Colors.accent)
                 .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.medium))
@@ -590,6 +602,7 @@ struct DemoRecoverySignals: View {
                                 .transition(.opacity.combined(with: .move(edge: .top)))
                         }
                     }
+                    .frame(minHeight: Theme.Layout.minimumTapTarget)
                     .padding(Theme.Spacing.md)
                     .background(
                         RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
@@ -657,7 +670,7 @@ struct DemoChartSwitcher: View {
                                 .font(Theme.Typography.captionBold)
                                 .foregroundStyle(selectedChart == type ? .white : Theme.Colors.textSecondary)
                                 .padding(.horizontal, Theme.Spacing.md)
-                                .padding(.vertical, Theme.Spacing.sm)
+                                .frame(minHeight: Theme.Layout.minimumTapTarget)
                                 .background(
                                     selectedChart == type
                                         ? AnyShapeStyle(Theme.accentGradient)
@@ -744,6 +757,7 @@ struct DemoChartSwitcher: View {
 /// Interactive health category explorer
 struct DemoHealthCategories: View {
     @State private var selectedCategory: String?
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private let categories: [(icon: String, name: String, color: Color, metrics: String)] = [
         ("flame.fill", "Activity", Theme.Colors.warning, "Steps, Active Energy, Move Ring"),
@@ -767,13 +781,7 @@ struct DemoHealthCategories: View {
                     .foregroundStyle(Theme.Colors.textTertiary)
             }
 
-            let columns = [
-                GridItem(.flexible(), spacing: Theme.Spacing.sm),
-                GridItem(.flexible(), spacing: Theme.Spacing.sm),
-                GridItem(.flexible(), spacing: Theme.Spacing.sm),
-            ]
-
-            LazyVGrid(columns: columns, spacing: Theme.Spacing.sm) {
+            LazyVGrid(columns: categoryColumns, spacing: Theme.Spacing.sm) {
                 ForEach(categories, id: \.name) { cat in
                     Button {
                         withAnimation(Theme.Animation.spring) {
@@ -791,6 +799,7 @@ struct DemoHealthCategories: View {
                                 .foregroundStyle(Theme.Colors.textPrimary)
                         }
                         .frame(maxWidth: .infinity)
+                        .frame(minHeight: Theme.Layout.minimumTapTarget)
                         .padding(.vertical, Theme.Spacing.md)
                         .background(
                             RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
@@ -806,6 +815,7 @@ struct DemoHealthCategories: View {
                         .scaleEffect(selectedCategory == cat.name ? 1.02 : 1.0)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityValue(selectedCategory == cat.name ? "Selected" : "Not selected")
                 }
             }
 
@@ -847,6 +857,13 @@ struct DemoHealthCategories: View {
                 .strokeBorder(Theme.Colors.accent.opacity(0.2), lineWidth: 1)
         )
     }
+
+    private var categoryColumns: [GridItem] {
+        if dynamicTypeSize.isAccessibilitySize {
+            return [GridItem(.flexible(), spacing: Theme.Spacing.sm)]
+        }
+        return [GridItem(.adaptive(minimum: 88), spacing: Theme.Spacing.sm)]
+    }
 }
 
 /// Interactive time range selector demo
@@ -880,7 +897,7 @@ struct DemoTimeRange: View {
                             .font(Theme.Typography.captionBold)
                             .foregroundStyle(selectedRange == range ? .white : Theme.Colors.textSecondary)
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, Theme.Spacing.sm)
+                            .frame(minHeight: Theme.Layout.minimumTapTarget)
                             .background(
                                 selectedRange == range
                                     ? AnyShapeStyle(Theme.accentGradient)

@@ -63,8 +63,7 @@ private enum ThemeDisplayWeight {
 }
 
 /// Centralized theme system — Warm Precision.
-/// Refined surfaces, layered shadows, two-family typography, generous radii.
-/// Premium athletic aesthetic with warmth and depth.
+/// Calm, high-contrast surfaces, two-family typography, and restrained elevation.
 enum Theme {
 
     // MARK: - Colors
@@ -91,18 +90,24 @@ enum Theme {
 
         // Text hierarchy — warm contrast (light) / soft white (dark)
         static let textPrimary     = adaptive(light: 0x1A1714, dark: 0xECECED)
-        static let textSecondary   = adaptive(light: 0x6B6560, dark: 0x98989D)
-        static let textTertiary    = adaptive(light: 0xA39E99, dark: 0x5A5A5E)
+        static let textSecondary   = adaptive(light: 0x5F5954, dark: 0xB0B0B5)
+        /// Muted text still meets a 4.5:1 contrast target on app surfaces.
+        static let textMuted       = adaptive(light: 0x746E68, dark: 0x98989D)
+        /// Decorative separators and disabled ornament only. Never use for text.
+        static let decorativeSubtle = adaptive(light: 0xA39E99, dark: 0x5A5A5E)
+        /// Compatibility alias for existing call sites. Semantically this is muted text.
+        static let textTertiary    = textMuted
 
         // Accent colors — slightly lighter in dark for contrast
         static let accent          = adaptive(light: 0x2563EB, dark: 0x3B82F6)
-        static let accentSecondary = adaptive(light: 0xF97316, dark: 0xFB923C)
+        // Light variants are dark enough for both semantic text and white-on-fill controls.
+        static let accentSecondary = adaptive(light: 0xC2410C, dark: 0xFB923C)
         static let accentTertiary  = adaptive(light: 0x8B5CF6, dark: 0xA78BFA)
 
         // Semantic colors — boosted luminance in dark
-        static let success         = adaptive(light: 0x16A34A, dark: 0x4ADE80)
-        static let warning         = adaptive(light: 0xF59E0B, dark: 0xFBBF24)
-        static let error           = adaptive(light: 0xEF4444, dark: 0xF87171)
+        static let success         = adaptive(light: 0x15803D, dark: 0x4ADE80)
+        static let warning         = adaptive(light: 0x92400E, dark: 0xFBBF24)
+        static let error           = adaptive(light: 0xB91C1C, dark: 0xF87171)
         static let info            = accent
         static let shadowOpacity: Double = 0.08
 
@@ -170,88 +175,22 @@ enum Theme {
         static let border          = adaptive(light: 0xE0DBD3, dark: 0x38383A)
 
         static let textPrimary     = adaptive(light: 0x1A1714, dark: 0xECECED)
-        static let textSecondary   = adaptive(light: 0x6B6560, dark: 0x98989D)
-        static let textTertiary    = adaptive(light: 0xA39E99, dark: 0x5A5A5E)
+        static let textSecondary   = adaptive(light: 0x5F5954, dark: 0xB0B0B5)
+        static let textTertiary    = adaptive(light: 0x746E68, dark: 0x98989D)
 
         static let accent          = adaptive(light: 0x2563EB, dark: 0x3B82F6)
-        static let accentSecondary = adaptive(light: 0xF97316, dark: 0xFB923C)
+        static let accentSecondary = adaptive(light: 0xC2410C, dark: 0xFB923C)
     }
 
     static func configureGlobalAppearance() {
-        // Navigation bar — clean, warm, refined
-        let nav = UINavigationBarAppearance()
-        nav.configureWithOpaqueBackground()
-        nav.backgroundColor = UIColors.background
-        nav.shadowColor = UIColors.border.withAlphaComponent(0.5)
-
-        nav.titleTextAttributes = [
-            .foregroundColor: UIColors.textPrimary,
-            .font: Typography.uiKitDisplay(size: 19, textStyle: .headline, weight: .semibold)
-        ]
-        nav.largeTitleTextAttributes = [
-            .foregroundColor: UIColors.textPrimary,
-            .font: Typography.uiKitDisplay(size: 30, textStyle: .largeTitle, weight: .bold)
-        ]
-
-        let navButton = UIBarButtonItemAppearance(style: .plain)
-        navButton.normal.backgroundImage = UIImage()
-        navButton.highlighted.backgroundImage = UIImage()
-        navButton.disabled.backgroundImage = UIImage()
-        navButton.normal.titleTextAttributes = [.foregroundColor: UIColors.accent]
-        navButton.highlighted.titleTextAttributes = [.foregroundColor: UIColors.accent]
-        navButton.disabled.titleTextAttributes = [.foregroundColor: UIColors.textTertiary]
-
-        nav.buttonAppearance = navButton
-        if #unavailable(iOS 26.0) {
-            nav.doneButtonAppearance = navButton
-        }
-        nav.prominentButtonAppearance = navButton
-        nav.backButtonAppearance = navButton
-
+        // Keep UIKit appearance intentionally narrow. NavigationStack and TabView own their
+        // native iOS 26 materials, scrolling transitions, and accessibility behavior.
         let navBar = UINavigationBar.appearance()
-        navBar.standardAppearance = nav
-        navBar.scrollEdgeAppearance = nav
-        navBar.compactAppearance = nav
-        if #available(iOS 15.0, *) {
-            navBar.compactScrollEdgeAppearance = nav
-        }
         navBar.tintColor = UIColors.accent
 
-        // Belt-and-suspenders fallback for newer UIKit button containers.
-        let clearImage = UIImage()
-        let barButton = UIBarButtonItem.appearance(whenContainedInInstancesOf: [UINavigationBar.self])
-        barButton.setBackgroundImage(clearImage, for: .normal, barMetrics: .default)
-        barButton.setBackgroundImage(clearImage, for: .highlighted, barMetrics: .default)
-        barButton.setBackgroundImage(clearImage, for: .disabled, barMetrics: .default)
-        barButton.setBackButtonBackgroundImage(clearImage, for: .normal, barMetrics: .default)
-        barButton.setBackButtonBackgroundImage(clearImage, for: .highlighted, barMetrics: .default)
-        barButton.setBackButtonBackgroundImage(clearImage, for: .disabled, barMetrics: .default)
-        barButton.setTitleTextAttributes([.foregroundColor: UIColors.accent], for: .normal)
-        barButton.setTitleTextAttributes([.foregroundColor: UIColors.accent], for: .highlighted)
-        barButton.setTitleTextAttributes([.foregroundColor: UIColors.textTertiary], for: .disabled)
-
-        // Tab bar — refined with subtle top separator
-        let tab = UITabBarAppearance()
-        tab.configureWithOpaqueBackground()
-        tab.backgroundColor = UIColors.surface
-        tab.shadowColor = UIColors.border.withAlphaComponent(0.4)
-
-        let stacked = tab.stackedLayoutAppearance
-        stacked.normal.iconColor = UIColors.textTertiary
-        stacked.normal.titleTextAttributes = [
-            .foregroundColor: UIColors.textTertiary,
-            .font: Typography.uiKitText(size: 11, textStyle: .caption2, weight: .medium)
-        ]
-        stacked.selected.iconColor = UIColors.accent
-        stacked.selected.titleTextAttributes = [
-            .foregroundColor: UIColors.accent,
-            .font: Typography.uiKitText(size: 11, textStyle: .caption2, weight: .bold)
-        ]
-
         let tabBar = UITabBar.appearance()
-        tabBar.standardAppearance = tab
-        tabBar.scrollEdgeAppearance = tab
         tabBar.tintColor = UIColors.accent
+        tabBar.unselectedItemTintColor = UIColors.textTertiary
     }
 
     // MARK: - Typography
@@ -411,6 +350,7 @@ enum Theme {
 
     enum Layout {
         static let maxContentWidth: CGFloat = 880
+        static let minimumTapTarget: CGFloat = 44
     }
 
     // MARK: - Opacity — semantic fill levels for tinted backgrounds
@@ -451,7 +391,7 @@ struct SplashBackground: View {
     }
 }
 
-// MARK: - Refined Card Modifier (Layered Shadow)
+// MARK: - Refined Card Modifier
 
 struct SoftCardBackground: ViewModifier {
     var cornerRadius: CGFloat = Theme.CornerRadius.large
@@ -472,24 +412,11 @@ struct SoftCardBackground: ViewModifier {
                         lineWidth: isDark ? 0.5 : 1
                     )
             )
-            // Layered shadow system — visible in light, subtle in dark
             .shadow(
-                color: Color.black.opacity(0.03 * elevation),
-                radius: 1,
+                color: Color.black.opacity((isDark ? 0.12 : 0.055) * min(elevation, 2)),
+                radius: 5 * elevation,
                 x: 0,
-                y: 1
-            )
-            .shadow(
-                color: Color.black.opacity((isDark ? 0.15 : 0.05) * elevation),
-                radius: isDark ? 4 : 8 * elevation,
-                x: 0,
-                y: isDark ? 2 : 4 * elevation
-            )
-            .shadow(
-                color: Color.black.opacity(0.02 * elevation),
-                radius: 20 * elevation,
-                x: 0,
-                y: 8 * elevation
+                y: 2 * elevation
             )
     }
 }
@@ -500,34 +427,50 @@ struct GlassBackground: ViewModifier {
     var opacity: Double = 0.08
     var cornerRadius: CGFloat = Theme.CornerRadius.medium
     var elevation: CGFloat = 1
+    var interactive = false
     @Environment(\.colorScheme) private var colorScheme
 
+    @ViewBuilder
     func body(content: Content) -> some View {
-        let isDark = colorScheme == .dark
-        content
-            .background(
-                RoundedRectangle(cornerRadius: cornerRadius)
-                    .fill(.ultraThinMaterial)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: cornerRadius)
-                    .strokeBorder(
-                        Theme.Colors.border.opacity(isDark ? 0.7 : 0.4),
-                        lineWidth: isDark ? 0.5 : 1
-                    )
-            )
-            .shadow(
-                color: Color.black.opacity(0.04 * elevation),
-                radius: 6 * elevation,
-                x: 0,
-                y: 3 * elevation
-            )
+        if #available(iOS 26.0, *) {
+            content
+                .background(
+                    Theme.Colors.surface.opacity(opacity),
+                    in: RoundedRectangle(cornerRadius: cornerRadius)
+                )
+                .glassEffect(
+                    interactive ? .regular.interactive() : .regular,
+                    in: .rect(cornerRadius: cornerRadius)
+                )
+                .shadow(
+                    color: Color.black.opacity(0.04 * elevation),
+                    radius: 5 * elevation,
+                    y: 2 * elevation
+                )
+        } else {
+            content
+                .background(
+                    .ultraThinMaterial,
+                    in: RoundedRectangle(cornerRadius: cornerRadius)
+                )
+                .background(
+                    Theme.Colors.surface.opacity(opacity),
+                    in: RoundedRectangle(cornerRadius: cornerRadius)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: cornerRadius)
+                        .strokeBorder(
+                            Theme.Colors.border.opacity(colorScheme == .dark ? 0.7 : 0.4),
+                            lineWidth: colorScheme == .dark ? 0.5 : 1
+                        )
+                )
+        }
     }
 }
 
 // MARK: - Refined Button Chrome
 
-struct BrutalistButtonChrome: ViewModifier {
+struct SurfaceButtonChrome: ViewModifier {
     var fill: Color = Theme.Colors.surface
     var border: Color = Theme.Colors.border
     var cornerRadius: CGFloat = Theme.CornerRadius.large
@@ -551,9 +494,9 @@ struct BrutalistButtonChrome: ViewModifier {
             )
             .shadow(
                 color: Color.black.opacity(0.06),
-                radius: 4,
+                radius: max(2, shadowOffset * 2),
                 x: 0,
-                y: 2
+                y: shadowOffset
             )
     }
 }
@@ -562,13 +505,14 @@ struct BrutalistButtonChrome: ViewModifier {
 /// Provides consistent pressed/disabled feedback with smooth spring animation.
 struct AppInteractionButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .opacity(isEnabled ? 1.0 : 0.55)
-            .scaleEffect(configuration.isPressed ? 0.94 : 1.0)
-            .animation(Theme.Animation.gentleSpring, value: configuration.isPressed)
-            .animation(Theme.Animation.quick, value: isEnabled)
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.98 : 1.0)
+            .animation(reduceMotion ? nil : Theme.Animation.quick, value: configuration.isPressed)
+            .animation(reduceMotion ? nil : Theme.Animation.quick, value: isEnabled)
     }
 }
 
@@ -611,9 +555,17 @@ extension View {
     func glassBackground(
         opacity: Double = 0.08,
         cornerRadius: CGFloat = Theme.CornerRadius.medium,
-        elevation: CGFloat = 1
+        elevation: CGFloat = 1,
+        interactive: Bool = false
     ) -> some View {
-        modifier(GlassBackground(opacity: opacity, cornerRadius: cornerRadius, elevation: elevation))
+        modifier(
+            GlassBackground(
+                opacity: opacity,
+                cornerRadius: cornerRadius,
+                elevation: elevation,
+                interactive: interactive
+            )
+        )
     }
 
     func softCard(
@@ -623,7 +575,7 @@ extension View {
         modifier(SoftCardBackground(cornerRadius: cornerRadius, elevation: elevation))
     }
 
-    func brutalistButtonChrome(
+    func surfaceButtonChrome(
         fill: Color = Theme.Colors.surface,
         border: Color = Theme.Colors.border,
         cornerRadius: CGFloat = Theme.CornerRadius.large,
@@ -631,7 +583,7 @@ extension View {
         shadowOffset: CGFloat = 2
     ) -> some View {
         modifier(
-            BrutalistButtonChrome(
+            SurfaceButtonChrome(
                 fill: fill,
                 border: border,
                 cornerRadius: cornerRadius,
@@ -671,6 +623,23 @@ extension View {
 
     func animateOnAppear(delay: Double = 0) -> some View {
         modifier(AnimateOnAppearModifier(delay: delay))
+    }
+
+    /// Keeps reading and form content comfortably centered on wide displays while
+    /// remaining fluid on iPhone and in compact split-view widths.
+    func contentColumn(
+        maxWidth: CGFloat = Theme.Layout.maxContentWidth,
+        alignment: Alignment = .leading
+    ) -> some View {
+        self
+            .frame(maxWidth: maxWidth, alignment: alignment)
+            .frame(maxWidth: .infinity, alignment: .center)
+    }
+
+    /// Provides a final safety net for custom animations that do not directly
+    /// inspect Reduce Motion, including content in deeper navigation flows.
+    func respectReduceMotion() -> some View {
+        modifier(ReduceMotionTransactionModifier())
     }
 }
 
@@ -736,6 +705,18 @@ struct AnimateOnAppearModifier: ViewModifier {
             .onAppear {
                 isVisible = true
             }
+    }
+}
+
+private struct ReduceMotionTransactionModifier: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content.transaction { transaction in
+            guard reduceMotion else { return }
+            transaction.animation = nil
+            transaction.disablesAnimations = true
+        }
     }
 }
 

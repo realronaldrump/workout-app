@@ -181,6 +181,7 @@ nonisolated struct AppBackupSettings: Codable {
     var intentionalRestDays: Int?
     var sessionsPerWeekGoal: Int?
     var appearanceMode: Int?
+    var hapticsEnabled: Bool?
     var preferredSleepSourceKey: String?
     var preferredSleepSourceName: String?
     var lastUsedGymProfileId: UUID?
@@ -496,6 +497,7 @@ enum AppBackupService {
             intentionalRestDays: userDefaults.object(forKey: "intentionalRestDays") as? Int,
             sessionsPerWeekGoal: userDefaults.object(forKey: "sessionsPerWeekGoal") as? Int,
             appearanceMode: userDefaults.object(forKey: "appearanceMode") as? Int,
+            hapticsEnabled: userDefaults.object(forKey: Haptics.preferenceKey) as? Bool,
             preferredSleepSourceKey: userDefaults.string(forKey: healthManager.preferredSleepSourceKey),
             preferredSleepSourceName: userDefaults.string(forKey: healthManager.preferredSleepSourceNameKey),
             lastUsedGymProfileId: gymProfilesManager.lastUsedGymProfileId,
@@ -684,6 +686,12 @@ enum AppBackupImporter {
         filled += setIfMissing(
             settings.appearanceMode,
             forKey: "appearanceMode",
+            userDefaults: userDefaults,
+            persistedValues: persistedValues
+        )
+        filled += setIfMissing(
+            settings.hapticsEnabled,
+            forKey: Haptics.preferenceKey,
             userDefaults: userDefaults,
             persistedValues: persistedValues
         )

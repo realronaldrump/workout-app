@@ -94,6 +94,7 @@ struct GymMapSearchSheet: View {
     @State private var isShowingAllResults = false
     @State private var manualSelection: GymMapPlace?
     @State private var manualSelectionRevision = 0
+    @State private var searchTask: Task<Void, Never>?
 
     // Fallback to CONUS center when we don't have workout/gym coordinates yet.
     private static let fallbackCenter = CLLocationCoordinate2D(latitude: 39.8283, longitude: -98.5795)
@@ -235,6 +236,7 @@ struct GymMapSearchSheet: View {
                         selectButton
                     }
                     .padding(Theme.Spacing.xl)
+                    .contentColumn(maxWidth: 640)
                 }
             }
             .navigationTitle(title)
@@ -252,6 +254,10 @@ struct GymMapSearchSheet: View {
             didRunInitialSearch = true
             guard shouldAutoRunInitialSearch else { return }
             runSearch()
+        }
+        .onDisappear {
+            searchTask?.cancel()
+            searchTask = nil
         }
     }
 
@@ -354,9 +360,20 @@ struct GymMapSearchSheet: View {
                         handleLongPress(at: point, proxy: proxy)
                     }
                 )
-                .onMapCameraChange(frequency: .continuous) { context in
+                .onMapCameraChange(frequency: .onEnd) { context in
                     visibleRegion = context.region
                 }
+
+                Button {
+                    selectManualCoordinate(visibleRegion.center)
+                } label: {
+                    Label("Use Map Center", systemImage: "scope")
+                        .font(Theme.Typography.captionBold)
+                        .frame(maxWidth: .infinity, minHeight: Theme.Layout.minimumTapTarget)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Theme.Colors.accent)
+                .accessibilityHint("Creates a custom gym at the center of the visible map")
             }
         }
         .padding(Theme.Spacing.lg)
@@ -405,6 +422,7 @@ struct GymMapSearchSheet: View {
                         }
                         .buttonStyle(.plain)
                         .padding(.top, Theme.Spacing.xs)
+                        .frame(minHeight: Theme.Layout.minimumTapTarget)
                     }
                 }
             }
@@ -495,13 +513,15 @@ struct GymMapSearchSheet: View {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
+        searchTask?.cancel()
         isSearching = true
         searchError = nil
         let region = visibleRegion
 
-        Task {
+        searchTask = Task {
             do {
                 let places = try await searchGyms(query: trimmed, region: region)
+                guard !Task.isCancelled else { return }
                 await MainActor.run {
                     results = places
                     isShowingAllResults = false
@@ -512,11 +532,14 @@ struct GymMapSearchSheet: View {
                         selectedPlaceId = nil
                     }
                     isSearching = false
+                    searchTask = nil
                 }
             } catch {
+                guard !Task.isCancelled else { return }
                 await MainActor.run {
                     isSearching = false
                     searchError = error.localizedDescription
+                    searchTask = nil
                 }
             }
         }
@@ -527,6 +550,12 @@ struct GymMapSearchSheet: View {
               CLLocationCoordinate2DIsValid(coordinate) else {
             return
         }
+
+        selectManualCoordinate(coordinate)
+    }
+
+    private func selectManualCoordinate(_ coordinate: CLLocationCoordinate2D) {
+        guard CLLocationCoordinate2DIsValid(coordinate) else { return }
 
         if let matchedGym = matchingSavedGym(for: coordinate, name: "", address: nil) {
             let usageCount = usageCountByGymId[matchedGym.id] ?? 0

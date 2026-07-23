@@ -15,10 +15,16 @@ final class HealthViewStore: ObservableObject {
     @Published private(set) var workouts: [Workout]
     @Published private(set) var isDailySyncing: Bool
     @Published private(set) var lastDailySyncDate: Date?
+    @Published private(set) var syncError: String?
 
-    private let healthManager: HealthKitManager
+    /// The app root owns `HealthKitManager` for the full scene lifetime. This projection must
+    /// not become a second owner: releasing a main-actor manager from SwiftUI's view-graph
+    /// teardown can happen while the graph is draining its executor-local state.
+    private unowned let healthManager: HealthKitManager
     private var cancellables: Set<AnyCancellable> = []
 
+    // Swift 6.2's isolated-deinit back deployment currently traps in repeated XCTest
+    // teardown on the iOS 26 simulator. This store owns no actor-bound teardown work.
     nonisolated deinit {}
 
     init(healthManager: HealthKitManager, dataManager: WorkoutDataManager) {
@@ -29,6 +35,7 @@ final class HealthViewStore: ObservableObject {
         workouts = dataManager.workouts
         isDailySyncing = healthManager.isDailySyncing
         lastDailySyncDate = healthManager.lastDailySyncDate
+        syncError = healthManager.syncError
 
         healthManager.$authorizationStatus
             .dropFirst()
@@ -62,6 +69,12 @@ final class HealthViewStore: ObservableObject {
             .removeDuplicates()
             .sink { [weak self] in self?.lastDailySyncDate = $0 }
             .store(in: &cancellables)
+
+        healthManager.$syncError
+            .dropFirst()
+            .removeDuplicates()
+            .sink { [weak self] in self?.syncError = $0 }
+            .store(in: &cancellables)
     }
 
     func refreshAuthorizationStatus() {
@@ -74,6 +87,10 @@ final class HealthViewStore: ObservableObject {
 
     func syncDailyHealthData(range: DateInterval) async throws {
         try await healthManager.syncDailyHealthData(range: range)
+    }
+
+    func clearSyncError() {
+        healthManager.syncError = nil
     }
 
     func fetchMetricSamples(

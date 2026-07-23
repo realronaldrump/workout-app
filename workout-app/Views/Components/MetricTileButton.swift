@@ -67,12 +67,13 @@ struct MetricTileButton<Content: View>: View {
 
 /// Subtle press style: card scales slightly on press.
 private struct MetricTilePressStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let isEnabled: Bool
 
     func makeBody(configuration: Configuration) -> some View {
         let isPressed = configuration.isPressed && isEnabled
         configuration.label
-            .scaleEffect(isPressed ? 0.97 : 1.0)
-            .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
+            .scaleEffect(isPressed && !reduceMotion ? 0.98 : 1.0)
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.1), value: configuration.isPressed)
     }
 }

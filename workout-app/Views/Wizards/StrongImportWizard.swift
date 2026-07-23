@@ -1,9 +1,11 @@
+import Foundation
 import SwiftUI
 import UniformTypeIdentifiers
 // swiftlint:disable type_body_length
 
 struct StrongImportWizard: View {
     @Binding var isPresented: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject var dataManager: WorkoutDataManager
     @ObservedObject var iCloudManager: iCloudDocumentManager
     let source: String
@@ -16,8 +18,9 @@ struct StrongImportWizard: View {
     @State private var step = 0
     @State private var isImporting = false
     @State private var importError: String?
-    @State private var importStats: (workouts: Int, exercises: Int, sideLinks: Int)?
+    @State private var importStats: ImportSummary?
     @State private var showingFileImporter = false
+    @State private var showingCloseConfirmation = false
     @State private var importPhase: ImportPhase = .idle
     @State private var importedFileName: String?
     @State private var importCompletedAt: Date?
@@ -38,26 +41,39 @@ struct StrongImportWizard: View {
                 AdaptiveBackground()
 
                 VStack(spacing: 0) {
-                    topBar
-
-                    Divider()
-                        .overlay(Theme.Colors.border.opacity(0.35))
-
                     progressIndicator
                         .padding(.top, Theme.Spacing.lg)
 
-                    TabView(selection: $step) {
-                        welcomeStep.tag(0)
-                        importStep.tag(1)
-                        successStep.tag(2)
-                    }
-                    .tabViewStyle(.page(indexDisplayMode: .never))
-                    .animation(.spring(), value: step)
+                    stepContent
+                        .id(step)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .contentColumn(maxWidth: 640, alignment: .center)
+                        .animation(reduceMotion ? nil : Theme.Animation.spring, value: step)
                 }
             }
-            .navigationBarBackButtonHidden(true)
-            .toolbar(.hidden, for: .navigationBar)
+            .navigationTitle("Import Data")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close", systemImage: "xmark") {
+                        handleCloseTapped()
+                    }
+                }
+            }
+            .confirmationDialog(
+                "Import in progress",
+                isPresented: $showingCloseConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Continue in Background") {
+                    isPresented = false
+                }
+                Button("Keep Open", role: .cancel) {}
+            } message: {
+                Text("The selected file will keep importing if you close this screen.")
+            }
         }
+        .interactiveDismissDisabled(isImporting)
         .analyticsScreen("ImportWizard", source: source)
         .onAppear {
             AppAnalytics.shared.track(
@@ -95,24 +111,16 @@ struct StrongImportWizard: View {
         }
     }
 
-    private var topBar: some View {
-        ZStack {
-            HStack {
-                AppToolbarButton(title: "Close", systemImage: "xmark", variant: .subtle) {
-                    isPresented = false
-                }
-                Spacer()
-            }
-
-            Text("Import Data")
-                .font(Theme.Typography.cardHeader)
-                .textCase(.uppercase)
-                .tracking(1)
-                .foregroundStyle(Theme.Colors.textPrimary)
+    @ViewBuilder
+    private var stepContent: some View {
+        switch step {
+        case 0:
+            welcomeStep
+        case 1:
+            importStep
+        default:
+            successStep
         }
-        .padding(.horizontal, Theme.Spacing.xl)
-        .padding(.top, Theme.Spacing.sm)
-        .padding(.bottom, Theme.Spacing.md)
     }
 
     private var progressIndicator: some View {
@@ -121,7 +129,7 @@ struct StrongImportWizard: View {
                 Capsule()
                     .fill(index <= step ? Theme.Colors.accent : Theme.Colors.surface)
                     .frame(height: 4)
-                    .animation(.spring(), value: step)
+                    .animation(reduceMotion ? nil : Theme.Animation.spring, value: step)
             }
         }
         .padding(.horizontal, Theme.Spacing.xl)
@@ -130,100 +138,97 @@ struct StrongImportWizard: View {
     // MARK: - Steps
 
     private var welcomeStep: some View {
-        VStack(spacing: Theme.Spacing.xl) {
-            Spacer()
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(spacing: Theme.Spacing.xl) {
+                    Image(systemName: "square.and.arrow.down.on.square")
+                        .font(Theme.Iconography.wizardHero)
+                        .foregroundStyle(Theme.Colors.accent)
+                        .padding()
+                        .background(
+                            Circle()
+                                .fill(Theme.Colors.accent.opacity(0.1))
+                                .frame(width: 160, height: 160)
+                        )
 
-            Image(systemName: "square.and.arrow.down.on.square")
-                .font(Theme.Iconography.wizardHero)
-                .foregroundStyle(Theme.Colors.accent)
-                .padding()
-                .background(
-                    Circle()
-                        .fill(Theme.Colors.accent.opacity(0.1))
-                        .frame(width: 160, height: 160)
-                )
-
-            VStack(spacing: Theme.Spacing.md) {
                     Text("Import Data")
                         .font(Theme.Typography.title)
                         .foregroundStyle(Theme.Colors.textPrimary)
 
-                Text("Strong CSV or Big Beautiful Workout backup")
-                    .font(Theme.Typography.body)
-                    .foregroundStyle(Theme.Colors.textSecondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal)
+                    Text("Strong CSV or Big Beautiful Workout backup")
+                        .font(Theme.Typography.body)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(Theme.Spacing.xl)
             }
-
-            Spacer()
 
             primaryActionButton(title: "Next", fill: Theme.Colors.accent) {
-                withAnimation { step = 1 }
+                withAnimation(reduceMotion ? nil : Theme.Animation.spring) { step = 1 }
             }
-            .padding(Theme.Spacing.xl)
+            .padding(.horizontal, Theme.Spacing.xl)
+            .padding(.bottom, Theme.Spacing.xl)
         }
     }
 
     private var importStep: some View {
-        VStack(spacing: Theme.Spacing.xl) {
-            Spacer()
+        ScrollView {
+            VStack(spacing: Theme.Spacing.xl) {
+                if isImporting {
+                    VStack(spacing: Theme.Spacing.md) {
+                        ProgressView(value: importPhase.rawValue)
+                            .progressViewStyle(.linear)
+                            .tint(Theme.Colors.accent)
+                            .frame(maxWidth: 320)
 
-            if isImporting {
-                VStack(spacing: Theme.Spacing.md) {
-                    ProgressView(value: importPhase.rawValue)
-                        .progressViewStyle(.linear)
-                        .tint(Theme.Colors.accent)
-                        .frame(maxWidth: 220)
+                        Text(importPhase.message)
+                            .font(Theme.Typography.body)
+                            .foregroundStyle(Theme.Colors.textSecondary)
+                            .multilineTextAlignment(.center)
 
-                    Text(importPhase.message)
-                        .font(Theme.Typography.body)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                        .multilineTextAlignment(.center)
-
-                    if let fileName = importedFileName {
-                        Text(fileName)
-                            .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.Colors.textTertiary)
-                            .lineLimit(1)
+                        if let fileName = importedFileName {
+                            Text(fileName)
+                                .font(Theme.Typography.caption)
+                                .foregroundStyle(Theme.Colors.textTertiary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
-                }
-            } else {
-                VStack(spacing: Theme.Spacing.lg) {
-                    Button(
-                        action: { showingFileImporter = true },
-                        label: {
-                            VStack(spacing: Theme.Spacing.md) {
-                                Image(systemName: "doc.text.fill")
-                                    .font(Theme.Iconography.largeTitle)
-                                Text("Select Import File")
-                                    .font(Theme.Typography.headline)
+                } else {
+                    VStack(spacing: Theme.Spacing.lg) {
+                        Button(
+                            action: { showingFileImporter = true },
+                            label: {
+                                VStack(spacing: Theme.Spacing.md) {
+                                    Image(systemName: "doc.text.fill")
+                                        .font(Theme.Iconography.largeTitle)
+                                    Text("Select Import File")
+                                        .font(Theme.Typography.headline)
+                                }
+                                .foregroundStyle(Theme.Colors.accent)
+                                .frame(maxWidth: .infinity, minHeight: 160)
+                                .padding(Theme.Spacing.xl)
+                                .background(
+                                    RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
+                                        .stroke(style: StrokeStyle(lineWidth: 2, dash: [10]))
+                                        .fill(Theme.Colors.accent.opacity(0.5))
+                                )
                             }
-                            .foregroundStyle(Theme.Colors.accent)
-                            .frame(maxWidth: .infinity)
-                            .padding(Theme.Spacing.xxl)
-                            .background(
-                                RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
-                                    .stroke(style: StrokeStyle(lineWidth: 2, dash: [10]))
-                                    .fill(Theme.Colors.accent.opacity(0.5))
-                            )
-                        }
-                    )
-                    .buttonStyle(.plain)
-                    .contentShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large))
+                        )
+                        .buttonStyle(.plain)
+                        .contentShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large))
 
-                    if let error = importError {
-                        HStack {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                            Text(error)
+                        if let error = importError {
+                            Label(error, systemImage: "exclamationmark.triangle.fill")
+                                .font(Theme.Typography.caption)
+                                .foregroundStyle(Theme.Colors.error)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.error)
                     }
                 }
-                .padding(.horizontal)
             }
-
-            Spacer()
+            .frame(maxWidth: .infinity)
+            .padding(Theme.Spacing.xl)
         }
     }
 
@@ -233,44 +238,62 @@ struct StrongImportWizard: View {
                 Image(systemName: "checkmark.circle.fill")
                     .font(Theme.Iconography.wizardHero)
                     .foregroundStyle(Theme.Colors.success)
-                    .symbolEffect(.bounce, value: step)
 
                 if let stats = importStats {
                     VStack(spacing: Theme.Spacing.md) {
-                            Text("Import Complete")
-                                .font(Theme.Typography.title)
+                        Text(stats.insertedItems > 0 ? "Import Complete" : "No New Data")
+                            .font(Theme.Typography.title)
 
-                        HStack(spacing: Theme.Spacing.xl) {
+                        LazyVGrid(
+                            columns: [GridItem(.adaptive(minimum: 100), spacing: Theme.Spacing.md)],
+                            spacing: Theme.Spacing.md
+                        ) {
                             VStack {
                                 Text("\(stats.workouts)")
                                     .font(Theme.Typography.title2)
                                     .foregroundStyle(Theme.Colors.accent)
-                                Text("Workouts")
+                                Text("Workouts Imported")
                                     .font(Theme.Typography.caption)
                                     .foregroundStyle(Theme.Colors.textSecondary)
                             }
-
-                            Divider()
-                                .frame(height: 40)
 
                             VStack {
                                 Text("\(stats.exercises)")
                                     .font(Theme.Typography.title2)
                                     .foregroundStyle(Theme.Colors.accent)
-                                Text("Exercises")
+                                Text("Unique Exercises")
                                     .font(Theme.Typography.caption)
                                     .foregroundStyle(Theme.Colors.textSecondary)
                             }
 
                             if stats.sideLinks > 0 {
-                                Divider()
-                                    .frame(height: 40)
-
                                 VStack {
                                     Text("\(stats.sideLinks)")
                                         .font(Theme.Typography.title2)
                                         .foregroundStyle(Theme.Colors.accent)
                                     Text("Side Links")
+                                        .font(Theme.Typography.caption)
+                                        .foregroundStyle(Theme.Colors.textSecondary)
+                                }
+                            }
+
+                            if stats.additionalItems > 0 {
+                                VStack {
+                                    Text("\(stats.additionalItems)")
+                                        .font(Theme.Typography.title2)
+                                        .foregroundStyle(Theme.Colors.accentSecondary)
+                                    Text("Other Items")
+                                        .font(Theme.Typography.caption)
+                                        .foregroundStyle(Theme.Colors.textSecondary)
+                                }
+                            }
+
+                            if stats.skippedItems > 0 {
+                                VStack {
+                                    Text("\(stats.skippedItems)")
+                                        .font(Theme.Typography.title2)
+                                        .foregroundStyle(Theme.Colors.textTertiary)
+                                    Text("Already Present")
                                         .font(Theme.Typography.caption)
                                         .foregroundStyle(Theme.Colors.textSecondary)
                                 }
@@ -373,6 +396,7 @@ struct StrongImportWizard: View {
                         .font(Theme.Typography.captionBold)
                         .foregroundStyle(Theme.Colors.accent)
                         .buttonStyle(.plain)
+                        .frame(minHeight: Theme.Layout.minimumTapTarget)
                     }
 
                     NavigationLink(destination: gymReviewDestination) {
@@ -384,6 +408,7 @@ struct StrongImportWizard: View {
                         .foregroundStyle(Theme.Colors.accent)
                     }
                     .buttonStyle(.plain)
+                    .frame(minHeight: Theme.Layout.minimumTapTarget)
                 }
                 .padding(.top, Theme.Spacing.xs)
             }
@@ -441,16 +466,32 @@ struct StrongImportWizard: View {
     }
 
     private func statusRow(title: String, value: String, valueColor: Color = Theme.Colors.textPrimary) -> some View {
-        HStack {
-            Text(title)
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Colors.textSecondary)
-            Spacer()
-            Text(value)
-                .font(Theme.Typography.captionBold)
-                .foregroundStyle(valueColor)
-                .multilineTextAlignment(.trailing)
+        ViewThatFits(in: .horizontal) {
+            HStack {
+                statusTitle(title)
+                Spacer()
+                statusValue(value, color: valueColor, alignment: .trailing)
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                statusTitle(title)
+                statusValue(value, color: valueColor, alignment: .leading)
+            }
         }
+    }
+
+    private func statusTitle(_ title: String) -> some View {
+        Text(title)
+            .font(Theme.Typography.caption)
+            .foregroundStyle(Theme.Colors.textSecondary)
+    }
+
+    private func statusValue(_ value: String, color: Color, alignment: TextAlignment) -> some View {
+        Text(value)
+            .font(Theme.Typography.captionBold)
+            .foregroundStyle(color)
+            .multilineTextAlignment(alignment)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     private var storageStatusText: String {
@@ -655,9 +696,8 @@ struct StrongImportWizard: View {
             Text(title)
                 .font(Theme.Typography.headline)
                 .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, Theme.Spacing.md)
-                .brutalistButtonChrome(
+                .frame(maxWidth: .infinity, minHeight: Theme.Layout.minimumTapTarget)
+                .surfaceButtonChrome(
                     fill: fill,
                     cornerRadius: Theme.CornerRadius.large
                 )
@@ -758,7 +798,7 @@ struct StrongImportWizard: View {
                                 importPhase = .complete
                                 importCompletedAt = Date()
 
-                                withAnimation {
+                                withAnimation(reduceMotion ? nil : Theme.Animation.spring) {
                                     isImporting = false
                                     step = 2
                                 }
@@ -789,6 +829,9 @@ struct StrongImportWizard: View {
             }
 
         case .failure(let error):
+            if let cocoaError = error as? CocoaError, cocoaError.code == .userCancelled {
+                return
+            }
             importError = error.localizedDescription
             AppAnalytics.shared.track(
                 AnalyticsSignal.importFailed,
@@ -811,7 +854,6 @@ struct StrongImportWizard: View {
         }.value
 
         importPhase = .saving
-        try await Task.sleep(nanoseconds: 1_000_000_000)
 
         guard let directory = directoryURL else {
             throw iCloudError.containerNotAvailable
@@ -841,8 +883,14 @@ struct StrongImportWizard: View {
             requestID: requestID
         )
 
-        let stats = dataManager.calculateStats()
-        importStats = (stats.totalWorkouts, stats.totalExercises, relationshipResult.created.count)
+        let stats = dataManager.calculateStats(for: dataManager.importedWorkouts)
+        importStats = ImportSummary(
+            workouts: stats.totalWorkouts,
+            exercises: stats.totalExercises,
+            sideLinks: relationshipResult.created.count,
+            additionalItems: 0,
+            skippedItems: 0
+        )
         AppAnalytics.shared.track(
             AnalyticsSignal.importCompleted,
             payload: [
@@ -861,8 +909,8 @@ struct StrongImportWizard: View {
         directoryURL: URL?,
         isUsingLocalFallback: Bool
     ) async throws {
+        let existingWorkoutIDs = Set(dataManager.workouts.map(\.id))
         importPhase = .saving
-        try await Task.sleep(nanoseconds: 350_000_000)
 
         guard let directory = directoryURL else {
             throw iCloudError.containerNotAvailable
@@ -904,8 +952,23 @@ struct StrongImportWizard: View {
             items: []
         )
 
-        let stats = dataManager.calculateStats()
-        importStats = (stats.totalWorkouts, stats.totalExercises, 0)
+        let addedWorkouts = dataManager.workouts.filter { !existingWorkoutIDs.contains($0.id) }
+        let stats = dataManager.calculateStats(for: addedWorkouts)
+        let insertedWorkoutCount = result.insertedWorkouts + result.insertedLoggedWorkouts
+        let additionalItemCount = max(0, result.insertedTotal - insertedWorkoutCount)
+        let skippedItemCount = result.skippedWorkouts
+            + result.skippedLoggedWorkouts
+            + result.skippedGyms
+            + result.skippedAnnotations
+            + result.skippedWorkoutHealthEntries
+            + result.skippedDailyHealthEntries
+        importStats = ImportSummary(
+            workouts: insertedWorkoutCount,
+            exercises: stats.totalExercises,
+            sideLinks: 0,
+            additionalItems: additionalItemCount,
+            skippedItems: skippedItemCount
+        )
         AppAnalytics.shared.track(
             AnalyticsSignal.importCompleted,
             payload: [
@@ -962,8 +1025,7 @@ struct StrongImportWizard: View {
             do {
                 if healthManager.authorizationStatus == .notDetermined {
                     healthSyncState = .needsAuthorization
-                    // Avoid triggering Health authorization UI during view transitions.
-                    try? await Task.sleep(nanoseconds: 250_000_000)
+                    await Task.yield()
                     try await healthManager.requestAuthorization()
                 }
 
@@ -1069,6 +1131,14 @@ struct StrongImportWizard: View {
                 autoGymTagErrorMessage = error.localizedDescription
                 autoGymTagState = .failed
             }
+        }
+    }
+
+    private func handleCloseTapped() {
+        if isImporting {
+            showingCloseConfirmation = true
+        } else {
+            isPresented = false
         }
     }
 }

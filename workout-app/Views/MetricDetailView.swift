@@ -11,13 +11,14 @@ struct MetricDetailView: View {
     @EnvironmentObject var annotationsManager: WorkoutAnnotationsManager
     @EnvironmentObject var gymProfilesManager: GymProfilesManager
     @EnvironmentObject var intentionalBreaksManager: IntentionalBreaksManager
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @AppStorage("intentionalRestDays") private var intentionalRestDays: Int = 1
 
     @State private var hasAutoScrolled = false
     @State private var selectedStreakRunId: String?
     @State private var selectedSessionDay: Date?
     @State private var selectedVolumeWorkoutId: UUID?
-    @State private var cachedSortedWorkouts: [Workout] = []
+    @State private var presentation = MetricDetailPresentation.empty
 
     private var sundayCalendar: Calendar {
         var calendar = Calendar.current
@@ -27,7 +28,17 @@ struct MetricDetailView: View {
     }
 
     private var sortedWorkouts: [Workout] {
-        cachedSortedWorkouts
+        presentation.sortedWorkouts
+    }
+
+    private var summaryGridColumns: [GridItem] {
+        if dynamicTypeSize.isAccessibilitySize {
+            return [GridItem(.flexible())]
+        }
+        return [
+            GridItem(.flexible(), spacing: Theme.Spacing.sm),
+            GridItem(.flexible(), spacing: Theme.Spacing.sm)
+        ]
     }
 
     var body: some View {
@@ -36,7 +47,7 @@ struct MetricDetailView: View {
 
             ScrollViewReader { proxy in
                 ScrollView(showsIndicators: false) {
-                    VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
+                    LazyVStack(alignment: .leading, spacing: Theme.Spacing.xl) {
                         heroCard
 
                         switch kind {
@@ -54,13 +65,20 @@ struct MetricDetailView: View {
                     .frame(maxWidth: .infinity, alignment: .center)
                 }
                 .onAppear {
-                    refreshCachedWorkouts()
-                    syncSelections()
+                    refreshPresentation()
                     autoScrollIfNeeded(using: proxy)
                 }
                 .onChange(of: workouts) { _, _ in
-                    refreshCachedWorkouts()
-                    syncSelections()
+                    refreshPresentation()
+                }
+                .onChange(of: dataManager.workouts) { _, _ in
+                    refreshPresentation()
+                }
+                .onChange(of: intentionalRestDays) { _, _ in
+                    refreshPresentation()
+                }
+                .onChange(of: intentionalBreaksManager.savedBreaks) { _, _ in
+                    refreshPresentation()
                 }
             }
         }
@@ -68,8 +86,10 @@ struct MetricDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 
-    private func refreshCachedWorkouts() {
-        cachedSortedWorkouts = workouts.sorted { $0.date > $1.date }
+    private func refreshPresentation() {
+        let nextPresentation = makePresentation()
+        presentation = nextPresentation
+        syncSelections(using: nextPresentation)
     }
 
     private var detailBackground: some View {
@@ -111,8 +131,9 @@ struct MetricDetailView: View {
             Text(heroHeadline)
                 .font(Theme.Typography.metric)
                 .foregroundStyle(Theme.accentGradient)
-                .lineLimit(1)
-                .minimumScaleFactor(0.65)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                .minimumScaleFactor(dynamicTypeSize.isAccessibilitySize ? 1 : 0.65)
+                .fixedSize(horizontal: false, vertical: true)
 
             Text(heroSubtitle)
                 .font(Theme.Typography.caption)
@@ -120,10 +141,7 @@ struct MetricDetailView: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             LazyVGrid(
-                columns: [
-                    GridItem(.flexible(), spacing: Theme.Spacing.sm),
-                    GridItem(.flexible(), spacing: Theme.Spacing.sm)
-                ],
+                columns: summaryGridColumns,
                 spacing: Theme.Spacing.sm
             ) {
                 switch kind {
@@ -171,7 +189,7 @@ struct MetricDetailView: View {
     }
 
     private var sessionsSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
+        LazyVStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             sectionHeader(
                 title: "Session Cadence",
                 subtitle: "This week reads better as rhythm and timing than stacked counts. Tap an active day to focus the feed."
@@ -231,10 +249,7 @@ struct MetricDetailView: View {
             }
 
             LazyVGrid(
-                columns: [
-                    GridItem(.flexible(), spacing: Theme.Spacing.sm),
-                    GridItem(.flexible(), spacing: Theme.Spacing.sm)
-                ],
+                columns: summaryGridColumns,
                 spacing: Theme.Spacing.sm
             ) {
                 SessionInsightTile(
@@ -379,7 +394,7 @@ struct MetricDetailView: View {
     }
 
     private var sessionsListCard: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+        LazyVStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             HStack(alignment: .firstTextBaseline) {
                 Text(selectedSessionDay == nil ? "Session Feed" : "Sessions On \(selectedSessionDayLabel)")
                     .font(Theme.Typography.title3)
@@ -406,6 +421,7 @@ struct MetricDetailView: View {
                         MetricWorkoutRow(
                             workout: workout,
                             subtitle: "\(workout.date.formatted(date: .abbreviated, time: .shortened)) | \(timeOfDayLabel(for: workout.date))",
+                            exerciseCount: exerciseCount(for: workout),
                             highlight: selectedSessionDay != nil
                         )
                     }
@@ -418,11 +434,11 @@ struct MetricDetailView: View {
     }
 
     private var streakSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
+        LazyVStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             sectionHeader(title: "Streak Explorer", subtitle: "Workout-day streaks that respect your rest allowance and saved break dates.")
 
-            LongestStreaksSection(
-                workouts: dataManager.workouts,
+            CachedLongestStreaksSection(
+                runs: streakRunsByLength,
                 collapsedCount: 4,
                 maxExpandedCount: 12,
                 selectedRunId: selectedStreakRun?.id
@@ -468,6 +484,7 @@ struct MetricDetailView: View {
                             MetricWorkoutRow(
                                 workout: workout,
                                 subtitle: "\(workout.date.formatted(date: .abbreviated, time: .shortened)) | \(timeOfDayLabel(for: workout.date))",
+                                exerciseCount: exerciseCount(for: workout),
                                 highlight: false
                             )
                         }
@@ -524,6 +541,9 @@ struct MetricDetailView: View {
                     plotArea.clipped()
                 }
                 .frame(height: Theme.ChartHeight.standard)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Recent streak lengths")
+                .accessibilityValue("\(chartRuns.count) runs. Longest \(chartRuns.map(\.workoutDayCount).max() ?? 0) days.")
             }
         }
         .padding(Theme.Spacing.md)
@@ -531,7 +551,7 @@ struct MetricDetailView: View {
     }
 
     private var totalVolumeSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
+        LazyVStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             sectionHeader(title: "Volume Explorer", subtitle: "Inspect trend, spotlight top sessions, and drill into top exercises.")
 
             volumeChartCard
@@ -603,6 +623,11 @@ struct MetricDetailView: View {
                     plotArea.clipped()
                 }
                 .frame(height: Theme.ChartHeight.expanded)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Volume trend")
+                .accessibilityValue(
+                    "\(volumePoints.count) sessions. Peak \(SharedFormatters.volumeCompact(volumePoints.map(\.value).max() ?? 0))."
+                )
             }
         }
         .padding(Theme.Spacing.md)
@@ -610,7 +635,7 @@ struct MetricDetailView: View {
     }
 
     private var topVolumeSessionPicker: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+        LazyVStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             Text("Peak Sessions")
                 .font(Theme.Typography.metricLabel)
                 .foregroundColor(Theme.Colors.textTertiary)
@@ -663,6 +688,7 @@ struct MetricDetailView: View {
                         MetricWorkoutRow(
                             workout: workout,
                             subtitle: "\(SharedFormatters.volumeCompact(normalizedVolume(for: workout))) volume | \(timeOfDayLabel(for: workout.date))",
+                            exerciseCount: exerciseCount(for: workout),
                             highlight: selectedVolumeWorkoutId == workout.id
                         )
                     }
@@ -677,7 +703,7 @@ struct MetricDetailView: View {
     private var topExercisesByVolumeCard: some View {
         let exerciseTotals = topExerciseTotals
 
-        return VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+        return LazyVStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             Text("Top Exercises By Volume")
                 .font(Theme.Typography.title3)
                 .foregroundColor(Theme.Colors.textPrimary)
@@ -779,29 +805,23 @@ struct MetricDetailView: View {
     }
 
     private var uniqueWorkoutDayCount: Int {
-        Set(sortedWorkouts.map { sundayCalendar.startOfDay(for: $0.date) }).count
+        presentation.uniqueWorkoutDayCount
     }
 
     private var stackedSessionDayCount: Int {
-        sessionDayBuckets.filter { $0.count > 1 }.count
-    }
-
-    private var avgSessionsPerWorkoutDay: Double {
-        guard uniqueWorkoutDayCount > 0 else { return 0 }
-        return Double(workouts.count) / Double(uniqueWorkoutDayCount)
+        presentation.stackedSessionDayCount
     }
 
     private var totalVolume: Double {
-        ExerciseAggregation.totalVolume(for: workouts, resolver: ExerciseIdentityResolver.current)
+        presentation.totalVolume
     }
 
     private var avgVolumePerSession: Double {
-        guard !workouts.isEmpty else { return 0 }
-        return totalVolume / Double(workouts.count)
+        presentation.averageVolumePerSession
     }
 
     private var peakVolumeSession: Workout? {
-        workouts.max(by: { normalizedVolume(for: $0) < normalizedVolume(for: $1) })
+        presentation.peakVolumeSession
     }
 
     private var selectedSessionDayLabel: String {
@@ -810,74 +830,19 @@ struct MetricDetailView: View {
 
     private var filteredSessionWorkouts: [Workout] {
         guard let selectedSessionDay else { return sortedWorkouts }
-        return sortedWorkouts.filter { workout in
-            sundayCalendar.isDate(workout.date, inSameDayAs: selectedSessionDay)
-        }
-    }
-
-    private var workoutsByDay: [Date: [Workout]] {
-        Dictionary(grouping: sortedWorkouts) { workout in
-            sundayCalendar.startOfDay(for: workout.date)
-        }
+        return presentation.workoutsByDay[sundayCalendar.startOfDay(for: selectedSessionDay)] ?? []
     }
 
     private var sessionDayBuckets: [SessionDayBucket] {
-        workoutsByDay
-            .map { day, dayWorkouts in
-                SessionDayBucket(dayStart: day, count: dayWorkouts.count)
-            }
-            .sorted { $0.dayStart > $1.dayStart }
-    }
-
-    private var sessionWeekBuckets: [SessionWeekBucket] {
-        let grouped = Dictionary(grouping: sortedWorkouts) { workout in
-            weekStart(for: workout.date)
-        }
-
-        return grouped
-            .map { weekStart, weekWorkouts in
-                SessionWeekBucket(weekStart: weekStart, count: weekWorkouts.count)
-            }
-            .sorted { $0.weekStart < $1.weekStart }
-    }
-
-    private func weekStart(for date: Date) -> Date {
-        sundayCalendar.dateInterval(of: .weekOfYear, for: date)?.start ?? sundayCalendar.startOfDay(for: date)
+        presentation.sessionDayBuckets
     }
 
     private var isCurrentWeekContext: Bool {
-        let now = Date()
-        let weekStart = SharedFormatters.startOfWeekSunday(for: now)
-        return sortedWorkouts.allSatisfy { workout in
-            workout.date >= weekStart && workout.date <= now
-        }
-    }
-
-    private var sessionDisplayEndDay: Date {
-        if isCurrentWeekContext {
-            return sundayCalendar.startOfDay(for: Date())
-        }
-        return sundayCalendar.startOfDay(for: sortedWorkouts.first?.date ?? Date())
-    }
-
-    private var sessionDisplayStartDay: Date {
-        if isCurrentWeekContext {
-            return SharedFormatters.startOfWeekSunday(for: sessionDisplayEndDay)
-        }
-
-        guard let oldestDay = sortedWorkouts.last.map({ sundayCalendar.startOfDay(for: $0.date) }) else {
-            return sessionDisplayEndDay
-        }
-
-        let recentStart = sundayCalendar.date(byAdding: .day, value: -13, to: sessionDisplayEndDay) ?? oldestDay
-        return max(oldestDay, recentStart)
+        presentation.isCurrentWeekContext
     }
 
     private var sessionDisplayDays: [SessionDisplayDay] {
-        continuousDays(from: sessionDisplayStartDay, to: sessionDisplayEndDay).map { day in
-            let dayWorkouts = (workoutsByDay[day] ?? []).sorted { $0.date < $1.date }
-            return SessionDisplayDay(date: day, workouts: dayWorkouts)
-        }
+        presentation.sessionDisplayDays
     }
 
     private var sessionFlowTitle: String {
@@ -946,31 +911,12 @@ struct MetricDetailView: View {
         return "\(label) had \(selectedDay.count) sessions."
     }
 
-    private var activeWorkoutDaysAscending: [Date] {
-        sessionDayBuckets
-            .map(\.dayStart)
-            .sorted()
-    }
-
-    private var sessionSpacingDays: [Int] {
-        let days = activeWorkoutDaysAscending
-        guard days.count > 1 else { return [] }
-
-        return zip(days, days.dropFirst()).compactMap { previous, next in
-            sundayCalendar.dateComponents([.day], from: previous, to: next).day
-        }
-    }
-
     private var averageSessionSpacingDays: Double? {
-        guard !sessionSpacingDays.isEmpty else { return nil }
-        let total = sessionSpacingDays.reduce(0, +)
-        return Double(total) / Double(sessionSpacingDays.count)
+        presentation.averageSessionSpacingDays
     }
 
     private var longestSessionBreakDays: Int? {
-        sessionSpacingDays
-            .map { max($0 - 1, 0) }
-            .max()
+        presentation.longestSessionBreakDays
     }
 
     private var longestSessionBreakLabel: String {
@@ -979,28 +925,15 @@ struct MetricDetailView: View {
     }
 
     private var sessionTimeWindowStats: [SessionTimeWindowStat] {
-        SessionTimeWindow.allCases.map { window in
-            SessionTimeWindowStat(
-                window: window,
-                sessions: sortedWorkouts.filter { SessionTimeWindow.window(for: $0.date) == window }.count
-            )
-        }
+        presentation.sessionTimeWindowStats
     }
 
     private var maxSessionTimeWindowCount: Int {
-        max(sessionTimeWindowStats.map(\.sessions).max() ?? 0, 1)
+        presentation.maxSessionTimeWindowCount
     }
 
     private var preferredSessionWindow: SessionTimeWindow? {
-        sessionTimeWindowStats
-            .sorted {
-                if $0.sessions != $1.sessions {
-                    return $0.sessions > $1.sessions
-                }
-                return $0.window.sortOrder < $1.window.sortOrder
-            }
-            .first(where: \.hasSessions)?
-            .window
+        presentation.preferredSessionWindow
     }
 
     private func roundedDayLabel(for spacing: Double) -> String {
@@ -1024,48 +957,210 @@ struct MetricDetailView: View {
         return days
     }
 
-    private var streakRuns: [StreakRun] {
-        WorkoutAnalytics.streakRuns(
-            for: dataManager.workouts,
-            intentionalRestDays: intentionalRestDays,
-            intentionalBreakRanges: intentionalBreaksManager.savedBreaks
-        )
-    }
+    /// Builds every expensive, data-driven value once per source mutation instead of
+    /// repeatedly while SwiftUI evaluates the view hierarchy.
+    private func makePresentation() -> MetricDetailPresentation {
+        let calendar = sundayCalendar
+        let sortedWorkouts = workouts.sorted { $0.date > $1.date }
+        let workoutsByDay = Dictionary(grouping: sortedWorkouts) { workout in
+            calendar.startOfDay(for: workout.date)
+        }
+        let sessionDayBuckets = workoutsByDay
+            .map { day, dayWorkouts in
+                SessionDayBucket(dayStart: day, count: dayWorkouts.count)
+            }
+            .sorted { $0.dayStart > $1.dayStart }
+        let uniqueWorkoutDayCount = sessionDayBuckets.count
+        let stackedSessionDayCount = sessionDayBuckets.lazy.filter { $0.count > 1 }.count
 
-    private var streakRunsByLength: [StreakRun] {
-        streakRuns.sorted {
+        let activeDays = sessionDayBuckets.map(\.dayStart).sorted()
+        let spacingDays: [Int]
+        if activeDays.count > 1 {
+            spacingDays = zip(activeDays, activeDays.dropFirst()).compactMap { previous, next in
+                calendar.dateComponents([.day], from: previous, to: next).day
+            }
+        } else {
+            spacingDays = []
+        }
+        let averageSessionSpacingDays = spacingDays.isEmpty
+            ? nil
+            : Double(spacingDays.reduce(0, +)) / Double(spacingDays.count)
+        let longestSessionBreakDays = spacingDays.map { max($0 - 1, 0) }.max()
+
+        let now = Date()
+        let currentWeekStart = SharedFormatters.startOfWeekSunday(for: now)
+        let isCurrentWeekContext = sortedWorkouts.allSatisfy { workout in
+            workout.date >= currentWeekStart && workout.date <= now
+        }
+        let sessionDisplayEndDay = isCurrentWeekContext
+            ? calendar.startOfDay(for: now)
+            : calendar.startOfDay(for: sortedWorkouts.first?.date ?? now)
+        let sessionDisplayStartDay: Date
+        if isCurrentWeekContext {
+            sessionDisplayStartDay = SharedFormatters.startOfWeekSunday(for: sessionDisplayEndDay)
+        } else if let oldestWorkout = sortedWorkouts.last {
+            let oldestDay = calendar.startOfDay(for: oldestWorkout.date)
+            let recentStart = calendar.date(byAdding: .day, value: -13, to: sessionDisplayEndDay) ?? oldestDay
+            sessionDisplayStartDay = max(oldestDay, recentStart)
+        } else {
+            sessionDisplayStartDay = sessionDisplayEndDay
+        }
+        let sessionDisplayDays = continuousDays(from: sessionDisplayStartDay, to: sessionDisplayEndDay).map { day in
+            SessionDisplayDay(
+                date: day,
+                workouts: (workoutsByDay[day] ?? []).sorted { $0.date < $1.date }
+            )
+        }
+
+        let timeWindowCounts = sortedWorkouts.reduce(into: [SessionTimeWindow: Int]()) { counts, workout in
+            counts[SessionTimeWindow.window(for: workout.date), default: 0] += 1
+        }
+        let sessionTimeWindowStats = SessionTimeWindow.allCases.map { window in
+            SessionTimeWindowStat(window: window, sessions: timeWindowCounts[window, default: 0])
+        }
+        let maxSessionTimeWindowCount = max(sessionTimeWindowStats.map(\.sessions).max() ?? 0, 1)
+        let preferredSessionWindow = sessionTimeWindowStats
+            .sorted {
+                if $0.sessions != $1.sessions {
+                    return $0.sessions > $1.sessions
+                }
+                return $0.window.sortOrder < $1.window.sortOrder
+            }
+            .first(where: \.hasSessions)?
+            .window
+
+        let allWorkouts = dataManager.workouts
+        let savedBreaks = intentionalBreaksManager.savedBreaks
+        let resolver = ExerciseIdentityResolver.current
+        var exerciseCountByWorkoutID: [UUID: Int] = [:]
+        exerciseCountByWorkoutID.reserveCapacity(max(allWorkouts.count, workouts.count))
+        for workout in allWorkouts + workouts where exerciseCountByWorkoutID[workout.id] == nil {
+            exerciseCountByWorkoutID[workout.id] = ExerciseAggregation.exerciseCount(
+                for: workout,
+                resolver: resolver
+            )
+        }
+        let streakRuns = WorkoutAnalytics.streakRuns(
+            for: allWorkouts,
+            intentionalRestDays: intentionalRestDays,
+            intentionalBreakRanges: savedBreaks
+        )
+        let streakRunsByLength = streakRuns.sorted {
             if $0.workoutDayCount != $1.workoutDayCount {
                 return $0.workoutDayCount > $1.workoutDayCount
             }
             return $0.end > $1.end
         }
-    }
+        let streakRunsByRecency = streakRuns.sorted { $0.end > $1.end }
 
-    private var streakRunsByRecency: [StreakRun] {
-        streakRuns.sorted { $0.end > $1.end }
-    }
-
-    private var currentStreakRun: StreakRun? {
+        let today = calendar.startOfDay(for: now)
         let allowedGapDays = max(0, intentionalRestDays) + 1
-        let today = sundayCalendar.startOfDay(for: Date())
-        let workoutDays = IntentionalBreaksAnalytics.normalizedWorkoutDays(for: dataManager.workouts, calendar: sundayCalendar)
-        let breakDays = intentionalBreaksManager.breakDaySet(
+        let workoutDays = IntentionalBreaksAnalytics.normalizedWorkoutDays(for: allWorkouts, calendar: calendar)
+        let breakDays = IntentionalBreaksAnalytics.breakDaySet(
+            from: savedBreaks,
             excluding: workoutDays,
             within: (workoutDays.min() ?? today)...today,
-            calendar: sundayCalendar
+            calendar: calendar
         )
-
-        return streakRunsByRecency.first { run in
-            let endDay = sundayCalendar.startOfDay(for: run.end)
+        let currentStreakRun = streakRunsByRecency.first { run in
             let daysSince = IntentionalBreaksAnalytics.effectiveGapDays(
-                from: endDay,
+                from: calendar.startOfDay(for: run.end),
                 to: today,
                 breakDays: breakDays,
                 includeEnd: true,
-                calendar: sundayCalendar
+                calendar: calendar
             )
             return daysSince <= allowedGapDays
         }
+
+        let allWorkoutsNewestFirst = allWorkouts.sorted { $0.date > $1.date }
+        var streakWorkoutsByRunID: [String: [Workout]] = [:]
+        for run in streakRuns {
+            let startDay = calendar.startOfDay(for: run.start)
+            let endDay = calendar.startOfDay(for: run.end)
+            streakWorkoutsByRunID[run.id] = allWorkoutsNewestFirst.filter { workout in
+                let day = calendar.startOfDay(for: workout.date)
+                return day >= startDay && day <= endDay
+            }
+        }
+
+        var volumeByWorkoutID: [UUID: Double] = [:]
+        volumeByWorkoutID.reserveCapacity(workouts.count)
+        for workout in workouts {
+            volumeByWorkoutID[workout.id] = ExerciseAggregation.totalVolume(for: workout, resolver: resolver)
+        }
+        let totalVolume = ExerciseAggregation.totalVolume(for: workouts, resolver: resolver)
+        let averageVolumePerSession = workouts.isEmpty ? 0 : totalVolume / Double(workouts.count)
+        let peakVolumeSession = workouts.max {
+            volumeByWorkoutID[$0.id, default: 0] < volumeByWorkoutID[$1.id, default: 0]
+        }
+        let volumeWorkouts = sortedWorkouts.filter(\.hasVolume)
+        let volumePoints = volumeWorkouts
+            .sorted { $0.date < $1.date }
+            .map { workout in
+                VolumePoint(id: workout.id, date: workout.date, value: volumeByWorkoutID[workout.id, default: 0])
+            }
+        let topVolumeWorkouts = volumeWorkouts
+            .sorted { volumeByWorkoutID[$0.id, default: 0] > volumeByWorkoutID[$1.id, default: 0] }
+            .prefix(6)
+            .map { $0 }
+        let exercises = volumeWorkouts.flatMap { workout in
+            ExerciseAggregation.aggregateExercises(in: workout, resolver: resolver).filter(\.hasVolume)
+        }
+        let topExerciseTotals = Dictionary(grouping: exercises, by: \.name)
+            .map { name, matchingExercises in
+                ExerciseVolumeTotal(
+                    name: name,
+                    volume: matchingExercises.reduce(0) { $0 + $1.totalVolume }
+                )
+            }
+            .filter { $0.volume > 0 }
+            .sorted { $0.volume > $1.volume }
+
+        return MetricDetailPresentation(
+            sortedWorkouts: sortedWorkouts,
+            workoutsByDay: workoutsByDay,
+            sessionDayBuckets: sessionDayBuckets,
+            uniqueWorkoutDayCount: uniqueWorkoutDayCount,
+            stackedSessionDayCount: stackedSessionDayCount,
+            isCurrentWeekContext: isCurrentWeekContext,
+            sessionDisplayDays: sessionDisplayDays,
+            averageSessionSpacingDays: averageSessionSpacingDays,
+            longestSessionBreakDays: longestSessionBreakDays,
+            sessionTimeWindowStats: sessionTimeWindowStats,
+            maxSessionTimeWindowCount: maxSessionTimeWindowCount,
+            preferredSessionWindow: preferredSessionWindow,
+            exerciseCountByWorkoutID: exerciseCountByWorkoutID,
+            streakRuns: streakRuns,
+            streakRunsByLength: streakRunsByLength,
+            streakRunsByRecency: streakRunsByRecency,
+            currentStreakRun: currentStreakRun,
+            streakWorkoutsByRunID: streakWorkoutsByRunID,
+            volumeByWorkoutID: volumeByWorkoutID,
+            totalVolume: totalVolume,
+            averageVolumePerSession: averageVolumePerSession,
+            peakVolumeSession: peakVolumeSession,
+            volumeWorkouts: volumeWorkouts,
+            volumePoints: volumePoints,
+            topVolumeWorkouts: topVolumeWorkouts,
+            topExerciseTotals: topExerciseTotals
+        )
+    }
+
+    private var streakRuns: [StreakRun] {
+        presentation.streakRuns
+    }
+
+    private var streakRunsByLength: [StreakRun] {
+        presentation.streakRunsByLength
+    }
+
+    private var streakRunsByRecency: [StreakRun] {
+        presentation.streakRunsByRecency
+    }
+
+    private var currentStreakRun: StreakRun? {
+        presentation.currentStreakRun
     }
 
     private var selectedStreakRun: StreakRun? {
@@ -1078,15 +1173,7 @@ struct MetricDetailView: View {
 
     private var selectedStreakWorkouts: [Workout] {
         guard let run = selectedStreakRun else { return sortedWorkouts }
-        let startDay = sundayCalendar.startOfDay(for: run.start)
-        let endDay = sundayCalendar.startOfDay(for: run.end)
-
-        return dataManager.workouts
-            .filter { workout in
-                let day = sundayCalendar.startOfDay(for: workout.date)
-                return day >= startDay && day <= endDay
-            }
-            .sorted { $0.date > $1.date }
+        return presentation.streakWorkoutsByRunID[run.id] ?? []
     }
 
     private func streakDateLabel(_ run: StreakRun) -> String {
@@ -1099,32 +1186,23 @@ struct MetricDetailView: View {
     }
 
     private var volumePoints: [VolumePoint] {
-        volumeWorkouts
-            .sorted { $0.date < $1.date }
-            .map { workout in
-                VolumePoint(id: workout.id, date: workout.date, value: normalizedVolume(for: workout))
-            }
+        presentation.volumePoints
     }
 
     private var topVolumeWorkouts: [Workout] {
-        volumeWorkouts.sorted { normalizedVolume(for: $0) > normalizedVolume(for: $1) }.prefix(6).map { $0 }
+        presentation.topVolumeWorkouts
     }
 
-    private var topExerciseTotals: [(name: String, volume: Double)] {
-        let resolver = ExerciseIdentityResolver.current
-        let exercises = volumeWorkouts.flatMap {
-            ExerciseAggregation.aggregateExercises(in: $0, resolver: resolver).filter(\.hasVolume)
-        }
-        return Dictionary(grouping: exercises, by: { $0.name })
-            .map { name, exercises in
-                (name: name, volume: exercises.reduce(0) { $0 + $1.totalVolume })
-            }
-            .filter { $0.volume > 0 }
-            .sorted { $0.volume > $1.volume }
+    private var topExerciseTotals: [ExerciseVolumeTotal] {
+        presentation.topExerciseTotals
     }
 
     private func normalizedVolume(for workout: Workout) -> Double {
-        ExerciseAggregation.totalVolume(for: workout, resolver: ExerciseIdentityResolver.current)
+        presentation.volumeByWorkoutID[workout.id] ?? 0
+    }
+
+    private func exerciseCount(for workout: Workout) -> Int {
+        presentation.exerciseCountByWorkoutID[workout.id] ?? 0
     }
 
     private var volumeListWorkouts: [Workout] {
@@ -1136,7 +1214,7 @@ struct MetricDetailView: View {
     }
 
     private var volumeWorkouts: [Workout] {
-        sortedWorkouts.filter(\.hasVolume)
+        presentation.volumeWorkouts
     }
 
     private func timeOfDayLabel(for date: Date) -> String {
@@ -1157,30 +1235,228 @@ struct MetricDetailView: View {
         guard !hasAutoScrolled else { return }
         guard let scrollTarget else { return }
         hasAutoScrolled = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+        Task { @MainActor in
+            await Task.yield()
             withAnimation(Theme.Animation.smooth) {
                 proxy.scrollTo(scrollTarget, anchor: .top)
             }
         }
     }
 
-    private func syncSelections() {
+    private func syncSelections(using nextPresentation: MetricDetailPresentation) {
         if let selectedSessionDay,
-           !sessionDayBuckets.contains(where: { sundayCalendar.isDate($0.dayStart, inSameDayAs: selectedSessionDay) }) {
+           !nextPresentation.sessionDayBuckets.contains(where: {
+               sundayCalendar.isDate($0.dayStart, inSameDayAs: selectedSessionDay)
+           }) {
             self.selectedSessionDay = nil
         }
 
         if let selectedVolumeWorkoutId,
-           !volumeWorkouts.contains(where: { $0.id == selectedVolumeWorkoutId }) {
+           !nextPresentation.volumeWorkouts.contains(where: { $0.id == selectedVolumeWorkoutId }) {
             self.selectedVolumeWorkoutId = nil
         }
 
+        let fallbackStreakRunID = nextPresentation.currentStreakRun?.id
+            ?? nextPresentation.streakRunsByLength.first?.id
         if let selectedStreakRunId,
-           !streakRuns.contains(where: { $0.id == selectedStreakRunId }) {
-            self.selectedStreakRunId = currentStreakRun?.id ?? streakRunsByLength.first?.id
+           !nextPresentation.streakRuns.contains(where: { $0.id == selectedStreakRunId }) {
+            self.selectedStreakRunId = fallbackStreakRunID
         } else if self.selectedStreakRunId == nil {
-            self.selectedStreakRunId = currentStreakRun?.id ?? streakRunsByLength.first?.id
+            self.selectedStreakRunId = fallbackStreakRunID
         }
+    }
+}
+
+private struct MetricDetailPresentation {
+    let sortedWorkouts: [Workout]
+    let workoutsByDay: [Date: [Workout]]
+    let sessionDayBuckets: [SessionDayBucket]
+    let uniqueWorkoutDayCount: Int
+    let stackedSessionDayCount: Int
+    let isCurrentWeekContext: Bool
+    let sessionDisplayDays: [SessionDisplayDay]
+    let averageSessionSpacingDays: Double?
+    let longestSessionBreakDays: Int?
+    let sessionTimeWindowStats: [SessionTimeWindowStat]
+    let maxSessionTimeWindowCount: Int
+    let preferredSessionWindow: SessionTimeWindow?
+    let exerciseCountByWorkoutID: [UUID: Int]
+    let streakRuns: [StreakRun]
+    let streakRunsByLength: [StreakRun]
+    let streakRunsByRecency: [StreakRun]
+    let currentStreakRun: StreakRun?
+    let streakWorkoutsByRunID: [String: [Workout]]
+    let volumeByWorkoutID: [UUID: Double]
+    let totalVolume: Double
+    let averageVolumePerSession: Double
+    let peakVolumeSession: Workout?
+    let volumeWorkouts: [Workout]
+    let volumePoints: [VolumePoint]
+    let topVolumeWorkouts: [Workout]
+    let topExerciseTotals: [ExerciseVolumeTotal]
+
+    static let empty = MetricDetailPresentation(
+        sortedWorkouts: [],
+        workoutsByDay: [:],
+        sessionDayBuckets: [],
+        uniqueWorkoutDayCount: 0,
+        stackedSessionDayCount: 0,
+        isCurrentWeekContext: true,
+        sessionDisplayDays: [],
+        averageSessionSpacingDays: nil,
+        longestSessionBreakDays: nil,
+        sessionTimeWindowStats: [],
+        maxSessionTimeWindowCount: 1,
+        preferredSessionWindow: nil,
+        exerciseCountByWorkoutID: [:],
+        streakRuns: [],
+        streakRunsByLength: [],
+        streakRunsByRecency: [],
+        currentStreakRun: nil,
+        streakWorkoutsByRunID: [:],
+        volumeByWorkoutID: [:],
+        totalVolume: 0,
+        averageVolumePerSession: 0,
+        peakVolumeSession: nil,
+        volumeWorkouts: [],
+        volumePoints: [],
+        topVolumeWorkouts: [],
+        topExerciseTotals: []
+    )
+}
+
+private struct ExerciseVolumeTotal {
+    let name: String
+    let volume: Double
+}
+
+/// The shared streak component derives runs from raw workouts during every body
+/// evaluation. This variant accepts the already-cached ordering for this screen.
+private struct CachedLongestStreaksSection: View {
+    let runs: [StreakRun]
+    let collapsedCount: Int
+    let maxExpandedCount: Int
+    let selectedRunId: String?
+    let onSelectRun: (StreakRun) -> Void
+
+    @State private var isExpanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            header
+
+            if runs.isEmpty {
+                Text("No streaks yet")
+                    .font(Theme.Typography.caption)
+                    .foregroundColor(Theme.Colors.textTertiary)
+            } else {
+                Text("Tap a streak to inspect it below")
+                    .font(Theme.Typography.caption)
+                    .foregroundColor(Theme.Colors.textTertiary)
+
+                VStack(spacing: Theme.Spacing.sm) {
+                    ForEach(Array(displayRuns.enumerated()), id: \.element.id) { index, run in
+                        Button {
+                            Haptics.selection()
+                            onSelectRun(run)
+                        } label: {
+                            HStack(spacing: Theme.Spacing.md) {
+                                Text("\(index + 1)")
+                                    .font(Theme.Typography.captionBold)
+                                    .foregroundColor(Theme.Colors.textTertiary)
+                                    .frame(width: 18, alignment: .leading)
+
+                                Text("\(run.workoutDayCount) day\(run.workoutDayCount == 1 ? "" : "s")")
+                                    .font(Theme.Typography.subheadline)
+                                    .foregroundColor(Theme.Colors.textPrimary)
+
+                                Spacer()
+
+                                Text(dateLabel(for: run))
+                                    .font(Theme.Typography.caption)
+                                    .foregroundColor(Theme.Colors.textTertiary)
+                            }
+                            .padding(.vertical, 6)
+                            .padding(.horizontal, Theme.Spacing.md)
+                            .background(
+                                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                                    .fill(
+                                        selectedRunId == run.id
+                                            ? Theme.Colors.accent.opacity(0.12)
+                                            : Theme.Colors.surface.opacity(0.55)
+                                    )
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                                    .strokeBorder(
+                                        selectedRunId == run.id ? Theme.Colors.accent : Color.clear,
+                                        lineWidth: 2
+                                    )
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    private var header: some View {
+        HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.sm) {
+            Text("Longest Streaks")
+                .font(Theme.Typography.cardHeader)
+                .foregroundColor(Theme.Colors.textPrimary)
+
+            Spacer()
+
+            if runs.count > collapsedCount {
+                Button {
+                    withAnimation(Theme.Animation.spring) {
+                        isExpanded.toggle()
+                    }
+                    Haptics.selection()
+                } label: {
+                    HStack(spacing: Theme.Spacing.xs) {
+                        Text(isExpanded ? "Less" : "More")
+                            .font(Theme.Typography.metricLabel)
+                            .foregroundColor(Theme.Colors.accent)
+                            .textCase(.uppercase)
+                            .tracking(0.8)
+                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                            .font(Theme.Typography.captionBold)
+                            .foregroundColor(Theme.Colors.accent)
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private var displayRuns: [StreakRun] {
+        guard runs.count > collapsedCount else { return runs }
+        return isExpanded
+            ? Array(runs.prefix(maxExpandedCount))
+            : Array(runs.prefix(collapsedCount))
+    }
+
+    private func dateLabel(for run: StreakRun) -> String {
+        let calendar = Calendar.current
+        if calendar.isDate(run.start, equalTo: run.end, toGranularity: .day) {
+            return run.start.formatted(date: .abbreviated, time: .omitted)
+        }
+
+        let startYear = calendar.component(.year, from: run.start)
+        let endYear = calendar.component(.year, from: run.end)
+        if startYear == endYear {
+            let start = run.start.formatted(Date.FormatStyle().month(.abbreviated).day())
+            let end = run.end.formatted(Date.FormatStyle().month(.abbreviated).day().year())
+            return "\(start) - \(end)"
+        }
+
+        let start = run.start.formatted(Date.FormatStyle().month(.abbreviated).day().year())
+        let end = run.end.formatted(Date.FormatStyle().month(.abbreviated).day().year())
+        return "\(start) - \(end)"
     }
 }
 
@@ -1188,6 +1464,7 @@ private struct HeroChip: View {
     let title: String
     let value: String
     let tint: Color
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -1200,8 +1477,9 @@ private struct HeroChip: View {
             Text(value)
                 .font(Theme.Typography.monoSmall)
                 .foregroundColor(Theme.Colors.textPrimary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                .minimumScaleFactor(dynamicTypeSize.isAccessibilitySize ? 1 : 0.75)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, Theme.Spacing.md)
@@ -1261,6 +1539,7 @@ private struct VolumeSessionChip: View {
 private struct MetricWorkoutRow: View {
     let workout: Workout
     let subtitle: String
+    let exerciseCount: Int
     var highlight: Bool = false
 
     var body: some View {
@@ -1280,7 +1559,7 @@ private struct MetricWorkoutRow: View {
                 Text(workout.duration)
                     .font(Theme.Typography.captionBold)
                     .foregroundColor(Theme.Colors.textSecondary)
-                Text("\(ExerciseAggregation.exerciseCount(for: workout, resolver: ExerciseIdentityResolver.current)) exercises")
+                Text("\(exerciseCount) exercises")
                     .font(Theme.Typography.caption)
                     .foregroundColor(Theme.Colors.textTertiary)
             }
@@ -1322,6 +1601,7 @@ private struct SessionInsightTile: View {
     let label: String
     let value: String
     let tint: Color
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -1333,8 +1613,9 @@ private struct SessionInsightTile: View {
             Text(value)
                 .font(Theme.Typography.monoMedium)
                 .foregroundColor(Theme.Colors.textPrimary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                .minimumScaleFactor(dynamicTypeSize.isAccessibilitySize ? 1 : 0.75)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, Theme.Spacing.md)

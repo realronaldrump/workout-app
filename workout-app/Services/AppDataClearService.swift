@@ -238,7 +238,8 @@ enum AppDataClearService {
             "weightIncrement",
             "intentionalRestDays",
             "sessionsPerWeekGoal",
-            "appearanceMode"
+            "appearanceMode",
+            Haptics.preferenceKey
         ].forEach { userDefaults.removeObject(forKey: $0) }
 
         clearHealthPreferences(healthManager: healthManager, userDefaults: userDefaults)

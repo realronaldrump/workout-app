@@ -23,14 +23,23 @@ struct SleepSourceAttributionView: View {
 /// Displays health data synced from Apple Health for a workout
 struct HealthDataView: View {
     let healthData: WorkoutHealthData
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var showingAllHeartRateSamples = false
+
+    private var metricColumns: [GridItem] {
+        if dynamicTypeSize.isAccessibilitySize {
+            return [GridItem(.flexible())]
+        }
+        return [GridItem(.flexible()), GridItem(.flexible())]
+    }
 
     var body: some View {
         VStack(spacing: Theme.Spacing.lg) {
             // Header
+            ViewThatFits(in: .horizontal) {
                 HStack {
                     Image(systemName: "heart.fill")
-	                    .foregroundColor(Theme.Colors.error)
+                        .foregroundColor(Theme.Colors.error)
                     Text("Health Metrics")
                         .font(Theme.Typography.headline)
 
@@ -41,6 +50,18 @@ struct HealthDataView: View {
                         .font(Theme.Typography.caption)
                         .foregroundColor(Theme.Colors.textTertiary)
                 }
+
+                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                    Label("Health Metrics", systemImage: "heart.fill")
+                        .font(Theme.Typography.headline)
+                        .foregroundStyle(Theme.Colors.error)
+                    if let syncedAt = healthData.syncedAt as Date? {
+                        Text("Synced \(syncedAt.formatted(.relative(presentation: .named)))")
+                            .font(Theme.Typography.caption)
+                            .foregroundColor(Theme.Colors.textTertiary)
+                    }
+                }
+            }
             }
 
             if !healthData.hasHealthData {
@@ -99,10 +120,7 @@ struct HealthDataView: View {
     // MARK: - Metrics Grid
 
     private var metricsGrid: some View {
-        LazyVGrid(columns: [
-            GridItem(.flexible()),
-            GridItem(.flexible())
-        ], spacing: Theme.Spacing.md) {
+        LazyVGrid(columns: metricColumns, spacing: Theme.Spacing.md) {
             // Heart Rate
             if let avgHR = healthData.avgHeartRate {
                 metricCard(
@@ -226,7 +244,7 @@ struct HealthDataView: View {
 
     private var heartRateSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Zones")
+            Text("Relative Intensity")
                 .font(Theme.Typography.subheadline)
                 .foregroundColor(Theme.Colors.textSecondary)
             HeartRateZoneStrip(samples: healthData.heartRateSamples)
@@ -323,7 +341,26 @@ struct HealthDataView: View {
                 .font(Theme.Typography.subheadline)
                 .foregroundColor(Theme.Colors.textSecondary)
 
-            HStack(spacing: Theme.Spacing.xl) {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: Theme.Spacing.xl) {
+                    sleepSummaryMetrics(summary)
+                }
+
+                VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+                    sleepSummaryMetrics(summary)
+                }
+            }
+
+            SleepStageStrip(summary: summary)
+
+            SleepSourceAttributionView(summary: summary)
+        }
+        .padding(Theme.Spacing.lg)
+        .softCard(elevation: 2)
+    }
+
+    @ViewBuilder
+    private func sleepSummaryMetrics(_ summary: SleepSummary) -> some View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(String(format: "%.1f", summary.totalHours))
                         .font(Theme.Typography.number)
@@ -341,14 +378,6 @@ struct HealthDataView: View {
                         .font(Theme.Typography.caption)
                         .foregroundColor(Theme.Colors.textSecondary)
                 }
-            }
-
-            SleepStageStrip(summary: summary)
-
-            SleepSourceAttributionView(summary: summary)
-        }
-        .padding(Theme.Spacing.lg)
-        .softCard(elevation: 2)
     }
 
     private var dailyActivitySection: some View {
@@ -357,7 +386,7 @@ struct HealthDataView: View {
                 .font(Theme.Typography.subheadline)
                 .foregroundColor(Theme.Colors.textSecondary)
 
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: Theme.Spacing.md) {
+            LazyVGrid(columns: metricColumns, spacing: Theme.Spacing.md) {
                 if let energy = healthData.dailyActiveEnergy {
                     metricCard(title: "Active Energy", value: "\(Int(energy))", unit: "kcal", icon: "flame.fill", color: .orange)
                 }
@@ -401,22 +430,34 @@ struct HealthDataView: View {
     }
 
     private func additionalMetricRow(label: String, value: String, icon: String) -> some View {
-        HStack {
-            Image(systemName: icon)
-                .frame(width: 24)
-                .foregroundColor(Theme.Colors.textTertiary)
+        ViewThatFits(in: .horizontal) {
+            HStack {
+                additionalMetricLabel(label: label, icon: icon)
+                Spacer()
+                Text(value)
+                    .font(Theme.Typography.body)
+                    .foregroundColor(Theme.Colors.textPrimary)
+            }
 
-            Text(label)
-                .font(Theme.Typography.body)
-                .foregroundColor(Theme.Colors.textSecondary)
-
-            Spacer()
-
-            Text(value)
-                .font(Theme.Typography.body)
-                .foregroundColor(Theme.Colors.textPrimary)
+            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                additionalMetricLabel(label: label, icon: icon)
+                Text(value)
+                    .font(Theme.Typography.bodyBold)
+                    .foregroundColor(Theme.Colors.textPrimary)
+            }
         }
         .padding(.vertical, Theme.Spacing.xs)
+    }
+
+    private func additionalMetricLabel(label: String, icon: String) -> some View {
+        Label {
+            Text(label)
+                .font(Theme.Typography.body)
+        } icon: {
+            Image(systemName: icon)
+                .frame(width: 24)
+        }
+        .foregroundColor(Theme.Colors.textSecondary)
     }
 
     private func formatDuration(_ seconds: TimeInterval) -> String {
@@ -437,7 +478,19 @@ struct HealthDataSummaryView: View {
     let healthData: WorkoutHealthData
 
     var body: some View {
-        HStack(spacing: Theme.Spacing.lg) {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: Theme.Spacing.lg) {
+                summaryMetrics
+            }
+
+            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                summaryMetrics
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var summaryMetrics: some View {
             if let avgHR = healthData.avgHeartRate {
                 compactMetric(
                     icon: "heart.fill",
@@ -464,7 +517,6 @@ struct HealthDataSummaryView: View {
                     color: .purple
                 )
             }
-        }
     }
 
     private func compactMetric(icon: String, value: String, unit: String, color: Color) -> some View {
@@ -552,10 +604,10 @@ struct HealthSyncButton: View {
 // MARK: - Heart Rate Zones
 
 struct HeartRateZoneStrip: View {
-    let samples: [HeartRateSample]
+    private let zones: [HeartRateZone]
 
-    private var zones: [HeartRateZone] {
-        HeartRateZone.calculate(from: samples)
+    init(samples: [HeartRateSample]) {
+        zones = HeartRateZone.calculate(from: samples)
     }
 
     var body: some View {
@@ -575,14 +627,23 @@ struct HeartRateZoneStrip: View {
             }
         }
         .frame(height: 18)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Relative workout intensity")
+        .accessibilityValue(
+            zones
+                .filter { $0.fraction > 0 }
+                .map { "\($0.label) \(Int(($0.fraction * 100).rounded())) percent" }
+                .joined(separator: ", ")
+        )
     }
 }
 
 struct HeartRateZone: Identifiable {
-    let id = UUID()
     let label: String
     let color: Color
     let fraction: Double
+
+    var id: String { label }
 
     static func calculate(from samples: [HeartRateSample]) -> [HeartRateZone] {
         guard let maxSample = samples.map({ $0.value }).max(), maxSample > 0 else {

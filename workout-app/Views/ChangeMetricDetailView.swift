@@ -10,8 +10,8 @@ struct ChangeMetricDetailView: View {
     @EnvironmentObject var dataManager: WorkoutDataManager
     @EnvironmentObject var annotationsManager: WorkoutAnnotationsManager
     @EnvironmentObject var gymProfilesManager: GymProfilesManager
-    @State private var cachedCurrentWorkouts: [Workout] = []
-    @State private var cachedPreviousWorkouts: [Workout] = []
+    @State private var presentation: Presentation
+    @State private var hasLoadedPresentation = false
 
     private enum WindowBucket: String {
         case previous
@@ -19,16 +19,32 @@ struct ChangeMetricDetailView: View {
     }
 
     private struct ChartPoint: Identifiable {
-        let id = UUID()
+        let id: String
         let date: Date
         let value: Double
         let window: WindowBucket
     }
 
+    private struct SessionWorkoutPresentation: Identifiable {
+        let workout: Workout
+        let exercisePreview: String
+        let exerciseCount: Int
+        let setCount: Int
+        let volume: Double
+
+        var id: UUID { workout.id }
+    }
+
+    private struct ExerciseVolumePresentation: Identifiable {
+        let name: String
+        let volume: Double
+
+        var id: String { name }
+    }
+
     fileprivate struct SessionWindowSummary {
         let title: String
         let rangeLabel: String
-        let workouts: [Workout]
         let sessionCount: Int
         let activeDays: Int
         let totalDurationMinutes: Int
@@ -61,37 +77,30 @@ struct ChangeMetricDetailView: View {
         var delta: Int { currentCount - previousCount }
     }
 
-    private var calendar: Calendar {
-        Calendar.current
+    private struct Presentation {
+        let currentWorkouts: [SessionWorkoutPresentation]
+        let previousWorkouts: [SessionWorkoutPresentation]
+        let currentSummary: SessionWindowSummary
+        let previousSummary: SessionWindowSummary
+        let dayComparisons: [SessionDayComparison]
+        let typeComparisons: [SessionTypeComparison]
+        let maxDailySessionCount: Int
+        let chartPoints: [ChartPoint]
+        let previousChartPoints: [ChartPoint]
+        let currentChartPoints: [ChartPoint]
+        let chartAccessibilityValue: String
+        let topVolumeWorkouts: [SessionWorkoutPresentation]
+        let topExercises: [ExerciseVolumePresentation]
+        let sessionsHeroHeadline: String
+        let sessionsHeroNarrative: String
     }
 
-    private var currentWorkouts: [Workout] {
-        cachedCurrentWorkouts
-    }
-
-    private var previousWorkouts: [Workout] {
-        cachedPreviousWorkouts
-    }
-
-    private var topVolumeWorkouts: [Workout] {
-        currentWorkouts
-            .filter { normalizedVolume(for: $0) > 0 }
-            .sorted { normalizedVolume(for: $0) > normalizedVolume(for: $1) }
-            .prefix(8)
-            .map { $0 }
-    }
-
-    private var topExerciseTotals: [(name: String, volume: Double)] {
-        let resolver = ExerciseIdentityResolver.current
-        let exercises = currentWorkouts.flatMap {
-            ExerciseAggregation.aggregateExercises(in: $0, resolver: resolver).filter(\.hasVolume)
-        }
-        return Dictionary(grouping: exercises, by: { $0.name })
-            .map { name, exercises in
-                (name: name, volume: exercises.reduce(0) { $0 + $1.totalVolume })
-            }
-            .filter { $0.volume > 0 }
-            .sorted { $0.volume > $1.volume }
+    private struct WindowCacheKey: Equatable {
+        let label: String
+        let currentStart: Date
+        let currentEnd: Date
+        let previousStart: Date
+        let previousEnd: Date
     }
 
     private var windowLabel: String {
@@ -112,107 +121,34 @@ struct ChangeMetricDetailView: View {
         return "Previous Window"
     }
 
-    private var currentSessionSummary: SessionWindowSummary {
-        buildSessionSummary(title: currentWindowTitle, workouts: currentWorkouts, interval: window.current)
+    private var currentWorkouts: [SessionWorkoutPresentation] { presentation.currentWorkouts }
+    private var previousWorkouts: [SessionWorkoutPresentation] { presentation.previousWorkouts }
+    private var currentSessionSummary: SessionWindowSummary { presentation.currentSummary }
+    private var previousSessionSummary: SessionWindowSummary { presentation.previousSummary }
+    private var sessionDayComparisons: [SessionDayComparison] { presentation.dayComparisons }
+    private var sessionTypeComparisons: [SessionTypeComparison] { presentation.typeComparisons }
+    private var maxDailySessionCount: Int { presentation.maxDailySessionCount }
+    private var topVolumeWorkouts: [SessionWorkoutPresentation] { presentation.topVolumeWorkouts }
+    private var topExerciseTotals: [ExerciseVolumePresentation] { presentation.topExercises }
+    private var chartPoints: [ChartPoint] { presentation.chartPoints }
+    private var sessionsHeroHeadline: String { presentation.sessionsHeroHeadline }
+    private var sessionsHeroNarrative: String { presentation.sessionsHeroNarrative }
+
+    private var windowCacheKey: WindowCacheKey {
+        WindowCacheKey(
+            label: window.label,
+            currentStart: window.current.start,
+            currentEnd: window.current.end,
+            previousStart: window.previous.start,
+            previousEnd: window.previous.end
+        )
     }
 
-    private var previousSessionSummary: SessionWindowSummary {
-        buildSessionSummary(title: previousWindowTitle, workouts: previousWorkouts, interval: window.previous)
-    }
-
-    private var sessionDayComparisons: [SessionDayComparison] {
-        let currentStart = calendar.startOfDay(for: window.current.start)
-        let previousStart = calendar.startOfDay(for: window.previous.start)
-        let dayCount = max(dayCount(for: window.current), dayCount(for: window.previous))
-        let currentCounts = dayCounts(for: currentWorkouts)
-        let previousCounts = dayCounts(for: previousWorkouts)
-
-        return (0..<dayCount).compactMap { offset in
-            guard let currentDay = calendar.date(byAdding: .day, value: offset, to: currentStart),
-                  let previousDay = calendar.date(byAdding: .day, value: offset, to: previousStart) else {
-                return nil
-            }
-
-            let label: String
-            if dayCount <= 7 {
-                label = currentDay.formatted(.dateTime.weekday(.abbreviated))
-            } else {
-                label = currentDay.formatted(.dateTime.month(.abbreviated).day())
-            }
-
-            return SessionDayComparison(
-                id: offset,
-                label: label,
-                dateLabel: "\(previousDay.formatted(.dateTime.month(.abbreviated).day())) vs \(currentDay.formatted(.dateTime.month(.abbreviated).day()))",
-                currentCount: currentCounts[currentDay, default: 0],
-                previousCount: previousCounts[previousDay, default: 0]
-            )
-        }
-    }
-
-    private var sessionTypeComparisons: [SessionTypeComparison] {
-        let currentCounts = Dictionary(grouping: currentWorkouts, by: \.name).mapValues(\.count)
-        let previousCounts = Dictionary(grouping: previousWorkouts, by: \.name).mapValues(\.count)
-        let currentVolume = Dictionary(grouping: currentWorkouts, by: \.name).mapValues { items in
-            ExerciseAggregation.totalVolume(for: items, resolver: ExerciseIdentityResolver.current)
-        }
-
-        let names = Set(currentCounts.keys).union(previousCounts.keys)
-        return names.map { name in
-            SessionTypeComparison(
-                name: name,
-                currentCount: currentCounts[name, default: 0],
-                previousCount: previousCounts[name, default: 0],
-                currentVolume: currentVolume[name, default: 0]
-            )
-        }
-        .sorted { lhs, rhs in
-            if lhs.currentCount != rhs.currentCount { return lhs.currentCount > rhs.currentCount }
-            if lhs.previousCount != rhs.previousCount { return lhs.previousCount > rhs.previousCount }
-            return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
-        }
-    }
-
-    private var maxDailySessionCount: Int {
-        max(1, sessionDayComparisons.map { max($0.currentCount, $0.previousCount) }.max() ?? 1)
-    }
-
-    private var sessionsHeroHeadline: String {
-        if metric.delta > 0 {
-            return "Session load is up."
-        }
-        if metric.delta < 0 {
-            return "This week is lighter."
-        }
-        return "Same count, different shape."
-    }
-
-    private var sessionsHeroNarrative: String {
-        let current = currentSessionSummary
-        let previous = previousSessionSummary
-        let activeDayLabel = "day\(current.activeDays == 1 ? "" : "s")"
-
-        if current.sessionCount == 0 && previous.sessionCount == 0 {
-            return "There are no sessions in either comparison window yet, so this screen will populate as soon as you log a workout."
-        }
-
-        if metric.delta > 0 {
-            let delta = Int(metric.delta)
-            let sessionLabel = "session\(delta == 1 ? "" : "s")"
-            return "You trained on \(current.activeDays) \(activeDayLabel) and logged \(delta) more \(sessionLabel) than the previous window."
-        }
-
-        if metric.delta < 0 {
-            let decrease = abs(Int(metric.delta))
-            let sessionLabel = "session\(decrease == 1 ? "" : "s")"
-            return "You trained on \(current.activeDays) \(activeDayLabel), which is \(decrease) fewer \(sessionLabel) than the previous window."
-        }
-
-        if current.activeDays != previous.activeDays {
-            return "The session count held steady, but the training days shifted from \(previous.activeDays) to \(current.activeDays), so the rhythm changed."
-        }
-
-        return "Session count and active days stayed even, so the differences below come from timing, session mix, and per-session density."
+    init(metric: ChangeMetric, window: ChangeMetricWindow, workouts: [Workout]) {
+        self.metric = metric
+        self.window = window
+        self.workouts = workouts
+        _presentation = State(initialValue: Self.makePlaceholder(metric: metric, window: window))
     }
 
     var body: some View {
@@ -229,21 +165,30 @@ struct ChangeMetricDetailView: View {
                 }
                 .padding(.vertical, Theme.Spacing.xxl)
                 .padding(.horizontal, Theme.Spacing.lg)
+                .contentColumn()
             }
         }
         .navigationTitle(metric.title)
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
-            refreshCachedWindows()
+            if !hasLoadedPresentation {
+                refreshCachedPresentation()
+            }
         }
         .onChange(of: workouts) { _, _ in
-            refreshCachedWindows()
+            refreshCachedPresentation()
+        }
+        .onChange(of: metric) { _, _ in
+            refreshCachedPresentation()
+        }
+        .onChange(of: windowCacheKey) { _, _ in
+            refreshCachedPresentation()
         }
     }
 
-    private func refreshCachedWindows() {
-        cachedCurrentWorkouts = workouts.filter { window.current.contains($0.date) }
-        cachedPreviousWorkouts = workouts.filter { window.previous.contains($0.date) }
+    private func refreshCachedPresentation() {
+        presentation = Self.makePresentation(metric: metric, window: window, workouts: workouts)
+        hasLoadedPresentation = true
     }
 
     private var sessionsDetailContent: some View {
@@ -414,7 +359,7 @@ struct ChangeMetricDetailView: View {
                 subtitle: "Day-by-day alignment shows where this week gained, lost, or redistributed sessions."
             )
 
-            VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            LazyVStack(alignment: .leading, spacing: Theme.Spacing.md) {
                 HStack(spacing: Theme.Spacing.md) {
                     legendPill(title: previousWindowTitle, tint: Theme.Colors.textTertiary)
                     legendPill(title: currentWindowTitle, tint: Theme.Colors.accent)
@@ -458,25 +403,25 @@ struct ChangeMetricDetailView: View {
     }
 
     private var sessionsFeedSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+        LazyVStack(alignment: .leading, spacing: Theme.Spacing.md) {
             sectionHeader(
                 title: "Session Feed",
                 subtitle: "Each workout gets enough context to be useful: timing, duration, density, volume, and location."
             )
 
-            VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            LazyVStack(alignment: .leading, spacing: Theme.Spacing.md) {
                 sessionFeedCard(
                     title: currentWindowTitle,
                     summary: currentSessionSummary,
                     tint: Theme.Colors.accent,
-                    workouts: currentWorkouts.sorted { $0.date > $1.date }
+                    workouts: currentWorkouts
                 )
 
                 sessionFeedCard(
                     title: previousWindowTitle,
                     summary: previousSessionSummary,
                     tint: Theme.Colors.textTertiary,
-                    workouts: previousWorkouts.sorted { $0.date > $1.date }
+                    workouts: previousWorkouts
                 )
             }
         }
@@ -486,9 +431,9 @@ struct ChangeMetricDetailView: View {
         title: String,
         summary: SessionWindowSummary,
         tint: Color,
-        workouts: [Workout]
+        workouts: [SessionWorkoutPresentation]
     ) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+        LazyVStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(title)
@@ -516,13 +461,16 @@ struct ChangeMetricDetailView: View {
             if workouts.isEmpty {
                 EmptyStateTile(message: "No sessions recorded in this window.")
             } else {
-                ForEach(workouts) { workout in
-                    NavigationLink(destination: WorkoutDetailView(workout: workout)) {
+                ForEach(workouts) { item in
+                    NavigationLink(destination: WorkoutDetailView(workout: item.workout)) {
                         SessionWorkoutCard(
-                            workout: workout,
-                            exercisePreview: exercisePreview(for: workout),
-                            gymLabel: gymLabel(for: workout),
-                            gymStyle: gymBadgeStyle(for: workout),
+                            workout: item.workout,
+                            exercisePreview: item.exercisePreview,
+                            exerciseCount: item.exerciseCount,
+                            setCount: item.setCount,
+                            volume: item.volume,
+                            gymLabel: gymLabel(for: item.workout),
+                            gymStyle: gymBadgeStyle(for: item.workout),
                             tint: tint
                         )
                     }
@@ -576,12 +524,16 @@ struct ChangeMetricDetailView: View {
     }
 
     private var chartSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+        let points = chartPoints
+        let previousPoints = presentation.previousChartPoints
+        let currentPoints = presentation.currentChartPoints
+
+        return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             Text("Trend")
                 .font(Theme.Typography.title3)
                 .foregroundStyle(Theme.Colors.textPrimary)
 
-            if chartPoints.isEmpty {
+            if points.isEmpty {
                 Text("Not enough data to chart.")
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Colors.textSecondary)
@@ -590,7 +542,7 @@ struct ChangeMetricDetailView: View {
             } else {
                 Chart {
                     if metric.title == "Sessions" {
-                        ForEach(chartPoints) { point in
+                        ForEach(points) { point in
                             BarMark(
                                 x: .value("Date", point.date),
                                 y: .value("Count", point.value)
@@ -599,7 +551,7 @@ struct ChangeMetricDetailView: View {
                             .cornerRadius(3)
                         }
                     } else {
-                        ForEach(chartPoints.filter { $0.window == .previous }) { point in
+                        ForEach(previousPoints) { point in
                             LineMark(
                                 x: .value("Date", point.date),
                                 y: .value("Value", point.value)
@@ -614,7 +566,7 @@ struct ChangeMetricDetailView: View {
                             .foregroundStyle(Theme.Colors.textTertiary)
                         }
 
-                        ForEach(chartPoints.filter { $0.window == .current }) { point in
+                        ForEach(currentPoints) { point in
                             LineMark(
                                 x: .value("Date", point.date),
                                 y: .value("Value", point.value)
@@ -655,12 +607,15 @@ struct ChangeMetricDetailView: View {
                 .frame(height: Theme.ChartHeight.expanded)
                 .padding(Theme.Spacing.lg)
                 .softCard(elevation: 2)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("\(metric.title) trend")
+                .accessibilityValue(presentation.chartAccessibilityValue)
             }
         }
     }
 
     private var supportingSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
+        LazyVStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             Text("Supporting")
                 .font(Theme.Typography.title3)
                 .foregroundStyle(Theme.Colors.textPrimary)
@@ -681,7 +636,7 @@ struct ChangeMetricDetailView: View {
     }
 
     private var sessionsSupporting: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+        LazyVStack(alignment: .leading, spacing: Theme.Spacing.md) {
             if currentWorkouts.isEmpty {
                 Text("No sessions in this window.")
                     .font(Theme.Typography.body)
@@ -689,14 +644,14 @@ struct ChangeMetricDetailView: View {
                     .padding(Theme.Spacing.lg)
                     .softCard(elevation: 1)
             } else {
-                ForEach(currentWorkouts.sorted { $0.date > $1.date }) { workout in
-                    NavigationLink(destination: WorkoutDetailView(workout: workout)) {
+                ForEach(currentWorkouts) { item in
+                    NavigationLink(destination: WorkoutDetailView(workout: item.workout)) {
                         HStack {
                             VStack(alignment: .leading, spacing: 4) {
-                                Text(workout.name)
+                                Text(item.workout.name)
                                     .font(Theme.Typography.headline)
                                     .foregroundStyle(Theme.Colors.textPrimary)
-                                Text(workout.date.formatted(date: .abbreviated, time: .omitted))
+                                Text(item.workout.date.formatted(date: .abbreviated, time: .omitted))
                                     .font(Theme.Typography.caption)
                                     .foregroundStyle(Theme.Colors.textSecondary)
                             }
@@ -715,7 +670,7 @@ struct ChangeMetricDetailView: View {
     }
 
     private var volumeSupporting: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+        LazyVStack(alignment: .leading, spacing: Theme.Spacing.md) {
             let topWorkouts = topVolumeWorkouts
 
             if topWorkouts.isEmpty {
@@ -729,14 +684,14 @@ struct ChangeMetricDetailView: View {
                     .font(Theme.Typography.headline)
                     .foregroundStyle(Theme.Colors.textPrimary)
 
-                ForEach(Array(topWorkouts), id: \.id) { workout in
-                    NavigationLink(destination: WorkoutDetailView(workout: workout)) {
+                ForEach(topWorkouts) { item in
+                    NavigationLink(destination: WorkoutDetailView(workout: item.workout)) {
                         HStack {
                             VStack(alignment: .leading, spacing: 4) {
-                                Text(workout.name)
+                                Text(item.workout.name)
                                     .font(Theme.Typography.headline)
                                     .foregroundStyle(Theme.Colors.textPrimary)
-                                Text("\(SharedFormatters.volumePrecise(normalizedVolume(for: workout))) volume")
+                                Text("\(SharedFormatters.volumePrecise(item.volume)) volume")
                                     .font(Theme.Typography.caption)
                                     .foregroundStyle(Theme.Colors.textSecondary)
                             }
@@ -751,15 +706,13 @@ struct ChangeMetricDetailView: View {
                     .buttonStyle(.plain)
                 }
 
-                let exerciseTotals = topExerciseTotals
-
-                if !exerciseTotals.isEmpty {
+                if !topExerciseTotals.isEmpty {
                     Text("Top Exercises")
                         .font(Theme.Typography.headline)
                         .foregroundStyle(Theme.Colors.textPrimary)
                         .padding(.top, Theme.Spacing.sm)
 
-                    ForEach(exerciseTotals.prefix(8), id: \.name) { exercise in
+                    ForEach(topExerciseTotals.prefix(8)) { exercise in
                         NavigationLink(
                             destination: ExerciseDetailView(
                                 exerciseName: exercise.name,
@@ -792,42 +745,6 @@ struct ChangeMetricDetailView: View {
         }
     }
 
-    private var chartPoints: [ChartPoint] {
-        switch metric.title {
-        case "Sessions":
-            return sessionChartPoints
-        case "Total Volume":
-            return seriesPoints(from: workouts, value: { normalizedVolume(for: $0) })
-        default:
-            return []
-        }
-    }
-
-    private func seriesPoints(from workouts: [Workout], value: (Workout) -> Double) -> [ChartPoint] {
-        let sorted = workouts.sorted { $0.date < $1.date }
-        return sorted.compactMap { workout in
-            let workoutValue = value(workout)
-            guard workoutValue > 0 else { return nil }
-            guard window.current.contains(workout.date) || window.previous.contains(workout.date) else { return nil }
-            let bucket: WindowBucket = window.current.contains(workout.date) ? .current : .previous
-            return ChartPoint(date: workout.date, value: workoutValue, window: bucket)
-        }
-    }
-
-    private var sessionChartPoints: [ChartPoint] {
-        let filtered = workouts.filter { window.current.contains($0.date) || window.previous.contains($0.date) }
-        let buckets: [Date: (count: Int, window: WindowBucket)] = filtered.reduce(into: [:]) { result, workout in
-            let day = calendar.startOfDay(for: workout.date)
-            let bucket: WindowBucket = window.current.contains(workout.date) ? .current : .previous
-            let current = result[day] ?? (0, bucket)
-            result[day] = (current.count + 1, bucket)
-        }
-
-        return buckets
-            .map { ChartPoint(date: $0.key, value: Double($0.value.count), window: $0.value.window) }
-            .sorted { $0.date < $1.date }
-    }
-
     private var deltaLabel: String {
         let sign = metric.delta >= 0 ? "+" : ""
         switch metric.title {
@@ -856,7 +773,11 @@ struct ChangeMetricDetailView: View {
     }
 
     private func axisLabel(_ value: Double) -> String {
-        switch metric.title {
+        Self.axisLabel(value, metricTitle: metric.title)
+    }
+
+    private static func axisLabel(_ value: Double, metricTitle: String) -> String {
+        switch metricTitle {
         case "Sessions":
             return "\(Int(value))"
         case "Total Volume":
@@ -866,29 +787,190 @@ struct ChangeMetricDetailView: View {
         }
     }
 
-    private func buildSessionSummary(
-        title: String,
-        workouts: [Workout],
-        interval: DateInterval
-    ) -> SessionWindowSummary {
-        let activeDays = Set(workouts.map { calendar.startOfDay(for: $0.date) }).count
-        let totalDurationMinutes = workouts.reduce(0) { partialResult, workout in
-            partialResult + workout.estimatedDurationMinutes(defaultMinutes: 0)
-        }
+    private static func makePlaceholder(
+        metric: ChangeMetric,
+        window: ChangeMetricWindow
+    ) -> Presentation {
+        let calendar = Calendar.current
+        let currentSummary = makeSessionSummary(
+            title: windowTitle(for: window, isCurrent: true),
+            workouts: [],
+            interval: window.current,
+            calendar: calendar
+        )
+        let previousSummary = makeSessionSummary(
+            title: windowTitle(for: window, isCurrent: false),
+            workouts: [],
+            interval: window.previous,
+            calendar: calendar
+        )
+        return Presentation(
+            currentWorkouts: [],
+            previousWorkouts: [],
+            currentSummary: currentSummary,
+            previousSummary: previousSummary,
+            dayComparisons: [],
+            typeComparisons: [],
+            maxDailySessionCount: 1,
+            chartPoints: [],
+            previousChartPoints: [],
+            currentChartPoints: [],
+            chartAccessibilityValue: chartAccessibilityValue(
+                metricTitle: metric.title,
+                previousPoints: [],
+                currentPoints: []
+            ),
+            topVolumeWorkouts: [],
+            topExercises: [],
+            sessionsHeroHeadline: heroHeadline(for: metric),
+            sessionsHeroNarrative: heroNarrative(
+                for: metric,
+                current: currentSummary,
+                previous: previousSummary
+            )
+        )
+    }
+
+    private static func makePresentation(
+        metric: ChangeMetric,
+        window: ChangeMetricWindow,
+        workouts: [Workout]
+    ) -> Presentation {
+        let calendar = Calendar.current
         let resolver = ExerciseIdentityResolver.current
-        let totalExercises = workouts.reduce(0) { partialResult, workout in
-            partialResult + ExerciseAggregation.exerciseCount(for: workout, resolver: resolver)
+        let currentTitle = windowTitle(for: window, isCurrent: true)
+        let previousTitle = windowTitle(for: window, isCurrent: false)
+        let currentRawWorkouts = workouts
+            .filter { window.current.contains($0.date) }
+            .sorted { $0.date > $1.date }
+        let previousRawWorkouts = workouts
+            .filter { window.previous.contains($0.date) }
+            .sorted { $0.date > $1.date }
+        let currentResult = makeWorkoutPresentations(from: currentRawWorkouts, resolver: resolver)
+        let previousResult = makeWorkoutPresentations(from: previousRawWorkouts, resolver: resolver)
+        let currentWorkouts = currentResult.workouts
+        let previousWorkouts = previousResult.workouts
+        let currentSummary = makeSessionSummary(
+            title: currentTitle,
+            workouts: currentWorkouts,
+            interval: window.current,
+            calendar: calendar
+        )
+        let previousSummary = makeSessionSummary(
+            title: previousTitle,
+            workouts: previousWorkouts,
+            interval: window.previous,
+            calendar: calendar
+        )
+        let dayComparisons = makeDayComparisons(
+            currentWorkouts: currentWorkouts,
+            previousWorkouts: previousWorkouts,
+            window: window,
+            calendar: calendar
+        )
+        let typeComparisons = makeTypeComparisons(
+            currentWorkouts: currentWorkouts,
+            previousWorkouts: previousWorkouts
+        )
+        let chartPoints = makeChartPoints(
+            metricTitle: metric.title,
+            currentWorkouts: currentWorkouts,
+            previousWorkouts: previousWorkouts,
+            calendar: calendar
+        )
+        let previousChartPoints = chartPoints.filter { $0.window == .previous }
+        let currentChartPoints = chartPoints.filter { $0.window == .current }
+        let maxDailySessionCount = max(
+            1,
+            dayComparisons.map { max($0.currentCount, $0.previousCount) }.max() ?? 1
+        )
+        let topVolumeWorkouts = currentWorkouts
+            .filter { $0.volume > 0 }
+            .sorted { lhs, rhs in
+                if lhs.volume != rhs.volume { return lhs.volume > rhs.volume }
+                return lhs.workout.date > rhs.workout.date
+            }
+            .prefix(8)
+            .map { $0 }
+        let topExercises = currentResult.exerciseVolumes
+            .map { ExerciseVolumePresentation(name: $0.key, volume: $0.value) }
+            .filter { $0.volume > 0 }
+            .sorted { lhs, rhs in
+                if lhs.volume != rhs.volume { return lhs.volume > rhs.volume }
+                return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+            }
+        let accessibilityValue = chartAccessibilityValue(
+            metricTitle: metric.title,
+            previousPoints: previousChartPoints,
+            currentPoints: currentChartPoints
+        )
+
+        return Presentation(
+            currentWorkouts: currentWorkouts,
+            previousWorkouts: previousWorkouts,
+            currentSummary: currentSummary,
+            previousSummary: previousSummary,
+            dayComparisons: dayComparisons,
+            typeComparisons: typeComparisons,
+            maxDailySessionCount: maxDailySessionCount,
+            chartPoints: chartPoints,
+            previousChartPoints: previousChartPoints,
+            currentChartPoints: currentChartPoints,
+            chartAccessibilityValue: accessibilityValue,
+            topVolumeWorkouts: topVolumeWorkouts,
+            topExercises: topExercises,
+            sessionsHeroHeadline: heroHeadline(for: metric),
+            sessionsHeroNarrative: heroNarrative(
+                for: metric,
+                current: currentSummary,
+                previous: previousSummary
+            )
+        )
+    }
+
+    private static func makeWorkoutPresentations(
+        from workouts: [Workout],
+        resolver: ExerciseIdentityResolver
+    ) -> (workouts: [SessionWorkoutPresentation], exerciseVolumes: [String: Double]) {
+        var exerciseVolumes: [String: Double] = [:]
+        let presentations = workouts.map { workout in
+            let exercises = ExerciseAggregation.aggregateExercises(in: workout, resolver: resolver)
+            for exercise in exercises where exercise.totalVolume > 0 {
+                exerciseVolumes[exercise.name, default: 0] += exercise.totalVolume
+            }
+
+            return SessionWorkoutPresentation(
+                workout: workout,
+                exercisePreview: exercisePreview(for: workout),
+                exerciseCount: exercises.count,
+                setCount: exercises.reduce(0) { $0 + $1.sets.count },
+                volume: exercises.reduce(0) { $0 + $1.totalVolume }
+            )
         }
-        let totalSets = ExerciseAggregation.totalSets(for: workouts, resolver: resolver)
-        let totalVolume = ExerciseAggregation.totalVolume(for: workouts, resolver: resolver)
+        return (presentations, exerciseVolumes)
+    }
+
+    private static func makeSessionSummary(
+        title: String,
+        workouts: [SessionWorkoutPresentation],
+        interval: DateInterval,
+        calendar: Calendar
+    ) -> SessionWindowSummary {
+        let activeDays = Set(workouts.map { calendar.startOfDay(for: $0.workout.date) }).count
+        let totalDurationMinutes = workouts.reduce(0) {
+            $0 + $1.workout.estimatedDurationMinutes(defaultMinutes: 0)
+        }
+        let totalExercises = workouts.reduce(0) { $0 + $1.exerciseCount }
+        let totalSets = workouts.reduce(0) { $0 + $1.setCount }
+        let totalVolume = workouts.reduce(0) { $0 + $1.volume }
         let workoutCount = max(workouts.count, 1)
-        let busiestDay = Dictionary(grouping: workouts, by: { calendar.startOfDay(for: $0.date) })
+        let busiestDay = Dictionary(grouping: workouts, by: { calendar.startOfDay(for: $0.workout.date) })
             .max { lhs, rhs in
                 if lhs.value.count != rhs.value.count { return lhs.value.count < rhs.value.count }
                 return lhs.key < rhs.key
             }
 
-        let topWorkout = Dictionary(grouping: workouts, by: \.name)
+        let topWorkout = Dictionary(grouping: workouts, by: { $0.workout.name })
             .map { (name: $0.key, count: $0.value.count) }
             .max(by: { lhs, rhs in
                 if lhs.count != rhs.count { return lhs.count < rhs.count }
@@ -898,7 +980,6 @@ struct ChangeMetricDetailView: View {
         return SessionWindowSummary(
             title: title,
             rangeLabel: intervalLabel(interval),
-            workouts: workouts,
             sessionCount: workouts.count,
             activeDays: activeDays,
             totalDurationMinutes: totalDurationMinutes,
@@ -914,29 +995,179 @@ struct ChangeMetricDetailView: View {
         )
     }
 
-    private func normalizedVolume(for workout: Workout) -> Double {
-        ExerciseAggregation.totalVolume(for: workout, resolver: ExerciseIdentityResolver.current)
+    private static func makeDayComparisons(
+        currentWorkouts: [SessionWorkoutPresentation],
+        previousWorkouts: [SessionWorkoutPresentation],
+        window: ChangeMetricWindow,
+        calendar: Calendar
+    ) -> [SessionDayComparison] {
+        let currentStart = calendar.startOfDay(for: window.current.start)
+        let previousStart = calendar.startOfDay(for: window.previous.start)
+        let dayCount = max(
+            dayCount(for: window.current, calendar: calendar),
+            dayCount(for: window.previous, calendar: calendar)
+        )
+        let currentCounts = dayCounts(for: currentWorkouts, calendar: calendar)
+        let previousCounts = dayCounts(for: previousWorkouts, calendar: calendar)
+
+        return (0..<dayCount).compactMap { offset in
+            guard let currentDay = calendar.date(byAdding: .day, value: offset, to: currentStart),
+                  let previousDay = calendar.date(byAdding: .day, value: offset, to: previousStart) else {
+                return nil
+            }
+            let label = dayCount <= 7
+                ? currentDay.formatted(.dateTime.weekday(.abbreviated))
+                : currentDay.formatted(.dateTime.month(.abbreviated).day())
+            return SessionDayComparison(
+                id: offset,
+                label: label,
+                dateLabel: "\(previousDay.formatted(.dateTime.month(.abbreviated).day())) vs \(currentDay.formatted(.dateTime.month(.abbreviated).day()))",
+                currentCount: currentCounts[currentDay, default: 0],
+                previousCount: previousCounts[previousDay, default: 0]
+            )
+        }
     }
 
-    private func normalizedSets(for workout: Workout) -> Int {
-        ExerciseAggregation.totalSets(for: workout, resolver: ExerciseIdentityResolver.current)
+    private static func makeTypeComparisons(
+        currentWorkouts: [SessionWorkoutPresentation],
+        previousWorkouts: [SessionWorkoutPresentation]
+    ) -> [SessionTypeComparison] {
+        let currentCounts = Dictionary(grouping: currentWorkouts, by: { $0.workout.name }).mapValues(\.count)
+        let previousCounts = Dictionary(grouping: previousWorkouts, by: { $0.workout.name }).mapValues(\.count)
+        let currentVolume = currentWorkouts.reduce(into: [String: Double]()) { result, item in
+            result[item.workout.name, default: 0] += item.volume
+        }
+        let names = Set(currentCounts.keys).union(previousCounts.keys)
+
+        return names.map { name in
+            SessionTypeComparison(
+                name: name,
+                currentCount: currentCounts[name, default: 0],
+                previousCount: previousCounts[name, default: 0],
+                currentVolume: currentVolume[name, default: 0]
+            )
+        }
+        .sorted { lhs, rhs in
+            if lhs.currentCount != rhs.currentCount { return lhs.currentCount > rhs.currentCount }
+            if lhs.previousCount != rhs.previousCount { return lhs.previousCount > rhs.previousCount }
+            return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+        }
     }
 
-    private func dayCount(for interval: DateInterval) -> Int {
+    private static func makeChartPoints(
+        metricTitle: String,
+        currentWorkouts: [SessionWorkoutPresentation],
+        previousWorkouts: [SessionWorkoutPresentation],
+        calendar: Calendar
+    ) -> [ChartPoint] {
+        switch metricTitle {
+        case "Sessions":
+            let buckets = (currentWorkouts.map { ($0, WindowBucket.current) }
+                + previousWorkouts.map { ($0, WindowBucket.previous) })
+                .reduce(into: [Date: (count: Int, window: WindowBucket)]()) { result, item in
+                    let day = calendar.startOfDay(for: item.0.workout.date)
+                    let existing = result[day] ?? (0, item.1)
+                    result[day] = (existing.count + 1, item.1)
+                }
+            return buckets.map { date, bucket in
+                ChartPoint(
+                    id: "\(bucket.window.rawValue)-day-\(date.timeIntervalSinceReferenceDate)",
+                    date: date,
+                    value: Double(bucket.count),
+                    window: bucket.window
+                )
+            }
+            .sorted { $0.date < $1.date }
+        case "Total Volume":
+            return (currentWorkouts.map { ($0, WindowBucket.current) }
+                + previousWorkouts.map { ($0, WindowBucket.previous) })
+                .filter { $0.0.volume > 0 }
+                .map { item, bucket in
+                    ChartPoint(
+                        id: "\(bucket.rawValue)-workout-\(item.workout.id.uuidString)",
+                        date: item.workout.date,
+                        value: item.volume,
+                        window: bucket
+                    )
+                }
+                .sorted { $0.date < $1.date }
+        default:
+            return []
+        }
+    }
+
+    private static func chartAccessibilityValue(
+        metricTitle: String,
+        previousPoints: [ChartPoint],
+        currentPoints: [ChartPoint]
+    ) -> String {
+        if metricTitle == "Sessions" {
+            let currentTotal = Int(currentPoints.reduce(0) { $0 + $1.value })
+            let previousTotal = Int(previousPoints.reduce(0) { $0 + $1.value })
+            return "Current window, \(currentTotal) sessions. Previous window, \(previousTotal) sessions."
+        }
+
+        let currentPeak = currentPoints.map(\.value).max() ?? 0
+        let previousPeak = previousPoints.map(\.value).max() ?? 0
+        return "Current peak \(axisLabel(currentPeak, metricTitle: metricTitle)). Previous peak \(axisLabel(previousPeak, metricTitle: metricTitle))."
+    }
+
+    private static func heroHeadline(for metric: ChangeMetric) -> String {
+        if metric.delta > 0 { return "Session load is up." }
+        if metric.delta < 0 { return "This week is lighter." }
+        return "Same count, different shape."
+    }
+
+    private static func heroNarrative(
+        for metric: ChangeMetric,
+        current: SessionWindowSummary,
+        previous: SessionWindowSummary
+    ) -> String {
+        let activeDayLabel = "day\(current.activeDays == 1 ? "" : "s")"
+        if current.sessionCount == 0 && previous.sessionCount == 0 {
+            return "There are no sessions in either comparison window yet, so this screen will populate as soon as you log a workout."
+        }
+        if metric.delta > 0 {
+            let delta = Int(metric.delta)
+            let sessionLabel = "session\(delta == 1 ? "" : "s")"
+            return "You trained on \(current.activeDays) \(activeDayLabel) and logged \(delta) more \(sessionLabel) than the previous window."
+        }
+        if metric.delta < 0 {
+            let decrease = abs(Int(metric.delta))
+            let sessionLabel = "session\(decrease == 1 ? "" : "s")"
+            return "You trained on \(current.activeDays) \(activeDayLabel), which is \(decrease) fewer \(sessionLabel) than the previous window."
+        }
+        if current.activeDays != previous.activeDays {
+            return "The session count held steady, but the training days shifted from \(previous.activeDays) to \(current.activeDays), so the rhythm changed."
+        }
+        return "Session count and active days stayed even, so the differences below come from timing, session mix, and per-session density."
+    }
+
+    private static func windowTitle(for window: ChangeMetricWindow, isCurrent: Bool) -> String {
+        if window.label.localizedCaseInsensitiveContains("week") {
+            return isCurrent ? "This Week" : "Last Week"
+        }
+        return isCurrent ? "Current Window" : "Previous Window"
+    }
+
+    private static func dayCount(for interval: DateInterval, calendar: Calendar) -> Int {
         let start = calendar.startOfDay(for: interval.start)
         let end = calendar.startOfDay(for: interval.end)
         let span = (calendar.dateComponents([.day], from: start, to: end).day ?? 0) + 1
         return max(span, 1)
     }
 
-    private func dayCounts(for workouts: [Workout]) -> [Date: Int] {
+    private static func dayCounts(
+        for workouts: [SessionWorkoutPresentation],
+        calendar: Calendar
+    ) -> [Date: Int] {
         workouts.reduce(into: [Date: Int]()) { result, workout in
-            let key = calendar.startOfDay(for: workout.date)
+            let key = calendar.startOfDay(for: workout.workout.date)
             result[key, default: 0] += 1
         }
     }
 
-    private func intervalLabel(_ interval: DateInterval) -> String {
+    private static func intervalLabel(_ interval: DateInterval) -> String {
         let start = interval.start.formatted(.dateTime.month(.abbreviated).day())
         let end = interval.end.formatted(.dateTime.month(.abbreviated).day())
         return "\(start) - \(end)"
@@ -978,7 +1209,7 @@ struct ChangeMetricDetailView: View {
         return "\(prefix)\(formatter(abs(delta))) from \(comparison)"
     }
 
-    private func exercisePreview(for workout: Workout) -> String {
+    private static func exercisePreview(for workout: Workout) -> String {
         let names = workout.exercises.map(\.name)
         guard !names.isEmpty else { return "No exercises logged" }
         let visible = Array(names.prefix(3))
@@ -1306,6 +1537,9 @@ private struct SessionMixRow: View {
 private struct SessionWorkoutCard: View {
     let workout: Workout
     let exercisePreview: String
+    let exerciseCount: Int
+    let setCount: Int
+    let volume: Double
     let gymLabel: String?
     let gymStyle: GymBadgeStyle
     let tint: Color
@@ -1333,17 +1567,15 @@ private struct SessionWorkoutCard: View {
             HStack(spacing: Theme.Spacing.sm) {
                 WorkoutMetricPill(label: workout.duration, icon: "clock")
                 WorkoutMetricPill(
-                    label: "\(ExerciseAggregation.exerciseCount(for: workout, resolver: ExerciseIdentityResolver.current)) ex",
+                    label: "\(exerciseCount) ex",
                     icon: "figure.strengthtraining.traditional"
                 )
                 WorkoutMetricPill(
-                    label: "\(ExerciseAggregation.totalSets(for: workout, resolver: ExerciseIdentityResolver.current)) sets",
+                    label: "\(setCount) sets",
                     icon: "number.square"
                 )
                 WorkoutMetricPill(
-                    label: SharedFormatters.volumeCompact(
-                        ExerciseAggregation.totalVolume(for: workout, resolver: ExerciseIdentityResolver.current)
-                    ),
+                    label: SharedFormatters.volumeCompact(volume),
                     icon: "scalemass"
                 )
             }

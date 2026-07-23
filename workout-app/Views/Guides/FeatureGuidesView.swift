@@ -36,6 +36,7 @@ struct FeatureGuidesView: View {
                     replayOnboardingSection
                 }
                 .padding(Theme.Spacing.lg)
+                .contentColumn()
             }
             .scrollIndicators(.hidden)
         }

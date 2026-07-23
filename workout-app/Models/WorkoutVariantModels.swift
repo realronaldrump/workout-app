@@ -165,7 +165,7 @@ struct WorkoutVariantLibrary: Hashable {
     let recentReviews: [WorkoutVariantWorkoutReview]
     let reviewsByWorkoutId: [UUID: WorkoutVariantWorkoutReview]
 
-    static let empty = WorkoutVariantLibrary(
+    nonisolated static let empty = WorkoutVariantLibrary(
         standoutPatterns: [],
         recentReviews: [],
         reviewsByWorkoutId: [:]

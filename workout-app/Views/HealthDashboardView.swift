@@ -95,6 +95,7 @@ struct HealthDashboardView: View {
                 }
                 .padding(.vertical, Theme.Spacing.xxl)
                 .padding(.horizontal, Theme.Spacing.lg)
+                .contentColumn()
             }
         }
         .navigationTitle("Workout Health")
@@ -157,7 +158,7 @@ struct HealthDashboardView: View {
         refreshDerivedData()
     }
 
-    private func scheduleDerivedDataRefresh(debounceNs: UInt64 = 120_000_000) {
+    private func scheduleDerivedDataRefresh(debounceNs: UInt64 = 350_000_000) {
         derivedRefreshTask?.cancel()
         derivedRefreshTask = Task { @MainActor in
             try? await Task.sleep(nanoseconds: debounceNs)
@@ -1252,6 +1253,7 @@ private struct HealthMetricDetailScreen: View {
     let detail: HealthMetricDetail
     let rangeLabel: String
     let earliestDate: Date?
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var selectedSeriesLabel: String
 
@@ -1270,6 +1272,12 @@ private struct HealthMetricDetailScreen: View {
         detail.comparisonSeries.first(where: { $0.label == selectedSeriesLabel })
     }
 
+    private var statColumns: [GridItem] {
+        dynamicTypeSize.isAccessibilitySize
+            ? [GridItem(.flexible())]
+            : [GridItem(.flexible()), GridItem(.flexible())]
+    }
+
     var body: some View {
         ZStack {
             AdaptiveBackground()
@@ -1279,12 +1287,11 @@ private struct HealthMetricDetailScreen: View {
                     headerSection
 
                     if detail.series.count > 1 {
-                        Picker("Series", selection: $selectedSeriesLabel) {
-                            ForEach(detail.series) { series in
-                                Text(series.label).tag(series.label)
-                            }
-                        }
-                        .pickerStyle(.segmented)
+                        AppSegmentedPicker(
+                            title: "Series",
+                            selection: $selectedSeriesLabel,
+                            options: detail.series.map { ($0.label, $0.label) }
+                        )
                     }
 
                     if let series = activeSeries {
@@ -1299,6 +1306,7 @@ private struct HealthMetricDetailScreen: View {
                 }
                 .padding(.vertical, Theme.Spacing.xxl)
                 .padding(.horizontal, Theme.Spacing.lg)
+                .contentColumn()
             }
         }
         .navigationTitle(detail.kind.title)
@@ -1362,7 +1370,7 @@ private struct HealthMetricDetailScreen: View {
 	                .font(Theme.Typography.headline)
                 .foregroundStyle(Theme.Colors.textPrimary)
 
-	            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: Theme.Spacing.md) {
+	            LazyVGrid(columns: statColumns, spacing: Theme.Spacing.md) {
 	                MetricStatCard(title: "Average", value: avg.map { formatValue($0, unit: series.unit) } ?? "--")
 	                MetricStatCard(
 	                    title: "Min",
@@ -1449,7 +1457,7 @@ private struct HealthMetricDetailScreen: View {
         let previousValue = previousAvg.reduce(0, +) / Double(previousAvg.count)
         let diff = currentValue - previousValue
         if abs(diff) < 0.01 { return "No change" }
-        let sign = diff >= 0 ? "+" : ""
+        let sign = diff >= 0 ? "+" : "−"
         return "\(sign)\(formatValue(abs(diff), unit: currentSeries.unit))"
     }
 	}

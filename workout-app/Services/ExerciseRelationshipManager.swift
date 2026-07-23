@@ -608,7 +608,10 @@ nonisolated enum ExerciseAggregation {
 final class ExerciseRelationshipManager: ObservableObject {
     static let shared = ExerciseRelationshipManager()
 
-    @Published private(set) var relationships: [String: ExerciseRelationship] = [:]
+    @Published private(set) var relationships: [String: ExerciseRelationship] = [:] {
+        didSet { revision &+= 1 }
+    }
+    private(set) var revision: UInt64 = 0
 
     private let userDefaults: UserDefaults
     private let storageKey = "ExerciseRelationships"

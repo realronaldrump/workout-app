@@ -34,7 +34,7 @@ enum AppTab: String, CaseIterable, Hashable {
     case today
     case health
     case history
-    case profile
+    case more
 }
 
 private struct HistoryTabView: View {
@@ -67,9 +67,12 @@ private struct HealthTabRoot: View {
 
 private struct ActiveSessionInset: View {
     @ObservedObject var sessionManager: WorkoutSessionManager
+    let isVisible: Bool
 
     var body: some View {
-        if sessionManager.activeSession != nil && !sessionManager.isPresentingSessionUI {
+        if isVisible,
+           sessionManager.activeSession != nil,
+           !sessionManager.isPresentingSessionUI {
             ActiveSessionBar()
                 .environmentObject(sessionManager)
                 .padding(.horizontal, Theme.Spacing.lg)
@@ -130,9 +133,7 @@ struct MainTabView: View {
     @ObservedObject private var relationshipManager = ExerciseRelationshipManager.shared
     @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
     @State private var showingOnboarding = false
-    @State private var pendingOnboarding = false
-    @State private var selectedTab: AppTab = .today
-    @State private var showSplash = true
+    @State private var selectedTab: AppTab
     @State private var hasCompletedInitialLoad = false
     @State private var hasStartedLaunchFlow = false
     @State private var hasBootstrappedStores = false
@@ -141,59 +142,70 @@ struct MainTabView: View {
     @State private var variantAnalysisTask: Task<Void, Never>?
     @State private var similarityAnalysisTask: Task<Void, Never>?
     @State private var sleepSummaryRefreshTask: Task<Void, Never>?
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
     private var dataManager: WorkoutDataManager { services.dataManager }
     private var annotationsManager: WorkoutAnnotationsManager { services.annotationsManager }
     private var intentionalBreaksManager: IntentionalBreaksManager { services.intentionalBreaksManager }
     private var gymProfilesManager: GymProfilesManager { services.gymProfilesManager }
     private var insightsEngine: InsightsEngine { services.insightsEngine }
 
+    init(sessionManager: WorkoutSessionManager, healthManager: HealthKitManager) {
+        self.sessionManager = sessionManager
+        self.healthManager = healthManager
+
+#if DEBUG
+        let requestedTab = ProcessInfo.processInfo.environment["WORKOUT_APP_INITIAL_TAB"]
+            .flatMap(AppTab.init(rawValue:))
+        _selectedTab = State(initialValue: requestedTab ?? .today)
+#else
+        _selectedTab = State(initialValue: .today)
+#endif
+    }
+
     var body: some View {
         ZStack {
             TabView(selection: $selectedTab) {
-            NavigationStack {
-                HomeView(
-                    dataManager: dataManager,
-                    iCloudManager: iCloudManager,
-                    annotationsManager: annotationsManager,
-                    gymProfilesManager: gymProfilesManager,
-                    selectedTab: $selectedTab
+                NavigationStack {
+                    HomeView(
+                        dataManager: dataManager,
+                        iCloudManager: iCloudManager,
+                        annotationsManager: annotationsManager,
+                        gymProfilesManager: gymProfilesManager,
+                        selectedTab: $selectedTab
+                    )
+                }
+                .tabItem {
+                    Label("Today", systemImage: "chart.bar.fill")
+                }
+                .tag(AppTab.today)
+
+                HealthTabRoot(
+                    healthManager: healthManager,
+                    dataManager: dataManager
                 )
-            }
-            .tabItem {
-                Label("Today", systemImage: "chart.bar.fill")
-            }
-            .tag(AppTab.today)
+                .tabItem {
+                    Label("Health", systemImage: "heart.fill")
+                }
+                .tag(AppTab.health)
 
-            HealthTabRoot(
-                healthManager: healthManager,
-                dataManager: dataManager
-            )
-            .tabItem {
-                Label("Health", systemImage: "heart.fill")
-            }
-            .tag(AppTab.health)
+                NavigationStack {
+                    HistoryTabView(dataManager: dataManager)
+                }
+                .tabItem {
+                    Label("History", systemImage: "clock.fill")
+                }
+                .tag(AppTab.history)
 
-            NavigationStack {
-                HistoryTabView(dataManager: dataManager)
-            }
-            .tabItem {
-                Label("History", systemImage: "clock.fill")
-            }
-            .tag(AppTab.history)
-
-            NavigationStack {
-                ProfileView(
-                    dataManager: dataManager,
-                    iCloudManager: iCloudManager,
-                    selectedTab: $selectedTab
-                )
-            }
-            .tabItem {
-                Label("Profile", systemImage: "person.crop.circle")
-            }
-            .tag(AppTab.profile)
+                NavigationStack {
+                    ProfileView(
+                        dataManager: dataManager,
+                        iCloudManager: iCloudManager,
+                        selectedTab: $selectedTab
+                    )
+                }
+                .tabItem {
+                    Label("More", systemImage: "ellipsis.circle.fill")
+                }
+                .tag(AppTab.more)
             }
         }
         .environmentObject(dataManager)
@@ -207,14 +219,6 @@ struct MainTabView: View {
         .environmentObject(similarityEngine)
         .tint(Theme.Colors.accent)
         .analyticsScreen("MainTabs")
-        .overlay {
-            if showSplash {
-                InAppSplashView(statusText: "Stronger than Strong")
-                    .transition(.opacity)
-                    .zIndex(10)
-                    .contentShape(Rectangle())
-            }
-        }
         .overlay {
             if migrationManager.blocksLaunch {
                 LegacyMigrationWizardView(
@@ -240,7 +244,6 @@ struct MainTabView: View {
             )
         }
         .onAppear {
-            beginSplashIfNeeded()
             refreshOnboardingState()
             startLaunchFlowIfNeeded()
             scheduleVariantAnalysis()
@@ -252,7 +255,6 @@ struct MainTabView: View {
             )
         }
         .onChange(of: selectedTab) { _, newValue in
-            Haptics.toggle()
             AppAnalytics.shared.track(
                 AnalyticsSignal.tabSelected,
                 payload: ["Navigation.tab": newValue.rawValue]
@@ -305,11 +307,6 @@ struct MainTabView: View {
             .presentationDragIndicator(.visible)
             .presentationCornerRadius(Theme.CornerRadius.xlarge)
         }
-        .onChange(of: showSplash) { _, isShowing in
-            if !isShowing {
-                presentChangelogIfReady()
-            }
-        }
         .onChange(of: showingOnboarding) { _, isShowing in
             if !isShowing {
                 presentChangelogIfReady()
@@ -326,7 +323,10 @@ struct MainTabView: View {
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            ActiveSessionInset(sessionManager: sessionManager)
+            ActiveSessionInset(
+                sessionManager: sessionManager,
+                isVisible: selectedTab != .today
+            )
         }
     }
 
@@ -347,38 +347,7 @@ struct MainTabView: View {
         if shouldShow {
             changelogStore.markCurrentVersionSeen()
         }
-        if showSplash {
-            pendingOnboarding = shouldShow
-        } else {
-            showingOnboarding = shouldShow
-        }
-    }
-
-    private func beginSplashIfNeeded() {
-        guard showSplash else { return }
-
-        Task { @MainActor in
-            // Make the brand moment feel intentional: allow the lockup to animate in,
-            // then hold briefly before dismissing.
-            let minVisibleNs: UInt64 = reduceMotion ? 650_000_000 : 1_200_000_000
-            let fadeOutSeconds: Double = reduceMotion ? 0.2 : 0.45
-
-            try? await Task.sleep(nanoseconds: minVisibleNs)
-
-            // Subtle "closing" feedback to mark the transition into the app.
-            Haptics.impact(.soft)
-
-            withAnimation(reduceMotion ? .easeOut(duration: 0.2) : .easeInOut(duration: fadeOutSeconds)) {
-                showSplash = false
-            }
-
-            if pendingOnboarding {
-                pendingOnboarding = false
-                // Present onboarding only after the splash fades out.
-                try? await Task.sleep(nanoseconds: UInt64(fadeOutSeconds * 1_000_000_000))
-                showingOnboarding = true
-            }
-        }
+        showingOnboarding = shouldShow
     }
 
     private func startLaunchFlowIfNeeded() {
@@ -436,7 +405,7 @@ struct MainTabView: View {
 
     private func presentChangelogIfReady() {
         guard hasCompletedInitialLoad else { return }
-        guard !showSplash, !pendingOnboarding, !showingOnboarding else { return }
+        guard !showingOnboarding else { return }
         guard !migrationManager.blocksLaunch else { return }
         guard !sessionManager.isPresentingSessionUI else { return }
         guard changelogPresentation == nil else { return }

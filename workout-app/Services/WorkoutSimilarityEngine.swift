@@ -52,7 +52,7 @@ final class WorkoutSimilarityEngine: ObservableObject {
     }
 }
 
-private enum WorkoutSimilarityAnalyzer {
+private nonisolated enum WorkoutSimilarityAnalyzer {
     private struct CanonicalExercise: Hashable {
         let displayName: String
         let normalizedName: String

@@ -3,6 +3,7 @@ import SwiftUI
 // swiftlint:disable type_body_length file_length
 
 struct HomeView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject var dataManager: WorkoutDataManager
     @ObservedObject var iCloudManager: iCloudDocumentManager
     let annotationsManager: WorkoutAnnotationsManager
@@ -84,10 +85,7 @@ struct HomeView: View {
                         }
                         .padding(.horizontal, Theme.Spacing.lg)
                     } else if dataManager.workouts.isEmpty {
-                        HomeEmptyState(
-                            onStart: { startQuickSession(exercise: nil) },
-                            onImport: { showingImportWizard = true }
-                        )
+                        HomeEmptyState()
                         .padding(.horizontal, Theme.Spacing.lg)
                     } else {
                         // Pre-workout briefing with recovery signals and muscle recency cues.
@@ -117,39 +115,18 @@ struct HomeView: View {
                         weeklySummarySection
                             .padding(.horizontal, Theme.Spacing.lg)
 
-                        SectionDivider()
-                            .padding(.horizontal, Theme.Spacing.lg)
-
-                        consistencySection
-                            .padding(.horizontal, Theme.Spacing.lg)
-
-                        SectionDivider()
-                            .padding(.horizontal, Theme.Spacing.lg)
-
-                        // Change metrics — always visible (not collapsed)
-                        changeSection
-                            .padding(.horizontal, Theme.Spacing.lg)
-
-                        // Highlights — always visible (not collapsed)
+                        // Today surfaces one useful signal. Deeper analysis remains one tap
+                        // away in Explore instead of turning the home screen into a report.
                         if !cachedHomeHighlights.isEmpty {
                             SectionDivider()
                                 .padding(.horizontal, Theme.Spacing.lg)
 
-                            HighlightsSectionView(title: "Highlights", items: cachedHomeHighlights)
+                            HighlightsSectionView(
+                                title: "Latest insight",
+                                items: Array(cachedHomeHighlights.prefix(1))
+                            )
                                 .padding(.horizontal, Theme.Spacing.lg)
                         }
-
-                        SectionDivider()
-                            .padding(.horizontal, Theme.Spacing.lg)
-
-                        // Data Insights (frequency snapshots)
-                        DataInsightCards(
-                            frequencyInsightsProvider: { window in
-                                recoveryCoverageEngine.frequencyInsights(for: window)
-                            },
-                            hasHistoricalFrequencyData: recoveryCoverageEngine.hasHistoricalFrequencyData
-                        )
-                        .padding(.horizontal, Theme.Spacing.lg)
 
                         SectionDivider()
                             .padding(.horizontal, Theme.Spacing.lg)
@@ -170,7 +147,8 @@ struct HomeView: View {
                 .frame(maxWidth: .infinity, alignment: .center)
             }
         }
-        .navigationBarHidden(true)
+        .navigationTitle("Today")
+        .navigationBarTitleDisplayMode(.large)
         .analyticsScreen("Home")
         .navigationDestination(item: $selectedExercise) { selection in
             ExerciseDetailView(
@@ -280,34 +258,48 @@ struct HomeView: View {
 
     private var headerSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .center, spacing: Theme.Spacing.md) {
                     Text(greetingText)
                         .font(Theme.Typography.subheadline)
                         .foregroundColor(Theme.Colors.textSecondary)
-                    Text("Today")
-                        .font(Theme.Typography.screenTitle)
-                        .foregroundColor(Theme.Colors.textPrimary)
+
+                    Spacer(minLength: Theme.Spacing.md)
+
+                    healthStatusButton
                 }
 
-                Spacer()
+                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                    Text(greetingText)
+                        .font(Theme.Typography.subheadline)
+                        .foregroundColor(Theme.Colors.textSecondary)
 
-                VStack(alignment: .trailing, spacing: Theme.Spacing.sm) {
-                    SyncStatusPill(text: syncStatusText, isActive: isHealthFresh)
-                    Text(Date().formatted(date: .abbreviated, time: .shortened))
-                        .font(Theme.Typography.caption)
-                        .foregroundColor(Theme.Colors.textTertiary)
+                    healthStatusButton
                 }
             }
 
-            if !headerSubtitle.isEmpty {
-                Text(headerSubtitle)
-                    .font(Theme.Typography.microcopy)
-                    .foregroundColor(Theme.Colors.textTertiary)
+            TimelineView(.periodic(from: .now, by: 60)) { context in
+                Text(context.date.formatted(date: .complete, time: .omitted))
+                    .font(Theme.Typography.caption)
+                    .foregroundColor(Theme.Colors.textMuted)
             }
+
+            Text(headerSubtitle)
+                .font(Theme.Typography.microcopy)
+                .foregroundColor(Theme.Colors.textMuted)
         }
         .padding(.horizontal, Theme.Spacing.lg)
         .animateOnAppear(delay: 0)
+    }
+
+    private var healthStatusButton: some View {
+        Button {
+            selectedTab = .health
+        } label: {
+            SyncStatusPill(text: syncStatusText, isActive: isHealthFresh)
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Opens Health")
     }
 
     private var greetingText: String {
@@ -369,20 +361,24 @@ struct HomeView: View {
                     .foregroundStyle(.white)
                     .padding(.horizontal, Theme.Spacing.md)
                     .padding(.vertical, Theme.Spacing.xs)
+                    .frame(minHeight: Theme.Layout.minimumTapTarget)
                     .background(Theme.Colors.accent)
                     .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.medium))
             }
             .buttonStyle(.plain)
 
             Button {
-                withAnimation(Theme.Animation.spring) {
+                withAnimation(reduceMotion ? nil : Theme.Animation.spring) {
                     dismissedUntaggedCount = untaggedExerciseNames.count
                 }
             } label: {
                 Image(systemName: "xmark")
                     .font(Theme.Typography.caption2Bold)
                     .foregroundStyle(Theme.Colors.textTertiary)
-                    .frame(width: 28, height: 28)
+                    .frame(
+                        minWidth: Theme.Layout.minimumTapTarget,
+                        minHeight: Theme.Layout.minimumTapTarget
+                    )
             }
             .buttonStyle(.plain)
         }
@@ -402,18 +398,28 @@ struct HomeView: View {
             Button(
                 action: {
                     Haptics.selection()
-                    startQuickSession(exercise: nil)
+                    if sessionManager.activeSession != nil {
+                        sessionManager.isPresentingSessionUI = true
+                    } else {
+                        startQuickSession(exercise: nil)
+                    }
                 },
                 label: {
-                    HStack(spacing: Theme.Spacing.sm) {
-                        Image(systemName: "bolt.fill")
-                            .font(Theme.Typography.title4Bold)
-                        Text("Start a Session")
-                            .font(Theme.Typography.headline)
-                        Spacer()
-                        Image(systemName: "arrow.right")
-                            .font(Theme.Typography.subheadlineBold)
-                            .foregroundStyle(Color.white.opacity(0.7))
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: Theme.Spacing.sm) {
+                            primarySessionActionLabel
+                            Spacer(minLength: Theme.Spacing.sm)
+                            Image(systemName: "arrow.right")
+                                .font(Theme.Typography.subheadlineBold)
+                                .foregroundStyle(Color.white.opacity(0.8))
+                        }
+
+                        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                            primarySessionActionLabel
+                            Image(systemName: "arrow.right")
+                                .font(Theme.Typography.subheadlineBold)
+                                .foregroundStyle(Color.white.opacity(0.8))
+                        }
                     }
                     .foregroundStyle(.white)
                     .padding(.horizontal, Theme.Spacing.xl)
@@ -422,27 +428,21 @@ struct HomeView: View {
                     .background(Theme.accentGradient)
                     .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge))
                     .shadow(
-                        color: Theme.Colors.accent.opacity(0.3),
-                        radius: 12,
+                        color: Theme.Colors.accent.opacity(0.22),
+                        radius: 10,
                         x: 0,
-                        y: 6
-                    )
-                    .shadow(
-                        color: Theme.Colors.accent.opacity(0.15),
-                        radius: 24,
-                        x: 0,
-                        y: 12
+                        y: 5
                     )
                 }
             )
             .buttonStyle(.plain)
             .padding(.horizontal, Theme.Spacing.lg)
-            .accessibilityLabel("Start a Session")
-            .accessibilityHint("Begin a new workout session")
+            .accessibilityLabel(primarySessionActionTitle)
+            .accessibilityHint(sessionManager.activeSession == nil ? "Begins a workout session" : "Returns to the active workout")
             .animateOnAppear(delay: 0.05)
 
             // Repeat last workout
-            if let lastWorkout = dataManager.workouts.first {
+            if sessionManager.activeSession == nil, let lastWorkout = dataManager.workouts.first {
                 Button(
                     action: {
                         Haptics.selection()
@@ -488,17 +488,30 @@ struct HomeView: View {
                 .animateOnAppear(delay: 0.1)
             }
 
-            // Secondary chips
-            HStack(spacing: Theme.Spacing.md) {
-                SecondaryChip(title: "Import", icon: "arrow.down.to.line") {
-                    showingImportWizard = true
-                }
-                SecondaryChip(title: "Health", icon: "heart.fill") {
-                    selectedTab = .health
-                }
+            // Health already has a persistent status entry in the header and its own tab.
+            // Keep this row focused on the only distinct secondary action.
+            SecondaryChip(title: "Import workout history", icon: "arrow.down.to.line") {
+                showingImportWizard = true
             }
             .padding(.horizontal, Theme.Spacing.lg)
             .animateOnAppear(delay: 0.15)
+        }
+    }
+
+    private var primarySessionActionTitle: String {
+        if let activeSession = sessionManager.activeSession {
+            return "Resume \(activeSession.name)"
+        }
+        return "Start a Session"
+    }
+
+    private var primarySessionActionLabel: some View {
+        HStack(spacing: Theme.Spacing.sm) {
+            Image(systemName: sessionManager.activeSession == nil ? "bolt.fill" : "play.fill")
+                .font(Theme.Typography.title4Bold)
+            Text(primarySessionActionTitle)
+                .font(Theme.Typography.headline)
+                .lineLimit(2)
         }
     }
 
@@ -532,33 +545,49 @@ struct HomeView: View {
                 }
             }
 
-            if let selectedBucket {
-                TabView(selection: selectedWeekSelection) {
-                    ForEach(buckets) { bucket in
-                        WeeklySummaryCarouselCard(
-                            bucket: bucket,
-                            onMetricTap: { kind in
-                                selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: kind, scrollTarget: nil)
-                            },
-                            onWorkoutTap: { workout in
-                                selectedWorkout = workout
-                            }
-                        )
-                        .tag(Optional(bucket.weekStart))
+            if selectedBucket != nil {
+                ScrollView(.horizontal) {
+                    LazyHStack(alignment: .top, spacing: Theme.Spacing.md) {
+                        ForEach(buckets) { bucket in
+                            WeeklySummaryCarouselCard(
+                                bucket: bucket,
+                                onMetricTap: { kind in
+                                    selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: kind, scrollTarget: nil)
+                                },
+                                onWorkoutTap: { workout in
+                                    selectedWorkout = workout
+                                }
+                            )
+                            .containerRelativeFrame(.horizontal)
+                            .id(bucket.weekStart)
+                        }
                     }
+                    .scrollTargetLayout()
                 }
-                .tabViewStyle(.page(indexDisplayMode: .never))
-                .frame(height: weeklySummaryCardHeight(for: selectedBucket))
-                .swipeHint()
-                .animation(Theme.Animation.gentleSpring, value: selectedWeekBucketStart)
+                .scrollIndicators(.hidden)
+                .scrollTargetBehavior(.paging)
+                .scrollPosition(id: selectedWeekSelection)
+                .animation(
+                    reduceMotion ? nil : Theme.Animation.gentleSpring,
+                    value: selectedWeekBucketStart
+                )
+                .accessibilityLabel("Weekly summaries")
 
                 if buckets.count > 1 {
                     HStack(spacing: Theme.Spacing.sm) {
                         ForEach(visibleWeekIndicatorBuckets(from: buckets)) { bucket in
-                            Capsule()
-                                .fill(isSelectedWeekBucket(bucket) ? Theme.Colors.accent : Theme.Colors.border.opacity(0.5))
-                                .frame(width: isSelectedWeekBucket(bucket) ? 20 : 8, height: 8)
-                                .animation(Theme.Animation.spring, value: selectedWeekBucketStart)
+                            Button {
+                                selectedWeekBucketStart = bucket.weekStart
+                            } label: {
+                                Capsule()
+                                    .fill(isSelectedWeekBucket(bucket) ? Theme.Colors.accent : Theme.Colors.border)
+                                    .frame(width: isSelectedWeekBucket(bucket) ? 20 : 8, height: 8)
+                                    .frame(minWidth: Theme.Layout.minimumTapTarget, minHeight: Theme.Layout.minimumTapTarget)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(bucket.rangeLabel)
+                            .accessibilityValue(isSelectedWeekBucket(bucket) ? "Selected" : "")
                         }
                     }
                     .frame(maxWidth: .infinity)
@@ -707,12 +736,17 @@ struct HomeView: View {
                 }
                 .buttonStyle(PlainButtonStyle())
 
-                NavigationLink {
-                    WorkoutHistoryView(workouts: dataManager.workouts, showsBackButton: true)
+                Button {
+                    showingConsistencyDetail = true
                 } label: {
-                    ExploreRow(title: "History", subtitle: "Past sessions", icon: "clock.fill", tint: Theme.Colors.accent)
+                    ExploreRow(
+                        title: "Consistency",
+                        subtitle: "Rhythm + streaks",
+                        icon: "calendar.badge.checkmark",
+                        tint: Theme.Colors.accent
+                    )
                 }
-                .buttonStyle(PlainButtonStyle())
+                .buttonStyle(.plain)
 
                 NavigationLink {
                     MuscleRecencyView(dataManager: dataManager)
@@ -751,16 +785,16 @@ struct HomeView: View {
     }
 
     private var syncStatusText: String {
-        if healthManager.isAutoSyncing { return "syncing" }
+        if healthManager.isAutoSyncing { return "Syncing Health" }
         switch healthManager.authorizationStatus {
         case .authorized:
             if let lastSync = healthManager.lastSyncDate {
-                return "sync \(lastSync.formatted(.relative(presentation: .named)))"
+                return "Health updated \(lastSync.formatted(.relative(presentation: .named)))"
             }
-            return "sync ready"
-        case .notDetermined: return "health off"
-        case .denied: return "health denied"
-        case .unavailable: return "health n/a"
+            return "Health connected"
+        case .notDetermined: return "Connect Health"
+        case .denied: return "Review Health access"
+        case .unavailable: return "Health unavailable"
         }
     }
 
@@ -904,21 +938,11 @@ struct HomeView: View {
 
     private var homeDerivedFingerprint: Int {
         var hasher = Hasher()
-        hasher.combine(dataManager.workouts)
-        hasher.combine(intentionalBreaksManager.savedBreaks)
+        hasher.combine(dataManager.datasetRevision)
+        hasher.combine(intentionalBreaksManager.revision)
+        hasher.combine(metadataManager.revision)
+        hasher.combine(relationshipManager.revision)
         hasher.combine(Calendar.current.startOfDay(for: Date()))
-
-        for key in metadataManager.muscleTagOverrides.keys.sorted() {
-            hasher.combine(key)
-            hasher.combine(metadataManager.muscleTagOverrides[key] ?? [])
-        }
-
-        for relationship in relationshipManager.relationships.values.sorted(by: {
-            $0.exerciseName.localizedCaseInsensitiveCompare($1.exerciseName) == .orderedAscending
-        }) {
-            hasher.combine(relationship)
-        }
-
         return hasher.finalize()
     }
 
@@ -1139,17 +1163,6 @@ struct HomeView: View {
             return Calendar.current.isDate(bucket.weekStart, inSameDayAs: cachedWeekBuckets.first?.weekStart ?? bucket.weekStart)
         }
         return Calendar.current.isDate(bucket.weekStart, inSameDayAs: selectedWeekBucketStart)
-    }
-
-    private func weeklySummaryCardHeight(for bucket: HomeWeekBucket) -> CGFloat {
-        let visibleSessionCount = min(bucket.workouts.count, 3)
-        let populatedBaseHeight: CGFloat = 194
-        let emptyWeekHeight: CGFloat = 230
-        let sessionCardHeight: CGFloat = 76
-        let baseHeight: CGFloat = bucket.workouts.isEmpty
-            ? emptyWeekHeight
-            : populatedBaseHeight + (CGFloat(visibleSessionCount) * sessionCardHeight)
-        return min(baseHeight, 422)
     }
 
     private func visibleWeekIndicatorBuckets(from buckets: [HomeWeekBucket]) -> [HomeWeekBucket] {

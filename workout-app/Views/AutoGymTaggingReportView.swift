@@ -44,16 +44,16 @@ struct AutoGymTaggingItem: Identifiable {
 struct AutoGymTaggingReportView: View {
     @Environment(\.dismiss) private var dismiss
     let report: AutoGymTaggingReport
+    private let skippedItems: [AutoGymTaggingItem]
+    private let assignedItems: [AutoGymTaggingItem]
 
-    private var skippedItems: [AutoGymTaggingItem] {
-        report.items.filter {
+    init(report: AutoGymTaggingReport) {
+        self.report = report
+        skippedItems = report.items.filter {
             if case .skipped = $0.status { return true }
             return false
         }
-    }
-
-    private var assignedItems: [AutoGymTaggingItem] {
-        report.items.filter {
+        assignedItems = report.items.filter {
             if case .assigned = $0.status { return true }
             return false
         }
@@ -65,7 +65,7 @@ struct AutoGymTaggingReportView: View {
                 AdaptiveBackground()
 
                 ScrollView {
-                    VStack(spacing: Theme.Spacing.lg) {
+                    LazyVStack(spacing: Theme.Spacing.lg) {
                         summaryCard
 
                         if !skippedItems.isEmpty {
@@ -77,6 +77,7 @@ struct AutoGymTaggingReportView: View {
                         }
                     }
                     .padding(Theme.Spacing.xl)
+                    .contentColumn()
                 }
             }
             .navigationTitle("Auto Tag Results")
@@ -135,7 +136,7 @@ struct AutoGymTaggingReportView: View {
                 .font(Theme.Typography.title3)
                 .foregroundStyle(Theme.Colors.textPrimary)
 
-            VStack(spacing: Theme.Spacing.md) {
+            LazyVStack(spacing: Theme.Spacing.md) {
                 ForEach(items) { item in
                     row(for: item)
                 }

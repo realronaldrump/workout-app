@@ -22,7 +22,7 @@ struct VolumeProgressChart: View {
                     .foregroundColor(Theme.Colors.textPrimary)
                     .tracking(1.0)
 
-                BrutalistSegmentedPicker(
+                AppSegmentedPicker(
                     title: "Metric",
                     selection: $selectedMetric,
                     options: VolumeMetric.allCases.map { ($0.rawValue, $0) }

@@ -132,7 +132,6 @@ struct WorkoutDetailView: View {
     @State private var derivedRefreshTask: Task<Void, Never>?
     @State private var pendingRepeatWorkout: Workout?
     @AppStorage("weightIncrement") private var weightIncrement = 2.5
-    @Environment(\.dismiss) private var dismiss
 
     private var resolvedWorkout: Workout {
         cachedResolvedWorkout ?? dataManager.workouts.first(where: { $0.id == workout.id }) ?? workout
@@ -166,7 +165,7 @@ struct WorkoutDetailView: View {
             AdaptiveBackground()
 
             ScrollView {
-                VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
+                LazyVStack(alignment: .leading, spacing: Theme.Spacing.xl) {
                     workoutHeader(workout)
 
                     summaryCard(for: workout)
@@ -214,11 +213,28 @@ struct WorkoutDetailView: View {
                     }
                 }
                 .padding(Theme.Spacing.xl)
+                .contentColumn()
             }
+            .scrollDismissesKeyboard(.interactively)
         }
-        .toolbar(.hidden, for: .navigationBar)
-        .safeAreaInset(edge: .top, spacing: 0) {
-            workoutTopBar
+        .navigationTitle("Workout Details")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                if isLoggedWorkout {
+                    Button("Edit", systemImage: "pencil") {
+                        showingEdit = true
+                        Haptics.selection()
+                    }
+                    .accessibilityHint("Edit this workout")
+                }
+
+                Button("Repeat", systemImage: "arrow.counterclockwise") {
+                    repeatThisWorkout()
+                    Haptics.selection()
+                }
+                .accessibilityHint("Start a new session based on this workout")
+            }
         }
         .onAppear {
             refreshCachedWorkoutState()
@@ -283,40 +299,6 @@ struct WorkoutDetailView: View {
         }
     }
 
-    private var workoutTopBar: some View {
-        HStack(spacing: Theme.Spacing.sm) {
-            AppToolbarIconButton(
-                systemImage: "chevron.left",
-                accessibilityLabel: "Back",
-                variant: .subtle
-            ) {
-                dismiss()
-            }
-
-            Spacer()
-
-            if isLoggedWorkout {
-                AppToolbarButton(title: "Edit", systemImage: "pencil", variant: .subtle) {
-                    showingEdit = true
-                    Haptics.selection()
-                }
-            }
-
-            AppToolbarButton(
-                title: "Repeat",
-                systemImage: "arrow.counterclockwise",
-                variant: .accent
-            ) {
-                repeatThisWorkout()
-                Haptics.selection()
-            }
-        }
-        .padding(.horizontal, Theme.Spacing.xl)
-        .padding(.top, Theme.Spacing.xs)
-        .padding(.bottom, Theme.Spacing.sm)
-        .background(Theme.Colors.background)
-    }
-
     private func workoutHeader(_ workout: Workout) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
             Text(workout.name)
@@ -365,25 +347,9 @@ struct WorkoutDetailView: View {
                         Divider()
                             .overlay(Theme.Colors.border)
 
-                        HStack(spacing: Theme.Spacing.sm) {
-                            Text("vs last \(comparison.workoutName)")
-                                .font(Theme.Typography.captionStrong)
-                                .foregroundStyle(Theme.Colors.textSecondary)
-                                .lineLimit(1)
-
-                            Spacer(minLength: Theme.Spacing.xs)
-
-                            if let volumeDelta = comparison.volumeDelta {
-                                DeltaTag(delta: volumeDelta, suffix: "volume")
-                            }
-
-                            if let durationDelta = comparison.durationDelta {
-                                DeltaTag(
-                                    delta: durationDelta,
-                                    suffix: "time",
-                                    tintOverride: Theme.Colors.textSecondary
-                                )
-                            }
+                        ViewThatFits(in: .horizontal) {
+                            comparisonContent(comparison, stacked: false)
+                            comparisonContent(comparison, stacked: true)
                         }
                     }
                 }
@@ -401,10 +367,53 @@ struct WorkoutDetailView: View {
             Text(value)
                 .font(Theme.Typography.title3)
                 .foregroundStyle(Theme.Colors.textPrimary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.72)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func comparisonContent(
+        _ comparison: WorkoutDetailComparison,
+        stacked: Bool
+    ) -> some View {
+        if stacked {
+            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                comparisonTitle(comparison)
+                comparisonDeltas(comparison)
+            }
+        } else {
+            HStack(spacing: Theme.Spacing.sm) {
+                comparisonTitle(comparison)
+                    .lineLimit(1)
+                Spacer(minLength: Theme.Spacing.xs)
+                comparisonDeltas(comparison)
+            }
+        }
+    }
+
+    private func comparisonTitle(_ comparison: WorkoutDetailComparison) -> some View {
+        Text("vs last \(comparison.workoutName)")
+            .font(Theme.Typography.captionStrong)
+            .foregroundStyle(Theme.Colors.textSecondary)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func comparisonDeltas(_ comparison: WorkoutDetailComparison) -> some View {
+        HStack(spacing: Theme.Spacing.sm) {
+            if let volumeDelta = comparison.volumeDelta {
+                DeltaTag(delta: volumeDelta, suffix: "volume")
+            }
+
+            if let durationDelta = comparison.durationDelta {
+                DeltaTag(
+                    delta: durationDelta,
+                    suffix: "time",
+                    tintOverride: Theme.Colors.textSecondary
+                )
+            }
+        }
     }
 
     // MARK: - Health Data Section
@@ -483,7 +492,7 @@ struct WorkoutDetailView: View {
             .foregroundColor(.white)
             .padding(.horizontal, Theme.Spacing.md)
             .padding(.vertical, Theme.Spacing.xs)
-            .brutalistButtonChrome(
+            .surfaceButtonChrome(
                 fill: Theme.Colors.accent,
                 cornerRadius: Theme.CornerRadius.large
             )
@@ -614,6 +623,7 @@ struct ExerciseCard: View {
     var onViewHistory: ((String) -> Void)?
     var onQuickStart: ((String) -> Void)?
     @State private var isExpanded = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject private var metadataManager = ExerciseMetadataManager.shared
     @ObservedObject private var metricManager = ExerciseMetricManager.shared
 
@@ -631,34 +641,51 @@ struct ExerciseCard: View {
         VStack(alignment: .leading, spacing: 12) {
             Button(
                 action: {
-                    withAnimation { isExpanded.toggle() }
+                    withAnimation(reduceMotion ? nil : Theme.Animation.gentleSpring) {
+                        isExpanded.toggle()
+                    }
                     Haptics.selection()
                 },
                 label: {
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
-                            HStack(spacing: Theme.Spacing.sm) {
-                                Text(exercise.name)
-                                    .font(Theme.Typography.condensed)
-                                    .tracking(-0.2)
-                                    .foregroundColor(Theme.Colors.textPrimary)
+                            ViewThatFits(in: .horizontal) {
+                                HStack(spacing: Theme.Spacing.sm) {
+                                    exerciseTitle
 
-                                if let personalRecordDate {
-                                    PRMarkerView(date: personalRecordDate)
+                                    if let personalRecordDate {
+                                        PRMarkerView(date: personalRecordDate)
+                                    }
+                                }
+
+                                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                                    exerciseTitle
+
+                                    if let personalRecordDate {
+                                        PRMarkerView(date: personalRecordDate)
+                                    }
                                 }
                             }
 
-                            HStack(spacing: 16) {
-                                Label("\(exercise.sets.count) sets", systemImage: "number")
-                                    .font(Theme.Typography.caption)
-                                    .foregroundColor(Theme.Colors.textSecondary)
+                            ViewThatFits(in: .horizontal) {
+                                HStack(spacing: Theme.Spacing.lg) {
+                                    setCountLabel
 
-                                if isCardio {
-                                    cardioSummaryChips
-                                } else {
-                                    Label(SharedFormatters.volumeCompact(exercise.totalVolume), systemImage: "scalemass")
-                                        .font(Theme.Typography.caption)
-                                        .foregroundColor(Theme.Colors.textSecondary)
+                                    if isCardio {
+                                        cardioSummaryChips
+                                    } else {
+                                        volumeLabel
+                                    }
+                                }
+
+                                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                                    setCountLabel
+
+                                    if isCardio {
+                                        cardioSummaryChips
+                                    } else {
+                                        volumeLabel
+                                    }
                                 }
                             }
                         }
@@ -671,33 +698,13 @@ struct ExerciseCard: View {
                     }
                 }
             )
-            .buttonStyle(PlainButtonStyle())
+            .buttonStyle(.plain)
+            .frame(minHeight: Theme.Layout.minimumTapTarget)
 
             if isExpanded {
                 VStack(alignment: .leading, spacing: 8) {
                     ForEach(Array(exercise.sets.enumerated()), id: \.offset) { index, set in
-                        HStack {
-                            Text("Set \(index + 1)")
-                                .font(Theme.Typography.caption)
-                                .foregroundColor(Theme.Colors.textTertiary)
-                                .frame(width: 50, alignment: .leading)
-
-                            if isCardio {
-                                Text(cardioSetSummary(set))
-                                    .font(Theme.Typography.body)
-
-                                Spacer()
-                            } else {
-                                Text("\(Int(set.weight)) lbs × \(set.reps)")
-                                    .font(Theme.Typography.body)
-
-                                Spacer()
-
-                                Text("\(Int(set.weight * Double(set.reps))) lbs")
-                                    .font(Theme.Typography.caption)
-                                    .foregroundColor(Theme.Colors.textSecondary)
-                            }
-                        }
+                        setRow(index: index, set: set)
                         .padding(.horizontal)
                         .padding(.vertical, Theme.Spacing.xs)
                         .background(
@@ -730,27 +737,112 @@ struct ExerciseCard: View {
         .accessibilityHint("Long press for more options: View History, Quick Start")
     }
 
+    private var exerciseTitle: some View {
+        Text(exercise.name)
+            .font(Theme.Typography.condensed)
+            .tracking(-0.2)
+            .foregroundStyle(Theme.Colors.textPrimary)
+            .lineLimit(2)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var setCountLabel: some View {
+        Label("\(exercise.sets.count) sets", systemImage: "number")
+            .font(Theme.Typography.caption)
+            .foregroundStyle(Theme.Colors.textSecondary)
+    }
+
+    private var volumeLabel: some View {
+        Label(SharedFormatters.volumeCompact(exercise.totalVolume), systemImage: "scalemass")
+            .font(Theme.Typography.caption)
+            .foregroundStyle(Theme.Colors.textSecondary)
+    }
+
+    @ViewBuilder
+    private func setRow(index: Int, set: WorkoutSet) -> some View {
+        let title = "Set \(index + 1)"
+
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: Theme.Spacing.md) {
+                Text(title)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.textTertiary)
+
+                if isCardio {
+                    Text(cardioSetSummary(set))
+                        .font(Theme.Typography.body)
+                } else {
+                    Text("\(Int(set.weight)) lbs × \(set.reps)")
+                        .font(Theme.Typography.body)
+
+                    Spacer(minLength: Theme.Spacing.xs)
+
+                    Text("\(Int(set.weight * Double(set.reps))) lbs")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                Text(title)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.textTertiary)
+
+                Text(
+                    isCardio
+                        ? cardioSetSummary(set)
+                        : "\(Int(set.weight)) lbs × \(set.reps) · \(Int(set.weight * Double(set.reps))) lbs"
+                )
+                .font(Theme.Typography.body)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
     private var cardioSummaryChips: some View {
         let totalDistance = exercise.sets.reduce(0.0) { $0 + $1.distance }
         let totalSeconds = exercise.sets.reduce(0.0) { $0 + $1.seconds }
         let totalCount = exercise.sets.reduce(0) { $0 + $1.reps }
 
-        return HStack(spacing: 10) {
-            if totalDistance > 0 {
-                Label("\(WorkoutValueFormatter.distanceText(totalDistance)) dist", systemImage: "location.fill")
-                    .font(Theme.Typography.caption)
-                    .foregroundColor(Theme.Colors.textSecondary)
+        return ViewThatFits(in: .horizontal) {
+            HStack(spacing: Theme.Spacing.sm) {
+                cardioSummaryContent(
+                    totalDistance: totalDistance,
+                    totalSeconds: totalSeconds,
+                    totalCount: totalCount
+                )
             }
-            if totalSeconds > 0 {
-                Label(WorkoutValueFormatter.durationText(seconds: totalSeconds), systemImage: "clock.fill")
-                    .font(Theme.Typography.caption)
-                    .foregroundColor(Theme.Colors.textSecondary)
+
+            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                cardioSummaryContent(
+                    totalDistance: totalDistance,
+                    totalSeconds: totalSeconds,
+                    totalCount: totalCount
+                )
             }
-            if totalCount > 0 {
-                Label("\(totalCount) \(cardioConfig.countLabel)", systemImage: "number")
-                    .font(Theme.Typography.caption)
-                    .foregroundColor(Theme.Colors.textSecondary)
-            }
+        }
+    }
+
+    @ViewBuilder
+    private func cardioSummaryContent(
+        totalDistance: Double,
+        totalSeconds: Double,
+        totalCount: Int
+    ) -> some View {
+        if totalDistance > 0 {
+            Label("\(WorkoutValueFormatter.distanceText(totalDistance)) dist", systemImage: "location.fill")
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.Colors.textSecondary)
+        }
+        if totalSeconds > 0 {
+            Label(WorkoutValueFormatter.durationText(seconds: totalSeconds), systemImage: "clock.fill")
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.Colors.textSecondary)
+        }
+        if totalCount > 0 {
+            Label("\(totalCount) \(cardioConfig.countLabel)", systemImage: "number")
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.Colors.textSecondary)
         }
     }
 
@@ -771,18 +863,10 @@ struct ExerciseCard: View {
 }
 
 struct SyncPulse: View {
-    @State private var isPulsing = false
-
     var body: some View {
-        Circle()
-            .fill(Color.white)
-            .frame(width: 8, height: 8)
-            .scaleEffect(isPulsing ? 1.4 : 0.8)
-            .opacity(isPulsing ? 0.6 : 1)
-            .onAppear {
-                withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
-                    isPulsing = true
-                }
-            }
+        ProgressView()
+            .controlSize(.mini)
+            .tint(.white)
+            .accessibilityHidden(true)
     }
 }

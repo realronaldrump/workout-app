@@ -97,7 +97,7 @@ struct WorkoutSimilarityLibrary: Hashable {
     let reviewsByWorkoutId: [UUID: WorkoutSimilarityReview]
     let comparisonsByKey: [String: WorkoutSimilarityComparison]
 
-    static let empty = WorkoutSimilarityLibrary(
+    nonisolated static let empty = WorkoutSimilarityLibrary(
         reviewsByWorkoutId: [:],
         comparisonsByKey: [:]
     )

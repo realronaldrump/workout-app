@@ -46,8 +46,12 @@ struct CollapsibleSection<Content: View>: View {
                         .animation(reduceMotion ? .easeOut(duration: 0.15) : .spring(response: 0.35, dampingFraction: 0.9), value: isExpanded)
                 }
                 .contentShape(Rectangle())
+                .frame(minHeight: Theme.Layout.minimumTapTarget)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(title)
+            .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
+            .accessibilityHint(isExpanded ? "Collapses this section" : "Expands this section")
 
             if isExpanded {
                 content

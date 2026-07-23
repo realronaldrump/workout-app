@@ -478,7 +478,6 @@ final class WorkoutSessionManager: ObservableObject {
 
         cancelRestTimer()
         activeSession = nil
-        isPresentingSessionUI = false
         await deleteDraftFile()
         AppAnalytics.shared.track(
             AnalyticsSignal.sessionFinished,

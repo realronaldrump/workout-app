@@ -23,6 +23,14 @@ struct BodyCompositionTrendChart: View {
     @State private var selectionClearTask: Task<Void, Never>?
 
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    private let renderedPoints: [TimeSeriesPoint]
+    private let renderedMA7: [TimeSeriesPoint]
+    private let renderedRA30: [TimeSeriesPoint]
+    private let cachedYDomain: ClosedRange<Double>
+    private let cachedAverageValue: Double?
+    private let cachedMinimumValue: Double?
+    private let cachedMaximumValue: Double?
 
     init(
         points: [TimeSeriesPoint],
@@ -39,9 +47,12 @@ struct BodyCompositionTrendChart: View {
         headerValueText: @escaping (Double) -> String,
         axisValueText: @escaping (Double) -> String
     ) {
-        self.points = points.sorted { $0.date < $1.date }
-        self.ma7 = ma7.sorted { $0.date < $1.date }
-        self.ra30 = ra30.sorted { $0.date < $1.date }
+        let sortedPoints = points.sorted { $0.date < $1.date }
+        let sortedMA7 = ma7.sorted { $0.date < $1.date }
+        let sortedRA30 = ra30.sorted { $0.date < $1.date }
+        self.points = sortedPoints
+        self.ma7 = sortedMA7
+        self.ra30 = sortedRA30
         self.trend = trend
         self.forecast = forecast
         self.color = color
@@ -52,34 +63,35 @@ struct BodyCompositionTrendChart: View {
         self.showForecast = showForecast
         self.headerValueText = headerValueText
         self.axisValueText = axisValueText
+        renderedPoints = HealthChartPointSampler.sampled(sortedPoints, limit: 400)
+        renderedMA7 = HealthChartPointSampler.sampled(sortedMA7, limit: 400)
+        renderedRA30 = HealthChartPointSampler.sampled(sortedRA30, limit: 400)
+        cachedAverageValue = sortedPoints.isEmpty
+            ? nil
+            : sortedPoints.reduce(0) { $0 + $1.value } / Double(sortedPoints.count)
+        cachedMinimumValue = sortedPoints.map(\.value).min()
+        cachedMaximumValue = sortedPoints.map(\.value).max()
+
+        var domainValues = sortedPoints.map(\.value)
+        if showMA7 { domainValues.append(contentsOf: sortedMA7.map(\.value)) }
+        if showRA30 { domainValues.append(contentsOf: sortedRA30.map(\.value)) }
+        if let trend, showTrend {
+            domainValues.append(trend.intercept)
+            let dayCount = Double(
+                Calendar.current.dateComponents(
+                    [.day],
+                    from: Calendar.current.startOfDay(for: trend.windowStart),
+                    to: Calendar.current.startOfDay(for: trend.windowEnd)
+                ).day ?? 0
+            )
+            domainValues.append((trend.slopePerDay * dayCount) + trend.intercept)
+        }
+        if showForecast { domainValues.append(contentsOf: forecast.map(\.predicted)) }
+        cachedYDomain = Self.chartYDomain(for: domainValues)
     }
 
     private var yDomain: ClosedRange<Double> {
-        var values = points.map(\.value)
-        if showMA7 { values.append(contentsOf: ma7.map(\.value)) }
-        if showRA30 { values.append(contentsOf: ra30.map(\.value)) }
-
-        if let trend, showTrend {
-            values.append(predictedValue(on: trend.windowStart, trend: trend))
-            values.append(predictedValue(on: trend.windowEnd, trend: trend))
-        }
-
-        if showForecast, !forecast.isEmpty {
-            values.append(contentsOf: forecast.map(\.predicted))
-        }
-
-        guard let minValue = values.min(), let maxValue = values.max() else {
-            return 0...1
-        }
-
-        if minValue == maxValue {
-            let padding = max(abs(minValue) * 0.05, 1)
-            return (minValue - padding)...(maxValue + padding)
-        }
-
-        let span = maxValue - minValue
-        let padding = span * 0.15
-        return (minValue - padding)...(maxValue + padding)
+        cachedYDomain
     }
 
     // MARK: - Gradient fill
@@ -101,7 +113,7 @@ struct BodyCompositionTrendChart: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             chartHeader
-                .animation(.easeInOut(duration: 0.15), value: selectedPoint?.date)
+                .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: selectedPoint?.date)
 
             chart
                 .frame(height: Theme.ChartHeight.expanded)
@@ -157,10 +169,6 @@ struct BodyCompositionTrendChart: View {
 
     private var chart: some View {
         let currentYDomain = yDomain
-        let renderedPoints = HealthChartPointSampler.sampled(points, limit: 400)
-        let renderedMA7 = HealthChartPointSampler.sampled(ma7, limit: 400)
-        let renderedRA30 = HealthChartPointSampler.sampled(ra30, limit: 400)
-
         return Chart {
             if let average = averageValue {
                 RuleMark(y: .value("Average", average))
@@ -388,13 +396,15 @@ struct BodyCompositionTrendChart: View {
                                 scheduleSelectionClear()
                             }
                     )
-            }
+                }
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Body composition trend")
+        .accessibilityValue(accessibilitySummary)
     }
 
     private var averageValue: Double? {
-        guard !points.isEmpty else { return nil }
-        return points.reduce(0) { $0 + $1.value } / Double(points.count)
+        cachedAverageValue
     }
 
     // MARK: - Selection
@@ -406,10 +416,8 @@ struct BodyCompositionTrendChart: View {
         let x = location.x - frame.origin.x
         guard let date: Date = proxy.value(atX: x) else { return }
 
-        if let closest = points.min(by: {
-            abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date))
-        }) {
-            withAnimation(.easeOut(duration: 0.12)) {
+        if let closest = nearestPoint(to: date) {
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.12)) {
                 selectedPoint = closest
             }
         }
@@ -421,10 +429,39 @@ struct BodyCompositionTrendChart: View {
         selectionClearTask = Task { @MainActor in
             try? await Task.sleep(nanoseconds: 2_500_000_000)
             guard !Task.isCancelled else { return }
-            withAnimation(.easeOut(duration: 0.25)) {
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) {
                 selectedPoint = nil
             }
         }
+    }
+
+    private func nearestPoint(to date: Date) -> TimeSeriesPoint? {
+        guard !points.isEmpty else { return nil }
+        var lower = 0
+        var upper = points.count
+        while lower < upper {
+            let middle = (lower + upper) / 2
+            if points[middle].date < date {
+                lower = middle + 1
+            } else {
+                upper = middle
+            }
+        }
+        if lower == 0 { return points[0] }
+        if lower == points.count { return points[points.count - 1] }
+        let before = points[lower - 1]
+        let after = points[lower]
+        return abs(before.date.timeIntervalSince(date)) <= abs(after.date.timeIntervalSince(date))
+            ? before
+            : after
+    }
+
+    private var accessibilitySummary: String {
+        guard let first = points.first, let last = points.last else { return "No data points" }
+        let low = cachedMinimumValue ?? first.value
+        let high = cachedMaximumValue ?? first.value
+        return "\(points.count) readings. First \(headerValueText(first.value)); "
+            + "latest \(headerValueText(last.value)); low \(headerValueText(low)); high \(headerValueText(high))."
     }
 
     private func isTapLike(_ translation: CGSize) -> Bool {
@@ -514,5 +551,15 @@ struct BodyCompositionTrendChart: View {
         let calendar = Calendar.current
         let xDays = Double(calendar.dateComponents([.day], from: calendar.startOfDay(for: trend.windowStart), to: calendar.startOfDay(for: date)).day ?? 0)
         return (trend.slopePerDay * xDays) + trend.intercept
+    }
+
+    private static func chartYDomain(for values: [Double]) -> ClosedRange<Double> {
+        guard let minValue = values.min(), let maxValue = values.max() else { return 0...1 }
+        if minValue == maxValue {
+            let padding = max(abs(minValue) * 0.05, 1)
+            return (minValue - padding)...(maxValue + padding)
+        }
+        let padding = (maxValue - minValue) * 0.15
+        return (minValue - padding)...(maxValue + padding)
     }
 }

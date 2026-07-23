@@ -71,6 +71,7 @@ struct ExportExerciseSelectionSheet: View {
                     }
                 }
                 .padding(Theme.Spacing.xl)
+                .contentColumn()
             }
             .navigationTitle("Select Exercises")
             .navigationBarTitleDisplayMode(.inline)
@@ -162,6 +163,7 @@ struct ExportWorkoutDateSelectionSheet: View {
                     }
                 }
                 .padding(Theme.Spacing.xl)
+                .contentColumn()
             }
             .navigationTitle("Select Workout Dates")
             .navigationBarTitleDisplayMode(.inline)
@@ -265,6 +267,7 @@ struct ExportMuscleGroupSelectionSheet: View {
                     }
                 }
                 .padding(Theme.Spacing.xl)
+                .contentColumn()
             }
             .navigationTitle("Select Muscle Groups")
             .navigationBarTitleDisplayMode(.inline)
@@ -312,6 +315,8 @@ private struct ExportSelectionSearchField: View {
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundStyle(Theme.Colors.textTertiary)
+                        .frame(width: Theme.Layout.minimumTapTarget, height: Theme.Layout.minimumTapTarget)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Clear search")
@@ -393,6 +398,7 @@ struct ExportWorkoutColumnSelectionSheet: View {
                     }
                 }
                 .padding(Theme.Spacing.xl)
+                .contentColumn()
             }
             .navigationTitle("Select Columns")
             .navigationBarTitleDisplayMode(.inline)
@@ -500,6 +506,7 @@ struct ExportHealthMetricSelectionSheet: View {
                     }
                 }
                 .padding(Theme.Spacing.xl)
+                .contentColumn()
             }
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)

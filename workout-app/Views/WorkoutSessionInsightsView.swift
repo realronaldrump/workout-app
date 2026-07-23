@@ -14,9 +14,10 @@ struct WorkoutSessionInsightsView: View {
     }
 
     private struct ExerciseVolumePoint: Identifiable {
-        let id = UUID()
         let name: String
         let volume: Double
+
+        var id: String { name }
     }
 
     private var exerciseVolumes: [ExerciseVolumePoint] {
@@ -107,10 +108,22 @@ struct WorkoutSessionInsightsView: View {
                         }
                     }
                 }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Volume by exercise")
+                .accessibilityValue(volumeChartAccessibilityValue)
                 .padding(Theme.Spacing.lg)
                 .softCard(elevation: 2)
             }
         }
+    }
+
+    private var volumeChartAccessibilityValue: String {
+        guard let highest = exerciseVolumes.max(by: { $0.volume < $1.volume }) else {
+            return "No exercise volume data"
+        }
+        let total = exerciseVolumes.reduce(0) { $0 + $1.volume }
+        return "\(exerciseVolumes.count) exercises. Highest: \(highest.name), "
+            + "\(SharedFormatters.volumeCompact(highest.volume)). Total \(SharedFormatters.volumeCompact(total))."
     }
 
     private var statsSection: some View {

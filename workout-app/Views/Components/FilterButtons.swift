@@ -11,6 +11,7 @@ struct FilterButton: View {
                 .font(Theme.Typography.captionBold)
                 .padding(.horizontal, Theme.Spacing.md)
                 .padding(.vertical, Theme.Spacing.sm)
+                .frame(minHeight: Theme.Layout.minimumTapTarget)
                 .background(isSelected ? Theme.Colors.accent : Theme.Colors.surfaceRaised)
                 .foregroundColor(isSelected ? .white : Theme.Colors.textPrimary)
                 .clipShape(Capsule())

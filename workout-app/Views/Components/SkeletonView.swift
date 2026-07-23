@@ -15,37 +15,14 @@ struct SkeletonRect: View {
     }
 }
 
-/// Shimmer animation modifier.
+/// A low-cost placeholder treatment. Loading screens can contain dozens of skeletons, so
+/// this intentionally avoids one GeometryReader and one infinite animation per element.
 struct SkeletonModifier: ViewModifier {
-    @State private var phase: CGFloat = 0
-
     func body(content: Content) -> some View {
         content
-            .overlay(
-                GeometryReader { geo in
-                    LinearGradient(
-                        colors: [
-                            .clear,
-                            Theme.Colors.surface.opacity(0.6),
-                            .clear
-                        ],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                    .frame(width: geo.size.width * 0.6)
-                    .offset(x: -geo.size.width * 0.3 + phase * (geo.size.width * 1.6))
-                    .clipped()
-                }
-            )
+            .opacity(0.72)
             .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
-            .onAppear {
-                withAnimation(
-                    .easeInOut(duration: 1.2)
-                    .repeatForever(autoreverses: false)
-                ) {
-                    phase = 1
-                }
-            }
+            .accessibilityHidden(true)
     }
 }
 

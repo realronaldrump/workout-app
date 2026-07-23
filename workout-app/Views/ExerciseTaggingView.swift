@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 
 struct ExerciseTaggingView: View {
@@ -13,38 +14,9 @@ struct ExerciseTaggingView: View {
     @ObservedObject var dataManager: WorkoutDataManager
     @ObservedObject private var metadataManager = ExerciseMetadataManager.shared
     @State private var searchText = ""
-
-    private var uniqueExercises: [String] {
-        let allExercises = dataManager.workouts.flatMap { $0.exercises.map { $0.name } }
-        let unique = Set(allExercises)
-        return Array(unique).sorted()
-    }
-
-    private var filteredExercises: [String] {
-        if searchText.isEmpty {
-            return uniqueExercises
-        } else {
-            return uniqueExercises.filter { $0.localizedCaseInsensitiveContains(searchText) }
-        }
-    }
-
-    private var filteredExerciseItems: [ExerciseTaggingItem] {
-        filteredExercises.map { exercise in
-            ExerciseTaggingItem(
-                exerciseName: exercise,
-                tags: metadataManager.resolvedTags(for: exercise),
-                isCustomized: metadataManager.isOverridden(for: exercise)
-            )
-        }
-    }
-
-    private var untaggedFilteredExercises: [ExerciseTaggingItem] {
-        filteredExerciseItems.filter(\.isUntagged)
-    }
-
-    private var taggedFilteredExercises: [ExerciseTaggingItem] {
-        filteredExerciseItems.filter { !$0.isUntagged }
-    }
+    @State private var cachedExerciseItems: [ExerciseTaggingItem] = []
+    @State private var untaggedFilteredExercises: [ExerciseTaggingItem] = []
+    @State private var taggedFilteredExercises: [ExerciseTaggingItem] = []
 
     var body: some View {
         ZStack {
@@ -58,14 +30,14 @@ struct ExerciseTaggingView: View {
                             .font(Theme.Typography.title3)
                             .foregroundStyle(Theme.Colors.textPrimary)
 
-                        if uniqueExercises.isEmpty {
+                        if cachedExerciseItems.isEmpty {
                             EmptyStateCard(
                                 title: "No exercises yet",
                                 message: "Import workouts first, then come back here to tag your exercises.",
                                 icon: "tray",
                                 tint: Theme.Colors.textTertiary
                             )
-                        } else if filteredExercises.isEmpty {
+                        } else if untaggedFilteredExercises.isEmpty && taggedFilteredExercises.isEmpty {
                             EmptyStateCard(
                                 title: "No matches",
                                 message: "Try a different search.",
@@ -86,11 +58,34 @@ struct ExerciseTaggingView: View {
                     }
                 }
                 .padding(Theme.Spacing.xl)
+                .contentColumn()
             }
         }
         .navigationTitle("Exercise Tags")
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $searchText, prompt: "Search exercises")
+        .onAppear(perform: rebuildExerciseCache)
+        .task(id: searchText) {
+            try? await Task.sleep(for: .milliseconds(120))
+            guard !Task.isCancelled else { return }
+            applySearchFilter()
+        }
+        .onReceive(
+            dataManager.$workouts
+                .dropFirst()
+                .debounce(for: .milliseconds(150), scheduler: RunLoop.main)
+        ) { _ in
+            rebuildExerciseCache()
+        }
+        .onReceive(
+            metadataManager.objectWillChange
+                .debounce(for: .milliseconds(100), scheduler: RunLoop.main)
+        ) { _ in
+            Task { @MainActor in
+                await Task.yield()
+                rebuildExerciseCache()
+            }
+        }
     }
 
     private func exerciseSection(title: String, exercises: [ExerciseTaggingItem]) -> some View {
@@ -100,7 +95,7 @@ struct ExerciseTaggingView: View {
                 .foregroundColor(Theme.Colors.textSecondary)
                 .padding(.horizontal, Theme.Spacing.sm)
 
-            VStack(spacing: Theme.Spacing.md) {
+            LazyVStack(spacing: Theme.Spacing.md) {
                 ForEach(exercises) { item in
                     NavigationLink(destination: ExerciseTagEditorView(exerciseName: item.exerciseName)) {
                         ExerciseTaggingRow(
@@ -113,6 +108,30 @@ struct ExerciseTaggingView: View {
                 }
             }
         }
+    }
+
+    private func rebuildExerciseCache() {
+        let names = Set(dataManager.workouts.flatMap { workout in
+            workout.exercises.map(\.name)
+        }).sorted()
+
+        cachedExerciseItems = names.map { exercise in
+            ExerciseTaggingItem(
+                exerciseName: exercise,
+                tags: metadataManager.resolvedTags(for: exercise),
+                isCustomized: metadataManager.isOverridden(for: exercise)
+            )
+        }
+        applySearchFilter()
+    }
+
+    private func applySearchFilter() {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let filtered = query.isEmpty
+            ? cachedExerciseItems
+            : cachedExerciseItems.filter { $0.exerciseName.localizedCaseInsensitiveContains(query) }
+        untaggedFilteredExercises = filtered.filter(\.isUntagged)
+        taggedFilteredExercises = filtered.filter { !$0.isUntagged }
     }
 
     private var introCard: some View {

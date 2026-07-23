@@ -22,6 +22,11 @@ final class ChangelogStore: ObservableObject {
         lastSeenVersion = defaults.string(forKey: Self.lastSeenVersionKey)
     }
 
+    // Keep destruction nonisolated. XCTest can release an actor-isolated ObservableObject
+    // while tearing down its host process; allowing the compiler to synthesize an isolated
+    // destructor has produced invalid frees on the iOS 26 simulator runtime.
+    nonisolated deinit {}
+
     func pendingPresentation() -> ChangelogPresentation? {
         let persistedVersion = defaults.string(forKey: Self.lastSeenVersionKey)
         if persistedVersion != lastSeenVersion {

@@ -8,9 +8,7 @@ struct DailyHealthDetailView: View {
     }
 
     private var dayTitle: String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "EEEE, MMM d"
-        return formatter.string(from: day.dayStart)
+        day.dayStart.formatted(.dateTime.weekday(.wide).month(.abbreviated).day())
     }
 
     private var overviewItems: [DailyOverviewItem] {

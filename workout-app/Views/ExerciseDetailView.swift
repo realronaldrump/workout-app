@@ -369,7 +369,7 @@ struct ExerciseDetailView: View {
             .padding(.horizontal, Theme.Spacing.md)
             .padding(.vertical, Theme.Spacing.sm)
             .frame(minHeight: 44)
-            .brutalistButtonChrome(
+            .surfaceButtonChrome(
                 fill: Theme.Colors.surface,
                 cornerRadius: Theme.CornerRadius.large
             )
@@ -427,7 +427,7 @@ struct ExerciseDetailView: View {
                         .padding(.horizontal, Theme.Spacing.md)
                         .padding(.vertical, Theme.Spacing.sm)
                         .frame(minHeight: 44)
-                        .brutalistButtonChrome(
+                        .surfaceButtonChrome(
                             fill: Theme.Colors.surface,
                             cornerRadius: Theme.CornerRadius.large
                         )
@@ -957,7 +957,7 @@ struct ExerciseDetailView: View {
             AdaptiveBackground()
 
             ScrollView {
-                VStack(spacing: Theme.Spacing.xl) {
+                LazyVStack(spacing: Theme.Spacing.xl) {
                     if isLoadingExerciseDetail && scopedHistory.isEmpty {
                         HStack(spacing: Theme.Spacing.sm) {
                             ProgressView()
@@ -982,21 +982,17 @@ struct ExerciseDetailView: View {
                     relationshipPanel
 
                     VStack(alignment: .leading, spacing: 16) {
-                        HStack {
-                            Text("Progress Chart")
-                                .font(Theme.Typography.title2)
-                                .foregroundColor(Theme.Colors.textPrimary)
-
-                            Spacer()
-
-                            locationMenu
-
-                            Picker("Chart Type", selection: $selectedChart) {
-                                ForEach(availableChartTypes, id: \.self) { type in
-                                    Text(type.displayName(for: exerciseName)).tag(type)
-                                }
+                        ViewThatFits(in: .horizontal) {
+                            HStack {
+                                progressChartTitle
+                                Spacer()
+                                progressChartControls
                             }
-                            .pickerStyle(.menu)
+
+                            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                                progressChartTitle
+                                progressChartControls
+                            }
                         }
 
                         if isDeletedScope {
@@ -1020,7 +1016,7 @@ struct ExerciseDetailView: View {
                                 .font(Theme.Typography.title3)
                                 .foregroundColor(Theme.Colors.textPrimary)
 
-                            VStack(spacing: Theme.Spacing.md) {
+                            LazyVStack(spacing: Theme.Spacing.md) {
                                 ForEach(exerciseInsights) { insight in
                                     InsightCardView(insight: insight)
                                 }
@@ -1083,6 +1079,7 @@ struct ExerciseDetailView: View {
                     )
                 }
                 .padding(Theme.Spacing.xl)
+                .contentColumn()
             }
         }
         .navigationTitle(exerciseName)
@@ -1177,6 +1174,26 @@ struct ExerciseDetailView: View {
             progressReviewTask?.cancel()
             progressReviewGeneration &+= 1
         }
+    }
+
+    private var progressChartTitle: some View {
+        Text("Progress Chart")
+            .font(Theme.Typography.title2)
+            .foregroundColor(Theme.Colors.textPrimary)
+    }
+
+    private var progressChartControls: some View {
+        HStack(spacing: Theme.Spacing.sm) {
+            locationMenu
+
+            Picker("Chart Type", selection: $selectedChart) {
+                ForEach(availableChartTypes, id: \.self) { type in
+                    Text(type.displayName(for: exerciseName)).tag(type)
+                }
+            }
+            .pickerStyle(.menu)
+        }
+        .frame(minHeight: Theme.Layout.minimumTapTarget)
     }
 
     private var locationMenu: some View {
@@ -1429,7 +1446,7 @@ private struct ExerciseRelationshipEditorSheet: View {
 
                                                     Spacer()
                                                 }
-                                                .padding(.vertical, Theme.Spacing.xs)
+                                                .frame(minHeight: Theme.Layout.minimumTapTarget)
                                             }
                                             .buttonStyle(.plain)
                                         }
@@ -1453,12 +1470,11 @@ private struct ExerciseRelationshipEditorSheet: View {
                         }
 
                         fieldCard(title: "Side") {
-                            Picker("Side", selection: $draftLaterality) {
-                                ForEach(ExerciseLaterality.allCases, id: \.self) { laterality in
-                                    Text(laterality.displayName).tag(laterality)
-                                }
-                            }
-                            .pickerStyle(.segmented)
+                            AppSegmentedPicker(
+                                title: "Side",
+                                selection: $draftLaterality,
+                                options: ExerciseLaterality.allCases.map { ($0.displayName, $0) }
+                            )
                         }
 
                         if let saveError {
@@ -1480,6 +1496,7 @@ private struct ExerciseRelationshipEditorSheet: View {
                         .disabled(!canSave)
                     }
                     .padding(Theme.Spacing.xl)
+                    .contentColumn(maxWidth: 640)
                 }
             }
             .navigationTitle("Exercise Variant")

@@ -16,15 +16,18 @@ struct ProfileView: View {
             AdaptiveBackground()
 
             ScrollView {
-                VStack(spacing: Theme.Spacing.xxl) {
+                LazyVStack(spacing: Theme.Spacing.xxl) {
                     headerSection
                     personalInfoSection
                     preferencesSection
                 }
                 .padding()
+                .contentColumn()
             }
+            .scrollDismissesKeyboard(.interactively)
         }
-        .navigationBarHidden(true)
+        .navigationTitle("More")
+        .navigationBarTitleDisplayMode(.large)
         .analyticsScreen("Profile")
         .navigationDestination(isPresented: $showingWorkoutHistory) {
             WorkoutHistoryView(workouts: dataManager.workouts, showsBackButton: true)
@@ -73,7 +76,24 @@ struct ProfileView: View {
             }
             .accessibilityElement(children: .combine)
 
-            HStack(spacing: Theme.Spacing.md) {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: Theme.Spacing.md) {
+                    profileStats
+                }
+
+                VStack(spacing: Theme.Spacing.md) {
+                    profileStats
+                }
+            }
+            .padding(.horizontal, Theme.Spacing.md)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, Theme.Spacing.lg)
+        .softCard()
+    }
+
+    @ViewBuilder
+    private var profileStats: some View {
                 MetricTileButton(
                     chevronPlacement: .bottomTrailing,
                     action: {
@@ -99,12 +119,6 @@ struct ProfileView: View {
                 .frame(maxWidth: .infinity)
                 .accessibilityLabel("\(uniqueExercisesCount) exercises")
                 .accessibilityHint("Double tap to view exercise list")
-            }
-            .padding(.horizontal, Theme.Spacing.md)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, Theme.Spacing.xl)
-        .softCard()
     }
 
     private var personalInfoSection: some View {
@@ -152,30 +166,6 @@ struct ProfileView: View {
 
                 Divider().padding(.leading, 62)
 
-                NavigationLink(destination: GymProfilesView()) {
-                    ProfileLinkRow(
-                        icon: "mappin.and.ellipse",
-                        color: Theme.Colors.accentSecondary,
-                        title: "Gym Profiles",
-                        subtitle: "Manage saved gyms"
-                    )
-                }
-                .buttonStyle(PlainButtonStyle())
-
-                Divider().padding(.leading, 62)
-
-                NavigationLink(destination: ExerciseTaggingView(dataManager: dataManager)) {
-                    ProfileLinkRow(
-                        icon: "tag.fill",
-                        color: Theme.Colors.accentTertiary,
-                        title: "Exercise Tags",
-                        subtitle: "Assign muscle groups"
-                    )
-                }
-                .buttonStyle(PlainButtonStyle())
-
-                Divider().padding(.leading, 62)
-
                 NavigationLink(
                     destination: SettingsView(
                         dataManager: dataManager,
@@ -209,8 +199,7 @@ struct ProfileView: View {
     }
 
     private var uniqueExercisesCount: Int {
-        let names = dataManager.workouts.flatMap { $0.exercises.map(\.name) }
-        return Set(names).count
+        dataManager.allExerciseNames().count
     }
 }
 
@@ -242,6 +231,8 @@ private struct ProfileFieldRow: View {
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Colors.textPrimary)
                     .keyboardType(keyboardType)
+                    .textInputAutocapitalization(.words)
+                    .submitLabel(.done)
             }
 
             Spacer()

@@ -38,6 +38,7 @@ struct BackupFilesView: View {
                     }
                 }
                 .padding()
+                .contentColumn()
             }
         }
         .navigationTitle("Backup Files")

@@ -47,6 +47,7 @@ struct WorkoutApp: App {
             "preferredSleepSourceKey": "",
             "preferredSleepSourceName": "",
             "appearanceMode": AppearanceMode.system.rawValue,
+            Haptics.preferenceKey: true,
             AppAnalytics.collectionEnabledKey: true
         ])
 
@@ -65,8 +66,8 @@ struct WorkoutApp: App {
                 .font(Theme.Typography.body)
                 .environmentObject(healthManager)
                 .environmentObject(sessionManager)
-                .buttonStyle(AppInteractionButtonStyle())
                 .preferredColorScheme(resolvedColorScheme)
+                .respectReduceMotion()
         }
         .onChange(of: scenePhase) { _, newPhase in
             AppAnalytics.shared.handleScenePhaseChange(newPhase)

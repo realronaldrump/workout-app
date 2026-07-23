@@ -37,6 +37,13 @@ final class BodyCompositionViewModel: ObservableObject {
 
     nonisolated deinit {}
 
+    func beginLoading() {
+        snapshot = Snapshot(
+            isLoading: true,
+            earliestSampleDate: snapshot.earliestSampleDate
+        )
+    }
+
     func load(
         dailyEntries: [DailyHealthData],
         metricKind: BodyCompositionMetricKind,

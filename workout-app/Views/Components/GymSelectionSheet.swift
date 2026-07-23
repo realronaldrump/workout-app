@@ -8,6 +8,7 @@ enum GymSelection: Hashable {
 
 struct GymSelectionSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @State private var shouldAddNewAfterDismiss = false
 
     let title: String
     let gyms: [GymProfile]
@@ -87,12 +88,8 @@ struct GymSelectionSheet: View {
 
                         if showAddNew {
                             Button {
-                                // This view is typically presented as a sheet; dismiss it before triggering
-                                // a new sheet/navigation from the parent.
+                                shouldAddNewAfterDismiss = true
                                 dismiss()
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                                    onAddNew?()
-                                }
                             } label: {
                                 HStack(spacing: Theme.Spacing.md) {
                                     Image(systemName: "plus.circle.fill")
@@ -120,6 +117,7 @@ struct GymSelectionSheet: View {
                         }
                     }
                     .padding(Theme.Spacing.xl)
+                    .contentColumn(maxWidth: 640)
                 }
             }
             .navigationTitle(title)
@@ -131,6 +129,11 @@ struct GymSelectionSheet: View {
                     }
                 }
             }
+        }
+        .onDisappear {
+            guard shouldAddNewAfterDismiss else { return }
+            shouldAddNewAfterDismiss = false
+            onAddNew?()
         }
     }
 

@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct HealthPermissionAuditView: View {
+    @Environment(\.openURL) private var openURL
     @EnvironmentObject private var healthManager: HealthKitManager
 
     @State private var sections: [HealthPermissionAuditSection] = []
@@ -55,11 +56,15 @@ struct HealthPermissionAuditView: View {
                 }
                 .padding(.horizontal, Theme.Spacing.lg)
                 .padding(.vertical, Theme.Spacing.xl)
+                .contentColumn()
             }
         }
         .navigationTitle("Health Permissions")
         .navigationBarTitleDisplayMode(.inline)
         .task {
+            await loadAudit()
+        }
+        .refreshable {
             await loadAudit()
         }
     }
@@ -77,28 +82,26 @@ struct HealthPermissionAuditView: View {
             .foregroundStyle(Theme.Colors.textSecondary)
             .fixedSize(horizontal: false, vertical: true)
 
-            Button(action: requestAuthorization) {
-                HStack(spacing: Theme.Spacing.sm) {
-                    if isRequestingAuthorization {
-                        ProgressView()
-                            .tint(.white)
-                    } else {
-                        Image(systemName: "heart.text.square.fill")
-                    }
-
-                    Text(isRequestingAuthorization ? "Checking Access..." : "Review Health Access")
-                        .font(Theme.Typography.bodyBold)
-                }
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, Theme.Spacing.md)
-                .background(Theme.accentGradient)
-                .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.medium))
+            AppPrimaryButton(
+                title: isRequestingAuthorization ? "Checking Access…" : "Review Health Access",
+                systemImage: isRequestingAuthorization ? nil : "heart.text.square.fill",
+                isEnabled: !isRequestingAuthorization && healthManager.authorizationStatus != .unavailable
+            ) {
+                requestAuthorization()
             }
-            .buttonStyle(.plain)
-            .disabled(isRequestingAuthorization || healthManager.authorizationStatus == .unavailable)
 
-            Text("Apple manages final Health toggles in the Health app. Return here after changing access.")
+            if isRequestingAuthorization {
+                ProgressView("Waiting for Apple Health…")
+                    .font(Theme.Typography.caption)
+            }
+
+            Button("Open App Settings", systemImage: "gear") {
+                guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+                openURL(url)
+            }
+            .frame(minHeight: Theme.Layout.minimumTapTarget)
+
+            Text("For privacy, Apple only reports whether a decision was recorded—not whether individual read access was granted. Review the toggles in Apple Health if data is still missing.")
                 .font(Theme.Typography.caption)
                 .foregroundStyle(Theme.Colors.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -113,18 +116,14 @@ struct HealthPermissionAuditView: View {
                 .font(Theme.Typography.sectionHeader)
                 .foregroundStyle(Theme.Colors.textPrimary)
 
-            HStack(spacing: Theme.Spacing.md) {
-                summaryMetric(
-                    title: "Requested",
-                    value: "\(totalRequestedCount)",
-                    tint: Theme.Colors.accent
-                )
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: Theme.Spacing.md) {
+                    summaryMetrics
+                }
 
-                summaryMetric(
-                    title: "Needs Review",
-                    value: "\(needsReviewCount)",
-                    tint: needsReviewCount == 0 ? Theme.Colors.success : Theme.Colors.warning
-                )
+                VStack(spacing: Theme.Spacing.md) {
+                    summaryMetrics
+                }
             }
 
             Text(
@@ -138,6 +137,21 @@ struct HealthPermissionAuditView: View {
         }
         .padding(Theme.Spacing.lg)
         .softCard()
+    }
+
+    @ViewBuilder
+    private var summaryMetrics: some View {
+        summaryMetric(
+            title: "Requested",
+            value: "\(totalRequestedCount)",
+            tint: Theme.Colors.accent
+        )
+
+        summaryMetric(
+            title: "Needs Review",
+            value: "\(needsReviewCount)",
+            tint: needsReviewCount == 0 ? Theme.Colors.success : Theme.Colors.warning
+        )
     }
 
     private func summaryMetric(title: String, value: String, tint: Color) -> some View {
@@ -300,8 +314,9 @@ struct HealthPermissionAuditView: View {
                 await loadAudit()
                 actionMessage = "Health access review completed. Check any remaining items marked Needs Review."
             } catch {
-                errorMessage = error.localizedDescription
+                let message = error.localizedDescription
                 await loadAudit()
+                errorMessage = message
             }
         }
     }

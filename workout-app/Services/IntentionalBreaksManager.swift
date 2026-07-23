@@ -326,7 +326,10 @@ enum IntentionalBreaksAnalytics {
 
 @MainActor
 final class IntentionalBreaksManager: ObservableObject {
-    @Published private(set) var savedBreaks: [IntentionalBreakRange] = []
+    @Published private(set) var savedBreaks: [IntentionalBreakRange] = [] {
+        didSet { revision &+= 1 }
+    }
+    private(set) var revision: UInt64 = 0
     @Published private(set) var dismissedSuggestionRanges: [IntentionalBreakRange] = []
 
     init(loadOnInit: Bool = true) {

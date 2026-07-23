@@ -24,6 +24,7 @@ struct GuideDetailView: View {
                     Spacer().frame(height: 100)
                 }
                 .padding(.horizontal, Theme.Spacing.lg)
+                .contentColumn(maxWidth: 640)
             }
             .background(AdaptiveBackground())
             .scrollIndicators(.hidden)

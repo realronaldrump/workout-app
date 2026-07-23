@@ -2,7 +2,7 @@ import Foundation
 import MapKit
 import Contacts
 
-func formatAddress(for mapItem: MKMapItem) -> String? {
+nonisolated func formatAddress(for mapItem: MKMapItem) -> String? {
     if #available(iOS 26.0, *) {
         if let fullAddress = mapItem.addressRepresentations?.fullAddress(includingRegion: false, singleLine: true)?
             .trimmingCharacters(in: .whitespacesAndNewlines),

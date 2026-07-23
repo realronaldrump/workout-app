@@ -32,15 +32,14 @@ struct WorkoutsInRangeView: View {
                             .padding(Theme.Spacing.xl)
                             .softCard(elevation: 1)
                     } else {
-                        VStack(spacing: Theme.Spacing.md) {
-                            ForEach(sortedWorkouts) { workout in
-                                WorkoutHistoryRow(workout: workout)
-                            }
+                        ForEach(sortedWorkouts) { workout in
+                            WorkoutHistoryRow(workout: workout)
                         }
                     }
                 }
                 .padding(.vertical, Theme.Spacing.xxl)
                 .padding(.horizontal, Theme.Spacing.lg)
+                .contentColumn()
             }
         }
         .navigationTitle("Workouts")

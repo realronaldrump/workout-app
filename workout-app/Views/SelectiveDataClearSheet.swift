@@ -42,6 +42,7 @@ struct SelectiveDataClearSheet: View {
                         clearButton
                     }
                     .padding()
+                    .contentColumn()
                 }
             }
             .task {
@@ -341,6 +342,7 @@ struct SelectiveDataClearSheet: View {
             "intentionalRestDays",
             "sessionsPerWeekGoal",
             "appearanceMode",
+            Haptics.preferenceKey,
             healthManager.preferredSleepSourceKey,
             healthManager.preferredSleepSourceNameKey
         ]

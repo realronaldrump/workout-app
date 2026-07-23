@@ -4,6 +4,7 @@ struct IntentionalBreaksView: View {
     @ObservedObject var dataManager: WorkoutDataManager
 
     @EnvironmentObject private var intentionalBreaksManager: IntentionalBreaksManager
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @AppStorage("intentionalRestDays") private var intentionalRestDays: Int = 1
 
     @State private var editorDraft: BreakEditorDraft?
@@ -51,12 +52,23 @@ struct IntentionalBreaksView: View {
         calendar.startOfDay(for: Date())
     }
 
+    private var heroMetricColumns: [GridItem] {
+        if dynamicTypeSize.isAccessibilitySize {
+            return [GridItem(.flexible())]
+        }
+        return [
+            GridItem(.flexible(), spacing: Theme.Spacing.sm),
+            GridItem(.flexible(), spacing: Theme.Spacing.sm),
+            GridItem(.flexible(), spacing: Theme.Spacing.sm)
+        ]
+    }
+
     var body: some View {
         ZStack {
             AdaptiveBackground()
 
             ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
+                LazyVStack(alignment: .leading, spacing: Theme.Spacing.xl) {
                     heroCard
                         .animateOnAppear(delay: 0)
 
@@ -120,11 +132,7 @@ struct IntentionalBreaksView: View {
             }
 
             LazyVGrid(
-                columns: [
-                    GridItem(.flexible(), spacing: Theme.Spacing.sm),
-                    GridItem(.flexible(), spacing: Theme.Spacing.sm),
-                    GridItem(.flexible(), spacing: Theme.Spacing.sm)
-                ],
+                columns: heroMetricColumns,
                 spacing: Theme.Spacing.sm
             ) {
                 BreakMetricChip(title: "Saved Ranges", value: "\(savedBreaks.count)", tint: Theme.Colors.accent)
@@ -190,7 +198,7 @@ struct IntentionalBreaksView: View {
     }
 
     private var suggestedSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+        LazyVStack(alignment: .leading, spacing: Theme.Spacing.md) {
             sectionHeader(
                 title: "Suggested Breaks",
                 subtitle: "Long uncovered workout gaps. Short 1-2 day gaps are intentionally ignored."
@@ -199,7 +207,7 @@ struct IntentionalBreaksView: View {
             if suggestions.isEmpty {
                 emptyCard(message: "No unmarked gap ranges found right now.")
             } else {
-                VStack(spacing: Theme.Spacing.sm) {
+                LazyVStack(spacing: Theme.Spacing.sm) {
                     ForEach(suggestions) { suggestion in
                         IntentionalBreakSuggestionCard(
                             suggestion: suggestion,
@@ -221,19 +229,18 @@ struct IntentionalBreaksView: View {
     }
 
     private var savedSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.sm) {
-                sectionHeader(
-                    title: "Saved Breaks",
-                    subtitle: "These ranges are already neutralized in streak and consistency analytics."
-                )
+        LazyVStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.sm) {
+                    savedBreaksHeader
+                    Spacer()
+                    clearSavedBreaksButton
+                }
 
-                Spacer()
-
-                if !savedBreaks.isEmpty {
-                    AppPillButton(title: "Clear Saved", systemImage: "trash", variant: .danger) {
-                        intentionalBreaksManager.clearSavedBreaks()
-                        Haptics.selection()
+                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                    savedBreaksHeader
+                    if !savedBreaks.isEmpty {
+                        clearSavedBreaksButton
                     }
                 }
             }
@@ -241,7 +248,7 @@ struct IntentionalBreaksView: View {
             if savedBreaks.isEmpty {
                 emptyCard(message: "No intentional break ranges saved yet.")
             } else {
-                VStack(spacing: Theme.Spacing.sm) {
+                LazyVStack(spacing: Theme.Spacing.sm) {
                     ForEach(savedBreaks) { savedRange in
                         IntentionalBreakSavedCard(
                             title: savedRange.displayName ?? "Unnamed Break",
@@ -258,6 +265,23 @@ struct IntentionalBreaksView: View {
                         )
                     }
                 }
+            }
+        }
+    }
+
+    private var savedBreaksHeader: some View {
+        sectionHeader(
+            title: "Saved Breaks",
+            subtitle: "These ranges are already neutralized in streak and consistency analytics."
+        )
+    }
+
+    @ViewBuilder
+    private var clearSavedBreaksButton: some View {
+        if !savedBreaks.isEmpty {
+            AppPillButton(title: "Clear Saved", systemImage: "trash", variant: .danger) {
+                intentionalBreaksManager.clearSavedBreaks()
+                Haptics.selection()
             }
         }
     }
@@ -307,6 +331,7 @@ private struct BreakMetricChip: View {
     let title: String
     let value: String
     let tint: Color
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -319,8 +344,9 @@ private struct BreakMetricChip: View {
             Text(value)
                 .font(Theme.Typography.monoMedium)
                 .foregroundColor(Theme.Colors.textPrimary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                .minimumScaleFactor(dynamicTypeSize.isAccessibilitySize ? 1 : 0.7)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, Theme.Spacing.md)

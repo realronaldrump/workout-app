@@ -33,6 +33,7 @@ struct RecoveryCoverageDetailView: View {
                     }
                 }
                 .padding(.vertical, Theme.Spacing.xxl)
+                .contentColumn()
             }
         }
         .navigationTitle("Recovery & Coverage")

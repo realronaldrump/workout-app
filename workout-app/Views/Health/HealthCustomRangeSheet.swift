@@ -41,6 +41,7 @@ struct HealthCustomRangeSheet: View {
                         )
                     }
                     .padding(Theme.Spacing.xl)
+                    .contentColumn(maxWidth: 640)
                 }
             }
             .navigationTitle("Custom Range")

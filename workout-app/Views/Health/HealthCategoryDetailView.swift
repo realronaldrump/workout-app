@@ -47,6 +47,7 @@ struct HealthCategoryDetailView: View {
                 }
                 .padding(.vertical, Theme.Spacing.xxl)
                 .padding(.horizontal, Theme.Spacing.lg)
+                .contentColumn()
             }
         }
         .navigationTitle(category.title)
@@ -63,7 +64,11 @@ struct HealthCategoryDetailView: View {
                 refreshPresentation()
             }
         }
-        .onReceive(healthManager.$dailyHealthStore.dropFirst()) { store in
+        .onReceive(
+            healthManager.$dailyHealthStore
+                .dropFirst()
+                .debounce(for: .milliseconds(100), scheduler: RunLoop.main)
+        ) { store in
             refreshPresentation(from: store)
         }
     }

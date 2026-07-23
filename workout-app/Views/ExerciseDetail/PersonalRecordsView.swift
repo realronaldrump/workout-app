@@ -6,12 +6,14 @@ struct PersonalRecordsView: View {
     var title: String = "Personal Records"
     @ObservedObject private var metadataManager = ExerciseMetadataManager.shared
     @ObservedObject private var metricManager = ExerciseMetricManager.shared
+    @State private var cachedRecords: [PersonalRecord] = []
 
     private struct PersonalRecord: Identifiable {
-        let id = UUID()
         let title: String
         let value: String
         let date: Date
+
+        var id: String { "\(title)|\(date.timeIntervalSinceReferenceDate)" }
     }
 
     private struct CardioSessionMetrics {
@@ -36,7 +38,17 @@ struct PersonalRecordsView: View {
         ExerciseLoad.isAssistedExercise(exerciseName)
     }
 
-    private var records: [PersonalRecord] {
+    private var historyFingerprint: Int {
+        var hasher = Hasher()
+        hasher.combine(exerciseName)
+        for session in history {
+            hasher.combine(session.date.timeIntervalSinceReferenceDate)
+            hasher.combine(session.sets)
+        }
+        return hasher.finalize()
+    }
+
+    private func buildRecords() -> [PersonalRecord] {
         if isCardio {
             let sessions: [CardioSessionMetrics] = history.map { session in
                 let distance = session.sets.reduce(0.0) { $0 + $1.distance }
@@ -145,8 +157,8 @@ struct PersonalRecordsView: View {
                     .foregroundColor(Theme.Colors.textPrimary)
             }
 
-            VStack(spacing: Theme.Spacing.md) {
-                ForEach(records) { record in
+            LazyVStack(spacing: Theme.Spacing.md) {
+                ForEach(cachedRecords) { record in
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(record.title)
@@ -168,5 +180,13 @@ struct PersonalRecordsView: View {
                 }
             }
         }
+        .onAppear(perform: refreshRecords)
+        .onChange(of: historyFingerprint) { _, _ in refreshRecords() }
+        .onChange(of: metadataManager.muscleTagOverrides) { _, _ in refreshRecords() }
+        .onChange(of: metricManager.cardioOverrides) { _, _ in refreshRecords() }
+    }
+
+    private func refreshRecords() {
+        cachedRecords = buildRecords()
     }
 }

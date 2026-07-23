@@ -5,6 +5,7 @@ struct ConsistencyDetailView: View {
     let workouts: [Workout]
 
     @EnvironmentObject private var intentionalBreaksManager: IntentionalBreaksManager
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @AppStorage("sessionsPerWeekGoal") private var sessionsPerWeekGoal: Int = 4
     @AppStorage("intentionalRestDays") private var intentionalRestDays: Int = 1
 
@@ -12,7 +13,8 @@ struct ConsistencyDetailView: View {
     @State private var selectedWeekStart: Date?
     @State private var selectedStreakRunId: String?
     @State private var selectedWeekday: Int?
-    @State private var cachedSortedWorkouts: [Workout] = []
+    @State private var presentation = ConsistencyPresentation.empty
+    @State private var hasBuiltPresentation = false
 
     private var calendar: Calendar {
         var calendar = Calendar.current
@@ -21,12 +23,18 @@ struct ConsistencyDetailView: View {
         return calendar
     }
 
-    private var sortedWorkouts: [Workout] {
-        cachedSortedWorkouts
-    }
-
     private var targetSessionsPerWeek: Int {
         min(max(sessionsPerWeekGoal, 1), 14)
+    }
+
+    private var metricGridColumns: [GridItem] {
+        if dynamicTypeSize.isAccessibilitySize {
+            return [GridItem(.flexible())]
+        }
+        return [
+            GridItem(.flexible(), spacing: Theme.Spacing.sm),
+            GridItem(.flexible(), spacing: Theme.Spacing.sm)
+        ]
     }
 
     var body: some View {
@@ -34,7 +42,7 @@ struct ConsistencyDetailView: View {
             consistencyBackground
 
             ScrollView {
-                VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
+                LazyVStack(alignment: .leading, spacing: Theme.Spacing.xl) {
                     heroCard
 
                     rangePicker
@@ -54,20 +62,167 @@ struct ConsistencyDetailView: View {
         .navigationTitle("Consistency")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
-            refreshCachedWorkouts()
+            guard !hasBuiltPresentation else { return }
+            refreshPresentation()
             syncSelections()
         }
         .onChange(of: selectedRange) { _, _ in
+            refreshPresentation()
             syncSelections()
         }
         .onChange(of: workouts) { _, _ in
-            refreshCachedWorkouts()
+            refreshPresentation()
+            syncSelections()
+        }
+        .onChange(of: intentionalBreaksManager.savedBreaks) { _, _ in
+            refreshPresentation()
+            syncSelections()
+        }
+        .onChange(of: sessionsPerWeekGoal) { _, _ in
+            refreshPresentation()
+            syncSelections()
+        }
+        .onChange(of: intentionalRestDays) { _, _ in
+            refreshPresentation()
             syncSelections()
         }
     }
 
-    private func refreshCachedWorkouts() {
-        cachedSortedWorkouts = workouts.sorted { $0.date < $1.date }
+    @MainActor
+    private func refreshPresentation() {
+        let calendar = calendar
+        let sortedWorkouts = workouts.sorted { $0.date < $1.date }
+        let bounds = makeRangeBounds(sortedWorkouts: sortedWorkouts, calendar: calendar)
+        let workoutsInRange = sortedWorkouts.filter { workout in
+            let day = calendar.startOfDay(for: workout.date)
+            return day >= bounds.start && day <= bounds.end
+        }
+        let workoutDaysInRange = IntentionalBreaksAnalytics.normalizedWorkoutDays(
+            for: workoutsInRange,
+            calendar: calendar
+        )
+        let breakDaysInRange = intentionalBreaksManager.breakDaySet(
+            excluding: workoutDaysInRange,
+            within: bounds.start...bounds.end,
+            calendar: calendar
+        )
+        let volumeByWorkoutID = workoutsInRange.reduce(into: [UUID: Double]()) { result, workout in
+            result[workout.id] = ExerciseAggregation.totalVolume(
+                for: workout,
+                resolver: ExerciseIdentityResolver.current
+            )
+        }
+        let weeklyBuckets = workouts.isEmpty
+            ? []
+            : buildWeeklyBuckets(
+                workoutsInRange: workoutsInRange,
+                volumeByWorkoutID: volumeByWorkoutID,
+                rangeBounds: bounds,
+                breakDaysInRange: breakDaysInRange,
+                calendar: calendar
+            )
+        let workoutsByWeekStart = Dictionary(grouping: workoutsInRange) { workout in
+            SharedFormatters.startOfWeekSunday(for: workout.date)
+        }
+        .mapValues { workouts in
+            Array(workouts.reversed())
+        }
+
+        let chronologicalStreakRuns = WorkoutAnalytics.streakRuns(
+            for: workoutsInRange,
+            intentionalRestDays: max(0, intentionalRestDays),
+            intentionalBreakRanges: intentionalBreaksManager.savedBreaks
+        )
+        let streakRuns = chronologicalStreakRuns
+            .sorted {
+                if $0.workoutDayCount != $1.workoutDayCount {
+                    return $0.workoutDayCount > $1.workoutDayCount
+                }
+                return $0.end > $1.end
+            }
+        let streakRunsByID = streakRuns.reduce(into: [String: StreakRun]()) { result, run in
+            result[run.id] = run
+        }
+        let allowedGapDays = max(0, intentionalRestDays) + 1
+        let today = calendar.startOfDay(for: Date())
+        let currentStreakRun = streakRuns.first { run in
+            let end = calendar.startOfDay(for: run.end)
+            let daysSince = IntentionalBreaksAnalytics.effectiveGapDays(
+                from: end,
+                to: today,
+                breakDays: breakDaysInRange,
+                includeEnd: true,
+                calendar: calendar
+            )
+            return daysSince <= allowedGapDays
+        }
+        var workoutsByStreakRunID: [String: [Workout]] = [:]
+        var runIndex = 0
+        for workout in workoutsInRange {
+            let day = calendar.startOfDay(for: workout.date)
+            while runIndex < chronologicalStreakRuns.count,
+                  day > calendar.startOfDay(for: chronologicalStreakRuns[runIndex].end) {
+                runIndex += 1
+            }
+            guard runIndex < chronologicalStreakRuns.count else { break }
+            let run = chronologicalStreakRuns[runIndex]
+            if day >= calendar.startOfDay(for: run.start) {
+                workoutsByStreakRunID[run.id, default: []].append(workout)
+            }
+        }
+        workoutsByStreakRunID = workoutsByStreakRunID.mapValues { Array($0.reversed()) }
+
+        let workoutsByWeekday = Dictionary(grouping: workoutsInRange) { workout in
+            calendar.component(.weekday, from: workout.date)
+        }
+        .mapValues { workouts in
+            Array(workouts.reversed())
+        }
+        let weekdayStats = (1...7).map { weekday in
+            let dayWorkouts = workoutsByWeekday[weekday] ?? []
+            return WeekdayConsistencyStat(
+                weekday: weekday,
+                label: weekdayName(for: weekday) ?? "-",
+                sessions: dayWorkouts.count,
+                totalVolume: dayWorkouts.reduce(0) { $0 + (volumeByWorkoutID[$1.id] ?? 0) }
+            )
+        }
+
+        let activeGoalWeeks = weeklyBuckets.filter { !$0.isFullyExcused }.count
+        let goalHitWeeks = weeklyBuckets.filter {
+            let required = $0.requiredSessions(targetSessionsPerWeek: targetSessionsPerWeek)
+            return required > 0 && $0.sessions >= required
+        }.count
+        let totalSessions = weeklyBuckets.reduce(0) { $0 + $1.sessions }
+        let effectiveWeeks = weeklyBuckets.reduce(0.0) { $0 + $1.activeWeekEquivalent }
+
+        presentation = ConsistencyPresentation(
+            sortedWorkouts: sortedWorkouts,
+            rangeBounds: bounds,
+            workoutsInRange: workoutsInRange,
+            workoutDaysInRange: workoutDaysInRange,
+            breakDaysInRange: breakDaysInRange,
+            weeklyBuckets: weeklyBuckets,
+            weeklyBucketsByStart: Dictionary(uniqueKeysWithValues: weeklyBuckets.map { ($0.weekStart, $0) }),
+            workoutsByWeekStart: workoutsByWeekStart,
+            streakRuns: streakRuns,
+            streakRunsByID: streakRunsByID,
+            currentStreakRun: currentStreakRun,
+            bestStreakLength: streakRuns.map(\.workoutDayCount).max() ?? 0,
+            workoutsByStreakRunID: workoutsByStreakRunID,
+            weekdayStats: weekdayStats,
+            workoutsByWeekday: workoutsByWeekday,
+            weekdayMaxCount: max(weekdayStats.map(\.sessions).max() ?? 1, 1),
+            goalHitWeeks: goalHitWeeks,
+            activeGoalWeeks: activeGoalWeeks,
+            goalHitRate: activeGoalWeeks > 0 ? Double(goalHitWeeks) / Double(activeGoalWeeks) : 0,
+            averageSessionsPerWeek: effectiveWeeks > 0 ? Double(totalSessions) / effectiveWeeks : 0,
+            maxSessionsInRange: max(
+                targetSessionsPerWeek,
+                weeklyBuckets.map(\.sessions).max() ?? targetSessionsPerWeek
+            )
+        )
+        hasBuiltPresentation = true
     }
 
     private var consistencyBackground: some View {
@@ -107,15 +262,16 @@ struct ConsistencyDetailView: View {
                     .foregroundColor(Theme.Colors.textTertiary)
                     .tracking(1.0)
 
-                HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.md) {
-                    Text(String(format: "%.1f", averageSessionsPerWeek))
-                        .font(Theme.Typography.metricLarge)
-                        .foregroundStyle(Theme.accentGradient)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.6)
-                    Text("sessions/week")
-                        .font(Theme.Typography.bodyBold)
-                        .foregroundColor(Theme.Colors.textSecondary)
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.md) {
+                        heroAverageValue
+                        heroAverageLabel
+                    }
+
+                    VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                        heroAverageValue
+                        heroAverageLabel
+                    }
                 }
 
                 Text("Saved break dates scale weekly goals down and keep excused gaps from breaking streaks.")
@@ -155,13 +311,15 @@ struct ConsistencyDetailView: View {
                 }
                 .chartXAxis(.hidden)
                 .frame(height: Theme.ChartHeight.compact)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Weekly consistency trend")
+                .accessibilityValue(
+                    "\(weeklyBuckets.count) weeks. Average \(String(format: "%.1f", averageSessionsPerWeek)) sessions per week."
+                )
             }
 
             LazyVGrid(
-                columns: [
-                    GridItem(.flexible(), spacing: Theme.Spacing.sm),
-                    GridItem(.flexible(), spacing: Theme.Spacing.sm)
-                ],
+                columns: metricGridColumns,
                 spacing: Theme.Spacing.sm
             ) {
                 HeroMetricChip(
@@ -207,6 +365,22 @@ struct ConsistencyDetailView: View {
         .shadow(color: Theme.Colors.accent.opacity(0.08), radius: 20, x: 0, y: 10)
     }
 
+    private var heroAverageValue: some View {
+        Text(String(format: "%.1f", averageSessionsPerWeek))
+            .font(Theme.Typography.metricLarge)
+            .foregroundStyle(Theme.accentGradient)
+            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+            .minimumScaleFactor(dynamicTypeSize.isAccessibilitySize ? 1 : 0.6)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var heroAverageLabel: some View {
+        Text("sessions/week")
+            .font(Theme.Typography.bodyBold)
+            .foregroundColor(Theme.Colors.textSecondary)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
     private var rangePicker: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             Text("Window")
@@ -249,7 +423,7 @@ struct ConsistencyDetailView: View {
     }
 
     private var weeklyExplorerSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
+        LazyVStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             sectionHeader(
                 title: "Weekly Explorer",
                 subtitle: "Tap any week to inspect sessions, volume, and time load."
@@ -357,10 +531,7 @@ struct ConsistencyDetailView: View {
 
         return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             LazyVGrid(
-                columns: [
-                    GridItem(.flexible(), spacing: Theme.Spacing.sm),
-                    GridItem(.flexible(), spacing: Theme.Spacing.sm)
-                ],
+                columns: metricGridColumns,
                 spacing: Theme.Spacing.sm
             ) {
                 DetailMetricTile(
@@ -431,7 +602,7 @@ struct ConsistencyDetailView: View {
     }
 
     private var weekdayPatternSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
+        LazyVStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             sectionHeader(
                 title: "Weekday Pattern",
                 subtitle: "See where your training rhythm is strongest."
@@ -499,7 +670,7 @@ struct ConsistencyDetailView: View {
     }
 
     private var streakExplorerSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
+        LazyVStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             sectionHeader(
                 title: "Streak Explorer",
                 subtitle: "Runs honor your rest allowance plus saved intentional break dates. Tap a run to inspect it."
@@ -618,38 +789,29 @@ struct ConsistencyDetailView: View {
     }
 
     private var goalHitWeeks: Int {
-        weeklyBuckets.filter {
-            let required = $0.requiredSessions(targetSessionsPerWeek: targetSessionsPerWeek)
-            return required > 0 && $0.sessions >= required
-        }.count
+        presentation.goalHitWeeks
     }
 
     private var activeGoalWeeks: Int {
-        weeklyBuckets.filter { !$0.isFullyExcused }.count
+        presentation.activeGoalWeeks
     }
 
     private var goalHitRate: Double {
-        guard activeGoalWeeks > 0 else { return 0 }
-        return Double(goalHitWeeks) / Double(activeGoalWeeks)
+        presentation.goalHitRate
     }
 
     private var averageSessionsPerWeek: Double {
-        guard !weeklyBuckets.isEmpty else { return 0 }
-        let total = weeklyBuckets.reduce(0) { partialResult, bucket in
-            partialResult + bucket.sessions
-        }
-        let effectiveWeeks = weeklyBuckets.reduce(0.0) { partialResult, bucket in
-            partialResult + bucket.activeWeekEquivalent
-        }
-        guard effectiveWeeks > 0 else { return 0 }
-        return Double(total) / effectiveWeeks
+        presentation.averageSessionsPerWeek
     }
 
     private var maxSessionsInRange: Int {
-        max(targetSessionsPerWeek, weeklyBuckets.map(\.sessions).max() ?? targetSessionsPerWeek)
+        presentation.maxSessionsInRange
     }
 
-    private var rangeBounds: (start: Date, end: Date) {
+    private func makeRangeBounds(
+        sortedWorkouts: [Workout],
+        calendar: Calendar
+    ) -> (start: Date, end: Date) {
         let now = Date()
         let end = calendar.startOfDay(for: now)
 
@@ -671,32 +833,19 @@ struct ConsistencyDetailView: View {
         return (start: min(start, end), end: end)
     }
 
-    private var workoutsInRange: [Workout] {
-        let bounds = rangeBounds
-        return workouts.filter { workout in
-            let day = calendar.startOfDay(for: workout.date)
-            return day >= bounds.start && day <= bounds.end
-        }
-    }
-
-    private var workoutDaysInRange: Set<Date> {
-        IntentionalBreaksAnalytics.normalizedWorkoutDays(for: workoutsInRange, calendar: calendar)
-    }
-
-    private var breakDaysInRange: Set<Date> {
-        intentionalBreaksManager.breakDaySet(
-            excluding: workoutDaysInRange,
-            within: rangeBounds.start...rangeBounds.end,
-            calendar: calendar
-        )
-    }
-
     private var weeklyBuckets: [ConsistencyWeekBucket] {
-        guard !workouts.isEmpty else { return [] }
+        presentation.weeklyBuckets
+    }
 
-        let bounds = rangeBounds
-        let firstWeekStart = SharedFormatters.startOfWeekSunday(for: bounds.start)
-        let lastWeekStart = SharedFormatters.startOfWeekSunday(for: bounds.end)
+    private func buildWeeklyBuckets(
+        workoutsInRange: [Workout],
+        volumeByWorkoutID: [UUID: Double],
+        rangeBounds: (start: Date, end: Date),
+        breakDaysInRange: Set<Date>,
+        calendar: Calendar
+    ) -> [ConsistencyWeekBucket] {
+        let firstWeekStart = SharedFormatters.startOfWeekSunday(for: rangeBounds.start)
+        let lastWeekStart = SharedFormatters.startOfWeekSunday(for: rangeBounds.end)
 
         struct WeekAccumulator {
             var sessions: Int = 0
@@ -709,10 +858,7 @@ struct ConsistencyDetailView: View {
             let weekStart = SharedFormatters.startOfWeekSunday(for: workout.date)
             var accumulator = partialResult[weekStart, default: WeekAccumulator()]
             accumulator.sessions += 1
-            accumulator.totalVolume += ExerciseAggregation.totalVolume(
-                for: workout,
-                resolver: ExerciseIdentityResolver.current
-            )
+            accumulator.totalVolume += volumeByWorkoutID[workout.id] ?? 0
             accumulator.totalMinutes += workout.estimatedDurationMinutes(defaultMinutes: 60)
             accumulator.uniqueDays.insert(calendar.startOfDay(for: workout.date))
             partialResult[weekStart] = accumulator
@@ -722,10 +868,13 @@ struct ConsistencyDetailView: View {
         var cursor = firstWeekStart
 
         while cursor <= lastWeekStart {
-            let weekEnd = min(calendar.date(byAdding: .day, value: 6, to: cursor) ?? cursor, bounds.end)
+            let weekEnd = min(calendar.date(byAdding: .day, value: 6, to: cursor) ?? cursor, rangeBounds.end)
             let aggregate = aggregates[cursor] ?? WeekAccumulator()
-            let trackedStart = max(cursor, bounds.start)
-            let trackedEnd = min(calendar.date(byAdding: .day, value: 6, to: cursor) ?? cursor, bounds.end)
+            let trackedStart = max(cursor, rangeBounds.start)
+            let trackedEnd = min(
+                calendar.date(byAdding: .day, value: 6, to: cursor) ?? cursor,
+                rangeBounds.end
+            )
             let trackedDays = max((calendar.dateComponents([.day], from: trackedStart, to: trackedEnd).day ?? 0) + 1, 0)
             let excludedDays = IntentionalBreaksAnalytics.dayCount(
                 from: trackedStart,
@@ -770,7 +919,7 @@ struct ConsistencyDetailView: View {
         }
 
         if let selectedWeekStart,
-           let bucket = weeklyBuckets.first(where: { calendar.isDate($0.weekStart, inSameDayAs: selectedWeekStart) }) {
+           let bucket = presentation.weeklyBucketsByStart[selectedWeekStart] {
             return bucket
         }
 
@@ -787,59 +936,24 @@ struct ConsistencyDetailView: View {
     }
 
     private var selectedWeekWorkouts: [Workout] {
-        let bucket = selectedWeek
-        let start = calendar.startOfDay(for: bucket.weekStart)
-        let end = calendar.startOfDay(for: bucket.weekEnd)
-
-        return workoutsInRange
-            .filter { workout in
-                let day = calendar.startOfDay(for: workout.date)
-                return day >= start && day <= end
-            }
-            .sorted { $0.date > $1.date }
+        presentation.workoutsByWeekStart[selectedWeek.weekStart] ?? []
     }
 
     private var streakRuns: [StreakRun] {
-        WorkoutAnalytics
-            .streakRuns(
-                for: workoutsInRange,
-                intentionalRestDays: max(0, intentionalRestDays),
-                intentionalBreakRanges: intentionalBreaksManager.savedBreaks
-            )
-            .sorted {
-                if $0.workoutDayCount != $1.workoutDayCount {
-                    return $0.workoutDayCount > $1.workoutDayCount
-                }
-                return $0.end > $1.end
-            }
+        presentation.streakRuns
     }
 
     private var currentStreakRun: StreakRun? {
-        guard !streakRuns.isEmpty else { return nil }
-
-        let allowedGapDays = max(0, intentionalRestDays) + 1
-        let today = calendar.startOfDay(for: Date())
-
-        return streakRuns.first { run in
-            let end = calendar.startOfDay(for: run.end)
-            let daysSince = IntentionalBreaksAnalytics.effectiveGapDays(
-                from: end,
-                to: today,
-                breakDays: breakDaysInRange,
-                includeEnd: true,
-                calendar: calendar
-            )
-            return daysSince <= allowedGapDays
-        }
+        presentation.currentStreakRun
     }
 
     private var bestStreakLength: Int {
-        streakRuns.map(\.workoutDayCount).max() ?? 0
+        presentation.bestStreakLength
     }
 
     private var selectedStreakRun: StreakRun? {
         if let selectedStreakRunId,
-           let run = streakRuns.first(where: { $0.id == selectedStreakRunId }) {
+           let run = presentation.streakRunsByID[selectedStreakRunId] {
             return run
         }
         return currentStreakRun ?? streakRuns.first
@@ -847,15 +961,7 @@ struct ConsistencyDetailView: View {
 
     private var selectedStreakWorkouts: [Workout] {
         guard let run = selectedStreakRun else { return [] }
-        let start = calendar.startOfDay(for: run.start)
-        let end = calendar.startOfDay(for: run.end)
-
-        return workoutsInRange
-            .filter { workout in
-                let day = calendar.startOfDay(for: workout.date)
-                return day >= start && day <= end
-            }
-            .sorted { $0.date > $1.date }
+        return presentation.workoutsByStreakRunID[run.id] ?? []
     }
 
     private func streakRangeLabel(_ run: StreakRun) -> String {
@@ -868,35 +974,15 @@ struct ConsistencyDetailView: View {
     }
 
     private var weekdayStats: [WeekdayConsistencyStat] {
-        let grouped = Dictionary(grouping: workoutsInRange) { workout in
-            calendar.component(.weekday, from: workout.date)
-        }
-
-        return (1...7).map { weekday in
-            let dayWorkouts = grouped[weekday] ?? []
-            let sessions = dayWorkouts.count
-            let volume = ExerciseAggregation.totalVolume(
-                for: dayWorkouts,
-                resolver: ExerciseIdentityResolver.current
-            )
-
-            return WeekdayConsistencyStat(
-                weekday: weekday,
-                label: weekdayName(for: weekday) ?? "-",
-                sessions: sessions,
-                totalVolume: volume
-            )
-        }
+        presentation.weekdayStats
     }
 
     private var weekdayMaxCount: Int {
-        max(weekdayStats.map(\.sessions).max() ?? 1, 1)
+        presentation.weekdayMaxCount
     }
 
     private func workoutsForWeekday(_ weekday: Int) -> [Workout] {
-        workoutsInRange
-            .filter { calendar.component(.weekday, from: $0.date) == weekday }
-            .sorted { $0.date > $1.date }
+        presentation.workoutsByWeekday[weekday] ?? []
     }
 
     private func weekdayName(for weekday: Int) -> String? {
@@ -907,10 +993,7 @@ struct ConsistencyDetailView: View {
 
     private func syncSelections() {
         if let selectedWeekStart {
-            let exists = weeklyBuckets.contains { bucket in
-                calendar.isDate(bucket.weekStart, inSameDayAs: selectedWeekStart)
-            }
-            if !exists {
+            if presentation.weeklyBucketsByStart[selectedWeekStart] == nil {
                 self.selectedWeekStart = weeklyBuckets.last?.weekStart
             }
         } else {
@@ -918,7 +1001,7 @@ struct ConsistencyDetailView: View {
         }
 
         if let selectedStreakRunId,
-           !streakRuns.contains(where: { $0.id == selectedStreakRunId }) {
+           presentation.streakRunsByID[selectedStreakRunId] == nil {
             self.selectedStreakRunId = currentStreakRun?.id ?? streakRuns.first?.id
         } else if selectedStreakRunId == nil {
             selectedStreakRunId = currentStreakRun?.id ?? streakRuns.first?.id
@@ -995,10 +1078,62 @@ private struct WeekdayConsistencyStat: Identifiable {
     var id: Int { weekday }
 }
 
+/// A single, main-actor snapshot of every history-derived value rendered by the screen.
+/// Selection changes only read this snapshot; the full history is revisited when one of
+/// the source inputs observed by `ConsistencyDetailView` changes.
+private struct ConsistencyPresentation {
+    let sortedWorkouts: [Workout]
+    let rangeBounds: (start: Date, end: Date)
+    let workoutsInRange: [Workout]
+    let workoutDaysInRange: Set<Date>
+    let breakDaysInRange: Set<Date>
+    let weeklyBuckets: [ConsistencyWeekBucket]
+    let weeklyBucketsByStart: [Date: ConsistencyWeekBucket]
+    let workoutsByWeekStart: [Date: [Workout]]
+    let streakRuns: [StreakRun]
+    let streakRunsByID: [String: StreakRun]
+    let currentStreakRun: StreakRun?
+    let bestStreakLength: Int
+    let workoutsByStreakRunID: [String: [Workout]]
+    let weekdayStats: [WeekdayConsistencyStat]
+    let workoutsByWeekday: [Int: [Workout]]
+    let weekdayMaxCount: Int
+    let goalHitWeeks: Int
+    let activeGoalWeeks: Int
+    let goalHitRate: Double
+    let averageSessionsPerWeek: Double
+    let maxSessionsInRange: Int
+
+    static let empty = ConsistencyPresentation(
+        sortedWorkouts: [],
+        rangeBounds: (start: .distantPast, end: .distantPast),
+        workoutsInRange: [],
+        workoutDaysInRange: [],
+        breakDaysInRange: [],
+        weeklyBuckets: [],
+        weeklyBucketsByStart: [:],
+        workoutsByWeekStart: [:],
+        streakRuns: [],
+        streakRunsByID: [:],
+        currentStreakRun: nil,
+        bestStreakLength: 0,
+        workoutsByStreakRunID: [:],
+        weekdayStats: [],
+        workoutsByWeekday: [:],
+        weekdayMaxCount: 1,
+        goalHitWeeks: 0,
+        activeGoalWeeks: 0,
+        goalHitRate: 0,
+        averageSessionsPerWeek: 0,
+        maxSessionsInRange: 1
+    )
+}
+
 private struct HeroMetricChip: View {
     let title: String
     let value: String
     let tint: Color
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
@@ -1010,8 +1145,9 @@ private struct HeroMetricChip: View {
             Text(value)
                 .font(Theme.Typography.monoMedium)
                 .foregroundColor(Theme.Colors.textPrimary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                .minimumScaleFactor(dynamicTypeSize.isAccessibilitySize ? 1 : 0.8)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, Theme.Spacing.md)
@@ -1134,6 +1270,7 @@ private struct DetailMetricTile: View {
     let label: String
     let value: String
     let tint: Color
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -1145,8 +1282,9 @@ private struct DetailMetricTile: View {
             Text(value)
                 .font(Theme.Typography.monoMedium)
                 .foregroundColor(Theme.Colors.textPrimary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                .minimumScaleFactor(dynamicTypeSize.isAccessibilitySize ? 1 : 0.75)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, Theme.Spacing.md)

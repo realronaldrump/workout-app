@@ -4,6 +4,7 @@ import SwiftUI
 // swiftlint:disable file_length
 
 struct ExportWorkoutsView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject var dataManager: WorkoutDataManager
     @ObservedObject var iCloudManager: iCloudDocumentManager
     @ObservedObject private var exerciseMetadataManager = ExerciseMetadataManager.shared
@@ -83,9 +84,9 @@ struct ExportWorkoutsView: View {
                 .padding(.horizontal, Theme.Spacing.lg)
                 .frame(maxWidth: Theme.Layout.maxContentWidth, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .center)
-                .animation(Theme.Animation.gentleSpring, value: selectedCategory)
-                .animation(Theme.Animation.smooth, value: workoutMode)
-                .animation(Theme.Animation.smooth, value: healthExportMode)
+                .animation(reduceMotion ? nil : Theme.Animation.gentleSpring, value: selectedCategory)
+                .animation(reduceMotion ? nil : Theme.Animation.smooth, value: workoutMode)
+                .animation(reduceMotion ? nil : Theme.Animation.smooth, value: healthExportMode)
             }
         }
         .navigationTitle("Export")
@@ -181,19 +182,48 @@ private extension ExportWorkoutsView {
     }
 
     var categoryPicker: some View {
-        ExportCategorySegmentedPicker(
-            options: ExportCategory.allCases.map { category in
-                ExportCategoryOption(
-                    id: category.rawValue,
-                    title: category.title,
-                    systemImage: category.systemImage,
-                    tint: category.tint
-                )
-            },
-            selection: $selectedCategory,
-            value: { option in
-                ExportCategory(rawValue: option.id) ?? .workouts
+        HStack(spacing: Theme.Spacing.xs) {
+            ForEach(ExportCategory.allCases) { category in
+                let isSelected = selectedCategory == category
+
+                Button {
+                    guard !isSelected else { return }
+                    selectedCategory = category
+                    Haptics.toggle()
+                } label: {
+                    HStack(spacing: Theme.Spacing.sm) {
+                        Image(systemName: category.systemImage)
+                            .font(Theme.Typography.subheadlineStrong)
+                        Text(category.title)
+                            .font(Theme.Typography.captionBold)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+                    }
+                    .foregroundStyle(isSelected ? .white : Theme.Colors.textSecondary)
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: Theme.Layout.minimumTapTarget)
+                    .background(
+                        RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
+                            .fill(isSelected ? category.tint : Color.clear)
+                            .shadow(color: isSelected ? category.tint.opacity(0.3) : .clear, radius: 6, y: 2)
+                    )
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(category.title)
+                .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+                .animation(reduceMotion ? nil : Theme.Animation.gentleSpring, value: isSelected)
             }
+        }
+        .padding(Theme.Spacing.xs)
+        .background(
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge, style: .continuous)
+                .fill(Theme.Colors.surfaceRaised)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge, style: .continuous)
+                .strokeBorder(Theme.Colors.border.opacity(0.5), lineWidth: 1)
         )
     }
 

@@ -1,10 +1,12 @@
+import Combine
 import SwiftUI
 
 struct MuscleRecencyView: View {
     @ObservedObject var dataManager: WorkoutDataManager
     @ObservedObject private var relationshipManager = ExerciseRelationshipManager.shared
+    @State private var recencyRows: [MuscleGroupRecency] = []
 
-    private var recencyRows: [MuscleGroupRecency] {
+    private func refreshRecencyRows() {
         let workouts = dataManager.workouts
         let exerciseNames = Set(workouts.flatMap { $0.exercises.map(\.name) })
         let tagMappings = ExerciseMetadataManager.shared.resolvedMappings(for: exerciseNames)
@@ -12,7 +14,7 @@ struct MuscleRecencyView: View {
             tags.compactMap { $0.builtInGroup }
         }
 
-        return MuscleRecencySuggestionEngine.allGroupRecency(
+        recencyRows = MuscleRecencySuggestionEngine.allGroupRecency(
             workouts: workouts,
             muscleGroupsByExerciseName: groupMappings,
             resolver: relationshipManager.resolverSnapshot()
@@ -35,18 +37,32 @@ struct MuscleRecencyView: View {
                         .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.Colors.textSecondary)
 
-                    VStack(spacing: Theme.Spacing.md) {
-                        ForEach(recencyRows) { row in
-                            recencyRow(row)
-                        }
+                    ForEach(recencyRows) { row in
+                        recencyRow(row)
                     }
                 }
                 .padding(.vertical, Theme.Spacing.xxl)
                 .padding(.horizontal, Theme.Spacing.lg)
+                .contentColumn()
             }
         }
         .navigationTitle("Muscle Recency")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear(perform: refreshRecencyRows)
+        .onReceive(
+            dataManager.$workouts
+                .dropFirst()
+                .debounce(for: .milliseconds(150), scheduler: RunLoop.main)
+        ) { _ in
+            refreshRecencyRows()
+        }
+        .onReceive(
+            relationshipManager.$relationships
+                .dropFirst()
+                .debounce(for: .milliseconds(100), scheduler: RunLoop.main)
+        ) { _ in
+            refreshRecencyRows()
+        }
     }
 
     private func recencyRow(_ row: MuscleGroupRecency) -> some View {

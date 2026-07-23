@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 
 struct ExercisePickerView: View {
@@ -5,231 +6,279 @@ struct ExercisePickerView: View {
     @EnvironmentObject private var dataManager: WorkoutDataManager
     @ObservedObject private var relationshipManager = ExerciseRelationshipManager.shared
 
-    @State private var searchText: String = ""
+    @State private var searchText = ""
+    @State private var settledSearchText = ""
+    @State private var allExercises: [String] = []
+    @State private var recentExercises: [String] = []
+    @State private var favoriteAggregates: Set<String> = []
+    @State private var favoriteMembership: Set<String> = []
+    @State private var recentMembership: Set<String> = []
     @AppStorage("favoriteExercises") private var favoriteExercisesData: String = "[]"
 
     let onSelect: (String) -> Void
 
-    private var favoriteExerciseNames: [String] {
-        guard let data = favoriteExercisesData.data(using: .utf8),
-              let array = try? JSONDecoder().decode([String].self, from: data) else { return [] }
-        let resolver = relationshipManager.resolverSnapshot()
-        return Array(Set(array.map { resolver.aggregateName(for: $0) }))
-            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
-    }
-
-    private func isFavorite(_ name: String) -> Bool {
-        !favoriteRollupNames(for: name).isDisjoint(with: Set(favoriteExerciseNames))
-    }
-
-    private func toggleFavorite(_ name: String) {
-        var favorites: Set<String>
-        if let data = favoriteExercisesData.data(using: .utf8),
-           let array = try? JSONDecoder().decode([String].self, from: data) {
-            favorites = Set(array)
-        } else {
-            favorites = []
-        }
-        let rollupNames = favoriteRollupNames(for: name)
-        if !favorites.isDisjoint(with: rollupNames) {
-            favorites.subtract(rollupNames)
-        } else {
-            favorites.insert(relationshipManager.resolverSnapshot().aggregateName(for: name))
-        }
-        if let data = try? JSONEncoder().encode(Array(favorites)),
-           let string = String(data: data, encoding: .utf8) {
-            favoriteExercisesData = string
-        }
-        Haptics.selection()
-    }
-
     var body: some View {
         NavigationStack {
-            ZStack {
-                AdaptiveBackground()
+            List {
+                if shouldShowCreateOption {
+                    Section("New Exercise") {
+                        createRow
+                    }
+                }
 
-                ScrollView(showsIndicators: false) {
-                    VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-                        if shouldShowCreateOption {
-                            createRow
-                        }
-
-                        if searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            if !recentExercises.isEmpty {
-                                sectionHeader("Recent")
-                                VStack(spacing: Theme.Spacing.sm) {
-                                    ForEach(recentExercises, id: \.self) { name in
-                                        exerciseRow(name)
-                                    }
-                                }
-                            }
-
-                            let favs = favoriteExerciseNames.filter { !recentExercises.contains($0) }
-                            if !favs.isEmpty {
-                                sectionHeader("Favorites")
-                                VStack(spacing: Theme.Spacing.sm) {
-                                    ForEach(favs, id: \.self) { name in
-                                        exerciseRow(name)
-                                    }
-                                }
-                            }
-
-                            sectionHeader(recentExercises.isEmpty && favs.isEmpty ? "All" : "All Others")
-                            VStack(spacing: Theme.Spacing.sm) {
-                                ForEach(allExercisesExcludingRecent, id: \.self) { name in
-                                    exerciseRow(name)
-                                }
-                            }
-                        } else {
-                            if filteredExercises.isEmpty {
-                                EmptyStateCard(
-                                    icon: "magnifyingglass",
-                                    tint: Theme.Colors.textTertiary,
-                                    title: "No Matches",
-                                    message: "Create a new exercise or adjust your search."
-                                )
-                                .padding(.top, Theme.Spacing.xl)
-                            } else {
-                                sectionHeader("Results")
-                                VStack(spacing: Theme.Spacing.sm) {
-                                    ForEach(filteredExercises, id: \.self) { name in
-                                        exerciseRow(name)
-                                    }
-                                }
+                if query.isEmpty {
+                    if !recentExercises.isEmpty {
+                        Section("Recent") {
+                            ForEach(recentExercises, id: \.self) { name in
+                                exerciseRow(name)
                             }
                         }
                     }
-                    .padding(Theme.Spacing.xl)
+
+                    let favorites = favoriteNamesExcludingRecent
+                    if !favorites.isEmpty {
+                        Section("Favorites") {
+                            ForEach(favorites, id: \.self) { name in
+                                exerciseRow(name)
+                            }
+                        }
+                    }
+
+                    Section(recentExercises.isEmpty && favorites.isEmpty ? "All Exercises" : "All Others") {
+                        ForEach(allExercisesExcludingFeatured, id: \.self) { name in
+                            exerciseRow(name)
+                        }
+                    }
+                } else if filteredExercises.isEmpty {
+                    Section {
+                        ContentUnavailableView.search(text: query)
+                    }
+                } else {
+                    Section("Results") {
+                        ForEach(filteredExercises, id: \.self) { name in
+                            exerciseRow(name)
+                        }
+                    }
                 }
             }
-            .navigationTitle("Pick Exercise")
+            .listStyle(.insetGrouped)
+            .scrollContentBackground(.hidden)
+            .background(AdaptiveBackground())
+            .navigationTitle("Add Exercise")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    AppToolbarButton(title: "Close", systemImage: "xmark", variant: .subtle) {
-                        dismiss()
-                    }
+                    Button("Close", systemImage: "xmark") { dismiss() }
                 }
             }
             .searchable(text: $searchText, prompt: "Search exercises")
+            .searchSuggestions {
+                if query.isEmpty {
+                    ForEach(recentExercises.prefix(5), id: \.self) { name in
+                        Text(name).searchCompletion(name)
+                    }
+                }
+            }
+            .task {
+                refreshSnapshot()
+            }
+            .task(id: searchText) {
+                do {
+                    try await Task.sleep(for: .milliseconds(120))
+                    settledSearchText = searchText
+                } catch {
+                    return
+                }
+            }
+            .onReceive(
+                dataManager.$workouts
+                    .dropFirst()
+                    .debounce(for: .milliseconds(150), scheduler: RunLoop.main)
+            ) { _ in
+                refreshSnapshot()
+            }
+            .onChange(of: relationshipManager.relationships) { _, _ in
+                refreshSnapshot()
+            }
+            .onChange(of: favoriteExercisesData) { _, _ in
+                refreshFavorites()
+            }
         }
     }
 
-    private var recentExercises: [String] {
-        dataManager.recentExerciseNames(limit: 10)
+    private var query: String {
+        settledSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private var allExercises: [String] {
-        let catalogNames = ExerciseMetadataManager.defaultExerciseNames
-        let relationshipNames = relationshipManager.relationships.values.flatMap { [$0.exerciseName, $0.parentName] }
-        if dataManager.allExerciseNames().isEmpty {
-            return Array(Set(catalogNames + relationshipNames))
-                .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
-        }
-
-        return Array(Set(dataManager.allExerciseNames() + catalogNames + relationshipNames))
-            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    private var favoriteNamesExcludingRecent: [String] {
+        favoriteAggregates
+            .filter { !recentMembership.contains($0) }
+            .sorted(by: localizedAscending)
     }
 
-    private var allExercisesExcludingRecent: [String] {
-        let recent = Set(recentExercises)
-        let favs = Set(favoriteExerciseNames)
-        return allExercises.filter { name in
-            let rollupNames = favoriteRollupNames(for: name)
-            return recent.isDisjoint(with: rollupNames) && favs.isDisjoint(with: rollupNames)
+    private var allExercisesExcludingFeatured: [String] {
+        allExercises.filter { name in
+            !recentMembership.contains(name) && !favoriteMembership.contains(name)
         }
     }
 
     private var filteredExercises: [String] {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return allExercises }
         return allExercises.filter { $0.localizedCaseInsensitiveContains(query) }
     }
 
     private var shouldShowCreateOption: Bool {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return false }
-        let exists = allExercises.contains { $0.compare(query, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame }
-        return !exists
-    }
-
-    private func favoriteRollupNames(for name: String) -> Set<String> {
-        let resolver = relationshipManager.resolverSnapshot()
-        let aggregateName = resolver.aggregateName(for: name)
-        var names = Set([name, aggregateName])
-        for child in resolver.children(of: aggregateName) {
-            names.insert(child.exerciseName)
+        return !allExercises.contains {
+            $0.compare(query, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
         }
-        return names
     }
 
     private var createRow: some View {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        return Button {
-            onSelect(query)
-            dismiss()
+        Button {
+            select(query)
         } label: {
-            HStack(spacing: Theme.Spacing.md) {
-                Image(systemName: "plus.circle.fill")
-                    .font(Theme.Iconography.action)
-                    .foregroundStyle(Theme.Colors.accent)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Create")
+            Label {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Create “\(query)”")
+                        .font(Theme.Typography.bodyBold)
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                    Text("Adds it to this workout and your exercise library")
                         .font(Theme.Typography.caption)
-                        .foregroundColor(Theme.Colors.textSecondary)
-                    Text(query)
-                        .font(Theme.Typography.headline)
-                        .foregroundColor(Theme.Colors.textPrimary)
+                        .foregroundStyle(Theme.Colors.textSecondary)
                 }
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textTertiary)
+            } icon: {
+                Image(systemName: "plus.circle.fill")
+                    .foregroundStyle(Theme.Colors.accent)
             }
-            .padding(Theme.Spacing.lg)
-            .softCard(elevation: 1)
+            .frame(minHeight: Theme.Layout.minimumTapTarget)
         }
         .buttonStyle(.plain)
     }
 
-    private func sectionHeader(_ title: String) -> some View {
-        Text(title)
-            .font(Theme.Typography.captionBold)
-            .foregroundColor(Theme.Colors.textSecondary)
-            .padding(.horizontal, Theme.Spacing.sm)
-    }
-
     private func exerciseRow(_ name: String) -> some View {
-        HStack(spacing: 0) {
+        HStack(spacing: Theme.Spacing.sm) {
             Button {
-                onSelect(name)
-                dismiss()
+                select(name)
             } label: {
                 HStack {
                     Text(name)
-                        .font(Theme.Typography.headline)
-                        .foregroundColor(Theme.Colors.textPrimary)
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textTertiary)
+                        .font(Theme.Typography.body)
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                        .multilineTextAlignment(.leading)
+                    Spacer(minLength: Theme.Spacing.sm)
+                    Image(systemName: "plus")
+                        .foregroundStyle(Theme.Colors.accent)
+                        .accessibilityHidden(true)
                 }
-                .padding(Theme.Spacing.lg)
+                .frame(maxWidth: .infinity, minHeight: Theme.Layout.minimumTapTarget, alignment: .leading)
+                .contentShape(.rect)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Add \(name)")
 
             Button {
                 toggleFavorite(name)
             } label: {
                 Image(systemName: isFavorite(name) ? "star.fill" : "star")
                     .font(Theme.Typography.callout)
-                    .foregroundStyle(isFavorite(name) ? Theme.Colors.warning : Theme.Colors.textTertiary)
-                    .frame(width: 44, height: 44)
-                    .contentShape(Rectangle())
+                    .foregroundStyle(isFavorite(name) ? Theme.Colors.warning : Theme.Colors.textSecondary)
+                    .frame(width: Theme.Layout.minimumTapTarget, height: Theme.Layout.minimumTapTarget)
+                    .contentShape(.rect)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(isFavorite(name) ? "Remove from favorites" : "Add to favorites")
+            .accessibilityLabel(isFavorite(name) ? "Remove \(name) from favorites" : "Add \(name) to favorites")
         }
-        .softCard(elevation: 1)
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            Button {
+                toggleFavorite(name)
+            } label: {
+                Label(isFavorite(name) ? "Unfavorite" : "Favorite", systemImage: isFavorite(name) ? "star.slash" : "star")
+            }
+            .tint(Theme.Colors.warning)
+        }
+    }
+
+    private func select(_ name: String) {
+        onSelect(name)
+        dismiss()
+    }
+
+    private func isFavorite(_ name: String) -> Bool {
+        favoriteMembership.contains(name)
+    }
+
+    private func toggleFavorite(_ name: String) {
+        let resolver = relationshipManager.resolverSnapshot()
+        let aggregateName = resolver.aggregateName(for: name)
+        if favoriteAggregates.contains(aggregateName) {
+            favoriteAggregates.remove(aggregateName)
+        } else {
+            favoriteAggregates.insert(aggregateName)
+        }
+        persistFavorites()
+        rebuildMembership(using: resolver)
+        Haptics.selection()
+    }
+
+    private func refreshSnapshot() {
+        let resolver = relationshipManager.resolverSnapshot()
+        let catalogNames = ExerciseMetadataManager.defaultExerciseNames
+        let relationshipNames = relationshipManager.relationships.values.flatMap { [$0.exerciseName, $0.parentName] }
+        let dataNames = dataManager.allExerciseNames()
+        allExercises = Array(Set(dataNames + catalogNames + relationshipNames)).sorted(by: localizedAscending)
+
+        var seenRecent = Set<String>()
+        recentExercises = dataManager.recentExerciseNames(limit: 20).compactMap { name in
+            let aggregate = resolver.aggregateName(for: name)
+            guard seenRecent.insert(aggregate).inserted else { return nil }
+            return aggregate
+        }
+        .prefix(10)
+        .map { $0 }
+
+        refreshFavorites(using: resolver)
+    }
+
+    private func refreshFavorites(using resolver: ExerciseIdentityResolver? = nil) {
+        let resolver = resolver ?? relationshipManager.resolverSnapshot()
+        let decoded: [String]
+        if let data = favoriteExercisesData.data(using: .utf8),
+           let values = try? JSONDecoder().decode([String].self, from: data) {
+            decoded = values
+        } else {
+            decoded = []
+        }
+        favoriteAggregates = Set(decoded.map { resolver.aggregateName(for: $0) })
+        rebuildMembership(using: resolver)
+    }
+
+    private func rebuildMembership(using resolver: ExerciseIdentityResolver) {
+        favoriteMembership = expandedMembership(for: favoriteAggregates, resolver: resolver)
+        recentMembership = expandedMembership(for: Set(recentExercises), resolver: resolver)
+    }
+
+    private func expandedMembership(
+        for aggregateNames: Set<String>,
+        resolver: ExerciseIdentityResolver
+    ) -> Set<String> {
+        var membership = aggregateNames
+        for aggregateName in aggregateNames {
+            for child in resolver.children(of: aggregateName) {
+                membership.insert(child.exerciseName)
+            }
+        }
+        return membership
+    }
+
+    private func persistFavorites() {
+        let values = favoriteAggregates.sorted(by: localizedAscending)
+        guard let data = try? JSONEncoder().encode(values),
+              let string = String(data: data, encoding: .utf8) else { return }
+        favoriteExercisesData = string
+    }
+
+    private func localizedAscending(_ lhs: String, _ rhs: String) -> Bool {
+        lhs.localizedCaseInsensitiveCompare(rhs) == .orderedAscending
     }
 }

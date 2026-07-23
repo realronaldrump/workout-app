@@ -1,7 +1,7 @@
 import SwiftUI
 import MapKit
 
-private struct DetectedGymCandidate: Identifiable {
+private nonisolated struct DetectedGymCandidate: Identifiable, Sendable {
     let coordinate: CLLocationCoordinate2D
     let visitCount: Int
     let latestWorkoutDate: Date
@@ -13,7 +13,7 @@ private struct DetectedGymCandidate: Identifiable {
     }
 }
 
-private struct CoordinateCluster {
+private nonisolated struct CoordinateCluster: Sendable {
     var center: CLLocationCoordinate2D
     var count: Int
     var latestWorkoutDate: Date
@@ -41,9 +41,10 @@ struct GymProfilesView: View {
     @State private var showingDeleteAlert = false
     @State private var gymToDelete: GymProfile?
     @State private var isDetectingCandidateGyms = false
-    @State private var didAutoDetectCandidateGyms = false
+    @State private var hasRunGymDiscovery = false
     @State private var candidateGyms: [DetectedGymCandidate] = []
     @State private var candidateGymError: String?
+    @State private var discoveryTask: Task<Void, Never>?
 
     var body: some View {
         ZStack {
@@ -108,14 +109,15 @@ struct GymProfilesView: View {
                     }
                 }
                 .padding(Theme.Spacing.xl)
+                .contentColumn()
             }
         }
         .navigationTitle("Gym Profiles")
         .navigationBarTitleDisplayMode(.inline)
-        .task {
-            guard !didAutoDetectCandidateGyms else { return }
-            didAutoDetectCandidateGyms = true
-            runGymDiscovery()
+        .onDisappear {
+            discoveryTask?.cancel()
+            discoveryTask = nil
+            isDetectingCandidateGyms = false
         }
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
@@ -174,7 +176,7 @@ struct GymProfilesView: View {
                         .tint(Theme.Colors.accent)
                         .scaleEffect(0.9)
                 } else {
-                    Button("Refresh") {
+                    Button(hasRunGymDiscovery ? "Refresh" : "Scan") {
                         runGymDiscovery()
                     }
                     .font(Theme.Typography.captionBold)
@@ -182,6 +184,7 @@ struct GymProfilesView: View {
                     .textCase(.uppercase)
                     .tracking(0.8)
                     .buttonStyle(.plain)
+                    .frame(minHeight: Theme.Layout.minimumTapTarget)
                 }
             }
 
@@ -196,7 +199,7 @@ struct GymProfilesView: View {
             }
 
             if candidateGyms.isEmpty {
-                Text(isDetectingCandidateGyms ? "Scanning…" : "No new gym locations detected yet.")
+                Text(discoveryStatusText)
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Colors.textTertiary)
             } else {
@@ -226,6 +229,7 @@ struct GymProfilesView: View {
                         .cornerRadius(Theme.CornerRadius.large)
                 }
                 .buttonStyle(.plain)
+                .frame(minHeight: Theme.Layout.minimumTapTarget)
             }
         }
         .padding(Theme.Spacing.lg)
@@ -261,6 +265,7 @@ struct GymProfilesView: View {
             .textCase(.uppercase)
             .tracking(0.8)
             .buttonStyle(.plain)
+            .frame(minWidth: Theme.Layout.minimumTapTarget, minHeight: Theme.Layout.minimumTapTarget)
         }
         .padding(Theme.Spacing.md)
         .glassBackground(cornerRadius: Theme.CornerRadius.large, elevation: 1)
@@ -269,10 +274,13 @@ struct GymProfilesView: View {
     private func runGymDiscovery() {
         guard !isDetectingCandidateGyms else { return }
         isDetectingCandidateGyms = true
+        hasRunGymDiscovery = true
         candidateGymError = nil
 
-        Task {
+        discoveryTask?.cancel()
+        discoveryTask = Task {
             var healthSnapshot = await MainActor.run { Array(healthManager.healthDataStore.values) }
+            guard !Task.isCancelled else { return }
             let cachedLocationCount = healthSnapshot.reduce(into: 0) { partialResult, entry in
                 if entry.resolvedWorkoutLocationCoordinate != nil {
                     partialResult += 1
@@ -283,6 +291,7 @@ struct GymProfilesView: View {
                 let workoutsSnapshot = await MainActor.run { dataManager.workouts }
                 do {
                     _ = try await healthManager.hydrateRouteStartLocationsForRecentWorkouts(workoutsSnapshot, maxWorkouts: 180)
+                    guard !Task.isCancelled else { return }
                     healthSnapshot = await MainActor.run { Array(healthManager.healthDataStore.values) }
                 } catch {
                     await MainActor.run {
@@ -293,6 +302,7 @@ struct GymProfilesView: View {
 
             let gymsSnapshot = await MainActor.run { gymProfilesManager.gyms }
             let candidates = await discoverGymCandidates(from: healthSnapshot, existingGyms: gymsSnapshot)
+            guard !Task.isCancelled else { return }
             let finalLocationCount = healthSnapshot.reduce(into: 0) { partialResult, entry in
                 if entry.resolvedWorkoutLocationCoordinate != nil {
                     partialResult += 1
@@ -307,8 +317,19 @@ struct GymProfilesView: View {
                     candidateGymError = "No workout locations were available from Apple Health for these workouts."
                 }
                 isDetectingCandidateGyms = false
+                discoveryTask = nil
             }
         }
+    }
+
+    private var discoveryStatusText: String {
+        if isDetectingCandidateGyms {
+            return "Scanning recent Apple Health workout locations…"
+        }
+        if hasRunGymDiscovery {
+            return "No new gym locations detected. You can scan again after syncing more workouts."
+        }
+        return "Scanning is optional and starts only when you tap Scan."
     }
 
     private func discoverGymCandidates(
@@ -339,24 +360,33 @@ struct GymProfilesView: View {
                 return lhs.latestWorkoutDate > rhs.latestWorkoutDate
             }
 
-        var candidates: [DetectedGymCandidate] = []
-        candidates.reserveCapacity(clusters.count)
+        return await withTaskGroup(of: (Int, DetectedGymCandidate).self) { group in
+            var iterator = Array(clusters.enumerated()).makeIterator()
+            let maximumConcurrentSearches = min(4, clusters.count)
 
-        for (index, cluster) in clusters.enumerated() {
-            let suggestion = await nearestFitnessCenter(around: cluster.center)
-            let suggestedName = suggestion?.name ?? "Detected Gym \(index + 1)"
-            candidates.append(
-                DetectedGymCandidate(
-                    coordinate: cluster.center,
-                    visitCount: cluster.count,
-                    latestWorkoutDate: cluster.latestWorkoutDate,
-                    suggestedName: suggestedName,
-                    suggestedAddress: suggestion?.address
-                )
-            )
+            for _ in 0..<maximumConcurrentSearches {
+                guard let (index, cluster) = iterator.next() else { break }
+                group.addTask {
+                    await Self.detectedCandidate(for: cluster, index: index)
+                }
+            }
+
+            var indexedCandidates: [(Int, DetectedGymCandidate)] = []
+            indexedCandidates.reserveCapacity(clusters.count)
+
+            for await candidate in group {
+                indexedCandidates.append(candidate)
+                if let (index, cluster) = iterator.next() {
+                    group.addTask {
+                        await Self.detectedCandidate(for: cluster, index: index)
+                    }
+                }
+            }
+
+            return indexedCandidates
+                .sorted { $0.0 < $1.0 }
+                .map(\.1)
         }
-
-        return candidates
     }
 
     private func clusterRoutePoints(
@@ -384,7 +414,24 @@ struct GymProfilesView: View {
         return clusters
     }
 
-    private func nearestFitnessCenter(around coordinate: CLLocationCoordinate2D) async -> (name: String, address: String?)? {
+    private nonisolated static func detectedCandidate(
+        for cluster: CoordinateCluster,
+        index: Int
+    ) async -> (Int, DetectedGymCandidate) {
+        let suggestion = await nearestFitnessCenter(around: cluster.center)
+        let candidate = DetectedGymCandidate(
+            coordinate: cluster.center,
+            visitCount: cluster.count,
+            latestWorkoutDate: cluster.latestWorkoutDate,
+            suggestedName: suggestion?.name ?? "Detected Gym \(index + 1)",
+            suggestedAddress: suggestion?.address
+        )
+        return (index, candidate)
+    }
+
+    private nonisolated static func nearestFitnessCenter(
+        around coordinate: CLLocationCoordinate2D
+    ) async -> (name: String, address: String?)? {
         let request = MKLocalSearch.Request()
         request.naturalLanguageQuery = "gym"
         request.region = MKCoordinateRegion(
@@ -475,8 +522,11 @@ struct GymProfilesView: View {
                 Image(systemName: "ellipsis.circle")
                     .font(Theme.Iconography.title3)
                     .foregroundColor(Theme.Colors.textSecondary)
+                    .frame(width: Theme.Layout.minimumTapTarget, height: Theme.Layout.minimumTapTarget)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("\(gym.name) actions")
         }
         .padding(Theme.Spacing.lg)
         .softCard(elevation: 2)

@@ -5,6 +5,7 @@ struct InsightCardView: View {
     var onTap: (() -> Void)?
 
     @State private var isAppearing = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var iconColor: Color {
         switch insight.type.color {
@@ -62,7 +63,7 @@ struct InsightCardView: View {
         .opacity(isAppearing ? 1 : 0)
         .offset(y: isAppearing ? 0 : 10)
         .onAppear {
-            withAnimation(Theme.Animation.spring) {
+            withAnimation(reduceMotion ? nil : Theme.Animation.spring) {
                 isAppearing = true
             }
         }
@@ -71,10 +72,12 @@ struct InsightCardView: View {
 
 /// Subtle press style: card scales slightly on press.
 struct ScaleButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
-            .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.98 : 1.0)
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.1), value: configuration.isPressed)
     }
 }
 

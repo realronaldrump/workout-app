@@ -3,7 +3,6 @@ import SwiftUI
 struct ExerciseListView: View {
     @ObservedObject var dataManager: WorkoutDataManager
     @ObservedObject private var relationshipManager = ExerciseRelationshipManager.shared
-    @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var annotationsManager: WorkoutAnnotationsManager
     @EnvironmentObject var gymProfilesManager: GymProfilesManager
     @State private var searchText = ""
@@ -138,12 +137,9 @@ struct ExerciseListView: View {
             AdaptiveBackground()
 
             VStack(spacing: Theme.Spacing.md) {
-                topBar
-                    .padding(.horizontal, Theme.Spacing.lg)
-                    .padding(.top, Theme.Spacing.sm)
-
                 searchField
                     .padding(.horizontal, Theme.Spacing.lg)
+                    .padding(.top, Theme.Spacing.sm)
 
                 ScrollView(showsIndicators: false) {
                     LazyVStack(spacing: Theme.Spacing.sm) {
@@ -185,9 +181,15 @@ struct ExerciseListView: View {
                     .padding(.bottom, Theme.Spacing.xl)
                 }
             }
+            .contentColumn()
         }
-        .navigationBarBackButtonHidden(true)
-        .toolbar(.hidden, for: .navigationBar)
+        .navigationTitle("All Exercises")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                sortMenu
+            }
+        }
         .navigationDestination(item: $selectedExercise) { selection in
             ExerciseDetailView(
                 exerciseName: selection.id,
@@ -219,28 +221,6 @@ struct ExerciseListView: View {
         }
         .onChange(of: favoriteExercisesData) { _, newValue in
             refreshFavorites(from: newValue)
-        }
-    }
-
-    private var topBar: some View {
-        ZStack {
-            HStack {
-                AppToolbarIconButton(
-                    systemImage: "chevron.left",
-                    accessibilityLabel: "Back",
-                    variant: .subtle
-                ) {
-                    dismiss()
-                }
-                Spacer()
-                sortMenu
-            }
-
-            Text("All Exercises")
-                .font(Theme.Typography.cardHeader)
-                .textCase(.uppercase)
-                .tracking(1)
-                .foregroundStyle(Theme.Colors.textPrimary)
         }
     }
 
@@ -289,6 +269,8 @@ struct ExerciseListView: View {
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundStyle(Theme.Colors.textTertiary)
+                        .frame(width: Theme.Layout.minimumTapTarget, height: Theme.Layout.minimumTapTarget)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Clear search")

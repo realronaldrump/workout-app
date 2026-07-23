@@ -160,19 +160,35 @@ private nonisolated enum HistoryDerivedStateBuilder {
         }
 
         let sections = sectionDrafts.enumerated().map { index, draft in
-            let olderVolume = sectionDrafts.indices.contains(index + 1)
-                ? sectionDrafts[index + 1].volume
-                : 0
+            let olderDraft = sectionDrafts.indices.contains(index + 1)
+                ? sectionDrafts[index + 1]
+                : nil
+            let olderVolume: Double? = olderDraft.map { older in
+                guard calendar.isDate(draft.date, equalTo: snapshot.referenceDate, toGranularity: .month) else {
+                    return older.volume
+                }
+
+                let elapsedDay = calendar.component(.day, from: snapshot.referenceDate)
+                let olderMonthRange = calendar.range(of: .day, in: .month, for: older.date)
+                let comparisonDay = min(elapsedDay, olderMonthRange?.count ?? elapsedDay)
+                var components = calendar.dateComponents([.year, .month], from: older.date)
+                components.day = comparisonDay
+                guard let cutoffDay = calendar.date(from: components),
+                      let cutoff = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: cutoffDay) else {
+                    return older.volume
+                }
+                return older.rows
+                    .filter { $0.workout.date <= cutoff }
+                    .reduce(0) { $0 + $1.metrics.volume }
+            }
             return HistoryMonthSection(
                 id: draft.date,
                 title: draft.title,
                 count: draft.rows.count,
                 volume: draft.volume,
-                delta: TrendDelta(
-                    current: draft.volume,
-                    previous: olderVolume,
-                    higherIsBetter: true
-                ),
+                delta: olderVolume.flatMap {
+                    TrendDelta(current: draft.volume, previous: $0, higherIsBetter: true)
+                },
                 rows: draft.rows
             )
         }
@@ -399,12 +415,14 @@ struct WorkoutHistoryView: View {
     @State private var presentedSummarySheet: HistorySummarySheet?
     @State private var derivedState = HistoryDerivedState.empty
     @State private var locallyDeletedWorkoutIDs: Set<UUID> = []
+    @State private var recentlyDeletedWorkout: LoggedWorkout?
     @State private var derivedRefreshTask: Task<Void, Never>?
     @State private var derivedWorkerTask: Task<HistoryDerivedState?, Never>?
 
-    @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var annotationsManager: WorkoutAnnotationsManager
     @EnvironmentObject private var gymProfilesManager: GymProfilesManager
+    @EnvironmentObject private var dataManager: WorkoutDataManager
+    @EnvironmentObject private var logStore: WorkoutLogStore
     @ObservedObject private var relationshipManager = ExerciseRelationshipManager.shared
 
     var body: some View {
@@ -427,7 +445,19 @@ struct WorkoutHistoryView: View {
                 .frame(maxWidth: .infinity, alignment: .center)
             }
         }
-        .navigationBarHidden(true)
+        .navigationTitle("History")
+        .navigationBarTitleDisplayMode(.large)
+        .toolbar(.visible, for: .navigationBar)
+        .searchable(
+            text: $searchText,
+            placement: .navigationBarDrawer(displayMode: .always),
+            prompt: "Workouts or exercises"
+        )
+        .safeAreaInset(edge: .bottom, spacing: Theme.Spacing.sm) {
+            if let recentlyDeletedWorkout {
+                deletionUndoBar(recentlyDeletedWorkout)
+            }
+        }
         .sheet(item: $presentedFilterSheet) { sheet in
             switch sheet {
             case .location:
@@ -490,29 +520,10 @@ struct WorkoutHistoryView: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            if showsBackButton {
-                AppToolbarIconButton(
-                    systemImage: "chevron.left",
-                    accessibilityLabel: "Back",
-                    variant: .subtle
-                ) {
-                    dismiss()
-                }
-            }
-
-            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                Text("History")
-                    .font(Theme.Typography.screenTitle)
-                    .foregroundStyle(Theme.Colors.textPrimary)
-
-                Text(historySubtitle)
-                    .font(Theme.Typography.microcopy)
-                    .foregroundStyle(Theme.Colors.textSecondary)
-            }
-
-            searchField
-        }
+        Text(historySubtitle)
+            .font(Theme.Typography.subheadline)
+            .foregroundStyle(Theme.Colors.textSecondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var historySubtitle: String {
@@ -520,35 +531,6 @@ struct WorkoutHistoryView: View {
         let workoutLabel = "\(count) workout" + (count == 1 ? "" : "s")
         guard let date = derivedState.firstWorkoutDate else { return workoutLabel }
         return "\(workoutLabel) · since \(date.formatted(.dateTime.month(.abbreviated).year()))"
-    }
-
-    private var searchField: some View {
-        HStack(spacing: Theme.Spacing.sm) {
-            Image(systemName: "magnifyingglass")
-                .font(Theme.Typography.subheadlineStrong)
-                .foregroundStyle(Theme.Colors.textTertiary)
-
-            TextField("Search workouts or exercises", text: $searchText)
-                .textInputAutocapitalization(.never)
-                .disableAutocorrection(true)
-                .font(Theme.Typography.callout)
-                .foregroundStyle(Theme.Colors.textPrimary)
-                .tint(Theme.Colors.accent)
-
-            if !searchText.isEmpty {
-                Button {
-                    searchText = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(Theme.Colors.textTertiary)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Clear search")
-            }
-        }
-        .padding(.horizontal, Theme.Spacing.lg)
-        .padding(.vertical, Theme.Spacing.md)
-        .glassBackground(cornerRadius: Theme.CornerRadius.xlarge, elevation: 1)
     }
 
     private var filterChips: some View {
@@ -680,7 +662,24 @@ struct WorkoutHistoryView: View {
     }
 
     private var overviewStrip: some View {
-        HStack(alignment: .center, spacing: Theme.Spacing.lg) {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .center, spacing: Theme.Spacing.lg) {
+                overviewSummary
+                Spacer(minLength: Theme.Spacing.sm)
+                overviewChart
+            }
+
+            VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+                overviewSummary
+                overviewChart
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(Theme.Spacing.md)
+        .softCard(elevation: 1)
+    }
+
+    private var overviewSummary: some View {
             VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                 Button {
                     Haptics.selection()
@@ -701,12 +700,10 @@ struct WorkoutHistoryView: View {
                 )
                 .font(Theme.Typography.captionStrong)
                 .foregroundStyle(Theme.Colors.textSecondary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
             }
+    }
 
-            Spacer(minLength: Theme.Spacing.sm)
-
+    private var overviewChart: some View {
             Chart(derivedState.monthlyChart) { point in
                 BarMark(
                     x: .value("Month", point.monthStart, unit: .month),
@@ -719,39 +716,49 @@ struct WorkoutHistoryView: View {
             .chartYAxis(.hidden)
             .frame(width: 124, height: 56)
             .accessibilityLabel("Workouts per month for the current results")
-        }
-        .padding(Theme.Spacing.md)
-        .softCard(elevation: 1)
     }
 
     private func monthSection(_ section: HistoryMonthSection) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            HStack(alignment: .center, spacing: Theme.Spacing.sm) {
-                Text(section.title)
-                    .font(Theme.Typography.sectionHeader2)
-                    .foregroundStyle(Theme.Colors.textPrimary)
-                    .lineLimit(1)
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .center, spacing: Theme.Spacing.sm) {
+                    monthTitle(section)
+                    Spacer(minLength: Theme.Spacing.xs)
+                    monthMetadata(section)
+                }
 
-                Spacer(minLength: Theme.Spacing.xs)
-
-                Text(monthSummary(section))
-                    .font(Theme.Typography.captionStrong)
-                    .foregroundStyle(Theme.Colors.textSecondary)
-                    .lineLimit(1)
-
-                if let delta = section.delta {
-                    DeltaTag(delta: delta)
+                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                    monthTitle(section)
+                    monthMetadata(section)
                 }
             }
 
-            VStack(spacing: Theme.Spacing.sm) {
+            LazyVStack(spacing: Theme.Spacing.sm) {
                 ForEach(section.rows) { row in
                     WorkoutHistoryRow(
                         workout: row.workout,
-                        onDeleted: { loggedWorkoutDeleted(row.id) },
+                        onDeleted: { loggedWorkoutDeleted($0) },
                         precomputedMetrics: row.metrics
                     )
                 }
+            }
+        }
+    }
+
+    private func monthTitle(_ section: HistoryMonthSection) -> some View {
+        Text(section.title)
+            .font(Theme.Typography.sectionHeader2)
+            .foregroundStyle(Theme.Colors.textPrimary)
+    }
+
+    private func monthMetadata(_ section: HistoryMonthSection) -> some View {
+        HStack(spacing: Theme.Spacing.sm) {
+            Text(monthSummary(section))
+                .font(Theme.Typography.captionStrong)
+                .foregroundStyle(Theme.Colors.textSecondary)
+
+            if let delta = section.delta {
+                DeltaTag(delta: delta)
             }
         }
     }
@@ -796,9 +803,42 @@ struct WorkoutHistoryView: View {
         scheduleDerivedStateRefresh(debounceNs: 0)
     }
 
-    private func loggedWorkoutDeleted(_ id: UUID) {
-        locallyDeletedWorkoutIDs.insert(id)
+    private func loggedWorkoutDeleted(_ workout: LoggedWorkout) {
+        locallyDeletedWorkoutIDs.insert(workout.id)
+        recentlyDeletedWorkout = workout
         scheduleDerivedStateRefresh(debounceNs: 0)
+    }
+
+    private func deletionUndoBar(_ workout: LoggedWorkout) -> some View {
+        HStack(spacing: Theme.Spacing.md) {
+            Text("Deleted \(workout.name)")
+                .font(Theme.Typography.subheadline)
+                .foregroundStyle(Theme.Colors.textPrimary)
+                .lineLimit(2)
+
+            Spacer(minLength: Theme.Spacing.sm)
+
+            Button("Undo") {
+                undoDeletion(workout)
+            }
+            .font(Theme.Typography.subheadlineStrong)
+            .frame(minHeight: Theme.Layout.minimumTapTarget)
+        }
+        .padding(.horizontal, Theme.Spacing.lg)
+        .padding(.vertical, Theme.Spacing.sm)
+        .glassBackground(opacity: 0.24, cornerRadius: Theme.CornerRadius.xlarge, elevation: 1, interactive: true)
+        .padding(.horizontal, Theme.Spacing.lg)
+    }
+
+    private func undoDeletion(_ workout: LoggedWorkout) {
+        Task { @MainActor in
+            await logStore.upsert(workout)
+            await dataManager.setLoggedWorkoutsOffMain(logStore.workouts)
+            locallyDeletedWorkoutIDs.remove(workout.id)
+            recentlyDeletedWorkout = nil
+            scheduleDerivedStateRefresh(debounceNs: 0)
+            Haptics.notify(.success)
+        }
     }
 
     private func scheduleDerivedStateRefresh(debounceNs: UInt64 = 120_000_000) {
@@ -899,7 +939,7 @@ private struct HistoryFilterChipLabel: View {
 
 struct WorkoutHistoryRow: View {
     let workout: Workout
-    var onDeleted: (() -> Void)?
+    var onDeleted: ((LoggedWorkout) -> Void)?
     let precomputedMetrics: HistoryRowMetrics?
 
     @EnvironmentObject private var healthManager: HealthKitManager
@@ -916,7 +956,7 @@ struct WorkoutHistoryRow: View {
 
     init(
         workout: Workout,
-        onDeleted: (() -> Void)? = nil,
+        onDeleted: ((LoggedWorkout) -> Void)? = nil,
         precomputedMetrics: HistoryRowMetrics? = nil
     ) {
         self.workout = workout
@@ -952,7 +992,8 @@ struct WorkoutHistoryRow: View {
                     Text(workout.name)
                         .font(Theme.Typography.bodyBold)
                         .foregroundStyle(Theme.Colors.textPrimary)
-                        .lineLimit(1)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
 
                     InlineStat(
                         icon: "clock",
@@ -1143,9 +1184,10 @@ struct WorkoutHistoryRow: View {
 
     private func deleteLoggedWorkout() {
         Task { @MainActor in
+            guard let deletedWorkout = logStore.workout(id: workout.id) else { return }
             await logStore.delete(id: workout.id)
             await dataManager.setLoggedWorkoutsOffMain(logStore.workouts)
-            onDeleted?()
+            onDeleted?(deletedWorkout)
             Haptics.notify(.success)
         }
     }

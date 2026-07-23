@@ -22,11 +22,11 @@ struct InteractiveTimeSeriesChart: View {
     let valueText: (Double) -> String
     let dateText: (Date) -> String
 
-    @State private var selectedPoint: HealthTrendPoint?
-    @State private var selectionClearTask: Task<Void, Never>?
-
-    @State private var visibleLength: TimeInterval
     @State private var visibleEnd: Date
+    /// `nil` means the user intends to see the complete range. Keeping the requested
+    /// zoom separately preserves that intent when the supplied domain shrinks and grows.
+    @State private var requestedZoomLength: TimeInterval?
+    @State private var isAnchoredToLatest: Bool
 
     init(
         points: [HealthTrendPoint],
@@ -54,33 +54,15 @@ struct InteractiveTimeSeriesChart: View {
         self.valueText = valueText
         self.dateText = dateText
 
-        let computedDomain: ClosedRange<Date>
-        if let fullDomain {
-            computedDomain = fullDomain
-        } else if let first = sorted.first?.date, let last = sorted.last?.date {
-            computedDomain = first...last
-        } else {
-            let now = Date()
-            computedDomain = now...now
-        }
+        let computedDomain = Self.resolvedFullDomain(points: sorted, explicitDomain: fullDomain)
 
-        let length = max(1, computedDomain.upperBound.timeIntervalSince(computedDomain.lowerBound))
-        _visibleLength = State(initialValue: length)
         _visibleEnd = State(initialValue: computedDomain.upperBound)
+        _requestedZoomLength = State(initialValue: nil)
+        _isAnchoredToLatest = State(initialValue: true)
     }
 
     private var fullXDomain: ClosedRange<Date> {
-        if let fullDomain { return fullDomain }
-        if let first = points.first?.date, let last = points.last?.date {
-            if first == last {
-                // Give the chart a little breathing room when there is only one point.
-                let pad: TimeInterval = 12 * 60 * 60
-                return first.addingTimeInterval(-pad)...last.addingTimeInterval(pad)
-            }
-            return first...last
-        }
-        let now = Date()
-        return now.addingTimeInterval(-24 * 60 * 60)...now
+        Self.resolvedFullDomain(points: points, explicitDomain: fullDomain)
     }
 
     private var fullLength: TimeInterval {
@@ -102,7 +84,8 @@ struct InteractiveTimeSeriesChart: View {
     }
 
     private var effectiveVisibleLength: TimeInterval {
-        min(max(visibleLength, minZoomLength), fullLength)
+        guard showsControls, let requestedZoomLength else { return fullLength }
+        return min(max(requestedZoomLength, minZoomLength), fullLength)
     }
 
     private var minVisibleEnd: Date {
@@ -110,7 +93,10 @@ struct InteractiveTimeSeriesChart: View {
     }
 
     private var effectiveVisibleEnd: Date {
-        clamp(visibleEnd, min: minVisibleEnd, max: fullXDomain.upperBound)
+        if !showsControls || requestedZoomLength == nil || isAnchoredToLatest {
+            return fullXDomain.upperBound
+        }
+        return clamp(visibleEnd, min: minVisibleEnd, max: fullXDomain.upperBound)
     }
 
     private var visibleStart: Date {
@@ -119,31 +105,6 @@ struct InteractiveTimeSeriesChart: View {
 
     private var xDomain: ClosedRange<Date> {
         visibleStart...effectiveVisibleEnd
-    }
-
-    private var visiblePoints: [HealthTrendPoint] {
-        let filtered = points.filter { xDomain.contains($0.date) }
-        return filtered.isEmpty ? points : filtered
-    }
-
-    private var yDomain: ClosedRange<Double> {
-        let values = visiblePoints.map { $0.value }
-        guard let minValue = values.min(), let maxValue = values.max() else {
-            return 0...1
-        }
-
-        if minValue == maxValue {
-            let padding = max(abs(minValue) * 0.05, 1)
-            let lowerRaw = minValue - padding
-            let lower = clampYToZero ? max(0, lowerRaw) : lowerRaw
-            return lower...(maxValue + padding)
-        }
-
-        let span = maxValue - minValue
-        let padding = span * 0.12
-        let lowerRaw = minValue - padding
-        let lower = clampYToZero ? max(0, lowerRaw) : lowerRaw
-        return lower...(maxValue + padding)
     }
 
     private var zoomPresets: [ZoomPreset] {
@@ -191,128 +152,41 @@ struct InteractiveTimeSeriesChart: View {
             set: { newValue in
                 let candidate = Date(timeIntervalSinceReferenceDate: newValue)
                 visibleEnd = clamp(candidate, min: minVisibleEnd, max: fullXDomain.upperBound)
-                selectedPoint = nil
+                isAnchoredToLatest = abs(visibleEnd.timeIntervalSince(fullXDomain.upperBound)) < 1
             }
         )
     }
 
     var body: some View {
         let currentXDomain = xDomain
-        let currentYDomain = yDomain
-        let renderedPoints = HealthChartPointSampler.sampled(visiblePoints, limit: 400)
+        let renderData = InteractiveChartRenderData(
+            points: points,
+            xDomain: currentXDomain,
+            clampYToZero: clampYToZero
+        )
 
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text(headerText)
-                .font(selectedPoint == nil ? Theme.Typography.caption : Theme.Typography.calloutStrong)
-                .foregroundStyle(selectedPoint == nil ? Theme.Colors.textSecondary : Theme.Colors.textPrimary)
-
-            Chart {
-                if areaFill {
-                    ForEach(renderedPoints) { point in
-                        AreaMark(
-                            x: .value("Date", point.date),
-                            yStart: .value("Baseline", currentYDomain.lowerBound),
-                            yEnd: .value("Value", point.value)
-                        )
-                        .foregroundStyle(color.opacity(0.18))
-                        .interpolationMethod(.catmullRom)
-                    }
-                }
-
-                ForEach(renderedPoints) { point in
-                    LineMark(
-                        x: .value("Date", point.date),
-                        y: .value("Value", point.value)
-                    )
-                    .foregroundStyle(color)
-                    .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round))
-                    .interpolationMethod(.catmullRom)
-
-                    if selectedPoint?.date == point.date {
-                        PointMark(
-                            x: .value("Date", point.date),
-                            y: .value("Value", point.value)
-                        )
-                        .foregroundStyle(color)
-                        .symbolSize(80)
-                    }
-                }
-
-                if showsAverageLine, let average = averageLineValue ?? visibleAverage {
-                    RuleMark(y: .value("Average", average))
-                        .foregroundStyle(color.opacity(0.4))
-                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 4]))
-                        .annotation(position: .top, alignment: .trailing, spacing: 4) {
-                            Text("avg \(valueText(average))")
-                                .font(Theme.Typography.caption2Bold)
-                                .foregroundStyle(Theme.Colors.textSecondary)
-                                .padding(.horizontal, Theme.Spacing.xs)
-                                .padding(.vertical, 2)
-                                .background(
-                                    Capsule().fill(Theme.Colors.surface.opacity(0.86))
-                                )
-                        }
-                }
-
-                if let selectedPoint {
-                    RuleMark(x: .value("Selected", selectedPoint.date))
-                        .foregroundStyle(color.opacity(0.35))
-                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
-                }
-            }
-            .chartXScale(domain: currentXDomain)
-            .chartYScale(domain: currentYDomain)
-            .chartOverlay { proxy in
-                GeometryReader { geometry in
-                    Rectangle()
-                        .fill(Color.clear)
-                        .contentShape(Rectangle())
-                        .simultaneousGesture(
-                            DragGesture(minimumDistance: 0)
-                                .onChanged { value in
-                                    selectionClearTask?.cancel()
-                                    guard isPrimarilyHorizontalDrag(value.translation) else { return }
-                                    updateSelection(at: value.location, proxy: proxy, geometry: geometry)
-                                }
-                                .onEnded { value in
-                                    let tapped = isTapLike(value.translation)
-                                    guard tapped || isPrimarilyHorizontalDrag(value.translation) else { return }
-                                    if tapped {
-                                        updateSelection(at: value.location, proxy: proxy, geometry: geometry)
-                                    }
-                                    scheduleSelectionClear()
-                                }
-                        )
-                }
-            }
-            .frame(height: height)
-            .accessibilityLabel(headerText)
+            InteractiveChartCanvas(
+                data: renderData,
+                color: color,
+                areaFill: areaFill,
+                height: height,
+                showsAverageLine: showsAverageLine,
+                averageLineValue: averageLineValue,
+                valueText: valueText,
+                dateText: dateText
+            )
+            // A point/domain change should clear stale selection state. Selection-only
+            // updates stay inside the canvas and do not rebuild the O(n) render data.
+            .id(renderData.key)
 
             if showsControls {
                 controls
             }
         }
-        .onDisappear {
-            selectionClearTask?.cancel()
+        .onChange(of: fullXDomain) { _, newDomain in
+            syncStateToDomain(newDomain)
         }
-        .onChange(of: points.first?.date) { _, _ in
-            syncStateToDomain()
-        }
-        .onChange(of: points.last?.date) { _, _ in
-            syncStateToDomain()
-        }
-    }
-
-    private var headerText: String {
-        if let selectedPoint {
-            return "\(dateText(selectedPoint.date)) | \(valueText(selectedPoint.value))"
-        }
-        return "\(dateText(visibleStart)) - \(dateText(effectiveVisibleEnd))"
-    }
-
-    private var visibleAverage: Double? {
-        guard !visiblePoints.isEmpty else { return nil }
-        return visiblePoints.reduce(0) { $0 + $1.value } / Double(visiblePoints.count)
     }
 
     @ViewBuilder
@@ -323,7 +197,7 @@ struct InteractiveTimeSeriesChart: View {
                     Button {
                         setVisibleLength(preset.length, anchorToEnd: true)
                     } label: {
-                        if abs(preset.length - effectiveVisibleLength) < 1 {
+                        if isSelectedZoomPreset(preset) {
                             Label(preset.title, systemImage: "checkmark")
                         } else {
                             Text(preset.title)
@@ -352,7 +226,7 @@ struct InteractiveTimeSeriesChart: View {
             .textCase(.uppercase)
             .tracking(0.8)
             .buttonStyle(.plain)
-            .disabled(abs(effectiveVisibleLength - fullLength) < 1)
+            .disabled(requestedZoomLength == nil)
             .accessibilityLabel("Reset zoom")
             .accessibilityHint("Show all data points")
         }
@@ -377,18 +251,313 @@ struct InteractiveTimeSeriesChart: View {
         }
     }
 
+    private func setVisibleLength(_ length: TimeInterval, anchorToEnd: Bool) {
+        let clamped = min(max(length, minZoomLength), fullLength)
+        requestedZoomLength = abs(length - fullLength) < 1 ? nil : max(length, minZoomLength)
+
+        if anchorToEnd {
+            isAnchoredToLatest = true
+            visibleEnd = fullXDomain.upperBound
+        } else {
+            isAnchoredToLatest = false
+            visibleEnd = clamp(visibleEnd, min: fullXDomain.lowerBound.addingTimeInterval(clamped), max: fullXDomain.upperBound)
+        }
+    }
+
+    private func syncStateToDomain(_ newDomain: ClosedRange<Date>) {
+        // Charts without controls represent a caller-selected period, so every new
+        // period must fill the chart rather than inheriting an old internal window.
+        guard showsControls else {
+            requestedZoomLength = nil
+            isAnchoredToLatest = true
+            visibleEnd = newDomain.upperBound
+            return
+        }
+
+        if isAnchoredToLatest || requestedZoomLength == nil {
+            visibleEnd = newDomain.upperBound
+        } else {
+            let earliestEnd = newDomain.lowerBound.addingTimeInterval(effectiveVisibleLength)
+            visibleEnd = clamp(visibleEnd, min: earliestEnd, max: newDomain.upperBound)
+        }
+    }
+
+    private func isSelectedZoomPreset(_ preset: ZoomPreset) -> Bool {
+        if preset.id == "All" {
+            return requestedZoomLength == nil
+        }
+        guard let requestedZoomLength else { return false }
+        return abs(preset.length - requestedZoomLength) < 1
+    }
+
+    private func clamp(_ value: Date, min: Date, max: Date) -> Date {
+        if value < min { return min }
+        if value > max { return max }
+        return value
+    }
+
+    private static func resolvedFullDomain(
+        points: [HealthTrendPoint],
+        explicitDomain: ClosedRange<Date>?
+    ) -> ClosedRange<Date> {
+        if let explicitDomain { return explicitDomain }
+        if let first = points.first?.date, let last = points.last?.date {
+            if first == last {
+                // Give the chart a little breathing room when there is only one point.
+                let pad: TimeInterval = 12 * 60 * 60
+                return first.addingTimeInterval(-pad)...last.addingTimeInterval(pad)
+            }
+            return first...last
+        }
+        let dayStart = Calendar.current.startOfDay(for: Date())
+        return dayStart...dayStart.addingTimeInterval(24 * 60 * 60)
+    }
+}
+
+private struct InteractiveChartRenderData {
+    struct Key: Hashable {
+        let lowerBound: Date
+        let upperBound: Date
+        let pointsDigest: Int
+    }
+
+    let key: Key
+    let xDomain: ClosedRange<Date>
+    let yDomain: ClosedRange<Double>
+    let visiblePoints: [HealthTrendPoint]
+    let renderedPoints: [HealthTrendPoint]
+    let minimumValue: Double?
+    let maximumValue: Double?
+    let averageValue: Double?
+
+    init(
+        points: [HealthTrendPoint],
+        xDomain: ClosedRange<Date>,
+        clampYToZero: Bool
+    ) {
+        let filtered = points.filter { xDomain.contains($0.date) }
+        let visiblePoints = filtered.isEmpty ? points : filtered
+
+        var digest = Hasher()
+        digest.combine(visiblePoints.count)
+        var minimumValue: Double?
+        var maximumValue: Double?
+        var total = 0.0
+        for point in visiblePoints {
+            digest.combine(point.date)
+            digest.combine(point.value.bitPattern)
+            digest.combine(point.label)
+            minimumValue = min(minimumValue ?? point.value, point.value)
+            maximumValue = max(maximumValue ?? point.value, point.value)
+            total += point.value
+        }
+
+        self.key = Key(
+            lowerBound: xDomain.lowerBound,
+            upperBound: xDomain.upperBound,
+            pointsDigest: digest.finalize()
+        )
+        self.xDomain = xDomain
+        self.visiblePoints = visiblePoints
+        self.renderedPoints = HealthChartPointSampler.sampled(visiblePoints, limit: 400)
+        self.minimumValue = minimumValue
+        self.maximumValue = maximumValue
+        self.averageValue = visiblePoints.isEmpty
+            ? nil
+            : total / Double(visiblePoints.count)
+        self.yDomain = Self.makeYDomain(
+            minimumValue: minimumValue,
+            maximumValue: maximumValue,
+            clampToZero: clampYToZero
+        )
+    }
+
+    private static func makeYDomain(
+        minimumValue: Double?,
+        maximumValue: Double?,
+        clampToZero: Bool
+    ) -> ClosedRange<Double> {
+        guard let minimumValue, let maximumValue else { return 0...1 }
+
+        if minimumValue == maximumValue {
+            let padding = max(abs(minimumValue) * 0.05, 1)
+            let lowerRaw = minimumValue - padding
+            let lower = clampToZero ? max(0, lowerRaw) : lowerRaw
+            return lower...(maximumValue + padding)
+        }
+
+        let span = maximumValue - minimumValue
+        let padding = span * 0.12
+        let lowerRaw = minimumValue - padding
+        let lower = clampToZero ? max(0, lowerRaw) : lowerRaw
+        return lower...(maximumValue + padding)
+    }
+}
+
+private struct InteractiveChartCanvas: View {
+    let data: InteractiveChartRenderData
+    let color: Color
+    let areaFill: Bool
+    let height: CGFloat
+    let showsAverageLine: Bool
+    let averageLineValue: Double?
+    let valueText: (Double) -> String
+    let dateText: (Date) -> String
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var selectedPoint: HealthTrendPoint?
+    @State private var selectionClearTask: Task<Void, Never>?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            Text(headerText)
+                .font(selectedPoint == nil ? Theme.Typography.caption : Theme.Typography.calloutStrong)
+                .foregroundStyle(selectedPoint == nil ? Theme.Colors.textSecondary : Theme.Colors.textPrimary)
+
+            Chart {
+                if areaFill {
+                    ForEach(data.renderedPoints) { point in
+                        AreaMark(
+                            x: .value("Date", point.date),
+                            yStart: .value("Baseline", data.yDomain.lowerBound),
+                            yEnd: .value("Value", point.value)
+                        )
+                        .foregroundStyle(color.opacity(0.18))
+                        .interpolationMethod(.catmullRom)
+                    }
+                }
+
+                ForEach(data.renderedPoints) { point in
+                    LineMark(
+                        x: .value("Date", point.date),
+                        y: .value("Value", point.value)
+                    )
+                    .foregroundStyle(color)
+                    .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                    .interpolationMethod(.catmullRom)
+                }
+
+                if showsAverageLine, let average = averageLineValue ?? data.averageValue {
+                    RuleMark(y: .value("Average", average))
+                        .foregroundStyle(color.opacity(0.4))
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 4]))
+                        .annotation(position: .top, alignment: .trailing, spacing: 4) {
+                            Text("avg \(valueText(average))")
+                                .font(Theme.Typography.caption2Bold)
+                                .foregroundStyle(Theme.Colors.textSecondary)
+                                .padding(.horizontal, Theme.Spacing.xs)
+                                .padding(.vertical, 2)
+                                .background(
+                                    Capsule().fill(Theme.Colors.surface.opacity(0.86))
+                                )
+                        }
+                }
+
+                if let selectedPoint {
+                    PointMark(
+                        x: .value("Date", selectedPoint.date),
+                        y: .value("Value", selectedPoint.value)
+                    )
+                    .foregroundStyle(color)
+                    .symbolSize(80)
+
+                    RuleMark(x: .value("Selected", selectedPoint.date))
+                        .foregroundStyle(color.opacity(0.35))
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                }
+            }
+            .chartXScale(domain: data.xDomain)
+            .chartYScale(domain: data.yDomain)
+            .chartOverlay { proxy in
+                GeometryReader { geometry in
+                    Rectangle()
+                        .fill(Color.clear)
+                        .contentShape(Rectangle())
+                        .simultaneousGesture(
+                            DragGesture(minimumDistance: 0)
+                                .onChanged { value in
+                                    selectionClearTask?.cancel()
+                                    guard isPrimarilyHorizontalDrag(value.translation) else { return }
+                                    updateSelection(at: value.location, proxy: proxy, geometry: geometry)
+                                }
+                                .onEnded { value in
+                                    let tapped = isTapLike(value.translation)
+                                    guard tapped || isPrimarilyHorizontalDrag(value.translation) else { return }
+                                    if tapped {
+                                        updateSelection(at: value.location, proxy: proxy, geometry: geometry)
+                                    }
+                                    scheduleSelectionClear()
+                                }
+                        )
+                }
+            }
+            .frame(height: height)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Trend chart")
+            .accessibilityValue(accessibilitySummary)
+        }
+        .onDisappear {
+            selectionClearTask?.cancel()
+        }
+    }
+
+    private var headerText: String {
+        if let selectedPoint {
+            return "\(dateText(selectedPoint.date)) | \(valueText(selectedPoint.value))"
+        }
+        return "\(dateText(data.xDomain.lowerBound)) - \(dateText(data.xDomain.upperBound))"
+    }
+
+    private var accessibilitySummary: String {
+        if let selectedPoint {
+            return "\(dateText(selectedPoint.date)), \(valueText(selectedPoint.value))"
+        }
+
+        guard let minimum = data.minimumValue,
+              let maximum = data.maximumValue,
+              let average = data.averageValue else {
+            return "No data in the selected date range"
+        }
+
+        let dateWindow = "from \(dateText(data.xDomain.lowerBound)) to \(dateText(data.xDomain.upperBound))"
+        let valueSummary = "Low \(valueText(minimum)), high \(valueText(maximum)), average \(valueText(average))."
+        return "\(data.visiblePoints.count) data points \(dateWindow). \(valueSummary)"
+    }
+
     private func updateSelection(at location: CGPoint, proxy: ChartProxy, geometry: GeometryProxy) {
         guard let plotFrame = proxy.plotFrame else { return }
         let frame = geometry[plotFrame]
         guard frame.contains(location) else { return }
         let x = location.x - frame.origin.x
-        guard let date: Date = proxy.value(atX: x) else { return }
+        guard let date: Date = proxy.value(atX: x),
+              let closest = closestPoint(to: date) else { return }
+        selectedPoint = closest
+    }
 
-        if let closest = visiblePoints.min(by: {
-            abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date))
-        }) {
-            selectedPoint = closest
+    /// Points are date-sorted, so scrubbing can use a binary search instead of
+    /// scanning the complete visible series for every drag event.
+    private func closestPoint(to date: Date) -> HealthTrendPoint? {
+        guard !data.visiblePoints.isEmpty else { return nil }
+
+        var lower = 0
+        var upper = data.visiblePoints.count
+        while lower < upper {
+            let middle = lower + (upper - lower) / 2
+            if data.visiblePoints[middle].date < date {
+                lower = middle + 1
+            } else {
+                upper = middle
+            }
         }
+
+        if lower == 0 { return data.visiblePoints[0] }
+        if lower == data.visiblePoints.count { return data.visiblePoints[data.visiblePoints.count - 1] }
+
+        let earlier = data.visiblePoints[lower - 1]
+        let later = data.visiblePoints[lower]
+        return abs(earlier.date.timeIntervalSince(date)) <= abs(later.date.timeIntervalSince(date))
+            ? earlier
+            : later
     }
 
     private func scheduleSelectionClear() {
@@ -397,8 +566,12 @@ struct InteractiveTimeSeriesChart: View {
         selectionClearTask = Task { @MainActor in
             try? await Task.sleep(nanoseconds: 2_000_000_000)
             guard !Task.isCancelled else { return }
-            withAnimation {
+            if reduceMotion {
                 selectedPoint = nil
+            } else {
+                withAnimation(.easeOut(duration: 0.2)) {
+                    selectedPoint = nil
+                }
             }
         }
     }
@@ -411,33 +584,6 @@ struct InteractiveTimeSeriesChart: View {
         let dx = abs(translation.width)
         let dy = abs(translation.height)
         return dx > max(14, dy * 1.2)
-    }
-
-    private func setVisibleLength(_ length: TimeInterval, anchorToEnd: Bool) {
-        let clamped = min(max(length, minZoomLength), fullLength)
-        visibleLength = clamped
-
-        if anchorToEnd {
-            visibleEnd = fullXDomain.upperBound
-        } else {
-            visibleEnd = clamp(visibleEnd, min: fullXDomain.lowerBound.addingTimeInterval(clamped), max: fullXDomain.upperBound)
-        }
-
-        selectedPoint = nil
-    }
-
-    private func syncStateToDomain() {
-        // Keep the user on a valid window if the domain changes (e.g. range changes, new data).
-        let isAll = abs(visibleLength - fullLength) < 1
-        visibleLength = isAll ? fullLength : min(max(visibleLength, minZoomLength), fullLength)
-        visibleEnd = clamp(visibleEnd, min: fullXDomain.lowerBound.addingTimeInterval(visibleLength), max: fullXDomain.upperBound)
-        selectedPoint = nil
-    }
-
-    private func clamp(_ value: Date, min: Date, max: Date) -> Date {
-        if value < min { return min }
-        if value > max { return max }
-        return value
     }
 }
 

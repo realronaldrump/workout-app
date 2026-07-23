@@ -21,7 +21,7 @@ struct WorkoutEditView: View {
 
                 if let draft {
                     ScrollView(showsIndicators: false) {
-                        VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
+                        LazyVStack(alignment: .leading, spacing: Theme.Spacing.xl) {
                             VStack(alignment: .leading, spacing: Theme.Spacing.md) {
                                 Text("Workout Name")
                                     .font(Theme.Typography.caption)
@@ -33,6 +33,7 @@ struct WorkoutEditView: View {
                                     .font(Theme.Typography.body)
                                     .foregroundColor(Theme.Colors.textPrimary)
                                     .padding(Theme.Spacing.md)
+                                    .frame(minHeight: Theme.Layout.minimumTapTarget)
                                     .background(
                                         RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
                                             .fill(Theme.Colors.surface.opacity(0.35))
@@ -47,7 +48,7 @@ struct WorkoutEditView: View {
                                     .foregroundColor(Theme.Colors.textPrimary)
                                     .tracking(1.0)
 
-                                VStack(spacing: Theme.Spacing.md) {
+                                LazyVStack(spacing: Theme.Spacing.md) {
                                     ForEach(draft.exercises) { exercise in
                                         LoggedExerciseEditorCard(
                                             exercise: exercise,
@@ -78,24 +79,6 @@ struct WorkoutEditView: View {
                                 .softCard(elevation: 1)
                             }
 
-                            Button {
-                                save()
-                            } label: {
-                                HStack {
-                                    Spacer()
-                                    Text(isSaving ? "Saving..." : "Save Changes")
-                                        .font(Theme.Typography.headline)
-                                        .foregroundColor(.white)
-                                    Spacer()
-                                }
-                                .padding()
-                                .background(Theme.Colors.accent)
-                                .cornerRadius(Theme.CornerRadius.large)
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(isSaving)
-                            .opacity(isSaving ? 0.7 : 1.0)
-
                             Button(role: .destructive) {
                                 showingDeleteAlert = true
                             } label: {
@@ -112,7 +95,9 @@ struct WorkoutEditView: View {
                             .foregroundStyle(Theme.Colors.error)
                         }
                         .padding(Theme.Spacing.xl)
+                        .contentColumn()
                     }
+                    .scrollDismissesKeyboard(.interactively)
                 } else {
                     EmptyStateCard(
                         icon: "exclamationmark.triangle.fill",
@@ -130,6 +115,21 @@ struct WorkoutEditView: View {
                     AppToolbarButton(title: "Close", systemImage: "xmark", variant: .subtle) {
                         dismiss()
                     }
+                }
+            }
+            .safeAreaInset(edge: .bottom) {
+                if draft != nil {
+                    AppPrimaryButton(
+                        title: isSaving ? "Saving…" : "Save Changes",
+                        systemImage: "checkmark",
+                        isEnabled: !isSaving
+                    ) {
+                        save()
+                    }
+                    .contentColumn(maxWidth: 640, alignment: .center)
+                    .padding(.horizontal, Theme.Spacing.lg)
+                    .padding(.vertical, Theme.Spacing.sm)
+                    .background(.bar)
                 }
             }
             .alert("Delete Workout?", isPresented: $showingDeleteAlert) {
@@ -307,24 +307,16 @@ private struct LoggedExerciseEditorCard: View {
                     onAddSet()
                     Haptics.selection()
                 } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "plus")
-                            .font(Theme.Typography.captionBold)
-                        Text("Set")
-                            .font(Theme.Typography.captionBold)
-                    }
-                    .foregroundColor(.white)
-                    .padding(.horizontal, Theme.Spacing.md)
-                    .padding(.vertical, Theme.Spacing.xs)
-                    .brutalistButtonChrome(
-                        fill: Theme.Colors.accentSecondary,
-                        cornerRadius: Theme.CornerRadius.large
-                    )
+                    Label("Add Set", systemImage: "plus")
+                        .font(Theme.Typography.captionBold)
+                        .frame(minHeight: Theme.Layout.minimumTapTarget)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.borderedProminent)
+                .buttonBorderShape(.capsule)
+                .tint(Theme.Colors.accentSecondary)
             }
 
-            VStack(spacing: Theme.Spacing.sm) {
+            LazyVStack(spacing: Theme.Spacing.sm) {
                 ForEach(exercise.sets) { set in
                     LoggedSetEditorRow(
                         order: set.order,
@@ -383,37 +375,33 @@ private struct LoggedSetEditorRow: View {
     }
 
     var body: some View {
-        HStack(spacing: Theme.Spacing.sm) {
-            Text("#\(order)")
-                .font(Theme.Typography.captionBold)
-                .foregroundColor(Theme.Colors.textSecondary)
-                .frame(width: 34, alignment: .leading)
+        VStack(spacing: Theme.Spacing.sm) {
+            HStack {
+                Text("Set \(order)")
+                    .font(Theme.Typography.captionBold)
+                    .foregroundStyle(Theme.Colors.textPrimary)
 
-            if let cardioConfig {
-                cardioField(kind: cardioConfig.primary, countLabel: cardioConfig.countLabel)
-                cardioField(kind: cardioConfig.secondary, countLabel: cardioConfig.countLabel)
-            } else {
-                field(title: weightUnit, text: $weightText, keyboard: .decimalPad, focus: .weight)
-                    .onChange(of: weightText) { _, _ in commit() }
+                Spacer()
 
-                field(title: "reps", text: $repsText, keyboard: .numberPad, focus: .reps)
-                    .onChange(of: repsText) { _, _ in commit() }
+                Button(role: .destructive) {
+                    onDelete()
+                } label: {
+                    Image(systemName: "trash")
+                        .font(Theme.Typography.subheadlineBold)
+                        .frame(width: Theme.Layout.minimumTapTarget, height: Theme.Layout.minimumTapTarget)
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Theme.Colors.error)
+                .accessibilityLabel("Delete set \(order)")
             }
 
-            Button {
-                onDelete()
-            } label: {
-                Image(systemName: "trash")
-                    .font(Theme.Typography.subheadlineBold)
-                    .foregroundStyle(Theme.Colors.error)
-                    .frame(width: 28, height: 28)
-                    .background(Theme.Colors.error.opacity(0.12))
-                    .cornerRadius(Theme.CornerRadius.small)
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: Theme.Spacing.sm) { metricFields }
+                VStack(spacing: Theme.Spacing.sm) { metricFields }
             }
-            .buttonStyle(.plain)
         }
-        .padding(.horizontal, Theme.Spacing.md)
-        .padding(.vertical, Theme.Spacing.sm)
+        .padding(Theme.Spacing.md)
         .background(
             RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
                 .fill(Theme.Colors.surface.opacity(0.20))
@@ -433,31 +421,49 @@ private struct LoggedSetEditorRow: View {
         }
     }
 
-    private func field(title: String, text: Binding<String>, keyboard: UIKeyboardType, focus: Field, width: CGFloat? = nil) -> some View {
+    @ViewBuilder
+    private var metricFields: some View {
+        if let cardioConfig {
+            cardioField(kind: cardioConfig.primary, countLabel: cardioConfig.countLabel)
+            cardioField(kind: cardioConfig.secondary, countLabel: cardioConfig.countLabel)
+        } else {
+            field(title: "Weight (\(weightUnit))", text: $weightText, keyboard: .decimalPad, focus: .weight)
+                .onChange(of: weightText) { _, _ in commit() }
+
+            field(title: "Reps", text: $repsText, keyboard: .numberPad, focus: .reps)
+                .onChange(of: repsText) { _, _ in commit() }
+        }
+    }
+
+    private func field(title: String, text: Binding<String>, keyboard: UIKeyboardType, focus: Field) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title)
                 .font(Theme.Typography.microcopy)
-                .foregroundColor(Theme.Colors.textTertiary)
+                .foregroundStyle(Theme.Colors.textSecondary)
             TextField(title, text: text)
                 .keyboardType(keyboard)
                 .focused($focusedField, equals: focus)
-                .font(Theme.Typography.body)
-                .foregroundColor(Theme.Colors.textPrimary)
+                .font(Theme.Typography.bodyBold)
+                .foregroundStyle(Theme.Colors.textPrimary)
+                .padding(.horizontal, Theme.Spacing.md)
+                .frame(maxWidth: .infinity, minHeight: Theme.Layout.minimumTapTarget)
+                .background(Theme.Colors.surface.opacity(0.4), in: RoundedRectangle(cornerRadius: Theme.CornerRadius.medium))
         }
-        .frame(width: width)
+        .frame(maxWidth: .infinity)
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     @ViewBuilder
     private func cardioField(kind: CardioMetricKind, countLabel: String) -> some View {
         switch kind {
         case .distance:
-            field(title: "dist", text: $distanceText, keyboard: .decimalPad, focus: .distance, width: 84)
+            field(title: "Distance", text: $distanceText, keyboard: .decimalPad, focus: .distance)
                 .onChange(of: distanceText) { _, _ in commit() }
         case .duration:
-            field(title: "time", text: $durationText, keyboard: .numbersAndPunctuation, focus: .duration, width: 92)
+            field(title: "Time", text: $durationText, keyboard: .numbersAndPunctuation, focus: .duration)
                 .onChange(of: durationText) { _, _ in commit() }
         case .count:
-            field(title: countLabel, text: $repsText, keyboard: .numberPad, focus: .reps, width: 72)
+            field(title: countLabel, text: $repsText, keyboard: .numberPad, focus: .reps)
                 .onChange(of: repsText) { _, _ in commit() }
         }
     }

@@ -85,6 +85,7 @@ struct ExerciseProgressChart: View {
                 if chartType == .volume, value <= 0 { return nil }
                 return ChartPoint(date: session.date, value: value)
             }
+            .sorted { $0.date < $1.date }
 
             let indexed = chartData.enumerated().map { IndexedChartPoint(id: $0.offset, point: $0.element) }
 
@@ -375,8 +376,11 @@ struct ExerciseProgressChart: View {
                                 scheduleSelectionClear()
                             }
                     )
-            }
+                }
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(chartLabel) trend")
+        .accessibilityValue(chartAccessibilityValue)
     }
 
     private func updateSelection(at location: CGPoint, proxy: ChartProxy, geometry: GeometryProxy) {
@@ -386,15 +390,52 @@ struct ExerciseProgressChart: View {
         let x = location.x - frame.origin.x
         guard let date: Date = proxy.value(atX: x) else { return }
 
-        if let closest = derived.chartData.min(by: {
-            abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date))
-        }) {
+        if let closest = nearestPoint(to: date) {
             selectedDataPoint = closest
             if let prDate = derived.prDate, prDate == closest.date, lastPRHapticDate != prDate {
                 Haptics.notify(.success)
                 lastPRHapticDate = prDate
             }
         }
+    }
+
+    private func nearestPoint(to date: Date) -> ChartPoint? {
+        let points = derived.chartData
+        guard !points.isEmpty else { return nil }
+
+        var lower = 0
+        var upper = points.count
+        while lower < upper {
+            let middle = (lower + upper) / 2
+            if points[middle].date < date {
+                lower = middle + 1
+            } else {
+                upper = middle
+            }
+        }
+
+        if lower == 0 { return points[0] }
+        if lower == points.count { return points[points.count - 1] }
+        let before = points[lower - 1]
+        let after = points[lower]
+        return abs(before.date.timeIntervalSince(date)) <= abs(after.date.timeIntervalSince(date))
+            ? before
+            : after
+    }
+
+    private var chartAccessibilityValue: String {
+        guard let first = derived.chartData.first, let last = derived.chartData.last else {
+            return "No data points"
+        }
+        let difference = last.value - first.value
+        let direction: String
+        if abs(difference) < 0.0001 {
+            direction = "unchanged"
+        } else {
+            direction = difference > 0 ? "up" : "down"
+        }
+        return "\(derived.chartData.count) sessions. Started at \(formatValue(first.value)); "
+            + "latest \(formatValue(last.value)), \(direction)."
     }
 
     private func scheduleSelectionClear() {

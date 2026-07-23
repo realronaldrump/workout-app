@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 
 struct WorkoutHealthInsightsView: View {
@@ -10,6 +11,9 @@ struct WorkoutHealthInsightsView: View {
     @State private var showBloodOxygenSamples = false
     @State private var isLoadingRawSamples = false
     @State private var rawSampleError: String?
+    @State private var heartRateRows: [(Date, String)] = []
+    @State private var hrvRows: [(Date, String)] = []
+    @State private var bloodOxygenRows: [(Date, String)] = []
 
     var body: some View {
         ZStack {
@@ -32,10 +36,15 @@ struct WorkoutHealthInsightsView: View {
                 }
                 .padding(.vertical, Theme.Spacing.xxl)
                 .padding(.horizontal, Theme.Spacing.lg)
+                .contentColumn()
             }
         }
         .navigationTitle("Health")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear { refreshRawSampleRows() }
+        .onReceive(healthManager.$healthDataStore.dropFirst()) { _ in
+            refreshRawSampleRows()
+        }
     }
 
     private var header: some View {
@@ -81,7 +90,7 @@ struct WorkoutHealthInsightsView: View {
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, Theme.Spacing.md)
-                        .brutalistButtonChrome(
+                        .surfaceButtonChrome(
                             fill: Theme.Colors.accent,
                             cornerRadius: Theme.CornerRadius.large
                         )
@@ -113,9 +122,7 @@ struct WorkoutHealthInsightsView: View {
                     if showHeartRateSamples {
                         samplesList(
                             title: "Heart Rate Samples",
-                            rows: data.heartRateSamples.sorted { $0.timestamp > $1.timestamp }.map {
-                                ($0.timestamp, "\(Int($0.value)) bpm")
-                            }
+                            rows: heartRateRows
                         )
                     }
                 }
@@ -131,9 +138,7 @@ struct WorkoutHealthInsightsView: View {
                     if showHRVSamples {
                         samplesList(
                             title: "HRV Samples",
-                            rows: data.hrvSamples.sorted { $0.timestamp > $1.timestamp }.map {
-                                ($0.timestamp, "\(Int($0.value)) ms")
-                            }
+                            rows: hrvRows
                         )
                     }
                 }
@@ -149,9 +154,7 @@ struct WorkoutHealthInsightsView: View {
                     if showBloodOxygenSamples {
                         samplesList(
                             title: "Blood Oxygen Samples",
-                            rows: data.bloodOxygenSamples.sorted { $0.timestamp > $1.timestamp }.map {
-                                ($0.timestamp, String(format: "%.1f%%", $0.value))
-                            }
+                            rows: bloodOxygenRows
                         )
                     }
                 }
@@ -197,5 +200,27 @@ struct WorkoutHealthInsightsView: View {
             }
             isLoadingRawSamples = false
         }
+    }
+
+    private func refreshRawSampleRows() {
+        guard let data = healthManager.getHealthData(for: workout.id) else {
+            heartRateRows = []
+            hrvRows = []
+            bloodOxygenRows = []
+            return
+        }
+
+        heartRateRows = data.heartRateSamples
+            .sorted { $0.timestamp > $1.timestamp }
+            .prefix(40)
+            .map { ($0.timestamp, "\(Int($0.value)) bpm") }
+        hrvRows = data.hrvSamples
+            .sorted { $0.timestamp > $1.timestamp }
+            .prefix(40)
+            .map { ($0.timestamp, "\(Int($0.value)) ms") }
+        bloodOxygenRows = data.bloodOxygenSamples
+            .sorted { $0.timestamp > $1.timestamp }
+            .prefix(40)
+            .map { ($0.timestamp, String(format: "%.1f%%", $0.value)) }
     }
 }

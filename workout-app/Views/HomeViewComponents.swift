@@ -1,11 +1,8 @@
 import SwiftUI
 
 struct HomeEmptyState: View {
-    let onStart: () -> Void
-    let onImport: () -> Void
-
     var body: some View {
-        VStack(spacing: Theme.Spacing.xl) {
+        VStack(spacing: Theme.Spacing.lg) {
             VStack(spacing: Theme.Spacing.md) {
                 ZStack {
                     Circle()
@@ -21,53 +18,11 @@ struct HomeEmptyState: View {
                     .foregroundColor(Theme.Colors.textPrimary)
                     .tracking(0.8)
 
-                Text("Start a session or import your history.\nWe'll keep it simple from there.")
+                Text("Your first workout will appear here with a focused weekly summary and useful trends.")
                     .font(Theme.Typography.body)
                     .foregroundColor(Theme.Colors.textSecondary)
                     .multilineTextAlignment(.center)
                     .lineSpacing(2)
-            }
-
-            VStack(spacing: Theme.Spacing.md) {
-                Button(
-                    action: {
-                        Haptics.selection()
-                        onStart()
-                    },
-                    label: {
-                        Text("Start a Session")
-                            .font(Theme.Typography.headline)
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, Theme.Spacing.lg)
-                            .frame(minHeight: 56)
-                            .background(Theme.accentGradient)
-                            .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge))
-                            .shadow(color: Theme.Colors.accent.opacity(0.25), radius: 12, x: 0, y: 6)
-                    }
-                )
-                .buttonStyle(.plain)
-
-                Button(
-                    action: {
-                        Haptics.selection()
-                        onImport()
-                    },
-                    label: {
-                        HStack(spacing: Theme.Spacing.sm) {
-                            Image(systemName: "arrow.down.to.line")
-                                .font(Theme.Typography.footnoteBold)
-                            Text("Import from Strong")
-                                .font(Theme.Typography.bodyBold)
-                        }
-                        .foregroundStyle(Theme.Colors.accent)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, Theme.Spacing.md)
-                        .frame(minHeight: 48)
-                        .softCard(cornerRadius: Theme.CornerRadius.xlarge, elevation: 1)
-                    }
-                )
-                .buttonStyle(.plain)
             }
         }
         .padding(Theme.Spacing.xl)
@@ -95,6 +50,8 @@ struct SyncStatusPill: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
+        .frame(minHeight: Theme.Layout.minimumTapTarget)
+        .contentShape(Capsule())
         .background(
             Capsule()
                 .fill(Theme.Colors.surfaceRaised)

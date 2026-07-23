@@ -22,7 +22,10 @@ class ExerciseMetadataManager: ObservableObject {
     static let defaultExerciseRelationships: [ExerciseRelationship] = DefaultExerciseCatalog.relationships
 
     /// User overrides. If a key is present with an empty array, that exercise is explicitly untagged.
-    @Published private(set) var muscleTagOverrides: [String: [MuscleTag]] = [:]
+    @Published private(set) var muscleTagOverrides: [String: [MuscleTag]] = [:] {
+        didSet { revision &+= 1 }
+    }
+    private(set) var revision: UInt64 = 0
 
     private let userDefaults = UserDefaults.standard
     private let metadataKey = "ExerciseMetadata"

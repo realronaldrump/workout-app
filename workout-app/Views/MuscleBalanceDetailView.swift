@@ -25,6 +25,7 @@ struct MuscleBalanceDetailView: View {
                 }
                 .padding(.vertical, Theme.Spacing.xxl)
                 .padding(.horizontal, Theme.Spacing.lg)
+                .contentColumn()
             }
         }
         .navigationTitle("Muscle Balance")

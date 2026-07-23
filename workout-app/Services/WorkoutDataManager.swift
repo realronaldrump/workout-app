@@ -19,12 +19,15 @@ struct WorkoutHealthIdentitySnapshot {
 
 @MainActor
 class WorkoutDataManager: ObservableObject {
-    @Published var workouts: [Workout] = []
+    @Published var workouts: [Workout] = [] {
+        didSet { datasetRevision &+= 1 }
+    }
     @Published private(set) var importedWorkouts: [Workout] = []
     @Published private(set) var loggedWorkouts: [Workout] = []
     @Published private(set) var loggedWorkoutIds: Set<UUID> = []
     @Published var isLoading = false
     @Published var error: String?
+    private(set) var datasetRevision: UInt64 = 0
 
     private static let intentionalRestDaysKey = "intentionalRestDays"
     private static let defaultIntentionalRestDays = 1

@@ -4,8 +4,8 @@ enum ImportPhase: Double {
     case idle = 0
     case reading = 0.2
     case parsing = 0.4
-    case processing = 0.6
-    case saving = 0.8
+    case saving = 0.6
+    case processing = 0.8
     case complete = 1.0
 
     var message: String {
@@ -23,6 +23,18 @@ enum ImportPhase: Double {
         case .complete:
             return "Complete"
         }
+    }
+}
+
+struct ImportSummary {
+    let workouts: Int
+    let exercises: Int
+    let sideLinks: Int
+    let additionalItems: Int
+    let skippedItems: Int
+
+    var insertedItems: Int {
+        workouts + additionalItems
     }
 }
 

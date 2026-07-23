@@ -13,6 +13,8 @@ struct OnboardingView: View {
     @State private var showingImportWizard = false
     @State private var welcomeVisible = false
     @State private var welcomeFloating = false
+    @State private var isRequestingHealth = false
+    @State private var healthErrorMessage: String?
 
     private let totalSteps = 3
     private let onboardingPrimaryText = Color.white
@@ -36,6 +38,7 @@ struct OnboardingView: View {
                 footer
             }
             .padding(.vertical, Theme.Spacing.xl)
+            .contentColumn(maxWidth: 640, alignment: .center)
         }
         .analyticsScreen("Onboarding")
         .onAppear {
@@ -113,9 +116,15 @@ struct OnboardingView: View {
         VStack(spacing: Theme.Spacing.md) {
             if let primary = primaryButtonTitle {
                 Button(action: handlePrimaryAction) {
-                    Text(primary)
-                        .font(Theme.Typography.headline)
-                        .foregroundStyle(Theme.Colors.accent)
+                    HStack(spacing: Theme.Spacing.sm) {
+                        if isRequestingHealth {
+                            ProgressView()
+                                .tint(Theme.Colors.accent)
+                        }
+                        Text(primary)
+                            .font(Theme.Typography.headline)
+                            .foregroundStyle(Theme.Colors.accent)
+                    }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, Theme.Spacing.md)
                         .frame(minHeight: 52)
@@ -126,6 +135,7 @@ struct OnboardingView: View {
                         .shadow(color: Color.black.opacity(0.15), radius: 8, y: 4)
                         .shadow(color: Color.black.opacity(0.08), radius: 16, y: 8)
                 }
+                .disabled(isRequestingHealth)
             }
 
             if let secondary = secondaryButtonTitle {
@@ -403,10 +413,9 @@ struct OnboardingView: View {
     }
 
     private var getStartedStep: some View {
-        VStack(spacing: Theme.Spacing.xl) {
-            Spacer()
-
-            VStack(spacing: Theme.Spacing.sm) {
+        ScrollView(showsIndicators: false) {
+            VStack(spacing: Theme.Spacing.xl) {
+                VStack(spacing: Theme.Spacing.sm) {
                 Text("HOW DO YOU WANT TO START?")
                     .font(Theme.Typography.sectionHeader)
                     .foregroundStyle(onboardingPrimaryText)
@@ -418,9 +427,9 @@ struct OnboardingView: View {
                     .foregroundStyle(onboardingSecondaryText)
                     .multilineTextAlignment(.center)
             }
-            .padding(.horizontal, Theme.Spacing.xl)
+                .padding(.horizontal, Theme.Spacing.xl)
 
-            VStack(spacing: Theme.Spacing.md) {
+                VStack(spacing: Theme.Spacing.md) {
                 // Import saved data option
                 Button {
                     Haptics.selection()
@@ -509,16 +518,14 @@ struct OnboardingView: View {
                 }
                 .buttonStyle(.plain)
             }
-            .padding(.horizontal, Theme.Spacing.xl)
-
-            Spacer()
+                .padding(.horizontal, Theme.Spacing.xl)
+            }
+            .padding(.vertical, Theme.Spacing.xl)
         }
     }
 
     private var healthStep: some View {
-        VStack(spacing: Theme.Spacing.xl) {
-            Spacer()
-
+        ScrollView(showsIndicators: false) {
             VStack(spacing: Theme.Spacing.lg) {
                 Image(systemName: "heart.fill")
                     .font(Theme.Iconography.featureLarge)
@@ -541,7 +548,7 @@ struct OnboardingView: View {
                         .tracking(1.0)
                         .multilineTextAlignment(.center)
 
-                    Text("Sleep and recovery alongside training. Use Settings later to connect and sync Apple Health.")
+                    Text("Connect Apple Health to see sleep and recovery alongside your training. You can change access at any time.")
                         .font(Theme.Typography.body)
                         .foregroundStyle(onboardingSecondaryText)
                         .multilineTextAlignment(.center)
@@ -575,9 +582,19 @@ struct OnboardingView: View {
                 .padding(.horizontal, Theme.Spacing.xl)
 
                 healthStatusPill
-            }
 
-            Spacer()
+                if let healthErrorMessage {
+                    Text(healthErrorMessage)
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Color.white)
+                        .multilineTextAlignment(.center)
+                        .padding(Theme.Spacing.md)
+                        .background(Color.red.opacity(0.28), in: RoundedRectangle(cornerRadius: Theme.CornerRadius.medium))
+                        .padding(.horizontal, Theme.Spacing.xl)
+                        .accessibilityLabel("Apple Health error: \(healthErrorMessage)")
+                }
+            }
+            .padding(.vertical, Theme.Spacing.xl)
         }
     }
 
@@ -642,7 +659,11 @@ struct OnboardingView: View {
         case 1:
             return nil
         default:
-            return "Continue"
+            if isRequestingHealth { return "Connecting…" }
+            return healthManager.authorizationStatus == .authorized
+                || healthManager.authorizationStatus == .unavailable
+                ? "Finish Setup"
+                : "Connect Apple Health"
         }
     }
 
@@ -663,6 +684,9 @@ struct OnboardingView: View {
             withAnimation(reduceMotion ? .easeOut(duration: 0.2) : Theme.Animation.spring) {
                 step = 1
             }
+        case 2 where healthManager.authorizationStatus != .authorized
+            && healthManager.authorizationStatus != .unavailable:
+            requestHealthAccess()
         default:
             completeOnboarding()
         }
@@ -680,6 +704,23 @@ struct OnboardingView: View {
         )
         hasSeenOnboarding = true
         isPresented = false
+    }
+
+    private func requestHealthAccess() {
+        guard !isRequestingHealth else { return }
+        isRequestingHealth = true
+        healthErrorMessage = nil
+
+        Task { @MainActor in
+            defer { isRequestingHealth = false }
+            do {
+                try await healthManager.requestAuthorization()
+                completeOnboarding()
+            } catch {
+                healthErrorMessage = error.localizedDescription
+                Haptics.notify(.error)
+            }
+        }
     }
 
     private func startWelcomeAnimation() {

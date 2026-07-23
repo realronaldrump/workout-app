@@ -1,6 +1,8 @@
+import Combine
 import SwiftUI
 
 struct SettingsView: View {
+    @Environment(\.openURL) private var openURL
     @ObservedObject var dataManager: WorkoutDataManager
     @ObservedObject var iCloudManager: iCloudDocumentManager
     @Binding var selectedTab: AppTab
@@ -23,34 +25,15 @@ struct SettingsView: View {
     @AppStorage("preferredSleepSourceName") private var preferredSleepSourceName: String = ""
     @AppStorage("appearanceMode") private var appearanceMode: Int = AppearanceMode.system.rawValue
     @AppStorage(AppAnalytics.collectionEnabledKey) private var analyticsCollectionEnabled = true
+    @AppStorage(Haptics.preferenceKey) private var hapticsEnabled = true
+    @State private var cachedIntentionalBreaksSubtitle = "Auto-detect workout gaps"
 
     var body: some View {
         ZStack {
             AdaptiveBackground()
 
             ScrollView {
-                VStack(spacing: Theme.Spacing.xxl) {
-                // Header
-                VStack(spacing: Theme.Spacing.sm) {
-                    Image(systemName: "gearshape.fill")
-                        .font(Theme.Iconography.featureLarge)
-                        .foregroundStyle(.white)
-                        .frame(width: 88, height: 88)
-                        .background(
-                            Circle()
-                                .fill(Theme.accentGradient)
-                        )
-                        .shadow(color: Theme.Colors.accent.opacity(0.25), radius: 12, y: 4)
-                        .shadow(color: Theme.Colors.accent.opacity(0.10), radius: 24, y: 8)
-
-                    Text("Settings")
-                        .font(Theme.Typography.screenTitle)
-                        .foregroundStyle(Theme.Colors.textPrimary)
-                        .tracking(1.5)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, Theme.Spacing.xl)
-                .animateOnAppear()
+                LazyVStack(spacing: Theme.Spacing.xxl) {
 
                 // Appearance Section
                 VStack(alignment: .leading, spacing: Theme.Spacing.md) {
@@ -71,11 +54,13 @@ struct SettingsView: View {
                     }
                     .padding(.horizontal)
 
-                    BrutalistSegmentedPicker(
-                        title: "Appearance",
-                        selection: $appearanceMode,
-                        options: AppearanceMode.allCases.map { ($0.label, $0.rawValue) }
-                    )
+                    Picker("Appearance", selection: $appearanceMode) {
+                        ForEach(AppearanceMode.allCases, id: \.rawValue) { mode in
+                            Text(mode.label).tag(mode.rawValue)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .padding(.horizontal)
                 }
 
                 // Data Management Section
@@ -122,9 +107,8 @@ struct SettingsView: View {
 
                         if healthManager.authorizationStatus == .denied {
                             Button {
-                                if let url = URL(string: UIApplication.openSettingsURLString) {
-                                    UIApplication.shared.open(url)
-                                }
+                                guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+                                openURL(url)
                             } label: {
                                 HStack(spacing: Theme.Spacing.sm) {
                                     Image(systemName: "gear")
@@ -208,7 +192,7 @@ struct SettingsView: View {
 
                             Spacer()
 
-                            Picker("", selection: $weightIncrement) {
+                            Picker("Weight increment", selection: $weightIncrement) {
                                 ForEach(incrementOptions, id: \.self) { option in
                                     Text(incrementLabel(option)).tag(option)
                                 }
@@ -240,7 +224,7 @@ struct SettingsView: View {
 
                             Spacer()
 
-                            Picker("", selection: $intentionalRestDays) {
+                            Picker("Intentional rest days", selection: $intentionalRestDays) {
                                 ForEach(0...30, id: \.self) { days in
                                     Text("\(days) day\(days == 1 ? "" : "s")").tag(days)
                                 }
@@ -284,7 +268,7 @@ struct SettingsView: View {
 
                             Spacer()
 
-                            Picker("", selection: $sessionsPerWeekGoal) {
+                            Picker("Sessions per week goal", selection: $sessionsPerWeekGoal) {
                                 ForEach(1...14, id: \.self) { sessions in
                                     Text("\(sessions)/wk").tag(sessions)
                                 }
@@ -318,6 +302,30 @@ struct SettingsView: View {
                             )
                         }
                         .buttonStyle(PlainButtonStyle())
+
+                        Divider().padding(.leading, 50)
+
+                        Toggle(isOn: $hapticsEnabled) {
+                            HStack(spacing: Theme.Spacing.sm) {
+                                Image(systemName: "hand.tap.fill")
+                                    .font(Theme.Typography.subheadlineStrong)
+                                    .foregroundStyle(.white)
+                                    .frame(width: 32, height: 32)
+                                    .background(Theme.Colors.accent)
+                                    .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
+
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Haptic Feedback")
+                                        .font(Theme.Typography.body)
+                                    Text("Tactile feedback for sets and key actions")
+                                        .font(Theme.Typography.caption)
+                                        .foregroundStyle(Theme.Colors.textSecondary)
+                                }
+                            }
+                        }
+                        .tint(Theme.Colors.accent)
+                        .padding()
+                        .softCard(elevation: 1)
 
                         Divider().padding(.leading, 50)
 
@@ -396,10 +404,12 @@ struct SettingsView: View {
                 .padding(.top, Theme.Spacing.md)
                 }
                 .padding()
+                .contentColumn()
             }
+            .scrollDismissesKeyboard(.interactively)
         }
         .navigationTitle("Settings")
-        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarTitleDisplayMode(.large)
         .sheet(isPresented: $showingImportWizard) {
             StrongImportWizard(
                 isPresented: $showingImportWizard,
@@ -432,10 +442,20 @@ struct SettingsView: View {
             healthManager.refreshAuthorizationStatus()
             normalizeIncrementIfNeeded()
             normalizeSessionsGoalIfNeeded()
+            refreshIntentionalBreaksSubtitle()
             AppAnalytics.shared.configureIfNeeded()
         }
         .onChange(of: analyticsCollectionEnabled) { _, newValue in
             AppAnalytics.shared.setCollectionEnabled(newValue)
+        }
+        .onChange(of: intentionalRestDays) { _, _ in
+            refreshIntentionalBreaksSubtitle()
+        }
+        .onReceive(dataManager.$workouts.dropFirst()) { _ in
+            refreshIntentionalBreaksSubtitle()
+        }
+        .onReceive(intentionalBreaksManager.$savedBreaks.dropFirst()) { _ in
+            refreshIntentionalBreaksSubtitle()
         }
         .analyticsScreen("Settings")
     }
@@ -477,6 +497,10 @@ struct SettingsView: View {
     }
 
     private var intentionalBreaksSubtitle: String {
+        cachedIntentionalBreaksSubtitle
+    }
+
+    private func refreshIntentionalBreaksSubtitle() {
         let suggestionCount = intentionalBreaksManager
             .suggestions(for: dataManager.workouts, intentionalRestDays: intentionalRestDays)
             .count
@@ -484,13 +508,13 @@ struct SettingsView: View {
 
         switch (savedCount, suggestionCount) {
         case (0, 0):
-            return "Auto-detect workout gaps"
+            cachedIntentionalBreaksSubtitle = "Auto-detect workout gaps"
         case (_, 0):
-            return "\(savedCount) saved range\(savedCount == 1 ? "" : "s")"
+            cachedIntentionalBreaksSubtitle = "\(savedCount) saved range\(savedCount == 1 ? "" : "s")"
         case (0, _):
-            return "\(suggestionCount) suggested gap\(suggestionCount == 1 ? "" : "s")"
+            cachedIntentionalBreaksSubtitle = "\(suggestionCount) suggested gap\(suggestionCount == 1 ? "" : "s")"
         default:
-            return "\(savedCount) saved · \(suggestionCount) suggested"
+            cachedIntentionalBreaksSubtitle = "\(savedCount) saved · \(suggestionCount) suggested"
         }
     }
 

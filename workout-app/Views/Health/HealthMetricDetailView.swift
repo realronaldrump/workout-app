@@ -6,6 +6,7 @@ struct HealthMetricDetailView: View {
 
     @EnvironmentObject var healthManager: HealthViewStore
     @EnvironmentObject private var dateRangeContext: HealthDateRangeContext
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var cachedPresentation: HealthMetricPresentation?
 
     private var earliestDate: Date? {
@@ -48,6 +49,7 @@ struct HealthMetricDetailView: View {
                 }
                 .padding(.vertical, Theme.Spacing.xxl)
                 .padding(.horizontal, Theme.Spacing.lg)
+                .contentColumn()
             }
         }
         .navigationTitle(metric.title)
@@ -64,62 +66,93 @@ struct HealthMetricDetailView: View {
                 refreshPresentation()
             }
         }
-        .onReceive(healthManager.$dailyHealthStore.dropFirst()) { store in
+        .onReceive(
+            healthManager.$dailyHealthStore
+                .dropFirst()
+                .debounce(for: .milliseconds(100), scheduler: RunLoop.main)
+        ) { store in
             refreshPresentation(from: store)
         }
     }
 
     private func headerSection(_ presentation: HealthMetricPresentation) -> some View {
-        HStack(spacing: Theme.Spacing.md) {
-            Image(systemName: metric.icon)
-                .font(Theme.Iconography.title3)
-                .foregroundStyle(metric.chartColor)
-                .frame(width: 44, height: 44)
-                .background(
-                    Circle()
-                        .fill(metric.chartColor.opacity(Theme.Opacity.subtleFill))
-                )
-                .overlay(
-                    Circle()
-                        .strokeBorder(metric.chartColor.opacity(0.15), lineWidth: 1)
-                )
-
-            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                if let latest = presentation.latest {
-                    HStack(alignment: .center, spacing: Theme.Spacing.sm) {
-                        HStack(alignment: .lastTextBaseline, spacing: 6) {
-                        Text(metric.format(latest))
-                            .font(Theme.Typography.title)
-                            .foregroundStyle(Theme.Colors.textPrimary)
-                        Text(metric.displayUnit)
-                            .font(Theme.Typography.subheadline)
-                            .foregroundStyle(Theme.Colors.textTertiary)
-                        }
-
-                        if let delta = presentation.delta {
-                            DeltaTag(
-                                delta: delta,
-                                tintOverride: deltaTintOverride
-                            )
-                        }
-                    }
-                }
-                Text(rangeLabel)
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textTertiary)
-
-                if let sentence = averageSentence(for: presentation) {
-                    Text(sentence)
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-
-            Spacer()
+        ViewThatFits(in: .horizontal) {
+            headerContent(presentation, laysOutVertically: false)
+            headerContent(presentation, laysOutVertically: true)
         }
         .padding(Theme.Spacing.lg)
         .tintedSection(metric.chartColor)
+    }
+
+    private func headerContent(
+        _ presentation: HealthMetricPresentation,
+        laysOutVertically: Bool
+    ) -> some View {
+        Group {
+            if laysOutVertically {
+                VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+                    metricIcon
+                    headerText(presentation)
+                }
+            } else {
+                HStack(spacing: Theme.Spacing.md) {
+                    metricIcon
+                    headerText(presentation)
+                    Spacer(minLength: 0)
+                }
+            }
+        }
+    }
+
+    private var metricIcon: some View {
+        Image(systemName: metric.icon)
+            .font(Theme.Iconography.title3)
+            .foregroundStyle(metric.chartColor)
+            .frame(width: 44, height: 44)
+            .background(Circle().fill(metric.chartColor.opacity(Theme.Opacity.subtleFill)))
+            .overlay(Circle().strokeBorder(metric.chartColor.opacity(0.15), lineWidth: 1))
+    }
+
+    private func headerText(_ presentation: HealthMetricPresentation) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            if let latest = presentation.latest {
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .center, spacing: Theme.Spacing.sm) {
+                        latestValue(latest)
+                        if let delta = presentation.delta {
+                            DeltaTag(delta: delta, tintOverride: deltaTintOverride)
+                        }
+                    }
+                    VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                        latestValue(latest)
+                        if let delta = presentation.delta {
+                            DeltaTag(delta: delta, tintOverride: deltaTintOverride)
+                        }
+                    }
+                }
+            }
+            Text(rangeLabel)
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.Colors.textTertiary)
+
+            if let sentence = averageSentence(for: presentation) {
+                Text(sentence)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private func latestValue(_ latest: Double) -> some View {
+        HStack(alignment: .lastTextBaseline, spacing: 6) {
+            Text(metric.format(latest))
+                .font(Theme.Typography.title)
+                .foregroundStyle(Theme.Colors.textPrimary)
+            Text(metric.displayUnit)
+                .font(Theme.Typography.subheadline)
+                .foregroundStyle(Theme.Colors.textTertiary)
+        }
     }
 
     private var emptyState: some View {
@@ -157,7 +190,7 @@ struct HealthMetricDetailView: View {
         let includeDayForExtremes = metric == .bodyMass
 
         return LazyVGrid(
-            columns: [GridItem(.flexible()), GridItem(.flexible())],
+            columns: [GridItem(.adaptive(minimum: 180), spacing: Theme.Spacing.md)],
             spacing: Theme.Spacing.md
         ) {
             MetricStatCard(
@@ -217,25 +250,7 @@ struct HealthMetricDetailView: View {
                 VStack(spacing: Theme.Spacing.sm) {
                     ForEach(SleepStage.allCases.filter { $0 != .unknown }, id: \.self) { stage in
                         if let hours = stageAverages[stage] {
-                            HStack(spacing: Theme.Spacing.md) {
-                                Text(stage.label)
-                                    .font(Theme.Typography.subheadline)
-                                    .foregroundStyle(Theme.Colors.textSecondary)
-                                    .frame(width: 70, alignment: .leading)
-
-                                GeometryReader { geo in
-                                    let fraction = maxHours > 0 ? hours / maxHours : 0
-                                    RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                                        .fill(sleepStageColor(stage).opacity(0.7))
-                                        .frame(width: max(4, geo.size.width * fraction))
-                                }
-                                .frame(height: 18)
-
-                                Text(String(format: "%.1fh", hours))
-                                    .font(Theme.Typography.monoSmall)
-                                    .foregroundStyle(Theme.Colors.textPrimary)
-                                    .frame(width: 42, alignment: .trailing)
-                            }
+                            sleepStageRow(stage: stage, hours: hours, maxHours: maxHours)
                         }
                     }
                 }
@@ -252,6 +267,32 @@ struct HealthMetricDetailView: View {
         }
         .padding(Theme.Spacing.lg)
         .softCard(elevation: 1)
+    }
+
+    private func sleepStageRow(stage: SleepStage, hours: Double, maxHours: Double) -> some View {
+        let fraction = maxHours > 0 ? hours / maxHours : 0
+
+        return VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            HStack {
+                Text(stage.label)
+                    .font(Theme.Typography.subheadline)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                Spacer()
+                Text(String(format: "%.1fh", hours))
+                    .font(Theme.Typography.monoSmall)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+            }
+
+            GeometryReader { geo in
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                    .fill(sleepStageColor(stage).opacity(0.7))
+                    .frame(width: max(4, geo.size.width * fraction))
+            }
+            .frame(height: dynamicTypeSize.isAccessibilitySize ? 22 : 18)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(stage.label)
+        .accessibilityValue(String(format: "%.1f hours average", hours))
     }
 
     private func sleepStageColor(_ stage: SleepStage) -> Color {

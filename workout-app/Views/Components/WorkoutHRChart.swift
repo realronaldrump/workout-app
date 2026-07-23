@@ -13,6 +13,16 @@ struct WorkoutHRChart: View {
         return min...max
     }
 
+    private var accessibilitySummary: String {
+        let values = samples.map(\.value)
+        guard let minimum = values.min(), let maximum = values.max(), !values.isEmpty else {
+            return "No heart rate samples"
+        }
+        let average = values.reduce(0, +) / Double(values.count)
+        return "\(values.count) samples. Average \(Int(average.rounded())) beats per minute, "
+            + "low \(Int(minimum.rounded())), high \(Int(maximum.rounded()))."
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             Text("Heart Rate")
@@ -45,6 +55,9 @@ struct WorkoutHRChart: View {
                 plotArea.clipped()
             }
             .frame(height: Theme.ChartHeight.standard)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Heart rate trend")
+            .accessibilityValue(accessibilitySummary)
         }
     }
 }

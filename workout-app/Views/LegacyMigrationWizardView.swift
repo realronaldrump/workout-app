@@ -170,7 +170,7 @@ struct LegacyMigrationWizardView: View {
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, Theme.Spacing.md)
-                .brutalistButtonChrome(fill: fill, cornerRadius: Theme.CornerRadius.large)
+                .surfaceButtonChrome(fill: fill, cornerRadius: Theme.CornerRadius.large)
         }
         .buttonStyle(.plain)
     }

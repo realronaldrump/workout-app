@@ -8,6 +8,7 @@ struct ExerciseStatDetailView: View {
 
     @State private var derived: DerivedStatData = .empty
     @State private var derivedCacheKey: Int?
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private var isAssisted: Bool {
         ExerciseLoad.isAssistedExercise(exerciseName)
@@ -123,13 +124,14 @@ struct ExerciseStatDetailView: View {
             AdaptiveBackground()
 
             ScrollView {
-                VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
+                LazyVStack(alignment: .leading, spacing: Theme.Spacing.xl) {
                     header
                     trendChart
                     summaryPills
                     topSessionsSection
                 }
                 .padding(Theme.Spacing.xl)
+                .contentColumn()
             }
         }
         .navigationTitle(navigationTitle)
@@ -224,6 +226,9 @@ struct ExerciseStatDetailView: View {
                         plotArea.clipped()
                     }
                     .frame(height: Theme.ChartHeight.standard)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(chartTitle)
+                    .accessibilityValue(trendAccessibilityValue)
                 }
                 .padding(Theme.Spacing.lg)
                 .softCard(elevation: 2)
@@ -246,7 +251,9 @@ struct ExerciseStatDetailView: View {
                     }
 
                     LazyVGrid(
-                        columns: [GridItem(.flexible()), GridItem(.flexible())],
+                        columns: dynamicTypeSize.isAccessibilitySize
+                            ? [GridItem(.flexible())]
+                            : [GridItem(.flexible()), GridItem(.flexible())],
                         spacing: Theme.Spacing.md
                     ) {
                         StatPill(title: "Average", value: formatValue(avg))
@@ -337,6 +344,18 @@ struct ExerciseStatDetailView: View {
 
     private var navigationTitle: String {
         kind == .maxWeight ? ExerciseLoad.weightMetricTitle(for: exerciseName) : kind.title
+    }
+
+    private var trendAccessibilityValue: String {
+        guard let first = points.first, let last = points.last else { return "No sessions" }
+        let direction: String
+        if abs(last.value - first.value) < 0.0001 {
+            direction = "unchanged"
+        } else {
+            direction = last.value > first.value ? "up" : "down"
+        }
+        return "\(points.count) sessions. First \(formatValue(first.value)); "
+            + "latest \(formatValue(last.value)), \(direction)."
     }
 
     private var summaryLeadingTitle: String {

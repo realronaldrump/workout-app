@@ -71,18 +71,20 @@ struct GymBulkAssignView: View {
     }
 
     var body: some View {
+        let visibleWorkouts = filteredWorkouts
+
         ZStack {
             AdaptiveBackground()
 
             ScrollView {
-                VStack(spacing: Theme.Spacing.lg) {
-                    filterSection
+                LazyVStack(spacing: Theme.Spacing.lg) {
+                    filterSection(matchingCount: visibleWorkouts.count)
 
-                    selectionHeader
+                    selectionHeader(visibleWorkouts: visibleWorkouts)
 
                     autoTagSection
 
-                    if filteredWorkouts.isEmpty {
+                    if visibleWorkouts.isEmpty {
                         EmptyStateCard(
                             icon: "magnifyingglass",
                             tint: Theme.Colors.textTertiary,
@@ -91,14 +93,13 @@ struct GymBulkAssignView: View {
                         )
                         .padding(.top, Theme.Spacing.xl)
                     } else {
-                        VStack(spacing: Theme.Spacing.md) {
-                            ForEach(filteredWorkouts) { workout in
-                                workoutRow(for: workout)
-                            }
+                        ForEach(visibleWorkouts) { workout in
+                            workoutRow(for: workout)
                         }
                     }
                 }
                 .padding(Theme.Spacing.xl)
+                .contentColumn()
             }
         }
         .navigationTitle("Bulk Assign Gyms")
@@ -136,7 +137,7 @@ struct GymBulkAssignView: View {
         }
     }
 
-    private var filterSection: some View {
+    private func filterSection(matchingCount: Int) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             Text("Filters")
                 .font(Theme.Typography.title3)
@@ -155,9 +156,9 @@ struct GymBulkAssignView: View {
             Toggle(isOn: $showUnassignedOnly) {
                 Text("Unassigned only")
             }
-            .toggleStyle(BrutalistToggleStyle())
+            .toggleStyle(AppToggleStyle())
 
-            Text("Matches \(filteredWorkouts.count) workouts")
+            Text("Matches \(matchingCount) workouts")
                 .font(Theme.Typography.caption)
                 .foregroundColor(Theme.Colors.textTertiary)
         }
@@ -185,6 +186,8 @@ struct GymBulkAssignView: View {
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundStyle(Theme.Colors.textTertiary)
+                        .frame(width: Theme.Layout.minimumTapTarget, height: Theme.Layout.minimumTapTarget)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Clear search")
@@ -195,7 +198,7 @@ struct GymBulkAssignView: View {
         .glassBackground(cornerRadius: Theme.CornerRadius.xlarge, elevation: 1)
     }
 
-    private var selectionHeader: some View {
+    private func selectionHeader(visibleWorkouts: [Workout]) -> some View {
         HStack(spacing: Theme.Spacing.md) {
             Text("\(selectedWorkouts.count) selected")
                 .font(Theme.Typography.captionBold)
@@ -204,13 +207,14 @@ struct GymBulkAssignView: View {
             Spacer()
 
             Button("Select All") {
-                selectedWorkouts = Set(filteredWorkouts.map(\.id))
+                selectedWorkouts = Set(visibleWorkouts.map(\.id))
             }
             .font(Theme.Typography.captionBold)
             .foregroundStyle(Theme.Colors.accent)
             .textCase(.uppercase)
             .tracking(0.8)
             .buttonStyle(.plain)
+            .frame(minHeight: Theme.Layout.minimumTapTarget)
 
             Button("Clear") {
                 selectedWorkouts.removeAll()
@@ -220,6 +224,7 @@ struct GymBulkAssignView: View {
             .textCase(.uppercase)
             .tracking(0.8)
             .buttonStyle(.plain)
+            .frame(minHeight: Theme.Layout.minimumTapTarget)
 
             Button {
                 showingAssignPicker = true
@@ -305,7 +310,7 @@ struct GymBulkAssignView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, Theme.Spacing.md)
                 .foregroundStyle(.white)
-                .brutalistButtonChrome(
+                .surfaceButtonChrome(
                     fill: isAutoTagging ? Theme.Colors.border : Theme.Colors.accent,
                     cornerRadius: Theme.CornerRadius.large
                 )

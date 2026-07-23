@@ -38,21 +38,11 @@ extension HealthKitManager {
             )
         }
 
-        var itemsByID: [String: HealthPermissionAuditItem] = [:]
-        itemsByID.reserveCapacity(descriptors.count)
-
-        for descriptor in descriptors {
-            let status = await permissionAuditStatus(
-                for: descriptor,
-                healthStore: healthStore
-            )
-            itemsByID[descriptor.id] = HealthPermissionAuditItem(
-                id: descriptor.id,
-                title: descriptor.title,
-                summary: descriptor.summary,
-                status: status
-            )
-        }
+        let itemsByID = await permissionAuditItems(
+            for: descriptors,
+            healthStore: healthStore,
+            maximumConcurrentChecks: 8
+        )
 
         return groupedPermissionAuditSections(
             from: descriptors.compactMap { itemsByID[$0.id] },
@@ -60,7 +50,51 @@ extension HealthKitManager {
         )
     }
 
-    private func permissionAuditStatus(
+    private nonisolated func permissionAuditItems(
+        for descriptors: [PermissionAuditDescriptor],
+        healthStore: HKHealthStore,
+        maximumConcurrentChecks: Int
+    ) async -> [String: HealthPermissionAuditItem] {
+        await withTaskGroup(of: HealthPermissionAuditItem.self) { group in
+            var iterator = descriptors.makeIterator()
+            let initialCount = min(maximumConcurrentChecks, descriptors.count)
+
+            for _ in 0..<initialCount {
+                guard let descriptor = iterator.next() else { break }
+                group.addTask {
+                    await Self.permissionAuditItem(for: descriptor, healthStore: healthStore)
+                }
+            }
+
+            var itemsByID: [String: HealthPermissionAuditItem] = [:]
+            itemsByID.reserveCapacity(descriptors.count)
+
+            for await item in group {
+                itemsByID[item.id] = item
+                if let descriptor = iterator.next() {
+                    group.addTask {
+                        await Self.permissionAuditItem(for: descriptor, healthStore: healthStore)
+                    }
+                }
+            }
+            return itemsByID
+        }
+    }
+
+    private nonisolated static func permissionAuditItem(
+        for descriptor: PermissionAuditDescriptor,
+        healthStore: HKHealthStore
+    ) async -> HealthPermissionAuditItem {
+        let status = await permissionAuditStatus(for: descriptor, healthStore: healthStore)
+        return HealthPermissionAuditItem(
+            id: descriptor.id,
+            title: descriptor.title,
+            summary: descriptor.summary,
+            status: status
+        )
+    }
+
+    private nonisolated static func permissionAuditStatus(
         for descriptor: PermissionAuditDescriptor,
         healthStore: HKHealthStore
     ) async -> HealthPermissionAuditItem.Status {
@@ -227,10 +261,10 @@ extension HealthKitManager {
     }
 }
 
-private struct PermissionAuditDescriptor {
+private struct PermissionAuditDescriptor: Sendable {
     let id: String
     let title: String
     let summary: String
     let section: String
-    let makeType: () -> HKObjectType?
+    let makeType: @Sendable () -> HKObjectType?
 }

@@ -2,6 +2,9 @@ import Combine
 import SwiftUI
 
 struct HealthHubView: View {
+    @Environment(\.openURL) private var openURL
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @EnvironmentObject var healthManager: HealthViewStore
     @EnvironmentObject private var dateRangeContext: HealthDateRangeContext
 
@@ -12,6 +15,7 @@ struct HealthHubView: View {
     @State private var cachedSummaryCards: [HealthSummaryCardModel] = []
     @State private var cachedTimelineRows: [DailyTimelineRowModel] = []
     @State private var isCatchUpSyncing = false
+    @State private var operationError: String?
 
     private var earliestDate: Date? {
         healthManager.dailyHealthStore.keys.min()
@@ -69,16 +73,20 @@ struct HealthHubView: View {
 
             ScrollView(showsIndicators: false) {
                 LazyVStack(alignment: .leading, spacing: Theme.Spacing.xxl) {
-                    headerSection
-
-                    timeRangeSection
+                    if healthManager.authorizationStatus == .authorized {
+                        headerSection
+                    }
 
                     if healthManager.authorizationStatus == .unavailable {
                         unavailableCard
                     } else if healthManager.authorizationStatus != .authorized {
                         accessCard
                     } else {
-                        categorySection
+                        timeRangeSection
+
+                        if let error = operationError ?? healthManager.syncError {
+                            syncErrorCard(error)
+                        }
 
                         if cachedDailyData.isEmpty {
                             emptyState
@@ -86,15 +94,22 @@ struct HealthHubView: View {
                             if !cachedSummaryCards.isEmpty {
                                 summarySection
                             }
+                        }
+
+                        categorySection
+
+                        if !cachedDailyData.isEmpty {
                             dailyTimelineSection
                         }
                     }
                 }
                 .padding(.vertical, Theme.Spacing.xxl)
                 .padding(.horizontal, Theme.Spacing.lg)
+                .contentColumn()
             }
         }
-        .navigationBarHidden(true)
+        .navigationTitle("Health")
+        .navigationBarTitleDisplayMode(.large)
         .navigationDestination(item: $selectedMetric) { metric in
             HealthMetricDetailView(metric: metric)
         }
@@ -118,49 +133,50 @@ struct HealthHubView: View {
         .onChange(of: timelineSortOrder) { _, _ in
             refreshTimelineRows()
         }
-        .onReceive(healthManager.$dailyHealthStore.dropFirst()) { store in
+        .onReceive(
+            healthManager.$dailyHealthStore
+                .dropFirst()
+                .debounce(for: .milliseconds(100), scheduler: RunLoop.main)
+        ) { store in
             refreshCachedContent(from: store)
         }
     }
 
     private var headerSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                Text("Health")
-                    .font(Theme.Typography.screenTitle)
-                    .foregroundStyle(Theme.Colors.textPrimary)
+            Text(headerSubtitle)
+                .font(Theme.Typography.body)
+                .foregroundStyle(Theme.Colors.textSecondary)
 
-                Text(headerSubtitle)
-                    .font(Theme.Typography.body)
-                    .foregroundStyle(Theme.Colors.textSecondary)
-            }
-
-            if healthManager.authorizationStatus == .authorized {
-                syncStatusRow
-            }
+            syncStatusRow
         }
     }
 
     private var syncStatusRow: some View {
-        HStack(spacing: Theme.Spacing.xs) {
+        HStack(spacing: Theme.Spacing.sm) {
             if isCatchUpSyncing || healthManager.isDailySyncing {
                 ProgressView()
-                    .controlSize(.mini)
-                Text("Syncing…")
+                Text("Syncing recent Health data…")
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textTertiary)
+                    .foregroundStyle(Theme.Colors.textSecondary)
             } else if let lastSync = healthManager.lastDailySyncDate {
                 Text("Last sync \(formatSyncDate(lastSync))")
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textTertiary)
+                    .foregroundStyle(Theme.Colors.textSecondary)
 
-                Button {
+                Spacer(minLength: Theme.Spacing.xs)
+
+                Button("Sync now", systemImage: "arrow.clockwise") {
                     Task { await catchUpRecentHealthData(force: true) }
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.accent)
                 }
+                .font(Theme.Typography.captionBold)
+                .frame(minHeight: Theme.Layout.minimumTapTarget)
+            } else {
+                Button("Sync Health", systemImage: "arrow.clockwise") {
+                    Task { await catchUpRecentHealthData(force: true) }
+                }
+                .font(Theme.Typography.captionBold)
+                .frame(minHeight: Theme.Layout.minimumTapTarget)
             }
         }
     }
@@ -213,7 +229,7 @@ struct HealthHubView: View {
 
                 if canShowLessTimeline {
                     Button("Show Less") {
-                        withAnimation(Theme.Animation.smooth) {
+                        withAnimation(reduceMotion ? nil : Theme.Animation.smooth) {
                             timelineDensity = .compact
                         }
                     }
@@ -244,7 +260,7 @@ struct HealthHubView: View {
                 HStack(spacing: Theme.Spacing.md) {
                     if canShowMoreTimeline {
                         Button("Show More") {
-                            withAnimation(Theme.Animation.smooth) {
+                            withAnimation(reduceMotion ? nil : Theme.Animation.smooth) {
                                 timelineDensity = .expanded
                             }
                         }
@@ -252,7 +268,7 @@ struct HealthHubView: View {
 
                     if canShowAllTimeline {
                         Button("Show All") {
-                            withAnimation(Theme.Animation.smooth) {
+                            withAnimation(reduceMotion ? nil : Theme.Animation.smooth) {
                                 timelineDensity = .all
                             }
                         }
@@ -284,7 +300,7 @@ struct HealthHubView: View {
                     .foregroundStyle(Theme.Colors.textPrimary)
             }
             .padding(.horizontal, Theme.Spacing.sm)
-            .frame(minHeight: 36)
+            .frame(minHeight: Theme.Layout.minimumTapTarget)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Sort daily timeline")
@@ -297,7 +313,15 @@ struct HealthHubView: View {
                 .font(Theme.Typography.sectionHeader2)
                 .foregroundStyle(Theme.Colors.textPrimary)
 
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: Theme.Spacing.md) {
+            LazyVGrid(
+                columns: [
+                    GridItem(
+                        .adaptive(minimum: dynamicTypeSize.isAccessibilitySize ? 280 : 150),
+                        spacing: Theme.Spacing.md
+                    )
+                ],
+                spacing: Theme.Spacing.md
+            ) {
                 ForEach(HealthHubCategory.allCases) { category in
                     NavigationLink {
                         if category == .sessions {
@@ -318,37 +342,48 @@ struct HealthHubView: View {
 
     private var accessCard: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Connect Apple Health")
+            Text(healthManager.authorizationStatus == .denied ? "Review Apple Health Access" : "Connect Apple Health")
                 .font(Theme.Typography.title3)
                 .foregroundStyle(Theme.Colors.textPrimary)
 
-            Text("View daily activity, sleep, vitals, and recovery metrics by connecting Apple Health.")
+            Text(accessDescription)
                 .font(Theme.Typography.body)
                 .foregroundStyle(Theme.Colors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
 
-            Button {
-                Task { await connectAndSync() }
-            } label: {
-                HStack(spacing: Theme.Spacing.xs) {
-                    Image(systemName: "heart.fill")
-                    Text("Connect")
-                        .tracking(0.8)
+            if healthManager.authorizationStatus == .denied {
+                AppPrimaryButton(title: "Open Settings", systemImage: "gear") {
+                    guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+                    openURL(url)
                 }
-                .font(Theme.Typography.metricLabel)
-                .textCase(.uppercase)
-                .foregroundStyle(Theme.Colors.background)
-                .padding(.horizontal, Theme.Spacing.lg)
-                .padding(.vertical, Theme.Spacing.sm)
-                .background(Theme.Colors.accent)
-                .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
-                .overlay(
-                    RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                        .stroke(Theme.Colors.border, lineWidth: 1)
-                )
+
+                Button("Try Health Access Again", systemImage: "arrow.clockwise") {
+                    Task { await connectAndSync() }
+                }
+                .frame(minHeight: Theme.Layout.minimumTapTarget)
+            } else {
+                AppPrimaryButton(
+                    title: dynamicTypeSize.isAccessibilitySize ? "Connect Health" : "Connect Apple Health",
+                    systemImage: "heart.fill"
+                ) {
+                    Task { await connectAndSync() }
+                }
             }
         }
-        .padding(Theme.Spacing.xl)
+        .padding(dynamicTypeSize.isAccessibilitySize ? Theme.Spacing.lg : Theme.Spacing.xl)
         .softCard(elevation: 1)
+    }
+
+    private var accessDescription: String {
+        if healthManager.authorizationStatus == .denied {
+            return dynamicTypeSize.isAccessibilitySize
+                ? "Review this app’s Health permissions in Settings, then try again."
+                : "Health access couldn’t be completed. Review this app’s permissions in Settings, then try again."
+        }
+
+        return dynamicTypeSize.isAccessibilitySize
+            ? "See health and recovery trends. Your data stays on device."
+            : "See activity, sleep, vitals, body measurements, and recovery trends in one place. Your Health data stays on your devices."
     }
 
     private var unavailableCard: some View {
@@ -388,15 +423,18 @@ struct HealthHubView: View {
                 .foregroundStyle(Theme.Colors.accent)
             }
             .padding(.top, Theme.Spacing.xs)
+            .frame(minHeight: Theme.Layout.minimumTapTarget)
         }
         .padding(Theme.Spacing.xl)
         .softCard(elevation: 1)
     }
 
     private func connectAndSync() async {
+        operationError = nil
         do {
             try await healthManager.requestAuthorization()
         } catch {
+            operationError = error.localizedDescription
             return
         }
         guard healthManager.authorizationStatus == .authorized else { return }
@@ -431,8 +469,40 @@ struct HealthHubView: View {
         do {
             try await healthManager.syncDailyHealthData(range: range)
         } catch {
-            // Silently fail — this is a background convenience sync
+            operationError = error.localizedDescription
         }
+    }
+
+    private func syncErrorCard(_ message: String) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            Label("Health Sync Needs Attention", systemImage: "exclamationmark.triangle.fill")
+                .font(Theme.Typography.headline)
+                .foregroundStyle(Theme.Colors.error)
+
+            Text(message)
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.Colors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack {
+                Button("Try Again", systemImage: "arrow.clockwise") {
+                    operationError = nil
+                    healthManager.clearSyncError()
+                    Task { await catchUpRecentHealthData(force: true) }
+                }
+
+                Spacer()
+
+                Button("Dismiss") {
+                    operationError = nil
+                    healthManager.clearSyncError()
+                }
+            }
+            .font(Theme.Typography.captionBold)
+            .frame(minHeight: Theme.Layout.minimumTapTarget)
+        }
+        .padding(Theme.Spacing.lg)
+        .background(Theme.Colors.error.opacity(0.08), in: RoundedRectangle(cornerRadius: Theme.CornerRadius.large))
     }
 
     private func buildSummaryCards(
@@ -633,6 +703,7 @@ private struct DailyTimelinePresentation {
 
 private struct HealthSummaryCard: View {
     let model: HealthSummaryCardModel
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
@@ -670,7 +741,7 @@ private struct HealthSummaryCard: View {
                 .frame(height: 34)
         }
         .padding(Theme.Spacing.md)
-        .frame(width: 160, alignment: .leading)
+        .frame(width: dynamicTypeSize.isAccessibilitySize ? 240 : 168, alignment: .leading)
         .softCard(elevation: 1)
         .overlay(alignment: .top) {
             UnevenRoundedRectangle(

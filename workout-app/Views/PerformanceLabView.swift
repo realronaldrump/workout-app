@@ -26,6 +26,7 @@ struct PerformanceLabView: View {
     let gymProfilesManager: GymProfilesManager
     @EnvironmentObject var intentionalBreaksManager: IntentionalBreaksManager
     @EnvironmentObject var variantEngine: WorkoutVariantEngine
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ObservedObject private var metadataManager = ExerciseMetadataManager.shared
     @ObservedObject private var relationshipManager = ExerciseRelationshipManager.shared
     @AppStorage("intentionalRestDays") private var intentionalRestDays: Int = 1
@@ -170,6 +171,13 @@ struct PerformanceLabView: View {
         derivedAnalytics.muscleWorkChanges
     }
 
+    private var glanceGridColumns: [GridItem] {
+        if dynamicTypeSize.isAccessibilitySize {
+            return [GridItem(.flexible())]
+        }
+        return [GridItem(.adaptive(minimum: 140, maximum: 240), spacing: Theme.Spacing.md)]
+    }
+
     var body: some View {
         ZStack {
             AdaptiveBackground()
@@ -311,11 +319,7 @@ struct PerformanceLabView: View {
                 .font(Theme.Typography.caption)
                 .foregroundColor(Theme.Colors.textSecondary)
 
-            BrutalistSegmentedPicker(
-                title: "Time Range",
-                selection: $selectedTimeFilter,
-                options: timeFilterOptions
-            )
+            timeRangePicker
 
             if selectedTimeFilter == .custom {
                 BrutalistDateRangePickerRow(
@@ -326,6 +330,40 @@ struct PerformanceLabView: View {
                     latestSelectableDate: latestSelectableDate
                 )
             }
+        }
+    }
+
+    @ViewBuilder
+    private var timeRangePicker: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            Picker("Time Range", selection: $selectedTimeFilter) {
+                ForEach(timeFilterOptions.indices, id: \.self) { index in
+                    let option = timeFilterOptions[index]
+                    Text(option.label)
+                        .tag(option.value)
+                }
+            }
+            .pickerStyle(.menu)
+            .tint(Theme.Colors.accent)
+            .padding(.horizontal, Theme.Spacing.md)
+            .frame(maxWidth: .infinity, minHeight: Theme.Layout.minimumTapTarget, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                    .fill(Theme.Colors.surface)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                    .strokeBorder(Theme.Colors.border.opacity(0.6), lineWidth: 1)
+            )
+            .onChange(of: selectedTimeFilter) { _, _ in
+                Haptics.toggle()
+            }
+        } else {
+            AppSegmentedPicker(
+                title: "Time Range",
+                selection: $selectedTimeFilter,
+                options: timeFilterOptions
+            )
         }
     }
 
@@ -341,44 +379,41 @@ struct PerformanceLabView: View {
                 .font(Theme.Typography.title2)
                 .foregroundColor(Theme.Colors.textPrimary)
 
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: Theme.Spacing.md) {
-                    glanceTile(
-                        value: "\(selectedRangeWorkouts.count)",
-                        label: "In \(selectedWindowContextLabel)",
-                        icon: "calendar"
-                    )
-                    glanceTile(
-                        value: avgPerWeekText,
-                        label: "Avg / Week",
-                        icon: "chart.bar.fill"
-                    )
-                    glanceTile(
-                        value: "\(currentStreak)",
-                        label: currentStreak == bestStreak && currentStreak > 0 ? "Day Streak \u{2605}" : "Day Streak",
-                        icon: "flame.fill"
-                    )
+            if dynamicTypeSize.isAccessibilitySize {
+                LazyVGrid(columns: glanceGridColumns, spacing: Theme.Spacing.md) {
+                    glanceTiles(currentStreak: currentStreak, bestStreak: bestStreak, avgPerWeekText: avgPerWeekText)
                 }
+            } else {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: Theme.Spacing.md) {
+                        glanceTiles(currentStreak: currentStreak, bestStreak: bestStreak, avgPerWeekText: avgPerWeekText)
+                    }
 
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: Theme.Spacing.md) {
-                    glanceTile(
-                        value: "\(selectedRangeWorkouts.count)",
-                        label: "In \(selectedWindowContextLabel)",
-                        icon: "calendar"
-                    )
-                    glanceTile(
-                        value: avgPerWeekText,
-                        label: "Avg / Week",
-                        icon: "chart.bar.fill"
-                    )
-                    glanceTile(
-                        value: "\(currentStreak)",
-                        label: currentStreak == bestStreak && currentStreak > 0 ? "Day Streak \u{2605}" : "Day Streak",
-                        icon: "flame.fill"
-                    )
+                    LazyVGrid(columns: glanceGridColumns, spacing: Theme.Spacing.md) {
+                        glanceTiles(currentStreak: currentStreak, bestStreak: bestStreak, avgPerWeekText: avgPerWeekText)
+                    }
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    private func glanceTiles(currentStreak: Int, bestStreak: Int, avgPerWeekText: String) -> some View {
+        glanceTile(
+            value: "\(selectedRangeWorkouts.count)",
+            label: "In \(selectedWindowContextLabel)",
+            icon: "calendar"
+        )
+        glanceTile(
+            value: avgPerWeekText,
+            label: "Avg / Week",
+            icon: "chart.bar.fill"
+        )
+        glanceTile(
+            value: "\(currentStreak)",
+            label: currentStreak == bestStreak && currentStreak > 0 ? "Day Streak \u{2605}" : "Day Streak",
+            icon: "flame.fill"
+        )
     }
 
     private func glanceTile(value: String, label: String, icon: String) -> some View {
@@ -748,6 +783,11 @@ struct PerformanceLabView: View {
                 PerformanceWeeklyChart(weeks: weeks)
                     .padding(Theme.Spacing.lg)
                     .softCard(elevation: 2)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Weekly activity")
+                    .accessibilityValue(
+                        "\(weeks.reduce(0) { $0 + $1.count }) workouts across \(weeks.count) weeks."
+                    )
             }
         }
     }
@@ -1106,6 +1146,13 @@ struct PerformanceMuscleVolumeBucket: Identifiable {
 
 private struct PerformanceMuscleFocusChart: View {
     let buckets: [PerformanceMuscleVolumeBucket]
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    private var legendColumns: [GridItem] {
+        dynamicTypeSize.isAccessibilitySize
+            ? [GridItem(.flexible())]
+            : [GridItem(.flexible()), GridItem(.flexible())]
+    }
 
     var body: some View {
         VStack(spacing: Theme.Spacing.lg) {
@@ -1120,9 +1167,12 @@ private struct PerformanceMuscleFocusChart: View {
             }
             .frame(height: Theme.ChartHeight.standard)
             .chartLegend(.hidden)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Muscle focus distribution")
+            .accessibilityValue(accessibilitySummary)
 
             LazyVGrid(
-                columns: [GridItem(.flexible()), GridItem(.flexible())],
+                columns: legendColumns,
                 spacing: Theme.Spacing.sm
             ) {
                 ForEach(buckets) { bucket in
@@ -1133,7 +1183,7 @@ private struct PerformanceMuscleFocusChart: View {
                         Text(bucket.name)
                             .font(Theme.Typography.caption)
                             .foregroundColor(Theme.Colors.textPrimary)
-                            .lineLimit(1)
+                            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                         Spacer()
                         Text(percentLabel(for: bucket.share))
                             .font(Theme.Typography.captionBold)
@@ -1149,5 +1199,11 @@ private struct PerformanceMuscleFocusChart: View {
         if percent <= 0 { return "0%" }
         if percent < 1 { return String(format: percent < 0.1 ? "<0.1%%" : "%.1f%%", percent) }
         return "\(Int(round(percent)))%"
+    }
+
+    private var accessibilitySummary: String {
+        buckets.prefix(5)
+            .map { "\($0.name), \(percentLabel(for: $0.share))" }
+            .joined(separator: "; ")
     }
 }

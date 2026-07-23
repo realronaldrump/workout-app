@@ -63,7 +63,10 @@ struct PreWorkoutBriefingCard: View {
                 .foregroundColor(Theme.Colors.textTertiary)
 
             // Signal breakdown
-            HStack(spacing: Theme.Spacing.lg) {
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: 88), spacing: Theme.Spacing.md)],
+                spacing: Theme.Spacing.md
+            ) {
                 ForEach(recoverySignals) { signal in
                     VStack(spacing: 2) {
                         Image(systemName: signal.icon)
@@ -122,6 +125,7 @@ struct PreWorkoutBriefingCard: View {
                 .textCase(.uppercase)
                 .tracking(0.8)
                 .buttonStyle(.plain)
+                .frame(minHeight: Theme.Layout.minimumTapTarget)
             }
 
             ForEach(muscleSuggestions) { suggestion in
@@ -147,6 +151,8 @@ struct PreWorkoutBriefingCard: View {
                                 Text(topExercise.name)
                                     .font(Theme.Typography.microcopy)
                                     .foregroundColor(Theme.Colors.accent)
+                                    .frame(minHeight: Theme.Layout.minimumTapTarget)
+                                    .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
                         }
@@ -160,6 +166,8 @@ struct PreWorkoutBriefingCard: View {
                         Image(systemName: "plus.circle")
                             .font(Theme.Typography.bodyLarge)
                             .foregroundColor(Theme.Colors.accent)
+                            .frame(width: Theme.Layout.minimumTapTarget, height: Theme.Layout.minimumTapTarget)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Start \(suggestion.group.displayName) session")

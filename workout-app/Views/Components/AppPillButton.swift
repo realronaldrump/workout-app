@@ -1,5 +1,34 @@
 import SwiftUI
 
+/// Full-width primary action used at the end of focused flows.
+struct AppPrimaryButton: View {
+    let title: String
+    var systemImage: String? = nil
+    var isEnabled = true
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: Theme.Spacing.sm) {
+                if let systemImage {
+                    Image(systemName: systemImage)
+                        .accessibilityHidden(true)
+                }
+                Text(title)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+            }
+            .font(Theme.Typography.headline)
+            .frame(maxWidth: .infinity, minHeight: Theme.Layout.minimumTapTarget)
+        }
+        .buttonStyle(.borderedProminent)
+        .buttonBorderShape(.roundedRectangle(radius: Theme.CornerRadius.large))
+        .controlSize(.large)
+        .tint(Theme.Colors.accent)
+        .disabled(!isEnabled)
+    }
+}
+
 /// In-content pill buttons used for compact secondary actions.
 struct AppPillButton: View {
     enum Variant {
@@ -61,13 +90,13 @@ struct AppPillButton: View {
                 Text(title)
                     .font(Theme.Typography.captionBold)
                     .foregroundStyle(textColor)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
-                    .allowsTightening(true)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
             }
             .padding(.horizontal, Theme.Spacing.md)
             .padding(.vertical, Theme.Spacing.xs)
-            .brutalistButtonChrome(
+            .frame(minHeight: Theme.Layout.minimumTapTarget)
+            .surfaceButtonChrome(
                 fill: backgroundColor,
                 cornerRadius: Theme.CornerRadius.large
             )
@@ -87,9 +116,11 @@ struct AppPillIconButton: View {
             Image(systemName: systemImage)
                 .font(Theme.Typography.subheadlineBold)
                 .foregroundStyle(tint)
-                .padding(.horizontal, Theme.Spacing.md)
-                .padding(.vertical, Theme.Spacing.xs)
-                .brutalistButtonChrome(
+                .frame(
+                    minWidth: Theme.Layout.minimumTapTarget,
+                    minHeight: Theme.Layout.minimumTapTarget
+                )
+                .surfaceButtonChrome(
                     fill: Theme.Colors.surface,
                     cornerRadius: Theme.CornerRadius.large
                 )

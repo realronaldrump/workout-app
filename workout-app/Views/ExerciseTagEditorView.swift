@@ -55,6 +55,7 @@ struct ExerciseTagEditorView: View {
                     actionsSection
                 }
                 .padding(Theme.Spacing.xl)
+                .contentColumn(maxWidth: 640)
             }
         }
         .navigationTitle(exerciseName)
@@ -200,7 +201,7 @@ struct ExerciseTagEditorView: View {
                         .foregroundStyle(Theme.Colors.accentSecondary)
                         .padding(.horizontal, Theme.Spacing.md)
                         .padding(.vertical, Theme.Spacing.sm)
-                        .frame(minHeight: 36)
+                        .frame(minHeight: Theme.Layout.minimumTapTarget)
                         .softCard(elevation: 1)
                 }
                 .buttonStyle(.plain)
@@ -432,6 +433,7 @@ private struct ActionRow: View {
             Spacer(minLength: 0)
         }
         .padding(Theme.Spacing.lg)
+        .frame(minHeight: Theme.Layout.minimumTapTarget)
         .softCard(elevation: 1)
     }
 }
