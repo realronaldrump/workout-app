@@ -245,7 +245,10 @@ struct StrongImportWizard: View {
                             .font(Theme.Typography.title)
 
                         LazyVGrid(
-                            columns: [GridItem(.adaptive(minimum: 100), spacing: Theme.Spacing.md)],
+                            columns: [
+                                GridItem(.flexible(), spacing: Theme.Spacing.md),
+                                GridItem(.flexible(), spacing: Theme.Spacing.md)
+                            ],
                             spacing: Theme.Spacing.md
                         ) {
                             VStack {
@@ -256,6 +259,7 @@ struct StrongImportWizard: View {
                                     .font(Theme.Typography.caption)
                                     .foregroundStyle(Theme.Colors.textSecondary)
                             }
+                            .frame(maxWidth: .infinity)
 
                             VStack {
                                 Text("\(stats.exercises)")
@@ -265,6 +269,7 @@ struct StrongImportWizard: View {
                                     .font(Theme.Typography.caption)
                                     .foregroundStyle(Theme.Colors.textSecondary)
                             }
+                            .frame(maxWidth: .infinity)
 
                             if stats.sideLinks > 0 {
                                 VStack {
@@ -275,6 +280,7 @@ struct StrongImportWizard: View {
                                         .font(Theme.Typography.caption)
                                         .foregroundStyle(Theme.Colors.textSecondary)
                                 }
+                                .frame(maxWidth: .infinity)
                             }
 
                             if stats.additionalItems > 0 {
@@ -286,6 +292,7 @@ struct StrongImportWizard: View {
                                         .font(Theme.Typography.caption)
                                         .foregroundStyle(Theme.Colors.textSecondary)
                                 }
+                                .frame(maxWidth: .infinity)
                             }
 
                             if stats.skippedItems > 0 {
@@ -297,6 +304,7 @@ struct StrongImportWizard: View {
                                         .font(Theme.Typography.caption)
                                         .foregroundStyle(Theme.Colors.textSecondary)
                                 }
+                                .frame(maxWidth: .infinity)
                             }
                         }
                         .padding()
