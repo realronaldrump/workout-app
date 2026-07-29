@@ -166,17 +166,10 @@ enum HealthMetric: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
-    var chartColor: Color {
-        switch category {
-        case .activity: return Theme.Colors.warning
-        case .sleep: return Theme.Colors.accentSecondary
-        case .heart: return Theme.Colors.error
-        case .vitals: return Theme.Colors.accent
-        case .cardio: return Theme.Colors.success
-        case .body: return Theme.Colors.accent
-        case .sessions: return Theme.Colors.textPrimary
-        }
-    }
+    /// Every metric used to inherit its category's single color, which rendered a
+    /// category screen as a stack of identical cards. Each metric now owns a hue —
+    /// see `accentColor` in `MetricVisualStyle.swift`.
+    var chartColor: Color { accentColor }
 
     var quantityType: HKQuantityTypeIdentifier? {
         switch self {

@@ -7,18 +7,24 @@ struct HealthMetricDetailView: View {
     @EnvironmentObject var healthManager: HealthViewStore
     @EnvironmentObject private var dateRangeContext: HealthDateRangeContext
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @State private var cachedPresentation: HealthMetricPresentation?
+
+    @State private var model: MetricScreenModel?
+    @State private var hasComputedOnce = false
 
     private var earliestDate: Date? {
         healthManager.dailyHealthStore.keys.min()
     }
 
-    private var range: DateInterval {
-        dateRangeContext.resolvedRange(earliest: earliestDate)
-    }
-
-    private var rangeLabel: String {
-        dateRangeContext.rangeLabel(earliest: earliestDate)
+    /// Recomputation is keyed rather than fired from every publisher emission, so a
+    /// sync that changes nothing this screen shows does not rebuild the statistics.
+    private var refreshKey: MetricRefreshKey {
+        MetricRefreshKey(
+            metric: metric,
+            selectedRange: dateRangeContext.selectedRange,
+            customRange: dateRangeContext.customRange,
+            sampleCount: healthManager.dailyHealthStore.count,
+            lastSync: healthManager.lastDailySyncDate
+        )
     }
 
     var body: some View {
@@ -27,27 +33,15 @@ struct HealthMetricDetailView: View {
 
             ScrollView(showsIndicators: false) {
                 LazyVStack(alignment: .leading, spacing: Theme.Spacing.xl) {
-                    if let presentation = cachedPresentation {
-                        headerSection(presentation)
-
-                        if presentation.points.isEmpty {
-                            emptyState
-                        } else {
-                            dailyChartSection(presentation)
-                            statsSection(presentation)
-                        }
-
-                        if metric == .sleep && !presentation.sleepSummaries.isEmpty {
-                            sleepBreakdownSection(presentation.sleepSummaries)
-                        }
+                    if let model {
+                        content(model)
+                    } else if hasComputedOnce {
+                        emptyState
                     } else {
-                        ProgressView()
-                            .tint(metric.chartColor)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, Theme.Spacing.xxl)
+                        loadingSkeleton
                     }
                 }
-                .padding(.vertical, Theme.Spacing.xxl)
+                .padding(.vertical, Theme.Spacing.xl)
                 .padding(.horizontal, Theme.Spacing.lg)
                 .contentColumn()
             }
@@ -59,177 +53,133 @@ struct HealthMetricDetailView: View {
                 HealthDateRangeToolbarMenu(earliestDate: earliestDate)
             }
         }
-        .onAppear { refreshPresentation() }
-        .onChange(of: dateRangeContext.selectedRange) { _, _ in refreshPresentation() }
-        .onChange(of: dateRangeContext.customRange) { _, _ in
-            if dateRangeContext.selectedRange == .custom {
-                refreshPresentation()
-            }
-        }
-        .onReceive(
-            healthManager.$dailyHealthStore
-                .dropFirst()
-                .debounce(for: .milliseconds(100), scheduler: RunLoop.main)
-        ) { store in
-            refreshPresentation(from: store)
+        .task(id: refreshKey) {
+            await recompute()
         }
     }
 
-    private func headerSection(_ presentation: HealthMetricPresentation) -> some View {
-        ViewThatFits(in: .horizontal) {
-            headerContent(presentation, laysOutVertically: false)
-            headerContent(presentation, laysOutVertically: true)
-        }
-        .padding(Theme.Spacing.lg)
-        .tintedSection(metric.chartColor)
-    }
+    // MARK: - Content
 
-    private func headerContent(
-        _ presentation: HealthMetricPresentation,
-        laysOutVertically: Bool
-    ) -> some View {
-        Group {
-            if laysOutVertically {
-                VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-                    metricIcon
-                    headerText(presentation)
-                }
-            } else {
-                HStack(spacing: Theme.Spacing.md) {
-                    metricIcon
-                    headerText(presentation)
-                    Spacer(minLength: 0)
-                }
-            }
-        }
-    }
-
-    private var metricIcon: some View {
-        Image(systemName: metric.icon)
-            .font(Theme.Iconography.title3)
-            .foregroundStyle(metric.chartColor)
-            .frame(width: 44, height: 44)
-            .background(Circle().fill(metric.chartColor.opacity(Theme.Opacity.subtleFill)))
-            .overlay(Circle().strokeBorder(metric.chartColor.opacity(0.15), lineWidth: 1))
-    }
-
-    private func headerText(_ presentation: HealthMetricPresentation) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            if let latest = presentation.latest {
-                ViewThatFits(in: .horizontal) {
-                    HStack(alignment: .center, spacing: Theme.Spacing.sm) {
-                        latestValue(latest)
-                        if let delta = presentation.delta {
-                            DeltaTag(delta: delta, tintOverride: deltaTintOverride)
-                        }
-                    }
-                    VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                        latestValue(latest)
-                        if let delta = presentation.delta {
-                            DeltaTag(delta: delta, tintOverride: deltaTintOverride)
-                        }
-                    }
-                }
-            }
-            Text(rangeLabel)
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Colors.textTertiary)
-
-            if let sentence = averageSentence(for: presentation) {
-                Text(sentence)
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-    }
-
-    private func latestValue(_ latest: Double) -> some View {
-        HStack(alignment: .lastTextBaseline, spacing: 6) {
-            Text(metric.format(latest))
-                .font(Theme.Typography.title)
-                .foregroundStyle(Theme.Colors.textPrimary)
-            Text(metric.displayUnit)
-                .font(Theme.Typography.subheadline)
-                .foregroundStyle(Theme.Colors.textTertiary)
-        }
-    }
-
-    private var emptyState: some View {
-        EmptyStateCard(
-            icon: metric.icon,
-            tint: metric.chartColor,
-            title: "No \(metric.title.lowercased()) data",
-            message: "Choose a longer range or sync recent Apple Health data."
+    @ViewBuilder
+    private func content(_ model: MetricScreenModel) -> some View {
+        MetricHeroCard(
+            metric: metric,
+            analysis: model.analysis,
+            rangeLabel: model.rangeLabel,
+            previousAverage: model.previousAverage
         )
+        .staggeredAppear(index: 0)
+
+        trendCard(model)
+            .staggeredAppear(index: 1)
+
+        MetricInsightList(insights: model.insights, tint: metric.accentColor)
+
+        if model.analysis.hasEnoughDataForRhythm {
+            MetricRhythmStrip(
+                metric: metric,
+                stats: model.analysis.weekdayStats,
+                strongest: model.analysis.strongestWeekday,
+                weakest: model.analysis.weakestWeekday,
+                chartForm: model.analysis.suggestedChartForm
+            )
+            .padding(Theme.Spacing.lg)
+            .softCard(elevation: 1)
+        }
+
+        if model.analysis.samples.count >= 14 {
+            MetricCalendarGrid(metric: metric, analysis: model.analysis)
+                .padding(Theme.Spacing.lg)
+                .softCard(elevation: 1)
+        }
+
+        if metric == .sleep && !model.sleepSummaries.isEmpty {
+            sleepBreakdownSection(model.sleepSummaries)
+        }
     }
 
-    private func dailyChartSection(_ presentation: HealthMetricPresentation) -> some View {
+    private func trendCard(_ model: MetricScreenModel) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Daily Trend")
+            Text(model.analysis.suggestedChartForm == .bars ? "Every \(metric.dailyNoun.capitalized)" : "Trend")
                 .font(Theme.Typography.sectionHeader2)
                 .foregroundStyle(Theme.Colors.textPrimary)
 
-            InteractiveTimeSeriesChart(
-                points: presentation.chartPoints,
-                color: metric.chartColor,
-                areaFill: true,
-                height: 180,
-                fullDomain: range.start...range.end,
-                showsControls: false,
-                showsAverageLine: true,
-                averageLineValue: presentation.average.map(metric.displayValue(from:)),
-                valueText: { tooltipValueText(displayValue: $0) }
+            MetricTrendChart(
+                metric: metric,
+                analysis: model.analysis,
+                domain: model.domain
             )
+
+            Divider().overlay(Theme.Colors.border.opacity(0.5))
+
+            statFooter(model.analysis)
         }
         .padding(Theme.Spacing.lg)
         .softCard(elevation: 1)
     }
 
-    private func statsSection(_ presentation: HealthMetricPresentation) -> some View {
-        let includeDayForExtremes = metric == .bodyMass
-
-        return LazyVGrid(
-            columns: [GridItem(.adaptive(minimum: 180), spacing: Theme.Spacing.md)],
+    /// Reference numbers the hero deliberately leaves out. Kept as one quiet row so
+    /// they support the chart rather than competing with it, which is what the four
+    /// large tinted tiles used to do.
+    private func statFooter(_ analysis: MetricSeriesAnalysis) -> some View {
+        LazyVGrid(
+            columns: [GridItem(.adaptive(minimum: dynamicTypeSize.isAccessibilitySize ? 150 : 84), spacing: Theme.Spacing.md)],
+            alignment: .leading,
             spacing: Theme.Spacing.md
         ) {
-            MetricStatCard(
-                title: "Average",
-                value: presentation.average.map(metric.format) ?? "--",
-                unit: metric.displayUnit,
-                tint: metric.chartColor,
-                icon: "equal.circle"
-            )
-            MetricStatCard(
-                title: "Prev period",
-                value: presentation.previousAverage.map(metric.format) ?? "--",
-                unit: metric.displayUnit,
-                tint: Theme.Colors.textSecondary,
-                icon: "clock.arrow.circlepath"
-            )
-            MetricStatCard(
-                title: "Min",
-                value: presentation.minimum.map(metric.format) ?? "--",
-                unit: metric.displayUnit,
-                tint: Theme.Colors.accent,
-                icon: "arrow.down.circle",
-                subtitle: includeDayForExtremes ? presentation.minimumPoint.map { formatDay($0.date) } : nil
-            )
-            MetricStatCard(
-                title: "Max",
-                value: presentation.maximum.map(metric.format) ?? "--",
-                unit: metric.displayUnit,
-                tint: Theme.Colors.accentSecondary,
-                icon: "arrow.up.circle",
-                subtitle: includeDayForExtremes ? presentation.maximumPoint.map { formatDay($0.date) } : nil
-            )
+            footerStat("Median", analysis.median.map(metric.formatDisplay))
+            footerStat(metric.polarity == .lowerIsBetter ? "Lowest" : "Best", analysis.bestDay.map { metric.formatDisplay($0.value) })
+            footerStat(metric.polarity == .lowerIsBetter ? "Highest" : "Quietest", analysis.worstDay.map { metric.formatDisplay($0.value) })
+            footerStat("Recorded", "\(analysis.samples.count) \(metric.dailyNoun)s")
         }
     }
 
-    private func formatDay(_ date: Date) -> String {
-        // Keep it compact so it fits on the stat tile.
-        date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
+    private func footerStat(_ label: String, _ value: String?) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label)
+                .font(Theme.Typography.microLabel)
+                .foregroundStyle(Theme.Colors.textTertiary)
+                .tracking(0.8)
+                .textCase(.uppercase)
+            Text(value ?? "--")
+                .font(Theme.Typography.subheadlineBold)
+                .foregroundStyle(Theme.Colors.textPrimary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
+
+    // MARK: - States
+
+    private var emptyState: some View {
+        EmptyStateCard(
+            icon: metric.icon,
+            tint: metric.accentColor,
+            title: "No \(metric.title.lowercased()) data",
+            message: "Choose a longer range or sync recent Apple Health data."
+        )
+    }
+
+    /// A shaped placeholder reads as "loading this screen" where a bare spinner
+    /// reads as "stalled".
+    private var loadingSkeleton: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge, style: .continuous)
+                .fill(metric.accentColor.opacity(0.08))
+                .frame(height: 190)
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
+                .fill(Theme.Colors.textPrimary.opacity(0.045))
+                .frame(height: 300)
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
+                .fill(Theme.Colors.textPrimary.opacity(0.045))
+                .frame(height: 120)
+        }
+        .redacted(reason: .placeholder)
+        .accessibilityLabel("Loading \(metric.title)")
+    }
+
+    // MARK: - Sleep breakdown
 
     private func sleepBreakdownSection(_ summaries: [SleepSummary]) -> some View {
         let count = Double(summaries.count)
@@ -258,11 +208,11 @@ struct HealthMetricDetailView: View {
 
             if fallbackCount > 0 {
                 Text(
-                    "\(fallbackCount) night\(fallbackCount == 1 ? "" : "s") used a fallback sleep source " +
-                    "because the preferred source had no usable sleep data."
+                    "\(fallbackCount) night\(fallbackCount == 1 ? "" : "s") used a fallback sleep source "
+                    + "because the preferred source had no usable sleep data."
                 )
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textSecondary)
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.Colors.textSecondary)
             }
         }
         .padding(Theme.Spacing.lg)
@@ -279,16 +229,22 @@ struct HealthMetricDetailView: View {
                     .foregroundStyle(Theme.Colors.textSecondary)
                 Spacer()
                 Text(String(format: "%.1fh", hours))
-                    .font(Theme.Typography.monoSmall)
+                    .font(Theme.Typography.subheadlineBold)
                     .foregroundStyle(Theme.Colors.textPrimary)
             }
 
             GeometryReader { geo in
-                RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                    .fill(sleepStageColor(stage).opacity(0.7))
+                Capsule()
+                    .fill(
+                        LinearGradient(
+                            colors: [sleepStageColor(stage).opacity(0.55), sleepStageColor(stage)],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
                     .frame(width: max(4, geo.size.width * fraction))
             }
-            .frame(height: dynamicTypeSize.isAccessibilitySize ? 22 : 18)
+            .frame(height: dynamicTypeSize.isAccessibilitySize ? 22 : 14)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(stage.label)
@@ -297,24 +253,12 @@ struct HealthMetricDetailView: View {
 
     private func sleepStageColor(_ stage: SleepStage) -> Color {
         switch stage {
-        case .deep: return Theme.Colors.accent
-        case .rem: return Theme.Colors.accentTertiary
-        case .core: return Theme.Colors.accentSecondary
-        case .awake: return Theme.Colors.error
+        case .deep: return MetricVisualStyle.indigo
+        case .rem: return MetricVisualStyle.violet
+        case .core: return MetricVisualStyle.sky
+        case .awake: return MetricVisualStyle.amber
         case .inBed: return Theme.Colors.textSecondary
         case .unknown: return Theme.Colors.textTertiary
-        }
-    }
-
-    private func tooltipValueText(displayValue: Double) -> String {
-        let formatted = metric.formatDisplay(displayValue)
-        switch metric.displayUnit {
-        case "%":
-            return "\(formatted)\(metric.displayUnit)"
-        case "":
-            return formatted
-        default:
-            return "\(formatted) \(metric.displayUnit)"
         }
     }
 
@@ -332,195 +276,89 @@ struct HealthMetricDetailView: View {
         return totals.mapValues { ($0 / count) / 3600 }
     }
 
-    private var deltaTintOverride: Color? {
-        switch metric {
-        case .bodyMass, .bodyFatPercentage, .bodyTemperature:
-            return Theme.Colors.textSecondary
-        default:
-            return nil
-        }
-    }
+    // MARK: - Computation
 
-    private func averageSentence(for presentation: HealthMetricPresentation) -> String? {
-        guard let average = presentation.average, let delta = presentation.delta else { return nil }
-        let direction = delta.isFlat ? "flat" : (delta.percentChange > 0 ? "up" : "down")
-        let change = delta.isFlat ? "" : " \(Int(abs(delta.percentChange).rounded()))%"
-        let unit = metric.displayUnit.isEmpty ? "" : " \(metric.displayUnit)"
-        let dayLabel = presentation.comparisonDayCount == 1
-            ? "completed day"
-            : "\(presentation.comparisonDayCount) completed days"
-        return "Averaging \(metric.format(average))\(unit) — \(direction)\(change) vs the previous \(dayLabel)."
-    }
-
-    private func refreshPresentation(from emittedStore: [Date: DailyHealthData]? = nil) {
-        let store = emittedStore ?? healthManager.dailyHealthStore
+    /// Pulls the raw values on the main actor (a cheap dictionary walk) and hands the
+    /// statistics off the main actor, so scrolling stays smooth on long histories.
+    private func recompute() async {
+        let store = healthManager.dailyHealthStore
         let resolvedRange = dateRangeContext.resolvedRange(earliest: store.keys.min())
         let ranges = HealthDayComparisonRanges(
             resolvedRange: resolvedRange,
             comparesPreviousPeriod: dateRangeContext.selectedRange != .allTime
         )
-        var current: [DailyHealthData] = []
-        var currentComparison: [DailyHealthData] = []
-        var previous: [DailyHealthData] = []
+
+        var samples: [MetricDaySample] = []
+        var previousValues: [Double] = []
+        var sleepSummaries: [SleepSummary] = []
+        let calendar = Calendar.current
 
         for day in store.values {
-            let dayStart = Calendar.current.startOfDay(for: day.dayStart)
+            let dayStart = calendar.startOfDay(for: day.dayStart)
             if ranges.display.contains(dayStart) {
-                current.append(day)
-            }
-            if ranges.currentComparison?.contains(dayStart) == true {
-                currentComparison.append(day)
-            } else if ranges.previousComparison?.contains(dayStart) == true {
-                previous.append(day)
+                if let value = day.value(for: metric) {
+                    samples.append(
+                        MetricDaySample(date: dayStart, value: metric.displayValue(from: value))
+                    )
+                }
+                if metric == .sleep, let summary = day.sleepSummary {
+                    sleepSummaries.append(summary)
+                }
+            } else if ranges.previousComparison?.contains(dayStart) == true,
+                      let value = day.value(for: metric) {
+                previousValues.append(metric.displayValue(from: value))
             }
         }
 
-        current.sort { $0.dayStart < $1.dayStart }
-        currentComparison.sort { $0.dayStart < $1.dayStart }
-        previous.sort { $0.dayStart < $1.dayStart }
-        cachedPresentation = HealthMetricPresentation(
-            metric: metric,
-            dailyData: current,
-            comparisonData: currentComparison.isEmpty ? current : currentComparison,
-            previousData: previous,
-            comparisonDayCount: ranges.comparisonDayCount
-        )
-    }
-}
-
-private struct HealthMetricPresentation {
-    let points: [HealthTrendPoint]
-    let chartPoints: [HealthTrendPoint]
-    let latest: Double?
-    let average: Double?
-    let previousAverage: Double?
-    let delta: TrendDelta?
-    let minimum: Double?
-    let maximum: Double?
-    let minimumPoint: HealthTrendPoint?
-    let maximumPoint: HealthTrendPoint?
-    let sleepSummaries: [SleepSummary]
-    let comparisonDayCount: Int
-
-    init(
-        metric: HealthMetric,
-        dailyData: [DailyHealthData],
-        comparisonData: [DailyHealthData],
-        previousData: [DailyHealthData],
-        comparisonDayCount: Int
-    ) {
-        let points = dailyData.compactMap { day -> HealthTrendPoint? in
-            guard let value = day.value(for: metric) else { return nil }
-            return HealthTrendPoint(date: day.dayStart, value: value, label: metric.title)
+        guard !samples.isEmpty else {
+            model = nil
+            hasComputedOnce = true
+            return
         }
-        self.points = points
-        chartPoints = points.map { point in
-            HealthTrendPoint(
-                date: point.date,
-                value: metric.displayValue(from: point.value),
-                label: point.label
+
+        let capturedSamples = samples
+        let capturedMetric = metric
+        let analysis = await Task.detached(priority: .userInitiated) {
+            MetricSeriesAnalysis(
+                metric: capturedMetric,
+                samples: capturedSamples,
+                range: resolvedRange
             )
-        }
+        }.value
 
-        let values = points.map(\.value)
-        let comparisonValues = comparisonData.compactMap { $0.value(for: metric) }
-        let usesFallback = comparisonValues.isEmpty
-        let averageValues = usesFallback ? values : comparisonValues
-        let previousValues = previousData.compactMap { $0.value(for: metric) }
-        let currentAverage = averageValues.isEmpty
-            ? nil
-            : averageValues.reduce(0, +) / Double(averageValues.count)
-        let priorAverage = usesFallback || previousValues.isEmpty
+        guard !Task.isCancelled else { return }
+
+        let previousAverage = previousValues.isEmpty
             ? nil
             : previousValues.reduce(0, +) / Double(previousValues.count)
-        latest = values.last
-        average = currentAverage
-        previousAverage = priorAverage
-        delta = currentAverage.flatMap { current in
-            priorAverage.flatMap {
-                TrendDelta(
-                    current: current,
-                    previous: $0,
-                    higherIsBetter: metric != .restingHeartRate
-                )
-            }
-        }
-        minimum = values.min()
-        maximum = values.max()
-        minimumPoint = Self.mostRecentPoint(matching: minimum, in: points)
-        maximumPoint = Self.mostRecentPoint(matching: maximum, in: points)
-        sleepSummaries = metric == .sleep ? dailyData.compactMap(\.sleepSummary) : []
-        self.comparisonDayCount = comparisonDayCount
-    }
 
-    private static func mostRecentPoint(
-        matching value: Double?,
-        in points: [HealthTrendPoint]
-    ) -> HealthTrendPoint? {
-        guard let value else { return nil }
-        return points.last { $0.value == value }
+        model = MetricScreenModel(
+            analysis: analysis,
+            insights: MetricNarrative.insights(for: analysis),
+            previousAverage: previousAverage,
+            rangeLabel: dateRangeContext.rangeLabel(earliest: store.keys.min()),
+            domain: ranges.display.lowerBound...max(ranges.display.lowerBound, ranges.display.upperBound),
+            sleepSummaries: sleepSummaries.sorted { $0.start < $1.start }
+        )
+        hasComputedOnce = true
     }
 }
 
-private struct MetricStatCard: View {
-    let title: String
-    let value: String
-    let unit: String
-    var tint: Color = Theme.Colors.accent
-    var icon: String?
-    let subtitle: String?
+// MARK: - Supporting types
 
-    init(title: String, value: String, unit: String, tint: Color = Theme.Colors.accent, icon: String? = nil, subtitle: String? = nil) {
-        self.title = title
-        self.value = value
-        self.unit = unit
-        self.tint = tint
-        self.icon = icon
-        self.subtitle = subtitle
-    }
+private struct MetricScreenModel {
+    let analysis: MetricSeriesAnalysis
+    let insights: [MetricInsight]
+    let previousAverage: Double?
+    let rangeLabel: String
+    let domain: ClosedRange<Date>
+    let sleepSummaries: [SleepSummary]
+}
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.xs) {
-                if let icon {
-                    Image(systemName: icon)
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(tint)
-                }
-                Text(title)
-                    .font(Theme.Typography.metricLabel)
-                    .foregroundStyle(tint)
-                    .textCase(.uppercase)
-                    .tracking(0.6)
-
-                Spacer(minLength: 0)
-
-                if let subtitle {
-                    Text(subtitle)
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.75)
-                }
-            }
-            HStack(alignment: .lastTextBaseline, spacing: 4) {
-                Text(value)
-                    .font(Theme.Typography.number)
-                    .foregroundStyle(Theme.Colors.textPrimary)
-                Text(unit)
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textTertiary)
-            }
-        }
-        .padding(Theme.Spacing.md)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
-                .fill(tint.opacity(Theme.Opacity.subtleFill))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
-                .strokeBorder(tint.opacity(0.12), lineWidth: 1)
-        )
-    }
+private struct MetricRefreshKey: Hashable {
+    let metric: HealthMetric
+    let selectedRange: AppTimeRange
+    let customRange: DateInterval
+    let sampleCount: Int
+    let lastSync: Date?
 }

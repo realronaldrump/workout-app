@@ -1,13 +1,24 @@
 import Combine
 import SwiftUI
-import Charts
 
 struct HealthCategoryDetailView: View {
     let category: HealthHubCategory
 
     @EnvironmentObject var healthManager: HealthViewStore
     @EnvironmentObject private var dateRangeContext: HealthDateRangeContext
-    @State private var cachedPresentation: HealthCategoryPresentation?
+
+    @State private var model: CategoryScreenModel?
+    @State private var hasComputedOnce = false
+
+    private var refreshKey: CategoryRefreshKey {
+        CategoryRefreshKey(
+            category: category,
+            selectedRange: dateRangeContext.selectedRange,
+            customRange: dateRangeContext.customRange,
+            sampleCount: healthManager.dailyHealthStore.count,
+            lastSync: healthManager.lastDailySyncDate
+        )
+    }
 
     var body: some View {
         ZStack {
@@ -15,37 +26,33 @@ struct HealthCategoryDetailView: View {
 
             ScrollView(showsIndicators: false) {
                 LazyVStack(alignment: .leading, spacing: Theme.Spacing.xl) {
-                    if let presentation = cachedPresentation {
-                        categoryHeader(rangeLabel: presentation.rangeLabel)
+                    if let model {
+                        categoryHeader(rangeLabel: model.rangeLabel)
                             .staggeredAppear(index: 0)
 
-                        if presentation.dailyData.isEmpty || presentation.metricsWithData.isEmpty {
-                            emptyState
-                        } else {
-                            spotlightSection(presentation.spotlight)
-                                .staggeredAppear(index: 1)
+                        spotlightSection(model)
+                            .staggeredAppear(index: 1)
 
-                            if let insightText = generateInsight(for: presentation.spotlight) {
-                                insightBanner(insightText)
-                                    .staggeredAppear(index: 2)
-                            }
+                        MetricInsightList(
+                            insights: model.insights,
+                            tint: model.spotlight.metric.accentColor
+                        )
 
-                            if !presentation.secondaryMetrics.isEmpty {
-                                secondarySection(presentation.secondaryMetrics)
-                            }
-
-                            if !presentation.unavailableMetrics.isEmpty {
-                                unavailableMetricsDisclosure(presentation.unavailableMetrics)
-                            }
+                        if !model.secondary.isEmpty {
+                            secondarySection(model.secondary)
                         }
+
+                        if !model.unavailable.isEmpty {
+                            unavailableMetricsDisclosure(model.unavailable)
+                        }
+                    } else if hasComputedOnce {
+                        categoryHeader(rangeLabel: dateRangeContext.rangeLabel(earliest: nil))
+                        emptyState
                     } else {
-                        ProgressView()
-                            .tint(category.tint)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, Theme.Spacing.xxl)
+                        loadingSkeleton
                     }
                 }
-                .padding(.vertical, Theme.Spacing.xxl)
+                .padding(.vertical, Theme.Spacing.xl)
                 .padding(.horizontal, Theme.Spacing.lg)
                 .contentColumn()
             }
@@ -54,26 +61,15 @@ struct HealthCategoryDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                HealthDateRangeToolbarMenu(earliestDate: cachedPresentation?.earliestDate)
+                HealthDateRangeToolbarMenu(earliestDate: model?.earliestDate)
             }
         }
-        .onAppear { refreshPresentation() }
-        .onChange(of: dateRangeContext.selectedRange) { _, _ in refreshPresentation() }
-        .onChange(of: dateRangeContext.customRange) { _, _ in
-            if dateRangeContext.selectedRange == .custom {
-                refreshPresentation()
-            }
-        }
-        .onReceive(
-            healthManager.$dailyHealthStore
-                .dropFirst()
-                .debounce(for: .milliseconds(100), scheduler: RunLoop.main)
-        ) { store in
-            refreshPresentation(from: store)
+        .task(id: refreshKey) {
+            await recompute()
         }
     }
 
-    // MARK: - Category Header
+    // MARK: - Header
 
     private func categoryHeader(rangeLabel: String) -> some View {
         HStack(spacing: Theme.Spacing.md) {
@@ -81,14 +77,8 @@ struct HealthCategoryDetailView: View {
                 .font(Theme.Iconography.title2)
                 .foregroundStyle(category.tint)
                 .frame(width: 48, height: 48)
-                .background(
-                    Circle()
-                        .fill(category.tint.opacity(Theme.Opacity.subtleFill))
-                )
-                .overlay(
-                    Circle()
-                        .strokeBorder(category.tint.opacity(0.15), lineWidth: 1)
-                )
+                .background(Circle().fill(category.tint.opacity(Theme.Opacity.subtleFill)))
+                .overlay(Circle().strokeBorder(category.tint.opacity(0.15), lineWidth: 1))
 
             VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                 Text(category.subtitle)
@@ -105,36 +95,22 @@ struct HealthCategoryDetailView: View {
         .tintedSection(category.tint)
     }
 
-    // MARK: - Empty State
+    // MARK: - Spotlight
 
-    private var emptyState: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text("No \(category.title.lowercased()) data in this range")
-                .font(Theme.Typography.title3)
-                .foregroundStyle(Theme.Colors.textPrimary)
-            Text("Try a longer time range or review Apple Health access for this category.")
-                .font(Theme.Typography.body)
-                .foregroundStyle(Theme.Colors.textSecondary)
-        }
-        .padding(Theme.Spacing.xl)
-        .softCard(elevation: 1)
-    }
-
-    // MARK: - Spotlight Section
-
-    private func spotlightSection(_ snapshot: HealthCategoryMetricSnapshot) -> some View {
+    private func spotlightSection(_ model: CategoryScreenModel) -> some View {
+        let snapshot = model.spotlight
         let metric = snapshot.metric
+        let analysis = snapshot.analysis
 
         return NavigationLink {
             HealthMetricDetailView(metric: metric)
         } label: {
             VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-                // Header: icon + name + trend
                 HStack {
                     HStack(spacing: Theme.Spacing.sm) {
                         Image(systemName: metric.icon)
-                            .font(Theme.Iconography.medium)
-                            .foregroundStyle(metric.chartColor)
+                            .font(Theme.Iconography.mediumStrong)
+                            .foregroundStyle(metric.accentColor)
                         Text(metric.title)
                             .font(Theme.Typography.sectionHeader2)
                             .foregroundStyle(Theme.Colors.textPrimary)
@@ -142,48 +118,60 @@ struct HealthCategoryDetailView: View {
 
                     Spacer()
 
-                    if let trend = snapshot.trend {
-                        TrendBadge(percentage: trend, color: metric.chartColor)
+                    if let delta = snapshot.previousDelta {
+                        DeltaTag(delta: delta, suffix: "vs prev")
                     }
-                }
 
-                // Big number
-                HStack(alignment: .lastTextBaseline, spacing: Theme.Spacing.sm) {
-                    Text(snapshot.latest.map(metric.format) ?? "--")
-                        .font(Theme.Typography.numberLarge)
-                        .foregroundStyle(Theme.Colors.textPrimary)
-                    Text(metric.displayUnit)
-                        .font(Theme.Typography.sectionHeader)
+                    Image(systemName: "chevron.right")
+                        .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.Colors.textTertiary)
                 }
 
-                // Chart
-                if snapshot.points.count >= 2 {
-                    spotlightChart(points: snapshot.renderedPoints, metric: metric)
+                // The period average leads. Today's partial total is a separate,
+                // labelled figure rather than the headline it used to be.
+                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                    HStack(alignment: .lastTextBaseline, spacing: 6) {
+                        Text(analysis.mean.map(metric.formatDisplay) ?? "--")
+                            .font(Theme.Typography.numberLarge)
+                            .foregroundStyle(Theme.Colors.textPrimary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.6)
+                        Text(metric.displayUnit)
+                            .font(Theme.Typography.title3)
+                            .foregroundStyle(Theme.Colors.textTertiary)
+                    }
+
+                    Text("Average across \(analysis.completed.count) \(metric.dailyNoun)s")
+                        .font(Theme.Typography.footnote)
+                        .foregroundStyle(Theme.Colors.textSecondary)
                 }
 
-                // Divider
+                if analysis.samples.count >= 2 {
+                    MetricMiniChart(metric: metric, analysis: analysis, height: 120)
+                }
+
                 Rectangle()
                     .fill(Theme.Colors.border.opacity(0.5))
                     .frame(height: 1)
 
-                // Stats row
-                HStack(spacing: 0) {
+                HStack(alignment: .top, spacing: 0) {
                     SpotlightStat(
-                        label: "AVG",
-                        value: snapshot.average.map(metric.format) ?? "--",
+                        label: "TYPICAL",
+                        value: analysis.typicalRange.map {
+                            "\(metric.formatDisplay($0.lowerBound))–\(metric.formatDisplay($0.upperBound))"
+                        } ?? "--",
                         unit: metric.displayUnit
                     )
-                    Spacer()
+                    Spacer(minLength: Theme.Spacing.sm)
                     SpotlightStat(
-                        label: "LOW",
-                        value: snapshot.minimum.map(metric.format) ?? "--",
+                        label: metric.polarity == .lowerIsBetter ? "LOWEST" : "BEST",
+                        value: analysis.bestDay.map { metric.formatDisplay($0.value) } ?? "--",
                         unit: metric.displayUnit
                     )
-                    Spacer()
+                    Spacer(minLength: Theme.Spacing.sm)
                     SpotlightStat(
-                        label: "HIGH",
-                        value: snapshot.maximum.map(metric.format) ?? "--",
+                        label: analysis.isTodayPartial ? "TODAY SO FAR" : "LATEST",
+                        value: analysis.todaySample.map { metric.formatDisplay($0.value) } ?? "--",
                         unit: metric.displayUnit
                     )
                 }
@@ -193,69 +181,33 @@ struct HealthCategoryDetailView: View {
             .overlay(alignment: .top) {
                 UnevenRoundedRectangle(
                     topLeadingRadius: Theme.CornerRadius.large,
-                    topTrailingRadius: Theme.CornerRadius.large
+                    topTrailingRadius: Theme.CornerRadius.large,
+                    style: .continuous
                 )
-                .fill(metric.chartColor)
+                .fill(metric.accentGradient)
                 .frame(height: 3)
             }
         }
         .buttonStyle(.plain)
     }
 
-    private func spotlightChart(points: [HealthTrendPoint], metric: HealthMetric) -> some View {
-        let baseline = areaBaseline(for: points)
+    // MARK: - Secondary metrics
 
-        return Chart(points) { point in
-            AreaMark(
-                x: .value("Date", point.date),
-                yStart: .value("Baseline", baseline),
-                yEnd: .value("Value", point.value)
-            )
-            .foregroundStyle(
-                LinearGradient(
-                    colors: [
-                        metric.chartColor.opacity(0.25),
-                        metric.chartColor.opacity(0.02)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            )
-            .interpolationMethod(.catmullRom)
+    private func secondarySection(_ snapshots: [CategoryMetricSnapshot]) -> some View {
+        LazyVStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            Text("ALL METRICS")
+                .sectionHeaderStyle()
+                .padding(.top, Theme.Spacing.sm)
 
-            LineMark(
-                x: .value("Date", point.date),
-                y: .value("Value", point.value)
-            )
-            .foregroundStyle(metric.chartColor)
-            .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round))
-            .interpolationMethod(.catmullRom)
-        }
-        .chartXAxis {
-            AxisMarks(values: .automatic(desiredCount: 4)) { _ in
-                AxisValueLabel(format: .dateTime.month(.abbreviated).day())
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textTertiary)
-            }
-        }
-        .chartYScale(domain: chartYDomain(for: points, baseline: baseline))
-        .chartYAxis {
-            AxisMarks(values: .automatic(desiredCount: 3)) { value in
-                AxisGridLine()
-                    .foregroundStyle(Theme.Colors.border.opacity(0.35))
-                AxisValueLabel {
-                    if let axisValue = value.as(Double.self) {
-                        Text(metric.format(axisValue))
-                            .font(Theme.Typography.caption2)
-                            .foregroundStyle(Theme.Colors.textTertiary)
-                    }
+            ForEach(snapshots) { snapshot in
+                NavigationLink {
+                    HealthMetricDetailView(metric: snapshot.metric)
+                } label: {
+                    CategoryMetricRow(snapshot: snapshot)
                 }
+                .buttonStyle(.plain)
             }
         }
-        .chartPlotStyle { plotArea in
-            plotArea.clipped()
-        }
-        .frame(height: Theme.ChartHeight.standard)
     }
 
     private func unavailableMetricsDisclosure(_ unavailableMetrics: [HealthMetric]) -> some View {
@@ -265,7 +217,7 @@ struct HealthCategoryDetailView: View {
                     HStack(spacing: Theme.Spacing.sm) {
                         Image(systemName: metric.icon)
                             .font(Theme.Typography.caption)
-                            .foregroundStyle(metric.chartColor)
+                            .foregroundStyle(metric.accentColor)
                             .frame(width: 24, height: 24)
 
                         Text(metric.title)
@@ -291,283 +243,140 @@ struct HealthCategoryDetailView: View {
         .softCard(elevation: 1)
     }
 
-    // MARK: - Insight Banner
+    // MARK: - States
 
-    private func insightBanner(_ text: String) -> some View {
-        HStack(spacing: Theme.Spacing.sm) {
-            Image(systemName: "sparkles")
-                .font(Theme.Iconography.medium)
-                .foregroundStyle(category.tint)
-
-            Text(text)
-                .font(Theme.Typography.subheadline)
+    private var emptyState: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            Text("No \(category.title.lowercased()) data in this range")
+                .font(Theme.Typography.title3)
+                .foregroundStyle(Theme.Colors.textPrimary)
+            Text("Try a longer time range or review Apple Health access for this category.")
+                .font(Theme.Typography.body)
                 .foregroundStyle(Theme.Colors.textSecondary)
-
-            Spacer(minLength: 0)
         }
-        .padding(Theme.Spacing.md)
-        .tintedSection(category.tint)
+        .padding(Theme.Spacing.xl)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .softCard(elevation: 1)
     }
 
-    // MARK: - Secondary Section
-
-    private func secondarySection(_ secondaryMetrics: [HealthCategoryMetricSnapshot]) -> some View {
-        LazyVStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("ALL METRICS")
-                .sectionHeaderStyle()
-                .padding(.top, Theme.Spacing.sm)
-
-            ForEach(secondaryMetrics) { snapshot in
-                let metric = snapshot.metric
-                NavigationLink {
-                    HealthMetricDetailView(metric: metric)
-                } label: {
-                    EnrichedMetricRow(
-                        metric: metric,
-                        points: snapshot.renderedPoints,
-                        latestValue: snapshot.latest,
-                        average: snapshot.average,
-                        trend: snapshot.trend
-                    )
-                }
-                .buttonStyle(.plain)
+    private var loadingSkeleton: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
+                .fill(category.tint.opacity(0.08))
+                .frame(height: 76)
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
+                .fill(Theme.Colors.textPrimary.opacity(0.045))
+                .frame(height: 330)
+            ForEach(0..<3, id: \.self) { _ in
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
+                    .fill(Theme.Colors.textPrimary.opacity(0.045))
+                    .frame(height: 130)
             }
         }
+        .redacted(reason: .placeholder)
+        .accessibilityLabel("Loading \(category.title)")
     }
 
-    // MARK: - Data Helpers
+    // MARK: - Computation
 
-    private func areaBaseline(for points: [HealthTrendPoint]) -> Double {
-        let values = points.map(\.value)
-        guard let minVal = values.min(), let maxVal = values.max() else { return 0 }
-        let span = maxVal - minVal
-        return Swift.max(0, minVal - span * 0.1)
-    }
-
-    private func chartYDomain(for points: [HealthTrendPoint], baseline: Double) -> ClosedRange<Double> {
-        let values = points.map(\.value)
-        guard let maxVal = values.max() else { return 0...1 }
-        let span = maxVal - baseline
-        if span <= 0 {
-            let padding = max(abs(maxVal) * 0.05, 1)
-            return max(0, baseline - padding)...(maxVal + padding)
-        }
-        return baseline...(maxVal + span * 0.08)
-    }
-
-    private func generateInsight(for snapshot: HealthCategoryMetricSnapshot) -> String? {
-        guard let trend = snapshot.trend else { return nil }
-        let name = snapshot.metric.title.lowercased()
-        let absT = abs(trend)
-        let direction = trend > 0 ? "up" : "down"
-        let pct = String(format: "%.0f%%", absT)
-
-        if absT < 2 {
-            return "Your \(name) has been holding steady over this period."
-        } else if absT < 10 {
-            return "Your \(name) is trending \(direction) \(pct) compared to earlier in this range."
-        } else {
-            return "Your \(name) is \(direction) \(pct) — a notable shift from the first half of this period."
-        }
-    }
-
-    private func refreshPresentation(from emittedStore: [Date: DailyHealthData]? = nil) {
-        let store = emittedStore ?? healthManager.dailyHealthStore
+    /// One pass over the store fills every metric's series, then the statistics for
+    /// all of them are built together off the main actor. The previous version built
+    /// a snapshot per metric inline, re-walking and re-sorting the store each time.
+    private func recompute() async {
+        let store = healthManager.dailyHealthStore
         let earliestDate = store.keys.min()
         let resolvedRange = dateRangeContext.resolvedRange(earliest: earliestDate)
-        var dailyData = store.values.filter { resolvedRange.contains($0.dayStart) }
-        dailyData.sort { $0.dayStart < $1.dayStart }
-
-        cachedPresentation = HealthCategoryPresentation(
-            category: category,
-            dailyData: dailyData,
-            earliestDate: earliestDate,
-            rangeLabel: dateRangeContext.rangeLabel(earliest: earliestDate)
+        let ranges = HealthDayComparisonRanges(
+            resolvedRange: resolvedRange,
+            comparesPreviousPeriod: dateRangeContext.selectedRange != .allTime
         )
-    }
-}
-
-private struct HealthCategoryMetricSnapshot: Identifiable {
-    let metric: HealthMetric
-    let points: [HealthTrendPoint]
-    let renderedPoints: [HealthTrendPoint]
-    let latest: Double?
-    let average: Double?
-    let minimum: Double?
-    let maximum: Double?
-    let trend: Double?
-
-    var id: HealthMetric { metric }
-
-    init(metric: HealthMetric, dailyData: [DailyHealthData]) {
-        self.metric = metric
-
-        let points = dailyData.compactMap { day -> HealthTrendPoint? in
-            guard let value = day.value(for: metric) else { return nil }
-            return HealthTrendPoint(date: day.dayStart, value: value, label: metric.title)
-        }
-        self.points = points
-        renderedPoints = HealthChartPointSampler.sampled(points, limit: 240)
-
-        let values = points.map(\.value)
-        latest = values.last
-        average = values.isEmpty ? nil : values.reduce(0, +) / Double(values.count)
-        minimum = values.min()
-        maximum = values.max()
-        trend = Self.trendPercentage(values)
-    }
-
-    private static func trendPercentage(_ values: [Double]) -> Double? {
-        guard values.count >= 4 else { return nil }
-
-        let midpoint = values.count / 2
-        let firstHalf = values[..<midpoint]
-        let secondHalf = values[midpoint...]
-        let firstAverage = firstHalf.reduce(0, +) / Double(firstHalf.count)
-        let secondAverage = secondHalf.reduce(0, +) / Double(secondHalf.count)
-
-        guard firstAverage != 0 else { return nil }
-        return ((secondAverage - firstAverage) / abs(firstAverage)) * 100
-    }
-}
-
-private struct HealthCategoryPresentation {
-    let dailyData: [DailyHealthData]
-    let earliestDate: Date?
-    let rangeLabel: String
-    let metricsWithData: [HealthCategoryMetricSnapshot]
-    let unavailableMetrics: [HealthMetric]
-    let spotlight: HealthCategoryMetricSnapshot
-    let secondaryMetrics: [HealthCategoryMetricSnapshot]
-
-    init(
-        category: HealthHubCategory,
-        dailyData: [DailyHealthData],
-        earliestDate: Date?,
-        rangeLabel: String
-    ) {
-        self.dailyData = dailyData
-        self.earliestDate = earliestDate
-        self.rangeLabel = rangeLabel
-
         let metrics = HealthMetric.metrics(for: category)
-        let snapshots = metrics.map {
-            HealthCategoryMetricSnapshot(metric: $0, dailyData: dailyData)
-        }
-        let available = snapshots.filter { !$0.points.isEmpty }
-        metricsWithData = available
-        unavailableMetrics = snapshots.filter(\.points.isEmpty).map(\.metric)
+        let calendar = Calendar.current
 
-        let preferred = category.primaryMetric.flatMap { primary in
-            available.first { $0.metric == primary }
-        }
-        let fallbackMetric = category.primaryMetric ?? metrics.first ?? .steps
-        let spotlight = preferred ?? available.first ?? HealthCategoryMetricSnapshot(
-            metric: fallbackMetric,
-            dailyData: dailyData
-        )
-        self.spotlight = spotlight
-        secondaryMetrics = available.filter { $0.metric != spotlight.metric }
-    }
-}
+        var samplesByMetric: [HealthMetric: [MetricDaySample]] = [:]
+        var previousTotals: [HealthMetric: (sum: Double, count: Int)] = [:]
 
-// MARK: - Trend Badge
+        for day in store.values {
+            let dayStart = calendar.startOfDay(for: day.dayStart)
+            let inDisplay = ranges.display.contains(dayStart)
+            let inPrevious = ranges.previousComparison?.contains(dayStart) == true
+            guard inDisplay || inPrevious else { continue }
 
-private struct TrendBadge: View {
-    let percentage: Double
-    let color: Color
-
-    private var isPositive: Bool { percentage >= 0 }
-    private var icon: String { isPositive ? "arrow.up.right" : "arrow.down.right" }
-    private var displayText: String { String(format: "%+.0f%%", percentage) }
-
-    var body: some View {
-        HStack(spacing: 4) {
-            Image(systemName: icon)
-                .font(Theme.Typography.caption)
-            Text(displayText)
-                .font(Theme.Typography.captionBold)
-        }
-        .foregroundStyle(color)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 5)
-        .background(
-            Capsule()
-                .fill(color.opacity(Theme.Opacity.subtleFill))
-        )
-        .overlay(
-            Capsule()
-                .strokeBorder(color.opacity(0.15), lineWidth: 1)
-        )
-    }
-}
-
-// MARK: - Spotlight Stat
-
-private struct SpotlightStat: View {
-    let label: String
-    let value: String
-    let unit: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(label)
-                .font(Theme.Typography.metricLabel)
-                .foregroundStyle(Theme.Colors.textTertiary)
-                .tracking(0.8)
-            HStack(alignment: .lastTextBaseline, spacing: 3) {
-                Text(value)
-                    .font(Theme.Typography.monoSmall)
-                    .foregroundStyle(Theme.Colors.textPrimary)
-                Text(unit)
-                    .font(Theme.Typography.caption2)
-                    .foregroundStyle(Theme.Colors.textTertiary)
+            for metric in metrics {
+                guard let raw = day.value(for: metric) else { continue }
+                let value = metric.displayValue(from: raw)
+                if inDisplay {
+                    samplesByMetric[metric, default: []].append(
+                        MetricDaySample(date: dayStart, value: value)
+                    )
+                } else {
+                    let existing = previousTotals[metric] ?? (0, 0)
+                    previousTotals[metric] = (existing.sum + value, existing.count + 1)
+                }
             }
         }
+
+        let capturedSamples = samplesByMetric
+        let analyses = await Task.detached(priority: .userInitiated) {
+            capturedSamples.reduce(into: [HealthMetric: MetricSeriesAnalysis]()) { result, entry in
+                result[entry.key] = MetricSeriesAnalysis(
+                    metric: entry.key,
+                    samples: entry.value,
+                    range: resolvedRange
+                )
+            }
+        }.value
+
+        guard !Task.isCancelled else { return }
+
+        let snapshots: [CategoryMetricSnapshot] = metrics.compactMap { metric in
+            guard let analysis = analyses[metric], !analysis.samples.isEmpty else { return nil }
+            let previous = previousTotals[metric].map { $0.sum / Double($0.count) }
+            return CategoryMetricSnapshot(
+                metric: metric,
+                analysis: analysis,
+                previousAverage: previous
+            )
+        }
+
+        guard let spotlight = snapshots.first(where: { $0.metric == category.primaryMetric })
+            ?? snapshots.first else {
+            model = nil
+            hasComputedOnce = true
+            return
+        }
+
+        model = CategoryScreenModel(
+            spotlight: spotlight,
+            secondary: snapshots.filter { $0.metric != spotlight.metric },
+            unavailable: metrics.filter { metric in !snapshots.contains { $0.metric == metric } },
+            insights: MetricNarrative.insights(for: spotlight.analysis),
+            rangeLabel: dateRangeContext.rangeLabel(earliest: earliestDate),
+            earliestDate: earliestDate
+        )
+        hasComputedOnce = true
     }
 }
 
-// MARK: - Enriched Metric Row
+// MARK: - Metric row
 
-private struct EnrichedMetricRow: View {
-    let metric: HealthMetric
-    let points: [HealthTrendPoint]
-    let latestValue: Double?
-    let average: Double?
-    let trend: Double?
+private struct CategoryMetricRow: View {
+    let snapshot: CategoryMetricSnapshot
 
-    private var areaBaseline: Double {
-        let values = points.map(\.value)
-        guard let minVal = values.min(), let maxVal = values.max() else { return 0 }
-        let span = maxVal - minVal
-        return Swift.max(0, minVal - span * 0.1)
-    }
-
-    private var chartYDomain: ClosedRange<Double> {
-        let baseline = areaBaseline
-        let maximum = points.map(\.value).max() ?? 1
-        if maximum <= baseline {
-            let padding = max(abs(maximum) * 0.05, 1)
-            return max(0, baseline - padding)...(maximum + padding)
-        }
-        return baseline...(maximum + (maximum - baseline) * 0.05)
-    }
+    private var metric: HealthMetric { snapshot.metric }
+    private var analysis: MetricSeriesAnalysis { snapshot.analysis }
 
     var body: some View {
-        let baseline = areaBaseline
-        let chartDomain = chartYDomain
-
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            // Header row
             HStack {
                 HStack(spacing: Theme.Spacing.sm) {
                     Image(systemName: metric.icon)
                         .font(Theme.Iconography.medium)
-                        .foregroundStyle(metric.chartColor)
+                        .foregroundStyle(metric.accentColor)
                         .frame(width: 28, height: 28)
                         .background(
-                            RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                                .fill(metric.chartColor.opacity(Theme.Opacity.subtleFill))
+                            RoundedRectangle(cornerRadius: Theme.CornerRadius.small, style: .continuous)
+                                .fill(metric.accentColor.opacity(Theme.Opacity.mediumFill))
                         )
 
                     Text(metric.title)
@@ -577,93 +386,115 @@ private struct EnrichedMetricRow: View {
 
                 Spacer()
 
-                if let trend {
-                    TrendBadge(percentage: trend, color: metric.chartColor)
+                if let delta = snapshot.previousDelta {
+                    DeltaTag(delta: delta)
                 }
             }
 
-            // Value + average
             HStack(alignment: .lastTextBaseline) {
-                if let latestValue {
-                    HStack(alignment: .lastTextBaseline, spacing: 4) {
-                        Text(metric.format(latestValue))
-                            .font(Theme.Typography.number)
-                            .foregroundStyle(Theme.Colors.textPrimary)
-                        Text(metric.displayUnit)
-                            .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.Colors.textTertiary)
-                    }
-                } else {
-                    Text("--")
+                HStack(alignment: .lastTextBaseline, spacing: 4) {
+                    Text(analysis.mean.map(metric.formatDisplay) ?? "--")
                         .font(Theme.Typography.number)
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                    Text(metric.displayUnit)
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Colors.textTertiary)
+                    Text("avg")
+                        .font(Theme.Typography.caption2)
                         .foregroundStyle(Theme.Colors.textTertiary)
                 }
 
                 Spacer()
 
-                if let average {
+                if let today = analysis.todaySample {
                     VStack(alignment: .trailing, spacing: 2) {
-                        Text("AVG")
-                            .font(Theme.Typography.metricLabel)
+                        Text(analysis.isTodayPartial ? "TODAY SO FAR" : "LATEST")
+                            .font(Theme.Typography.microLabel)
                             .foregroundStyle(Theme.Colors.textTertiary)
                             .tracking(0.6)
-                        Text("\(metric.format(average)) \(metric.displayUnit)")
+                        Text(metric.formatWithUnit(today.value))
                             .font(Theme.Typography.caption)
                             .foregroundStyle(Theme.Colors.textSecondary)
                     }
                 }
             }
 
-            // Chart
-            if points.isEmpty {
-                Text("No data in this range")
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textTertiary)
-            } else {
-                Chart(points) { point in
-                    AreaMark(
-                        x: .value("Date", point.date),
-                        yStart: .value("Baseline", baseline),
-                        yEnd: .value("Value", point.value)
-                    )
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [
-                                metric.chartColor.opacity(0.18),
-                                metric.chartColor.opacity(0.02)
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-                    .interpolationMethod(.catmullRom)
-
-                    LineMark(
-                        x: .value("Date", point.date),
-                        y: .value("Value", point.value)
-                    )
-                    .foregroundStyle(metric.chartColor)
-                    .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round))
-                    .interpolationMethod(.catmullRom)
-                }
-                .chartXAxis(.hidden)
-                .chartYScale(domain: chartDomain)
-                .chartYAxis(.hidden)
-                .chartPlotStyle { plotArea in
-                    plotArea.clipped()
-                }
-                .frame(height: 56)
-            }
+            MetricMiniChart(metric: metric, analysis: analysis)
         }
         .padding(Theme.Spacing.md)
         .softCard(elevation: 1)
         .overlay(alignment: .leading) {
             UnevenRoundedRectangle(
                 topLeadingRadius: Theme.CornerRadius.large,
-                bottomLeadingRadius: Theme.CornerRadius.large
+                bottomLeadingRadius: Theme.CornerRadius.large,
+                style: .continuous
             )
-            .fill(metric.chartColor)
+            .fill(metric.accentGradient)
             .frame(width: 3)
         }
     }
+}
+
+// MARK: - Spotlight stat
+
+private struct SpotlightStat: View {
+    let label: String
+    let value: String
+    let unit: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label)
+                .font(Theme.Typography.microLabel)
+                .foregroundStyle(Theme.Colors.textTertiary)
+                .tracking(0.8)
+                .lineLimit(1)
+            HStack(alignment: .lastTextBaseline, spacing: 3) {
+                Text(value)
+                    .font(Theme.Typography.subheadlineBold)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                Text(unit)
+                    .font(Theme.Typography.caption2)
+                    .foregroundStyle(Theme.Colors.textTertiary)
+            }
+        }
+    }
+}
+
+// MARK: - Supporting types
+
+private struct CategoryMetricSnapshot: Identifiable {
+    let metric: HealthMetric
+    let analysis: MetricSeriesAnalysis
+    let previousAverage: Double?
+
+    var id: HealthMetric { metric }
+
+    var previousDelta: TrendDelta? {
+        guard let mean = analysis.mean, let previousAverage else { return nil }
+        return TrendDelta(
+            current: mean,
+            previous: previousAverage,
+            higherIsBetter: metric.polarity != .lowerIsBetter
+        )
+    }
+}
+
+private struct CategoryScreenModel {
+    let spotlight: CategoryMetricSnapshot
+    let secondary: [CategoryMetricSnapshot]
+    let unavailable: [HealthMetric]
+    let insights: [MetricInsight]
+    let rangeLabel: String
+    let earliestDate: Date?
+}
+
+private struct CategoryRefreshKey: Hashable {
+    let category: HealthHubCategory
+    let selectedRange: AppTimeRange
+    let customRange: DateInterval
+    let sampleCount: Int
+    let lastSync: Date?
 }

@@ -154,7 +154,46 @@ struct ExerciseDetailView: View {
     }
 
     private var exerciseInsights: [Insight] {
-        insightsEngine.insights.filter { $0.exerciseName == exerciseName }
+        let matching = insightsEngine.insights.filter { $0.exerciseName == exerciseName }
+        return Self.collapsingEquipmentBaselines(in: matching)
+    }
+
+    /// The engine emits one baseline insight per new gym, which stacked up as six
+    /// identical "New Equipment Baseline" rows for anyone who trains in more than
+    /// one place. They say more as a single row that names the count and the gyms,
+    /// and that also explains why the loads are not comparable.
+    private static func collapsingEquipmentBaselines(in insights: [Insight]) -> [Insight] {
+        let baselines = insights.filter { $0.type == .baseline }
+        guard baselines.count > 1 else { return insights }
+
+        var gyms: [String] = []
+        for insight in baselines.sorted(by: { $0.date < $1.date }) {
+            // Messages are formatted "<exercise> | <gym>".
+            let gym = insight.message
+                .split(separator: "|", maxSplits: 1)
+                .last
+                .map { $0.trimmingCharacters(in: .whitespaces) } ?? insight.message
+            if !gym.isEmpty, !gyms.contains(gym) { gyms.append(gym) }
+        }
+
+        guard let latest = baselines.max(by: { $0.date < $1.date }), gyms.count > 1 else {
+            return insights
+        }
+
+        let combined = Insight(
+            id: latest.id,
+            type: .baseline,
+            title: "Logged at \(gyms.count) gyms",
+            message: gyms.joined(separator: " · ")
+                + ". Machine loads rarely match between gyms, so compare within one location.",
+            exerciseName: latest.exerciseName,
+            date: latest.date,
+            priority: latest.priority,
+            actionLabel: latest.actionLabel,
+            metric: nil
+        )
+
+        return insights.filter { $0.type != .baseline } + [combined]
     }
 
     private var exerciseContextPatterns: [WorkoutVariantPattern] {

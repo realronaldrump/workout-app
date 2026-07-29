@@ -510,12 +510,15 @@ struct HealthHubView: View {
         fallbackData: [DailyHealthData],
         previousData: [DailyHealthData]
     ) -> [HealthSummaryCardModel] {
+        // Tints come from the metric so a card here matches the same metric's detail
+        // screen. Hardcoding them meant sleep read orange on this screen and violet on
+        // its own.
         let configurations: [HealthSummaryConfiguration] = [
-            HealthSummaryConfiguration(metric: .steps, title: "Avg Steps", tint: Theme.Colors.warning, higherIsBetter: true),
-            HealthSummaryConfiguration(metric: .sleep, title: "Avg Sleep", tint: Theme.Colors.accentSecondary, higherIsBetter: true),
-            HealthSummaryConfiguration(metric: .restingHeartRate, title: "Resting HR", tint: Theme.Colors.error, higherIsBetter: false),
-            HealthSummaryConfiguration(metric: .heartRateVariability, title: "Avg HRV", tint: Theme.Colors.accent, higherIsBetter: true),
-            HealthSummaryConfiguration(metric: .activeEnergy, title: "Active Energy", tint: Theme.Colors.warning, higherIsBetter: true)
+            HealthSummaryConfiguration(metric: .steps, title: "Avg Steps", tint: HealthMetric.steps.accentColor, higherIsBetter: true),
+            HealthSummaryConfiguration(metric: .sleep, title: "Avg Sleep", tint: HealthMetric.sleep.accentColor, higherIsBetter: true),
+            HealthSummaryConfiguration(metric: .restingHeartRate, title: "Resting HR", tint: HealthMetric.restingHeartRate.accentColor, higherIsBetter: false),
+            HealthSummaryConfiguration(metric: .heartRateVariability, title: "Avg HRV", tint: HealthMetric.heartRateVariability.accentColor, higherIsBetter: true),
+            HealthSummaryConfiguration(metric: .activeEnergy, title: "Active Energy", tint: HealthMetric.activeEnergy.accentColor, higherIsBetter: true)
         ]
 
         return configurations.compactMap { configuration in
@@ -975,10 +978,10 @@ private struct DailyTimelineRow: View, Equatable {
 
     private func statTint(for id: String) -> Color {
         switch id {
-        case "sleep": return Theme.Colors.accentTertiary
-        case "steps": return Theme.Colors.success
-        case "energy": return Theme.Colors.accentSecondary
-        case "resting": return Theme.Colors.error
+        case "sleep": return HealthMetric.sleep.accentColor
+        case "steps": return HealthMetric.steps.accentColor
+        case "energy": return HealthMetric.activeEnergy.accentColor
+        case "resting": return HealthMetric.restingHeartRate.accentColor
         default: return Theme.Colors.accent
         }
     }
