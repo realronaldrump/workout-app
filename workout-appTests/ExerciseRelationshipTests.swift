@@ -25,7 +25,7 @@ final class ExerciseRelationshipTests: XCTestCase {
         let fixture = makeIsolatedRelationshipManager()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
 
-        XCTAssertEqual(fixture.manager.relationships.count, 44)
+        XCTAssertEqual(fixture.manager.relationships.count, 50)
         XCTAssertEqual(
             fixture.manager.relationship(for: "Bayesian Curl - Left"),
             ExerciseRelationship(
