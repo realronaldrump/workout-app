@@ -4,11 +4,11 @@ import SwiftUI
 struct ExerciseTaggingView: View {
     private struct ExerciseTaggingItem: Identifiable {
         let exerciseName: String
-        let tags: [MuscleTag]
+        let assignments: [ExerciseMuscleAssignment]
         let isCustomized: Bool
 
         var id: String { exerciseName }
-        var isUntagged: Bool { tags.isEmpty }
+        var isUntagged: Bool { assignments.isEmpty }
     }
 
     @ObservedObject var dataManager: WorkoutDataManager
@@ -26,7 +26,7 @@ struct ExerciseTaggingView: View {
                     introCard
 
                     VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-                        Text("Assign Muscle Tags")
+                        Text("Assign Muscle Roles")
                             .font(Theme.Typography.title3)
                             .foregroundStyle(Theme.Colors.textPrimary)
 
@@ -61,7 +61,7 @@ struct ExerciseTaggingView: View {
                 .contentColumn()
             }
         }
-        .navigationTitle("Exercise Tags")
+        .navigationTitle("Exercise Muscle Roles")
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $searchText, prompt: "Search exercises")
         .onAppear(perform: rebuildExerciseCache)
@@ -100,7 +100,7 @@ struct ExerciseTaggingView: View {
                     NavigationLink(destination: ExerciseTagEditorView(exerciseName: item.exerciseName)) {
                         ExerciseTaggingRow(
                             exerciseName: item.exerciseName,
-                            tags: item.tags,
+                            assignments: item.assignments,
                             isCustomized: item.isCustomized
                         )
                     }
@@ -118,7 +118,7 @@ struct ExerciseTaggingView: View {
         cachedExerciseItems = names.map { exercise in
             ExerciseTaggingItem(
                 exerciseName: exercise,
-                tags: metadataManager.resolvedTags(for: exercise),
+                assignments: metadataManager.resolvedAssignments(for: exercise),
                 isCustomized: metadataManager.isOverridden(for: exercise)
             )
         }
@@ -146,7 +146,7 @@ struct ExerciseTaggingView: View {
                 Text("Clean data in, clean insights out.")
                     .font(Theme.Typography.headline)
                     .foregroundStyle(Theme.Colors.textPrimary)
-                Text("Tag each exercise once. These muscle groups power your charts and show up in exports.")
+                Text("Choose primary and secondary muscles once. Their weighted roles power charts, recency, coverage, and exports.")
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Colors.textSecondary)
             }
@@ -160,17 +160,21 @@ struct ExerciseTaggingView: View {
 
 private struct ExerciseTaggingRow: View {
     let exerciseName: String
-    let tags: [MuscleTag]
+    let assignments: [ExerciseMuscleAssignment]
     let isCustomized: Bool
 
     private var iconTint: Color {
-        if let first = tags.first { return first.tint }
+        if let primary = assignments.first(where: { $0.role == .primary }) { return primary.tag.tint }
         return Theme.Colors.textTertiary
+    }
+
+    private var roleSummary: String {
+        MuscleContributionPolicy.exportDescription(assignments)
     }
 
     var body: some View {
         HStack(spacing: Theme.Spacing.md) {
-            Image(systemName: tags.isEmpty ? "tag.slash.fill" : "tag.fill")
+            Image(systemName: assignments.isEmpty ? "tag.slash.fill" : "tag.fill")
                 .foregroundStyle(.white)
                 .frame(width: 30, height: 30)
                 .background(iconTint)
@@ -198,9 +202,9 @@ private struct ExerciseTaggingRow: View {
                     }
                 }
 
-                Text(tags.isEmpty ? "Untagged" : tags.map(\.displayName).joined(separator: ", "))
+                Text(assignments.isEmpty ? "Untagged" : roleSummary)
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(tags.isEmpty ? Theme.Colors.textTertiary : Theme.Colors.textSecondary)
+                    .foregroundStyle(assignments.isEmpty ? Theme.Colors.textTertiary : Theme.Colors.textSecondary)
                     .lineLimit(2)
             }
 

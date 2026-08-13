@@ -64,6 +64,12 @@ final class AppBackupServiceTests: XCTestCase {
                 dailyHealthData: [DailyHealthData(dayStart: day, steps: 1_000, bodyMass: 80)],
                 dailyHealthCoverage: [day],
                 exerciseTagOverrides: ["Bench Press": [.builtIn(.chest)]],
+                exerciseMuscleAssignmentOverrides: [
+                    "Bench Press": [
+                        .primary(.builtIn(.chest)),
+                        .secondary(.builtIn(.triceps))
+                    ]
+                ],
                 exerciseMetricPreferences: [
                     "Stair Stepper": ExerciseCardioMetricPreferences(
                         primaryMetric: .count,
@@ -116,6 +122,10 @@ final class AppBackupServiceTests: XCTestCase {
         XCTAssertEqual(decoded.payload.workoutHealthData.first?.workoutId, workout.id)
         XCTAssertEqual(decoded.payload.dailyHealthData.first?.dayStart, day)
         XCTAssertEqual(decoded.payload.exerciseTagOverrides["Bench Press"], [.builtIn(.chest)])
+        XCTAssertEqual(
+            decoded.payload.exerciseMuscleAssignmentOverrides["Bench Press"],
+            [.primary(.builtIn(.chest)), .secondary(.builtIn(.triceps))]
+        )
         XCTAssertEqual(decoded.payload.exerciseMetricPreferences["Stair Stepper"]?.countLabel, "floors")
         XCTAssertEqual(decoded.payload.exerciseRelationships.first?.exerciseName, "Leg Extension (Machine) - Left")
         XCTAssertEqual(decoded.payload.exerciseRelationships.first?.parentName, "Leg Extension (Machine)")
@@ -149,6 +159,9 @@ final class AppBackupServiceTests: XCTestCase {
             appVersion: "1.0.0",
             appBuild: "7",
             payload: AppBackupPayload(
+                exerciseMuscleAssignmentOverrides: [
+                    "Row": [.primary(.builtIn(.back)), .secondary(.builtIn(.biceps))]
+                ],
                 favoriteExercises: ["Bench Press", "Row"],
                 settings: AppBackupSettings(profileName: "Streamed")
             )
@@ -164,7 +177,38 @@ final class AppBackupServiceTests: XCTestCase {
         XCTAssertEqual(decoded.appVersion, backup.appVersion)
         XCTAssertEqual(decoded.appBuild, backup.appBuild)
         XCTAssertEqual(decoded.payload.favoriteExercises, backup.payload.favoriteExercises)
+        XCTAssertEqual(
+            decoded.payload.exerciseMuscleAssignmentOverrides,
+            backup.payload.exerciseMuscleAssignmentOverrides
+        )
         XCTAssertEqual(decoded.payload.settings.profileName, "Streamed")
+    }
+
+    func testVersionThreeBackupWithoutRolesStillDecodesFlatTags() throws {
+        let backup = BigBeautifulWorkoutBackup(
+            schemaVersion: 3,
+            appVersion: "1.9.1",
+            appBuild: "39",
+            payload: AppBackupPayload(
+                exerciseTagOverrides: [
+                    "Custom Press": [.builtIn(.shoulders), .builtIn(.triceps)]
+                ]
+            )
+        )
+        let encoded = try AppBackupService.exportBackup(backup)
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        var payload = try XCTUnwrap(object["payload"] as? [String: Any])
+        payload.removeValue(forKey: "exerciseMuscleAssignmentOverrides")
+        object["payload"] = payload
+
+        let legacyData = try JSONSerialization.data(withJSONObject: object)
+        let decoded = try AppBackupService.decodeBackup(from: legacyData)
+
+        XCTAssertEqual(
+            decoded.payload.exerciseTagOverrides["Custom Press"],
+            [.builtIn(.shoulders), .builtIn(.triceps)]
+        )
+        XCTAssertTrue(decoded.payload.exerciseMuscleAssignmentOverrides.isEmpty)
     }
 
     func testClassifyImportTreatsCSVAsStrong() throws {

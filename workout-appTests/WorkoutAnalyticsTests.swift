@@ -288,6 +288,46 @@ final class WorkoutAnalyticsTests: XCTestCase {
         )
     }
 
+    func testMuscleProgressUsesPrimaryAndSecondaryWeights() throws {
+        let previous = makeWorkout(
+            on: Date().addingTimeInterval(-86_400),
+            exercises: [
+                Exercise(
+                    name: "Bench Press",
+                    sets: [makeSet(weight: 180, reps: 5, exerciseName: "Bench Press")]
+                )
+            ]
+        )
+        let current = makeWorkout(
+            on: Date(),
+            exercises: [
+                Exercise(
+                    name: "Bench Press",
+                    sets: [makeSet(weight: 200, reps: 5, exerciseName: "Bench Press")]
+                )
+            ]
+        )
+
+        let contributions = WorkoutAnalytics.progressContributions(
+            current: [current],
+            previous: [previous],
+            mappings: [
+                "Bench Press": [
+                    .primary(.builtIn(.chest)),
+                    .secondary(.builtIn(.triceps))
+                ]
+            ]
+        )
+        let muscles = Dictionary(
+            uniqueKeysWithValues: contributions
+                .filter { $0.category == .muscleGroup }
+                .map { ($0.name, $0.delta) }
+        )
+
+        XCTAssertEqual(try XCTUnwrap(muscles[MuscleGroup.chest.shortName]), 20, accuracy: 0.001)
+        XCTAssertEqual(try XCTUnwrap(muscles[MuscleGroup.triceps.shortName]), 10, accuracy: 0.001)
+    }
+
     func testStrengthContributionsRequireExerciseInBothPeriods() {
         let current = makeWorkout(
             on: Date(),

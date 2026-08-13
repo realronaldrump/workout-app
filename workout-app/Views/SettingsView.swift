@@ -297,8 +297,8 @@ struct SettingsView: View {
                             SettingsInlineRow(
                                 icon: "tag.fill",
                                 color: Theme.Colors.accentTertiary,
-                                title: "Exercise Tags",
-                                subtitle: "Assign muscle groups"
+                                title: "Exercise Muscle Roles",
+                                subtitle: "Choose primary and secondary muscles"
                             )
                         }
                         .buttonStyle(PlainButtonStyle())

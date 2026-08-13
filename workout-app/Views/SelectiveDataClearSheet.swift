@@ -290,11 +290,11 @@ struct SelectiveDataClearSheet: View {
                 detail: "\(savedCount) saved, \(dismissedCount) dismissed"
             )
         case .exerciseCustomization:
-            let tagCount = ExerciseMetadataManager.shared.muscleTagOverrides.count
+            let tagCount = ExerciseMetadataManager.shared.muscleAssignmentOverrides.count
             let metricCount = ExerciseMetricManager.shared.cardioOverrides.count
             let favoriteCount = favoriteExerciseCount()
             let detail = [
-                "\(tagCount) tag override\(tagCount == 1 ? "" : "s")",
+                "\(tagCount) muscle-role override\(tagCount == 1 ? "" : "s")",
                 "\(metricCount) metric preference\(metricCount == 1 ? "" : "s")",
                 "\(favoriteCount) favorite\(favoriteCount == 1 ? "" : "s")"
             ]

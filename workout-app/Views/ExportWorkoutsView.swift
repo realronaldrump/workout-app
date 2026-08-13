@@ -429,7 +429,7 @@ private extension ExportWorkoutsView {
                 .fixedSize(horizontal: false, vertical: true)
 
             Toggle(isOn: $includeExerciseTags) {
-                Text("Include muscle tags")
+                Text("Include muscle roles")
                     .font(Theme.Typography.captionBold)
                     .foregroundStyle(Theme.Colors.textPrimary)
             }
@@ -799,7 +799,7 @@ private extension ExportWorkoutsView {
         let workoutHealth = healthManager.healthDataStore.count
         let dailyHealth = healthManager.dailyHealthStore.count
         let annotations = annotationsManager.annotations.count
-        let tagOverrides = exerciseMetadataManager.muscleTagOverrides.count
+        let tagOverrides = exerciseMetadataManager.muscleAssignmentOverrides.count
         let metricPrefs = ExerciseMetricManager.shared.cardioOverrides.count
         let relationships = exerciseRelationshipManager.relationships.count
 
@@ -811,7 +811,7 @@ private extension ExportWorkoutsView {
             BackupInventoryItem(id: "workoutHealth", icon: "heart.circle.fill", title: "Workout health snapshots", value: "\(workoutHealth)"),
             BackupInventoryItem(id: "dailyHealth", icon: "calendar.badge.heart", title: "Daily health entries", value: "\(dailyHealth)"),
             BackupInventoryItem(id: "annotations", icon: "note.text", title: "Workout annotations", value: "\(annotations)"),
-            BackupInventoryItem(id: "tagOverrides", icon: "tag.fill", title: "Exercise tag overrides", value: "\(tagOverrides)"),
+            BackupInventoryItem(id: "tagOverrides", icon: "tag.fill", title: "Exercise muscle-role overrides", value: "\(tagOverrides)"),
             BackupInventoryItem(id: "relationships", icon: "rectangle.stack.fill", title: "Exercise relationships", value: "\(relationships)"),
             BackupInventoryItem(id: "metricPrefs", icon: "slider.horizontal.3", title: "Metric preferences", value: "\(metricPrefs)")
         ]
@@ -1729,8 +1729,8 @@ private extension ExportWorkoutsView {
         if includeTags {
             var mapping: [String: String] = [:]
             for name in exerciseNames {
-                let tags = exerciseMetadataManager.resolvedTags(for: name)
-                mapping[name] = tags.isEmpty ? "" : tags.map(\.displayName).joined(separator: "; ")
+                let assignments = exerciseMetadataManager.resolvedAssignments(for: name)
+                mapping[name] = MuscleContributionPolicy.exportDescription(assignments)
             }
             exerciseTagsByName = mapping
         } else {
@@ -2192,9 +2192,9 @@ private extension ExportWorkoutsView {
         var mapping: [String: String] = [:]
 
         for name in exerciseNames {
-            let tags = exerciseMetadataManager.resolvedTags(for: name)
-            guard !tags.isEmpty else { continue }
-            mapping[name] = tags.map(\.displayName).joined(separator: "; ")
+            let assignments = exerciseMetadataManager.resolvedAssignments(for: name)
+            guard !assignments.isEmpty else { continue }
+            mapping[name] = MuscleContributionPolicy.exportDescription(assignments)
         }
 
         return mapping
@@ -2240,7 +2240,10 @@ private extension ExportWorkoutsView {
         backup.payload.workoutAnnotations.count +
         backup.payload.workoutHealthData.count +
         backup.payload.dailyHealthData.count +
-        backup.payload.exerciseTagOverrides.count +
+        max(
+            backup.payload.exerciseMuscleAssignmentOverrides.count,
+            backup.payload.exerciseTagOverrides.count
+        ) +
         backup.payload.exerciseMetricPreferences.count +
         backup.payload.exerciseRelationships.count +
         backup.payload.intentionalBreakRanges.count

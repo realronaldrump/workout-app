@@ -14,6 +14,17 @@ final class ExerciseMetadataManagerTests: XCTestCase {
                 entry.groups,
                 "Incorrect default tags for: \(entry.name)"
             )
+            XCTAssertEqual(
+                ExerciseMetadataManager.shared.defaultAssignments(for: entry.name),
+                entry.assignments,
+                "Incorrect default muscle roles for: \(entry.name)"
+            )
+            XCTAssertFalse(entry.primaryGroups.isEmpty, "Missing primary muscle for: \(entry.name)")
+            XCTAssertEqual(
+                Set(entry.primaryGroups + entry.secondaryGroups),
+                Set(entry.groups),
+                "Role assignments do not cover every muscle for: \(entry.name)"
+            )
         }
     }
 
@@ -30,6 +41,11 @@ final class ExerciseMetadataManagerTests: XCTestCase {
             }
             XCTAssertNotNil(child.laterality, "Missing side for \(child.name)")
             XCTAssertEqual(child.groups, parent.groups, "Child/parent tags diverge for \(child.name)")
+            XCTAssertEqual(
+                child.assignments,
+                parent.assignments,
+                "Child/parent muscle roles diverge for \(child.name)"
+            )
         }
     }
 
@@ -153,6 +169,97 @@ final class ExerciseMetadataManagerTests: XCTestCase {
         XCTAssertEqual(defaultGroups(for: "Running (Treadmill)"), [.cardio])
     }
 
+    func testCompoundDefaultsDistinguishPrimaryAndSecondaryMuscles() {
+        XCTAssertEqual(
+            roles(for: "Bench Press (Barbell)"),
+            [.chest: .primary, .triceps: .secondary, .shoulders: .secondary]
+        )
+        XCTAssertEqual(
+            roles(for: "Romanian Deadlift (Dumbbell)"),
+            [.hamstrings: .primary, .glutes: .primary]
+        )
+        XCTAssertEqual(
+            roles(for: "Cossack Squat"),
+            [.quads: .primary, .adductors: .primary, .glutes: .secondary]
+        )
+    }
+
+    func testLegacyFlatOverridesMigrateAsPrimaryWithoutInferringPriority() throws {
+        let suiteName = "ExerciseMetadataManagerTests.migration.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let legacy: [String: [MuscleTag]] = [
+            "Custom Press": [.builtIn(.shoulders), .builtIn(.triceps)]
+        ]
+        defaults.set(try JSONEncoder().encode(legacy), forKey: ExerciseMetadataManager.legacyMetadataKey)
+
+        let manager = ExerciseMetadataManager(userDefaults: defaults)
+        let migrated = manager.resolvedAssignments(for: "Custom Press")
+
+        XCTAssertEqual(Set(migrated.map(\.role)), [.primary])
+        XCTAssertEqual(Set(migrated.map(\.tag)), Set(legacy["Custom Press"] ?? []))
+        XCTAssertNotNil(defaults.data(forKey: ExerciseMetadataManager.assignmentMetadataKey))
+    }
+
+    func testMixedBackupOverridesPreserveLegacyOnlyEntries() throws {
+        let suiteName = "ExerciseMetadataManagerTests.mixed-backup.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let manager = ExerciseMetadataManager(userDefaults: defaults)
+        let roleOverrides: [String: [ExerciseMuscleAssignment]] = [
+            "Bench Press": [.primary(.builtIn(.chest)), .secondary(.builtIn(.triceps))]
+        ]
+        let legacyOverrides: [String: [MuscleTag]] = [
+            "Bench Press": [.builtIn(.shoulders)],
+            "Custom Row": [.builtIn(.back)]
+        ]
+
+        _ = manager.mergeAssignmentOverridesFromBackup(
+            roleOverrides,
+            legacyTagOverrides: legacyOverrides
+        )
+
+        XCTAssertEqual(manager.resolvedAssignments(for: "Bench Press"), roleOverrides["Bench Press"])
+        XCTAssertEqual(
+            manager.resolvedAssignments(for: "Custom Row"),
+            [.primary(.builtIn(.back))]
+        )
+    }
+
+    func testRoleEditsAlwaysKeepAPrimaryMuscle() throws {
+        let suiteName = "ExerciseMetadataManagerTests.roles.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let manager = ExerciseMetadataManager(userDefaults: defaults)
+        let chest = MuscleTag.builtIn(.chest)
+        let triceps = MuscleTag.builtIn(.triceps)
+
+        manager.setRole(for: "Custom Press", tag: chest, role: .secondary)
+        XCTAssertEqual(manager.role(for: "Custom Press", tag: chest), .primary)
+
+        manager.setRole(for: "Custom Press", tag: triceps, role: .secondary)
+        XCTAssertEqual(manager.role(for: "Custom Press", tag: chest), .primary)
+        XCTAssertEqual(manager.role(for: "Custom Press", tag: triceps), .secondary)
+    }
+
+    func testAssignmentMappingsIncludeRelationshipAggregateNames() {
+        let manager = ExerciseMetadataManager.shared
+        let relationships = Dictionary(
+            uniqueKeysWithValues: DefaultExerciseCatalog.relationships.map { ($0.exerciseName, $0) }
+        )
+        let resolver = ExerciseIdentityResolver(relationships: relationships)
+        let childName = "Single Leg Leg Extension (Left)"
+        let parentName = resolver.aggregateName(for: childName)
+
+        let mappings = manager.resolvedAssignmentMappings(
+            for: [childName],
+            resolver: resolver
+        )
+
+        XCTAssertNotEqual(parentName, childName)
+        XCTAssertEqual(mappings[parentName], manager.resolvedAssignments(for: parentName))
+    }
+
     func testCompatibilityMappingsResolveWithoutDuplicateBuiltIns() {
         XCTAssertFalse(ExerciseMetadataManager.defaultExerciseNames.contains("Push Ups"))
         XCTAssertFalse(ExerciseMetadataManager.defaultExerciseNames.contains("Stair stepper"))
@@ -168,5 +275,15 @@ final class ExerciseMetadataManagerTests: XCTestCase {
         ExerciseMetadataManager.shared
             .defaultTags(for: exerciseName)
             .compactMap(\.builtInGroup)
+    }
+
+    private func roles(for exerciseName: String) -> [MuscleGroup: ExerciseMuscleRole] {
+        Dictionary(
+            uniqueKeysWithValues: ExerciseMetadataManager.shared
+                .defaultAssignments(for: exerciseName)
+                .compactMap { assignment in
+                    assignment.tag.builtInGroup.map { ($0, assignment.role) }
+                }
+        )
     }
 }

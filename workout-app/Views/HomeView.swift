@@ -342,7 +342,7 @@ struct HomeView: View {
                 .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("\(untaggedExerciseNames.count) exercise\(untaggedExerciseNames.count == 1 ? "" : "s") without tags")
+                Text("\(untaggedExerciseNames.count) exercise\(untaggedExerciseNames.count == 1 ? "" : "s") without muscle roles")
                     .font(Theme.Typography.captionBold)
                     .foregroundStyle(Theme.Colors.textPrimary)
                 Text("Tag them for muscle tracking")
@@ -979,8 +979,11 @@ struct HomeView: View {
 
         let allExerciseNames = dataManager.allExerciseNames()
         let exerciseNames = Set(allExerciseNames)
-        let tagMappings = metadataManager.resolvedMappings(for: exerciseNames)
-        cachedUntaggedExerciseNames = allExerciseNames.filter { tagMappings[$0]?.isEmpty ?? true }
+        let assignmentMappings = metadataManager.resolvedAssignmentMappings(
+            for: exerciseNames,
+            resolver: resolver
+        )
+        cachedUntaggedExerciseNames = allExerciseNames.filter { assignmentMappings[$0]?.isEmpty ?? true }
 
         guard !workouts.isEmpty else {
             cachedMuscleSuggestions = []
@@ -989,12 +992,9 @@ struct HomeView: View {
             return
         }
 
-        let groupMappings: [String: [MuscleGroup]] = tagMappings.mapValues { tags in
-            tags.compactMap(\.builtInGroup)
-        }
         cachedMuscleSuggestions = MuscleRecencySuggestionEngine.suggestions(
             workouts: workouts,
-            muscleGroupsByExerciseName: groupMappings,
+            muscleAssignmentsByExerciseName: assignmentMappings,
             resolver: resolver
         )
         syncSelectedWeekBucket()
@@ -1012,12 +1012,16 @@ struct HomeView: View {
 
     private func refreshRecoveryCoverage() async {
         let exerciseNames = Set(dataManager.allExerciseNames())
-        let tagMappings = ExerciseMetadataManager.shared.resolvedMappings(for: exerciseNames)
+        let resolver = ExerciseRelationshipManager.shared.resolverSnapshot()
+        let assignmentMappings = ExerciseMetadataManager.shared.resolvedAssignmentMappings(
+            for: exerciseNames,
+            resolver: resolver
+        )
         await recoveryCoverageEngine.analyze(
             workouts: dataManager.workouts,
             healthStore: healthManager.healthDataStore,
             dailyHealth: healthManager.dailyHealthStore,
-            muscleMappings: tagMappings,
+            muscleMappings: assignmentMappings,
             intentionalBreakRanges: intentionalBreaksManager.savedBreaks
         )
     }

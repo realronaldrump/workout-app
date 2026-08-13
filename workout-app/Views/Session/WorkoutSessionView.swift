@@ -612,12 +612,16 @@ struct WorkoutSessionView: View {
 
         if shouldRebuildContexts {
             let allExerciseNames = Set(dataManager.allExerciseNames())
-            let tagMappings = metadataManager.resolvedMappings(for: allExerciseNames)
-            let groupMappings: [String: [MuscleGroup]] = tagMappings.mapValues { tags in
-                tags.compactMap(\.builtInGroup)
-            }
+            let resolver = ExerciseIdentityResolver.current
+            let assignmentMappings = metadataManager.resolvedAssignmentMappings(
+                for: allExerciseNames,
+                resolver: resolver
+            )
             exerciseCardContexts = contexts
-            cachedMuscleSuggestions = buildMuscleSuggestions(for: session, groupMappings: groupMappings)
+            cachedMuscleSuggestions = buildMuscleSuggestions(
+                for: session,
+                assignmentMappings: assignmentMappings
+            )
         }
         cachedUncheckedSetCount = uncheckedSetCount
         cachedCanFinishSession = canFinish && (completedSetCount > 0 || uncheckedSetCount > 0)
@@ -634,23 +638,33 @@ struct WorkoutSessionView: View {
 
     private func buildMuscleSuggestions(
         for session: ActiveWorkoutSession,
-        groupMappings: [String: [MuscleGroup]]
+        assignmentMappings: [String: [ExerciseMuscleAssignment]]
     ) -> [MuscleGroupSuggestion] {
         guard !dataManager.workouts.isEmpty else { return [] }
 
         let resolver = ExerciseIdentityResolver.current
-        var covered = Set<MuscleGroup>()
+        var plannedEffectiveSets: [MuscleGroup: Double] = [:]
         for exercise in session.exercises {
             let aggregateName = resolver.aggregateName(for: exercise.name)
-            for group in groupMappings[exercise.name] ?? groupMappings[aggregateName] ?? [] {
-                covered.insert(group)
+            let assignments = assignmentMappings[exercise.name] ?? assignmentMappings[aggregateName] ?? []
+            for assignment in assignments {
+                guard let group = assignment.tag.builtInGroup else { continue }
+                plannedEffectiveSets[group, default: 0] += MuscleContributionPolicy.effectiveSets(
+                    setCount: max(exercise.sets.count, 1),
+                    assignment: assignment
+                )
             }
         }
+        let covered = Set(
+            plannedEffectiveSets.compactMap { group, effectiveSets in
+                effectiveSets >= 1 ? group : nil
+            }
+        )
 
         let dismissed = Set(session.dismissedMuscleGroupSuggestions.compactMap(MuscleGroup.init(rawValue:)))
         return MuscleRecencySuggestionEngine.suggestions(
             workouts: dataManager.workouts,
-            muscleGroupsByExerciseName: groupMappings,
+            muscleAssignmentsByExerciseName: assignmentMappings,
             excluding: covered.union(dismissed),
             resolver: resolver
         )

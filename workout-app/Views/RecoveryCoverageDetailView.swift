@@ -139,7 +139,10 @@ struct RecoveryCoverageDetailView: View {
                 .foregroundColor(Theme.Colors.textPrimary)
                 .tracking(1.0)
 
-            Text("Each bar shows how many active weeks in the selected window included at least one tagged exercise for that muscle group. Fully excused break weeks are removed.")
+            Text(
+                "Each bar shows how many active weeks reached at least one effective set for that muscle group. " +
+                    "Primary sets count 1.0, secondary sets count 0.5, and fully excused break weeks are removed."
+            )
                 .font(Theme.Typography.caption)
                 .foregroundColor(Theme.Colors.textSecondary)
 

@@ -98,7 +98,7 @@ nonisolated enum WorkoutExportColumn: String, CaseIterable, Hashable, Identifiab
         case .side:
             return "Left, right, or unilateral side metadata for variants."
         case .tags:
-            return "Exercise muscle tags."
+            return "Primary and secondary exercise muscles with their roles."
         case .setNumber:
             return "Set number."
         case .weight:
@@ -180,7 +180,7 @@ struct WorkoutCSVExporter {
     /// A compact, human-friendly export:
     /// - One CSV header.
     /// - Workout-level fields are only populated on the first set row of each workout.
-    /// - Exercise + muscle tags are only populated on the first set row of each exercise.
+    /// - Exercise + muscle roles are only populated on the first set row of each exercise.
     /// - Distance/Seconds columns are only included if selected and any set uses them.
     /// - Columns are emitted in the selected order.
     nonisolated static func exportWorkoutHistoryCSV(
@@ -280,7 +280,7 @@ struct WorkoutCSVExporter {
     }
 
     /// Export a unique list of exercise names within a date range.
-    /// If `includeTags` is true, adds a `Tags` column (blank if no tags).
+    /// If `includeTags` is true, adds a `Tags` column with primary and secondary roles.
     nonisolated static func exportExerciseListCSV(
         workouts: [Workout],
         startDate: Date,

@@ -37,7 +37,7 @@ final class RecoveryCoverageEngine: ObservableObject {
         workouts: [Workout],
         healthStore _: [UUID: WorkoutHealthData],
         dailyHealth: [Date: DailyHealthData],
-        muscleMappings: [String: [MuscleTag]],
+        muscleMappings: [String: [ExerciseMuscleAssignment]],
         intentionalBreakRanges: [IntentionalBreakRange] = []
     ) async {
         analysisGeneration += 1
@@ -54,9 +54,7 @@ final class RecoveryCoverageEngine: ObservableObject {
         isAnalyzing = true
         let workoutsSnapshot = workouts
         let dailyHealthSnapshot = dailyHealth
-        let mappingsSnapshot = muscleMappings.mapValues { tags in
-            tags.map(\.displayName)
-        }
+        let mappingsSnapshot = muscleMappings
         let breakRangesSnapshot = intentionalBreakRanges
         let resolver = ExerciseRelationshipManager.shared.resolverSnapshot()
         let referenceDate = Date()
@@ -194,7 +192,7 @@ final class RecoveryCoverageEngine: ObservableObject {
 
     private nonisolated static func analyzeFrequency(
         workouts: [Workout],
-        mappings: [String: [String]],
+        mappings: [String: [ExerciseMuscleAssignment]],
         intentionalBreakRanges: [IntentionalBreakRange],
         window: FrequencyInsightWindow,
         referenceDate: Date = Date(),
@@ -246,36 +244,46 @@ final class RecoveryCoverageEngine: ObservableObject {
 
         let trackedWeekSet = Set(trackedWeekStarts)
         var allMuscleGroups: Set<String> = []
-        for muscleGroups in mappings.values {
-            for muscleGroup in muscleGroups {
-                allMuscleGroups.insert(muscleGroup)
+        for assignments in mappings.values {
+            for assignment in assignments {
+                allMuscleGroups.insert(assignment.tag.displayName)
             }
         }
         guard !allMuscleGroups.isEmpty else { return [] }
 
-        // Count weeks active per muscle group
-        var muscleWeekSets: [String: Set<Date>] = [:]
+        // Accumulate effective sets by muscle and week. A week is covered once it reaches
+        // one effective set: one primary set or two secondary sets.
+        var effectiveSetsByMuscleAndWeek: [String: [Date: Double]] = [:]
 
         for workout in workoutsInWindow {
             guard !Task.isCancelled else { return [] }
             let weekStart = startOfWeekSunday(for: workout.date)
             guard trackedWeekSet.contains(weekStart) else { continue }
 
-            for exercise in workout.exercises {
+            for exercise in ExerciseAggregation.aggregateExercises(in: workout, resolver: resolver) {
                 let aggregateName = resolver.aggregateName(for: exercise.name)
-                let muscleGroups = mappings[exercise.name] ?? mappings[aggregateName] ?? []
-                for muscleGroup in muscleGroups {
-                    muscleWeekSets[muscleGroup, default: Set()].insert(weekStart)
+                let assignments = mappings[exercise.name] ?? mappings[aggregateName] ?? []
+                for assignment in assignments {
+                    let muscleGroup = assignment.tag.displayName
+                    let effectiveSets = MuscleContributionPolicy.effectiveSets(
+                        setCount: max(exercise.sets.count, 1),
+                        assignment: assignment
+                    )
+                    effectiveSetsByMuscleAndWeek[muscleGroup, default: [:]][weekStart, default: 0] += effectiveSets
                 }
             }
         }
 
-        guard !muscleWeekSets.isEmpty else { return [] }
+        guard !effectiveSetsByMuscleAndWeek.isEmpty else { return [] }
 
         var insights: [FrequencyInsight] = []
 
         for muscle in allMuscleGroups.sorted() {
-            let coveredWeekStarts = (muscleWeekSets[muscle] ?? []).sorted()
+            let coveredWeekStarts = (effectiveSetsByMuscleAndWeek[muscle] ?? [:])
+                .compactMap { weekStart, effectiveSets in
+                    effectiveSets >= 1 ? weekStart : nil
+                }
+                .sorted()
 
             insights.append(FrequencyInsight(
                 muscleGroup: muscle,

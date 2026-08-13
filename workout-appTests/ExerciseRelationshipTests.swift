@@ -724,7 +724,9 @@ final class ExerciseRelationshipTests: XCTestCase {
             workouts: [workout],
             healthStore: [:],
             dailyHealth: [:],
-            muscleMappings: ["Leg Extension (Machine)": [.builtIn(.quads)]],
+            muscleMappings: [
+                "Leg Extension (Machine)": [.primary(.builtIn(.quads))]
+            ],
             intentionalBreakRanges: []
         )
 

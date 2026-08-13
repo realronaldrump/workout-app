@@ -5,19 +5,37 @@ enum DefaultExerciseCatalog {
     struct Entry: Hashable, Sendable {
         let name: String
         let groups: [MuscleGroup]
+        let primaryGroups: [MuscleGroup]
+        let secondaryGroups: [MuscleGroup]
         let parentName: String?
         let laterality: ExerciseLaterality?
 
         init(
             name: String,
             groups: [MuscleGroup],
+            primaryGroups: [MuscleGroup]? = nil,
             parentName: String? = nil,
             laterality: ExerciseLaterality? = nil
         ) {
+            let resolvedPrimaryGroups = primaryGroups ?? Array(groups.prefix(1))
+            let primarySet = Set(resolvedPrimaryGroups)
+
             self.name = name
             self.groups = groups
+            self.primaryGroups = groups.filter { primarySet.contains($0) }
+            self.secondaryGroups = groups.filter { !primarySet.contains($0) }
             self.parentName = parentName
             self.laterality = laterality
+        }
+
+        var assignments: [ExerciseMuscleAssignment] {
+            let primarySet = Set(primaryGroups)
+            return groups.map { group in
+                ExerciseMuscleAssignment(
+                    tag: .builtIn(group),
+                    role: primarySet.contains(group) ? .primary : .secondary
+                )
+            }
         }
     }
 
@@ -56,15 +74,27 @@ enum DefaultExerciseCatalog {
         .init(name: "Chest Fly (Dumbbell)", groups: [.chest]),
         .init(name: "Chest Fly - Kinesis Machine", groups: [.chest]),
         .init(name: "Chest Press (Machine)", groups: [.chest, .triceps, .shoulders]),
-        .init(name: "Cossack Squat", groups: [.quads, .glutes, .adductors]),
-        .init(name: "Cossack Squat - Left", groups: [.quads, .glutes, .adductors], parentName: "Cossack Squat", laterality: .left),
-        .init(name: "Cossack Squat - Right", groups: [.quads, .glutes, .adductors], parentName: "Cossack Squat", laterality: .right),
+        .init(name: "Cossack Squat", groups: [.quads, .glutes, .adductors], primaryGroups: [.quads, .adductors]),
+        .init(
+            name: "Cossack Squat - Left",
+            groups: [.quads, .glutes, .adductors],
+            primaryGroups: [.quads, .adductors],
+            parentName: "Cossack Squat",
+            laterality: .left
+        ),
+        .init(
+            name: "Cossack Squat - Right",
+            groups: [.quads, .glutes, .adductors],
+            primaryGroups: [.quads, .adductors],
+            parentName: "Cossack Squat",
+            laterality: .right
+        ),
         .init(name: "Crucifix Crunches", groups: [.core]),
         .init(name: "Crunch", groups: [.core]),
         .init(name: "Crunch (Machine)", groups: [.core]),
         .init(name: "Cycling (Indoor)", groups: [.cardio]),
         .init(name: "Dead Hang", groups: [.forearms]),
-        .init(name: "Deadlift (Smith Machine)", groups: [.hamstrings, .glutes, .back, .quads]),
+        .init(name: "Deadlift (Smith Machine)", groups: [.hamstrings, .glutes, .back, .quads], primaryGroups: [.hamstrings, .glutes]),
         .init(name: "Decline Bench Press (Barbell)", groups: [.chest, .triceps, .shoulders]),
         .init(name: "Elliptical Machine", groups: [.cardio]),
         .init(name: "EZ Bar Curl", groups: [.biceps]),
@@ -160,15 +190,15 @@ enum DefaultExerciseCatalog {
         .init(name: "Preacher Curl (Machine)", groups: [.biceps]),
         .init(name: "Pull Up (Assisted)", groups: [.back, .biceps]),
         .init(name: "Push Up", groups: [.chest, .triceps, .shoulders]),
-        .init(name: "RDL (Kettlebell)", groups: [.hamstrings, .glutes]),
+        .init(name: "RDL (Kettlebell)", groups: [.hamstrings, .glutes], primaryGroups: [.hamstrings, .glutes]),
         .init(name: "Reverse Crunch", groups: [.core]),
         .init(name: "Reverse Curl (Barbell)", groups: [.biceps, .forearms]),
         .init(name: "Reverse Curl (EZ Bar)", groups: [.biceps, .forearms]),
-        .init(name: "Reverse Fly (Dumbbell)", groups: [.back, .shoulders, .traps]),
-        .init(name: "Reverse Fly (Machine)", groups: [.back, .shoulders, .traps]),
+        .init(name: "Reverse Fly (Dumbbell)", groups: [.back, .shoulders, .traps], primaryGroups: [.back, .shoulders]),
+        .init(name: "Reverse Fly (Machine)", groups: [.back, .shoulders, .traps], primaryGroups: [.back, .shoulders]),
         .init(name: "Reverse Plank", groups: [.core, .glutes, .hamstrings]),
-        .init(name: "Romanian Deadlift (Dumbbell)", groups: [.hamstrings, .glutes]),
-        .init(name: "Romanian Deadlift (Smith Machine)", groups: [.hamstrings, .glutes]),
+        .init(name: "Romanian Deadlift (Dumbbell)", groups: [.hamstrings, .glutes], primaryGroups: [.hamstrings, .glutes]),
+        .init(name: "Romanian Deadlift (Smith Machine)", groups: [.hamstrings, .glutes], primaryGroups: [.hamstrings, .glutes]),
         .init(name: "Rhino Belt Squat", groups: [.quads, .glutes]),
         .init(name: "Rotary Torso Machine", groups: [.core]),
         .init(name: "Rotary Torso Machine - Left", groups: [.core], parentName: "Rotary Torso Machine", laterality: .left),
@@ -219,9 +249,21 @@ enum DefaultExerciseCatalog {
         .init(name: "Single-Arm Overhead Cable Extension", groups: [.triceps]),
         .init(name: "Single-Arm Overhead Cable Extension - Left", groups: [.triceps], parentName: "Single-Arm Overhead Cable Extension", laterality: .left),
         .init(name: "Single-Arm Overhead Cable Extension - Right", groups: [.triceps], parentName: "Single-Arm Overhead Cable Extension", laterality: .right),
-        .init(name: "Single-Leg RDL", groups: [.hamstrings, .glutes]),
-        .init(name: "Single-Leg RDL - Left", groups: [.hamstrings, .glutes], parentName: "Single-Leg RDL", laterality: .left),
-        .init(name: "Single-Leg RDL - Right", groups: [.hamstrings, .glutes], parentName: "Single-Leg RDL", laterality: .right),
+        .init(name: "Single-Leg RDL", groups: [.hamstrings, .glutes], primaryGroups: [.hamstrings, .glutes]),
+        .init(
+            name: "Single-Leg RDL - Left",
+            groups: [.hamstrings, .glutes],
+            primaryGroups: [.hamstrings, .glutes],
+            parentName: "Single-Leg RDL",
+            laterality: .left
+        ),
+        .init(
+            name: "Single-Leg RDL - Right",
+            groups: [.hamstrings, .glutes],
+            primaryGroups: [.hamstrings, .glutes],
+            parentName: "Single-Leg RDL",
+            laterality: .right
+        ),
         .init(name: "Skullcrusher (Barbell)", groups: [.triceps]),
         .init(name: "Skullcrusher (Dumbbell)", groups: [.triceps]),
         .init(name: "Squat (Band)", groups: [.quads, .glutes]),
@@ -253,8 +295,8 @@ enum DefaultExerciseCatalog {
         .init(name: "Triceps Kickback (dumbbell) - Right", groups: [.triceps], parentName: "Triceps Kickback (dumbbell)", laterality: .right),
         .init(name: "Triceps Press Machine", groups: [.triceps]),
         .init(name: "Triceps Pushdown (Cable - Straight Bar)", groups: [.triceps]),
-        .init(name: "Upright Row (Barbell)", groups: [.shoulders, .traps]),
-        .init(name: "Upright Row (Dumbbell)", groups: [.shoulders, .traps]),
+        .init(name: "Upright Row (Barbell)", groups: [.shoulders, .traps], primaryGroups: [.shoulders, .traps]),
+        .init(name: "Upright Row (Dumbbell)", groups: [.shoulders, .traps], primaryGroups: [.shoulders, .traps]),
         .init(name: "V-bar Pulldown", groups: [.back, .biceps]),
         .init(name: "Walking (Treadmill)", groups: [.cardio])
     ]

@@ -8,16 +8,24 @@ struct ExerciseTagEditorView: View {
     @State private var customTagText = ""
     @State private var cardioCountLabelDraft: String = ""
 
+    private var selectedAssignments: [ExerciseMuscleAssignment] {
+        metadataManager.resolvedAssignments(for: exerciseName)
+    }
+
     private var selectedTags: [MuscleTag] {
-        metadataManager.resolvedTags(for: exerciseName)
+        selectedAssignments.map(\.tag)
     }
 
-    private var selectedTagIds: Set<String> {
-        Set(selectedTags.map(\.id))
+    private var primaryAssignments: [ExerciseMuscleAssignment] {
+        selectedAssignments.filter { $0.role == .primary }
     }
 
-    private var defaultTags: [MuscleTag] {
-        metadataManager.defaultTags(for: exerciseName)
+    private var secondaryAssignments: [ExerciseMuscleAssignment] {
+        selectedAssignments.filter { $0.role == .secondary }
+    }
+
+    private var defaultAssignments: [ExerciseMuscleAssignment] {
+        metadataManager.defaultAssignments(for: exerciseName)
     }
 
     private var hasDefaultTags: Bool {
@@ -99,7 +107,7 @@ struct ExerciseTagEditorView: View {
                 }
             }
 
-            if selectedTags.isEmpty {
+            if selectedAssignments.isEmpty {
                 Text("Untagged")
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Colors.textTertiary)
@@ -108,18 +116,16 @@ struct ExerciseTagEditorView: View {
                     .background(Theme.Colors.surface.opacity(0.6))
                     .cornerRadius(Theme.CornerRadius.medium)
             } else {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: Theme.Spacing.sm) {
-                        ForEach(selectedTags, id: \.id) { tag in
-                            MuscleTagBadge(tag: tag)
-                        }
+                VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+                    assignmentBadges(title: "Primary", assignments: primaryAssignments)
+                    if !secondaryAssignments.isEmpty {
+                        assignmentBadges(title: "Secondary", assignments: secondaryAssignments)
                     }
-                    .padding(.vertical, 2)
                 }
             }
 
-            if hasDefaultTags, !defaultTags.isEmpty {
-                Text("Defaults: \(defaultTags.map(\.displayName).joined(separator: ", "))")
+            if hasDefaultTags, !defaultAssignments.isEmpty {
+                Text("Defaults: \(MuscleContributionPolicy.exportDescription(defaultAssignments))")
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Colors.textSecondary)
                     .lineLimit(3)
@@ -135,12 +141,32 @@ struct ExerciseTagEditorView: View {
 
     private var selectionFootnote: String {
         if isOverridden {
-            return "Customized tags override defaults."
+            return "Customized roles override defaults. Primary work counts 1.0; secondary work counts 0.5."
         }
         if hasDefaultTags {
-            return "Using default tags for this exercise."
+            return "Using default roles. Primary work counts 1.0; secondary work counts 0.5."
         }
-        return "No default tags found for this exercise."
+        return "No default roles found. A tagged exercise always keeps at least one primary muscle."
+    }
+
+    private func assignmentBadges(
+        title: String,
+        assignments: [ExerciseMuscleAssignment]
+    ) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            Text(title.uppercased())
+                .font(Theme.Typography.metricLabel)
+                .foregroundStyle(Theme.Colors.textTertiary)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: Theme.Spacing.sm) {
+                    ForEach(assignments) { assignment in
+                        MuscleTagBadge(tag: assignment.tag, role: assignment.role)
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+        }
     }
 
     private var builtInTagsSection: some View {
@@ -149,18 +175,22 @@ struct ExerciseTagEditorView: View {
                 .font(Theme.Typography.title3)
                 .foregroundStyle(Theme.Colors.textPrimary)
 
+            Text("Choose at least one primary muscle. Add secondary muscles for meaningful assistance work.")
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.Colors.textSecondary)
+
             VStack(spacing: Theme.Spacing.sm) {
                 ForEach(MuscleGroup.allCases, id: \.self) { group in
                     let tag = MuscleTag.builtIn(group)
-                    TagToggleRow(
+                    MuscleRoleSelectionRow(
                         title: group.displayName,
-                        subtitle: nil,
                         icon: group.iconName,
                         tint: tag.tint,
-                        isSelected: selectedTagIds.contains(tag.id)
-                    ) {
+                        selectedRole: metadataManager.role(for: exerciseName, tag: tag),
+                        canSelectSecondary: canSelectSecondary(for: tag)
+                    ) { role in
                         Haptics.selection()
-                        metadataManager.toggleTag(for: exerciseName, tag: tag)
+                        metadataManager.setRole(for: exerciseName, tag: tag, role: role)
                     }
                 }
             }
@@ -221,15 +251,15 @@ struct ExerciseTagEditorView: View {
             } else {
                 VStack(spacing: Theme.Spacing.sm) {
                     ForEach(metadataManager.knownCustomTags, id: \.id) { tag in
-                        TagToggleRow(
+                        MuscleRoleSelectionRow(
                             title: tag.displayName,
-                            subtitle: nil,
                             icon: tag.iconName,
                             tint: tag.tint,
-                            isSelected: selectedTagIds.contains(tag.id)
-                        ) {
+                            selectedRole: metadataManager.role(for: exerciseName, tag: tag),
+                            canSelectSecondary: canSelectSecondary(for: tag)
+                        ) { role in
                             Haptics.selection()
-                            metadataManager.toggleTag(for: exerciseName, tag: tag)
+                            metadataManager.setRole(for: exerciseName, tag: tag, role: role)
                         }
                     }
                 }
@@ -344,7 +374,7 @@ struct ExerciseTagEditorView: View {
                     ActionRow(
                         icon: "trash",
                         tint: Theme.Colors.error,
-                        title: "Clear Tags",
+                        title: "Clear Muscle Roles",
                         subtitle: "Mark this exercise as untagged."
                     )
                 }
@@ -359,18 +389,25 @@ struct ExerciseTagEditorView: View {
         metadataManager.addCustomTag(for: exerciseName, name: tag.value)
         customTagText = ""
     }
+
+    private func canSelectSecondary(for tag: MuscleTag) -> Bool {
+        guard tag.builtInGroup != .cardio else { return false }
+        let currentRole = metadataManager.role(for: exerciseName, tag: tag)
+        let otherPrimaryCount = primaryAssignments.filter { $0.tag.id != tag.id }.count
+        return currentRole != nil ? otherPrimaryCount > 0 : !primaryAssignments.isEmpty
+    }
 }
 
-private struct TagToggleRow: View {
+private struct MuscleRoleSelectionRow: View {
     let title: String
-    var subtitle: String?
     let icon: String
     let tint: Color
-    let isSelected: Bool
-    let action: () -> Void
+    let selectedRole: ExerciseMuscleRole?
+    let canSelectSecondary: Bool
+    let onSelect: (ExerciseMuscleRole?) -> Void
 
     var body: some View {
-        Button(action: action) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             HStack(spacing: Theme.Spacing.md) {
                 Image(systemName: icon)
                     .foregroundStyle(.white)
@@ -378,31 +415,33 @@ private struct TagToggleRow: View {
                     .background(tint)
                     .cornerRadius(Theme.CornerRadius.large)
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(Theme.Typography.body)
-                        .foregroundStyle(Theme.Colors.textPrimary)
-
-                    if let subtitle {
-                        Text(subtitle)
-                            .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.Colors.textSecondary)
-                            .lineLimit(2)
-                    }
-                }
+                Text(title)
+                    .font(Theme.Typography.body)
+                    .foregroundStyle(Theme.Colors.textPrimary)
 
                 Spacer(minLength: 0)
 
-                if isSelected {
-                    Image(systemName: "checkmark")
-                        .font(Theme.Typography.caption)
+                if let selectedRole {
+                    Text(selectedRole.displayName.uppercased())
+                        .font(Theme.Typography.metricLabel)
                         .foregroundStyle(tint)
                 }
             }
-            .padding(Theme.Spacing.lg)
-            .softCard(elevation: 1)
+
+            Picker(
+                "Muscle role for \(title)",
+                selection: Binding(get: { selectedRole }, set: onSelect)
+            ) {
+                Text("None").tag(ExerciseMuscleRole?.none)
+                Text("Primary").tag(ExerciseMuscleRole?.some(.primary))
+                Text("Secondary")
+                    .tag(ExerciseMuscleRole?.some(.secondary))
+                    .disabled(!canSelectSecondary)
+            }
+            .pickerStyle(.segmented)
         }
-        .buttonStyle(.plain)
+        .padding(Theme.Spacing.lg)
+        .softCard(elevation: 1)
     }
 }
 

@@ -4,9 +4,9 @@ struct SuggestedExerciseOption: Identifiable, Hashable, Sendable {
     let id: String
     let name: String
     let lastPerformed: Date
-    let frequency: Int
+    let frequency: Double
 
-    nonisolated init(name: String, lastPerformed: Date, frequency: Int) {
+    nonisolated init(name: String, lastPerformed: Date, frequency: Double) {
         self.id = name
         self.name = name
         self.lastPerformed = lastPerformed
@@ -34,7 +34,7 @@ enum MuscleRecencySuggestionEngine {
     /// Returns suggestions sorted by most-neglected (largest `daysSince`) first.
     nonisolated static func suggestions(
         workouts: [Workout],
-        muscleGroupsByExerciseName: [String: [MuscleGroup]],
+        muscleAssignmentsByExerciseName: [String: [ExerciseMuscleAssignment]],
         excluding alreadyCoveredGroups: Set<MuscleGroup> = [],
         now: Date = Date(),
         calendar: Calendar = .current,
@@ -46,7 +46,7 @@ enum MuscleRecencySuggestionEngine {
 
         let aggregated = aggregate(
             workouts: workouts,
-            muscleGroupsByExerciseName: muscleGroupsByExerciseName,
+            muscleAssignmentsByExerciseName: muscleAssignmentsByExerciseName,
             excluding: alreadyCoveredGroups,
             resolver: resolver
         )
@@ -79,14 +79,14 @@ enum MuscleRecencySuggestionEngine {
 
     nonisolated static func allGroupRecency(
         workouts: [Workout],
-        muscleGroupsByExerciseName: [String: [MuscleGroup]],
+        muscleAssignmentsByExerciseName: [String: [ExerciseMuscleAssignment]],
         now: Date = Date(),
         calendar: Calendar = .current,
         resolver: ExerciseIdentityResolver = .empty
     ) -> [MuscleGroupRecency] {
         let aggregated = aggregate(
             workouts: workouts,
-            muscleGroupsByExerciseName: muscleGroupsByExerciseName,
+            muscleAssignmentsByExerciseName: muscleAssignmentsByExerciseName,
             resolver: resolver
         )
 
@@ -128,7 +128,7 @@ enum MuscleRecencySuggestionEngine {
 
     nonisolated private static func sortedExerciseOptions(
         for group: MuscleGroup,
-        from exerciseStatsByGroup: [MuscleGroup: [String: (last: Date, count: Int)]]
+        from exerciseStatsByGroup: [MuscleGroup: [String: (last: Date, count: Double)]]
     ) -> [SuggestedExerciseOption] {
         (exerciseStatsByGroup[group] ?? [:])
             .map { name, stat in
@@ -143,38 +143,54 @@ enum MuscleRecencySuggestionEngine {
 
     nonisolated private static func aggregate(
         workouts: [Workout],
-        muscleGroupsByExerciseName: [String: [MuscleGroup]],
+        muscleAssignmentsByExerciseName: [String: [ExerciseMuscleAssignment]],
         excluding: Set<MuscleGroup> = [],
         resolver: ExerciseIdentityResolver
-    ) -> (lastTrainedByGroup: [MuscleGroup: Date], exerciseStatsByGroup: [MuscleGroup: [String: (last: Date, count: Int)]]) {
+    ) -> (
+        lastTrainedByGroup: [MuscleGroup: Date],
+        exerciseStatsByGroup: [MuscleGroup: [String: (last: Date, count: Double)]]
+    ) {
         var lastTrainedByGroup: [MuscleGroup: Date] = [:]
-        var exerciseStatsByGroup: [MuscleGroup: [String: (last: Date, count: Int)]] = [:]
+        var exerciseStatsByGroup: [MuscleGroup: [String: (last: Date, count: Double)]] = [:]
 
         for workout in workouts {
+            var effectiveSetsByGroup: [MuscleGroup: Double] = [:]
+
             for exercise in ExerciseAggregation.aggregateExercises(in: workout, resolver: resolver) {
                 let aggregateName = exercise.name
-                let groups = muscleGroupsByExerciseName[exercise.name]
-                    ?? muscleGroupsByExerciseName[aggregateName]
+                let assignments = muscleAssignmentsByExerciseName[exercise.name]
+                    ?? muscleAssignmentsByExerciseName[aggregateName]
                     ?? []
-                guard !groups.isEmpty else { continue }
+                guard !assignments.isEmpty else { continue }
 
-                for group in groups {
+                for assignment in assignments {
+                    guard let group = assignment.tag.builtInGroup else { continue }
                     if excluding.contains(group) { continue }
 
-                    if let existing = lastTrainedByGroup[group] {
-                        if workout.date > existing { lastTrainedByGroup[group] = workout.date }
-                    } else {
-                        lastTrainedByGroup[group] = workout.date
-                    }
+                    let effectiveSets = MuscleContributionPolicy.effectiveSets(
+                        setCount: max(exercise.sets.count, 1),
+                        assignment: assignment
+                    )
+                    effectiveSetsByGroup[group, default: 0] += effectiveSets
 
                     var groupStats = exerciseStatsByGroup[group] ?? [:]
                     if let existing = groupStats[aggregateName] {
                         let last = max(existing.last, workout.date)
-                        groupStats[aggregateName] = (last, existing.count + 1)
+                        groupStats[aggregateName] = (last, existing.count + effectiveSets)
                     } else {
-                        groupStats[aggregateName] = (workout.date, 1)
+                        groupStats[aggregateName] = (workout.date, effectiveSets)
                     }
                     exerciseStatsByGroup[group] = groupStats
+                }
+            }
+
+            // One effective set is the minimum meaningful exposure. This lets one primary
+            // set refresh recency while requiring two secondary sets to do the same.
+            for (group, effectiveSets) in effectiveSetsByGroup where effectiveSets >= 1 {
+                if let existing = lastTrainedByGroup[group] {
+                    if workout.date > existing { lastTrainedByGroup[group] = workout.date }
+                } else {
+                    lastTrainedByGroup[group] = workout.date
                 }
             }
         }

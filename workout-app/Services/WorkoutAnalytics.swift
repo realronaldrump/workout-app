@@ -331,7 +331,7 @@ struct WorkoutAnalytics {
     static func progressContributions(
         workouts: [Workout],
         weeks: Int,
-        mappings: [String: [MuscleTag]],
+        mappings: [String: [ExerciseMuscleAssignment]],
         resolver: ExerciseIdentityResolver = .empty
     ) -> [ProgressContribution] {
         guard let endDate = workouts.map({ $0.date }).max() else { return [] }
@@ -355,7 +355,7 @@ struct WorkoutAnalytics {
     static func progressContributions(
         workouts: [Workout],
         window: ChangeMetricWindow,
-        mappings: [String: [MuscleTag]],
+        mappings: [String: [ExerciseMuscleAssignment]],
         resolver: ExerciseIdentityResolver = .empty
     ) -> [ProgressContribution] {
         var current: [Workout] = []
@@ -384,7 +384,7 @@ struct WorkoutAnalytics {
     static func progressContributions(
         current: [Workout],
         previous: [Workout],
-        mappings: [String: [MuscleTag]],
+        mappings: [String: [ExerciseMuscleAssignment]],
         resolver: ExerciseIdentityResolver = .empty
     ) -> [ProgressContribution] {
         let currentTotals = progressPeriodTotals(for: current, resolver: resolver)
@@ -417,9 +417,10 @@ struct WorkoutAnalytics {
 
         var muscleTotals: [MuscleTag: Double] = [:]
         for (exerciseName, delta) in exerciseDeltas {
-            let tags = mappings[exerciseName] ?? ExerciseMetadataManager.shared.resolvedTags(for: exerciseName)
-            for tag in tags {
-                muscleTotals[tag, default: 0] += delta
+            let assignments = mappings[exerciseName]
+                ?? ExerciseMetadataManager.shared.resolvedAssignments(for: exerciseName)
+            for assignment in assignments {
+                muscleTotals[assignment.tag, default: 0] += delta * assignment.contributionWeight
             }
         }
 

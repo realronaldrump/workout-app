@@ -52,7 +52,7 @@ enum AppDataClearCategory: String, CaseIterable, Identifiable, Sendable {
         case .intentionalBreaks:
             return "Saved break ranges and dismissed break suggestions."
         case .exerciseCustomization:
-            return "Muscle tags, custom tags, exercise relationships, cardio metric preferences, and favorite exercises."
+            return "Primary and secondary muscle roles, custom muscles, exercise relationships, cardio metric preferences, and favorite exercises."
         case .profileAndPreferences:
             return "Profile name, appearance, goals, weight increment, and Health source preferences."
         case .guideProgress:

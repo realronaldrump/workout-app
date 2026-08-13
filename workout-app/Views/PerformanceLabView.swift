@@ -259,7 +259,7 @@ struct PerformanceLabView: View {
         .onReceive(intentionalBreaksManager.$savedBreaks.dropFirst()) { _ in
             scheduleDerivedAnalyticsRefresh()
         }
-        .onReceive(metadataManager.$muscleTagOverrides.dropFirst()) { _ in
+        .onReceive(metadataManager.$muscleAssignmentOverrides.dropFirst()) { _ in
             scheduleDerivedAnalyticsRefresh()
         }
         .onReceive(relationshipManager.$relationships.dropFirst()) { _ in
@@ -691,19 +691,19 @@ struct PerformanceLabView: View {
 
     private func muscleEffortTotals(
         for sourceWorkouts: [Workout],
-        mappings: [String: [MuscleTag]],
+        mappings: [String: [ExerciseMuscleAssignment]],
         resolver: ExerciseIdentityResolver
     ) -> [MuscleTag: Double] {
         var totals: [MuscleTag: Double] = [:]
         for workout in sourceWorkouts {
             for exercise in ExerciseAggregation.aggregateExercises(in: workout, resolver: resolver) {
-                let tags = mappings[exercise.name]
-                    ?? metadataManager.resolvedTags(for: exercise.name)
-                guard !tags.isEmpty else { continue }
+                let assignments = mappings[exercise.name]
+                    ?? metadataManager.resolvedAssignments(for: exercise.name)
+                guard !assignments.isEmpty else { continue }
                 let effort = exerciseEffortScore(exercise)
                 guard effort > 0 else { continue }
-                for tag in tags {
-                    totals[tag, default: 0] += effort
+                for assignment in assignments {
+                    totals[assignment.tag, default: 0] += effort * assignment.contributionWeight
                 }
             }
         }
@@ -863,7 +863,10 @@ struct PerformanceLabView: View {
                 workout.exercises.map(\.name)
             }
         )
-        let mappings = metadataManager.resolvedMappings(for: exerciseNames)
+        let mappings = metadataManager.resolvedAssignmentMappings(
+            for: exerciseNames,
+            resolver: resolver
+        )
         let streakRuns = WorkoutAnalytics.streakRuns(
             for: currentWorkouts,
             intentionalRestDays: intentionalRestDays,

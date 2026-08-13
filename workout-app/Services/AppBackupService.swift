@@ -51,7 +51,7 @@ nonisolated struct AppBackupImportResult {
 
 nonisolated struct BigBeautifulWorkoutBackup: Codable {
     static let currentFormatIdentifier = "com.davis.big-beautiful-workout.backup"
-    static let currentSchemaVersion = 3
+    static let currentSchemaVersion = 4
 
     var formatIdentifier: String
     var schemaVersion: Int
@@ -86,7 +86,9 @@ nonisolated struct AppBackupPayload: Codable {
     var workoutHealthData: [WorkoutHealthData]
     var dailyHealthData: [DailyHealthData]
     var dailyHealthCoverage: [Date]
+    /// Flat tags retained as a fallback compatibility view for older backup readers and migrations.
     var exerciseTagOverrides: [String: [MuscleTag]]
+    var exerciseMuscleAssignmentOverrides: [String: [ExerciseMuscleAssignment]]
     var exerciseMetricPreferences: [String: ExerciseCardioMetricPreferences]
     var exerciseRelationships: [ExerciseRelationship]
     var suppressedDefaultExerciseRelationships: [String]
@@ -106,6 +108,7 @@ nonisolated struct AppBackupPayload: Codable {
         dailyHealthData: [DailyHealthData] = [],
         dailyHealthCoverage: [Date] = [],
         exerciseTagOverrides: [String: [MuscleTag]] = [:],
+        exerciseMuscleAssignmentOverrides: [String: [ExerciseMuscleAssignment]] = [:],
         exerciseMetricPreferences: [String: ExerciseCardioMetricPreferences] = [:],
         exerciseRelationships: [ExerciseRelationship] = [],
         suppressedDefaultExerciseRelationships: [String] = [],
@@ -124,6 +127,7 @@ nonisolated struct AppBackupPayload: Codable {
         self.dailyHealthData = dailyHealthData
         self.dailyHealthCoverage = dailyHealthCoverage
         self.exerciseTagOverrides = exerciseTagOverrides
+        self.exerciseMuscleAssignmentOverrides = exerciseMuscleAssignmentOverrides
         self.exerciseMetricPreferences = exerciseMetricPreferences
         self.exerciseRelationships = exerciseRelationships
         self.suppressedDefaultExerciseRelationships = suppressedDefaultExerciseRelationships
@@ -147,6 +151,10 @@ nonisolated struct AppBackupPayload: Codable {
         exerciseTagOverrides = try container.decodeIfPresent(
             [String: [MuscleTag]].self,
             forKey: .exerciseTagOverrides
+        ) ?? [:]
+        exerciseMuscleAssignmentOverrides = try container.decodeIfPresent(
+            [String: [ExerciseMuscleAssignment]].self,
+            forKey: .exerciseMuscleAssignmentOverrides
         ) ?? [:]
         exerciseMetricPreferences = try container.decodeIfPresent(
             [String: ExerciseCardioMetricPreferences].self,
@@ -231,6 +239,7 @@ enum AppBackupService {
             dailyHealthData: Array(healthManager.dailyHealthStore.values),
             dailyHealthCoverage: Array(healthManager.dailyHealthCoverage).sorted(),
             exerciseTagOverrides: exerciseMetadataManager.muscleTagOverrides,
+            exerciseMuscleAssignmentOverrides: exerciseMetadataManager.muscleAssignmentOverrides,
             exerciseMetricPreferences: exerciseMetricManager.cardioOverrides,
             exerciseRelationships: exerciseRelationshipManager.relationships.values.sorted {
                 $0.exerciseName.localizedCaseInsensitiveCompare($1.exerciseName) == .orderedAscending
@@ -352,6 +361,9 @@ enum AppBackupService {
                 }
                 try $0.field("exerciseRelationships") {
                     try writeArray(payload.exerciseRelationships)
+                }
+                try $0.field("exerciseMuscleAssignmentOverrides") {
+                    try writeDictionary(payload.exerciseMuscleAssignmentOverrides)
                 }
                 try $0.field("exerciseTagOverrides") {
                     try writeDictionary(payload.exerciseTagOverrides)
@@ -589,7 +601,10 @@ enum AppBackupImporter {
         result.insertedDailyHealthEntries = healthMerge.dailyInserted
         result.skippedDailyHealthEntries = healthMerge.dailySkipped
 
-        _ = exerciseMetadataManager.mergeOverridesFromBackup(backup.payload.exerciseTagOverrides)
+        _ = exerciseMetadataManager.mergeAssignmentOverridesFromBackup(
+            backup.payload.exerciseMuscleAssignmentOverrides,
+            legacyTagOverrides: backup.payload.exerciseTagOverrides
+        )
         _ = exerciseMetricManager.mergePreferencesFromBackup(backup.payload.exerciseMetricPreferences)
         _ = exerciseRelationshipManager.mergeRelationshipsFromBackup(backup.payload.exerciseRelationships)
         _ = exerciseRelationshipManager.mergeSuppressedDefaultsFromBackup(

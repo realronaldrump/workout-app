@@ -1186,7 +1186,7 @@ struct ExerciseDetailView: View {
             refreshScopedHistory()
             scheduleProgressReviewRefresh()
         }
-        .onChange(of: metadataManager.muscleTagOverrides) { _, _ in
+        .onChange(of: metadataManager.muscleAssignmentOverrides) { _, _ in
             refreshScopedHistory()
             scheduleExerciseDetailRefresh()
             scheduleProgressReviewRefresh()

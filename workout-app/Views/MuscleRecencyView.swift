@@ -9,15 +9,16 @@ struct MuscleRecencyView: View {
     private func refreshRecencyRows() {
         let workouts = dataManager.workouts
         let exerciseNames = Set(workouts.flatMap { $0.exercises.map(\.name) })
-        let tagMappings = ExerciseMetadataManager.shared.resolvedMappings(for: exerciseNames)
-        let groupMappings: [String: [MuscleGroup]] = tagMappings.mapValues { tags in
-            tags.compactMap { $0.builtInGroup }
-        }
+        let resolver = relationshipManager.resolverSnapshot()
+        let assignmentMappings = ExerciseMetadataManager.shared.resolvedAssignmentMappings(
+            for: exerciseNames,
+            resolver: resolver
+        )
 
         recencyRows = MuscleRecencySuggestionEngine.allGroupRecency(
             workouts: workouts,
-            muscleGroupsByExerciseName: groupMappings,
-            resolver: relationshipManager.resolverSnapshot()
+            muscleAssignmentsByExerciseName: assignmentMappings,
+            resolver: resolver
         )
     }
 
@@ -33,7 +34,7 @@ struct MuscleRecencyView: View {
                         .tracking(1.5)
                         .padding(.top, Theme.Spacing.md)
 
-                    Text("See when each muscle group was last trained.")
+                    Text("See when each muscle group last reached one effective set of work.")
                         .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.Colors.textSecondary)
 

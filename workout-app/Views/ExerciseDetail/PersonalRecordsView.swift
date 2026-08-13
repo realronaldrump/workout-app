@@ -182,7 +182,7 @@ struct PersonalRecordsView: View {
         }
         .onAppear(perform: refreshRecords)
         .onChange(of: historyFingerprint) { _, _ in refreshRecords() }
-        .onChange(of: metadataManager.muscleTagOverrides) { _, _ in refreshRecords() }
+        .onChange(of: metadataManager.muscleAssignmentOverrides) { _, _ in refreshRecords() }
         .onChange(of: metricManager.cardioOverrides) { _, _ in refreshRecords() }
     }
 

@@ -84,8 +84,150 @@ nonisolated struct ChangelogPresentation: Identifiable, Hashable, Sendable {
 nonisolated enum ChangelogCatalog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
-            version: "1.7.1",
+            version: "1.9.2",
             releaseDate: nil,
+            summary: String(
+                localized: "Muscle tracking now distinguishes primary targets from secondary assistance for more realistic workout insights."
+            ),
+            highlights: [
+                ChangelogHighlight(
+                    title: String(localized: "Primary and secondary muscles"),
+                    detail: String(
+                        localized: "Built-in exercises include curated muscle roles, and you can customize either role from the exercise editor."
+                    ),
+                    systemImage: "figure.strengthtraining.traditional"
+                ),
+                ChangelogHighlight(
+                    title: String(localized: "Weighted muscle insights"),
+                    detail: String(
+                        localized: "Primary work counts as one effective set and secondary work counts as half across balance, progress, recency, and coverage."
+                    ),
+                    systemImage: "chart.bar.xaxis"
+                ),
+                ChangelogHighlight(
+                    title: String(localized: "Portable and dependable data"),
+                    detail: String(
+                        localized: "Exports and backups preserve muscle roles, while existing custom tags migrate safely without losing credit."
+                    ),
+                    systemImage: "externaldrive.fill.badge.checkmark"
+                ),
+                ChangelogHighlight(
+                    title: String(localized: "Complete release history"),
+                    detail: String(
+                        localized: "Previously missing updates are now available in What’s New so the app’s full release story is easy to revisit."
+                    ),
+                    systemImage: "clock.arrow.circlepath"
+                )
+            ]
+        ),
+        ChangelogEntry(
+            version: "1.9.1",
+            releaseDate: ChangelogReleaseDate(year: 2026, month: 8, day: 13),
+            summary: String(localized: "More Strong exercises are recognized automatically with accurate default muscle coverage."),
+            highlights: [
+                ChangelogHighlight(
+                    title: String(localized: "A much larger exercise library"),
+                    detail: String(
+                        localized: "Exercises found in your Strong history are now built in, making imports and new workout setup more familiar."
+                    ),
+                    systemImage: "list.bullet.rectangle.portrait.fill"
+                ),
+                ChangelogHighlight(
+                    title: String(localized: "Better exercise relationships"),
+                    detail: String(
+                        localized: "Left, right, and unilateral variants connect to their parent exercise for cleaner history and analytics."
+                    ),
+                    systemImage: "arrow.triangle.branch"
+                ),
+                ChangelogHighlight(
+                    title: String(localized: "More accurate muscle tags"),
+                    detail: String(
+                        localized: "New defaults use exercise-specific muscle mappings while preserving compatibility with older spelling variants."
+                    ),
+                    systemImage: "tag.fill"
+                )
+            ]
+        ),
+        ChangelogEntry(
+            version: "1.9",
+            releaseDate: ChangelogReleaseDate(year: 2026, month: 7, day: 30),
+            summary: String(localized: "Health and exercise details reveal trends more clearly and make progress easier to understand."),
+            highlights: [
+                ChangelogHighlight(
+                    title: String(localized: "Richer Health trends"),
+                    detail: String(
+                        localized: "New trend charts, calendars, rhythm views, and mini charts make patterns easier to spot at a glance."
+                    ),
+                    systemImage: "chart.xyaxis.line"
+                ),
+                ChangelogHighlight(
+                    title: String(localized: "Insights for each metric"),
+                    detail: String(
+                        localized: "Health details now use metric-specific visuals and plain-language summaries instead of one generic presentation."
+                    ),
+                    systemImage: "heart.text.square.fill"
+                ),
+                ChangelogHighlight(
+                    title: String(localized: "Smarter exercise stats"),
+                    detail: String(
+                        localized: "Exercise cards add recent comparisons, session frequency, and compact progress lines alongside lifetime totals."
+                    ),
+                    systemImage: "figure.strengthtraining.traditional"
+                )
+            ]
+        ),
+        ChangelogEntry(
+            version: "1.8.2",
+            releaseDate: ChangelogReleaseDate(year: 2026, month: 7, day: 28),
+            summary: String(localized: "Strong import results are cleaner and easier to scan."),
+            highlights: [
+                ChangelogHighlight(
+                    title: String(localized: "Clearer import summaries"),
+                    detail: String(
+                        localized: "The completion screen uses a balanced two-column layout so imported and skipped totals stay readable."
+                    ),
+                    systemImage: "square.grid.2x2.fill"
+                )
+            ]
+        ),
+        ChangelogEntry(
+            version: "1.8",
+            releaseDate: ChangelogReleaseDate(year: 2026, month: 7, day: 23),
+            summary: String(localized: "A refreshed design makes workouts, history, Health, imports, and gym setup faster and easier to use."),
+            highlights: [
+                ChangelogHighlight(
+                    title: String(localized: "A refreshed app design"),
+                    detail: String(
+                        localized: "System Dark Mode, cleaner navigation, modern materials, and responsive layouts improve the app on iPhone and iPad."
+                    ),
+                    systemImage: "moon.stars.fill"
+                ),
+                ChangelogHighlight(
+                    title: String(localized: "Faster workout logging"),
+                    detail: String(
+                        localized: "Quick Start, active sessions, set controls, rest timers, workout names, and saving all received focused refinements."
+                    ),
+                    systemImage: "bolt.fill"
+                ),
+                ChangelogHighlight(
+                    title: String(localized: "Stronger history and Health tools"),
+                    detail: String(
+                        localized: "Search, undo, smoother charts, clearer comparisons, and more dependable Health syncing put progress in context."
+                    ),
+                    systemImage: "chart.line.uptrend.xyaxis"
+                ),
+                ChangelogHighlight(
+                    title: String(localized: "More polished setup and access"),
+                    detail: String(
+                        localized: "Imports, gym assignment, haptic settings, accessibility, Dynamic Type, and Reduce Motion support are improved."
+                    ),
+                    systemImage: "accessibility"
+                )
+            ]
+        ),
+        ChangelogEntry(
+            version: "1.7.2",
+            releaseDate: ChangelogReleaseDate(year: 2026, month: 7, day: 11),
             summary: String(
                 localized: "Workout history, workout review, Health trends, and exercise setup are clearer, smarter, and more dependable."
             ),
@@ -144,7 +286,7 @@ nonisolated enum ChangelogCatalog {
         ),
         ChangelogEntry(
             version: "1.6",
-            releaseDate: ChangelogReleaseDate(year: 2026, month: 7, day: 7),
+            releaseDate: ChangelogReleaseDate(year: 2026, month: 7, day: 6),
             summary: String(localized: "The Health experience is clearer from the daily timeline to detailed trends."),
             highlights: [
                 ChangelogHighlight(

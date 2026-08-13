@@ -454,7 +454,10 @@ private struct DataInsightDetailSheet: View {
                 .font(Theme.Typography.sectionHeader2)
                 .foregroundColor(Theme.Colors.textPrimary)
 
-            Text("A week counts once when at least one tagged exercise for that muscle group appears in your log during \(selectedWindow.detailPhrase).")
+            Text(
+                "A week counts once after that muscle reaches one effective set during " +
+                    "\(selectedWindow.detailPhrase). Primary sets count 1.0 and secondary sets count 0.5."
+            )
                 .font(Theme.Typography.caption)
                 .foregroundColor(Theme.Colors.textSecondary)
 

@@ -22,17 +22,34 @@ class ExerciseMetadataManager: ObservableObject {
     static let defaultExerciseRelationships: [ExerciseRelationship] = DefaultExerciseCatalog.relationships
 
     /// User overrides. If a key is present with an empty array, that exercise is explicitly untagged.
-    @Published private(set) var muscleTagOverrides: [String: [MuscleTag]] = [:] {
+    @Published private(set) var muscleAssignmentOverrides: [String: [ExerciseMuscleAssignment]] = [:] {
         didSet { revision &+= 1 }
     }
+
+    /// Compatibility view for code and older backup formats that only understand flat tags.
+    var muscleTagOverrides: [String: [MuscleTag]] {
+        muscleAssignmentOverrides.mapValues { $0.map(\.tag) }
+    }
+
     private(set) var revision: UInt64 = 0
 
-    private let userDefaults = UserDefaults.standard
-    private let metadataKey = "ExerciseMetadata"
+    private let userDefaults: UserDefaults
+    static let assignmentMetadataKey = "ExerciseMuscleAssignments"
+    static let legacyMetadataKey = "ExerciseMetadata"
 
     private struct CatalogEntry {
         let name: String
         let groups: [MuscleGroup]
+
+        var assignments: [ExerciseMuscleAssignment] {
+            let primaryCount = name == "Deadlift (Barbell)" ? 2 : 1
+            return groups.enumerated().map { index, group in
+                ExerciseMuscleAssignment(
+                    tag: .builtIn(group),
+                    role: index < primaryCount ? .primary : .secondary
+                )
+            }
+        }
     }
 
     /// Legacy built-ins retained for compatibility and for valid exercises omitted from the latest CSV.
@@ -170,51 +187,61 @@ class ExerciseMetadataManager: ObservableObject {
         .init(name: "Walking (Treadmill)", groups: [.cardio])
     ]
 
-    private static func builtInTags(_ groups: [MuscleGroup]) -> [MuscleTag] {
-        groups.map { MuscleTag.builtIn($0) }
+    private static func builtInAssignments(_ groups: [MuscleGroup]) -> [ExerciseMuscleAssignment] {
+        groups.enumerated().map { index, group in
+            ExerciseMuscleAssignment(
+                tag: .builtIn(group),
+                role: index == 0 ? .primary : .secondary
+            )
+        }
     }
 
     /// Default mappings merge the legacy catalog with the latest CSV. CSV values win when a row was revised.
     /// Additional keys below preserve common import/name variants without creating duplicate picker entries.
-    private static let defaultMappings: [String: [MuscleTag]] = {
-        var mappings: [String: [MuscleTag]] = Dictionary(
+    private static let defaultMappings: [String: [ExerciseMuscleAssignment]] = {
+        var mappings: [String: [ExerciseMuscleAssignment]] = Dictionary(
             uniqueKeysWithValues: defaultExerciseCatalog.map { entry in
-                (entry.name, builtInTags(entry.groups))
+                (entry.name, entry.assignments)
             }
         )
 
         for entry in DefaultExerciseCatalog.entries {
-            mappings[entry.name] = builtInTags(entry.groups)
+            mappings[entry.name] = entry.assignments
         }
 
-        let compatibilityMappings: [String: [MuscleTag]] = [
+        let compatibilityMappings: [String: [ExerciseMuscleAssignment]] = [
             // Strong exports contain these historical spelling variants. Keep the picker
             // canonical while still tagging imported workouts under their original names.
-            "Hallow Hold": builtInTags([.core]),
-            "Kneeling Bilateral Lat Pulldown - Kinesis Machind": builtInTags([.back, .biceps]),
-            "Push Ups": builtInTags([.chest, .triceps, .shoulders]),
-            "Stair stepper": builtInTags([.cardio])
+            "Hallow Hold": builtInAssignments([.core]),
+            "Kneeling Bilateral Lat Pulldown - Kinesis Machind": builtInAssignments([.back, .biceps]),
+            "Push Ups": builtInAssignments([.chest, .triceps, .shoulders]),
+            "Stair stepper": builtInAssignments([.cardio])
         ]
 
         mappings.merge(compatibilityMappings) { current, _ in current }
         return mappings
     }()
 
-    init() {
+    init(userDefaults: UserDefaults = .standard) {
+        self.userDefaults = userDefaults
         loadMappings()
     }
 
-    func resolvedTags(for exerciseName: String) -> [MuscleTag] {
-        if let override = muscleTagOverrides[exerciseName] {
+    func resolvedAssignments(for exerciseName: String) -> [ExerciseMuscleAssignment] {
+        if let override = muscleAssignmentOverrides[exerciseName] {
             return override
         }
         if let relationship = ExerciseRelationshipManager.shared.relationship(for: exerciseName) {
-            if let parentOverride = muscleTagOverrides[relationship.parentName] {
+            if let parentOverride = muscleAssignmentOverrides[relationship.parentName] {
                 return parentOverride
             }
             return Self.defaultMappings[relationship.parentName] ?? []
         }
         return Self.defaultMappings[exerciseName] ?? []
+    }
+
+    func resolvedTags(for exerciseName: String) -> [MuscleTag] {
+        resolvedAssignments(for: exerciseName).map(\.tag)
     }
 
     /// Returns resolved (defaults + user overrides) tags for all provided exercise names.
@@ -231,7 +258,37 @@ class ExerciseMetadataManager: ObservableObject {
         }
     }
 
-    func defaultTags(for exerciseName: String) -> [MuscleTag] {
+    /// Returns resolved role-aware assignments for all provided exercise names.
+    func resolvedAssignmentMappings(
+        for exerciseNames: Set<String>,
+        includeUntagged: Bool = false,
+        resolver: ExerciseIdentityResolver? = nil
+    ) -> [String: [ExerciseMuscleAssignment]] {
+        var result = exerciseNames.reduce(into: [String: [ExerciseMuscleAssignment]]()) { result, name in
+            let assignments = resolvedAssignments(for: name)
+            if includeUntagged || !assignments.isEmpty {
+                result[name] = assignments
+            }
+        }
+
+        // Muscle analytics operate on relationship-aggregated exercise names. Include
+        // those parent identities even when the input only contains left/right children.
+        if let resolver {
+            let aggregateNames = Set(exerciseNames.map { resolver.aggregateName(for: $0) })
+            for aggregateName in aggregateNames {
+                let assignments = resolvedAssignments(for: aggregateName)
+                if includeUntagged || !assignments.isEmpty {
+                    result[aggregateName] = assignments
+                } else {
+                    result.removeValue(forKey: aggregateName)
+                }
+            }
+        }
+
+        return result
+    }
+
+    func defaultAssignments(for exerciseName: String) -> [ExerciseMuscleAssignment] {
         if let direct = Self.defaultMappings[exerciseName] {
             return direct
         }
@@ -241,16 +298,20 @@ class ExerciseMetadataManager: ObservableObject {
         return []
     }
 
+    func defaultTags(for exerciseName: String) -> [MuscleTag] {
+        defaultAssignments(for: exerciseName).map(\.tag)
+    }
+
     func hasDefaultTags(for exerciseName: String) -> Bool {
         !defaultTags(for: exerciseName).isEmpty
     }
 
     func isOverridden(for exerciseName: String) -> Bool {
-        muscleTagOverrides[exerciseName] != nil
+        muscleAssignmentOverrides[exerciseName] != nil
     }
 
     func resetToDefault(for exerciseName: String) {
-        muscleTagOverrides.removeValue(forKey: exerciseName)
+        muscleAssignmentOverrides.removeValue(forKey: exerciseName)
         saveMappings()
     }
 
@@ -259,41 +320,77 @@ class ExerciseMetadataManager: ObservableObject {
     }
 
     func setTags(for exerciseName: String, to tags: [MuscleTag]) {
-        let canonical = canonicalize(tags)
-        let defaultCanonical = canonicalize(defaultTags(for: exerciseName))
+        // Flat callers predate roles, so preserve their former full-credit semantics.
+        setAssignments(for: exerciseName, to: tags.map { .primary($0) })
+    }
+
+    func setAssignments(
+        for exerciseName: String,
+        to assignments: [ExerciseMuscleAssignment]
+    ) {
+        let canonical = canonicalize(assignments)
+        let defaultCanonical = canonicalize(defaultAssignments(for: exerciseName))
 
         if canonical == defaultCanonical {
             // No override needed: fall back to defaults.
-            muscleTagOverrides.removeValue(forKey: exerciseName)
+            muscleAssignmentOverrides.removeValue(forKey: exerciseName)
         } else {
-            muscleTagOverrides[exerciseName] = canonical
+            muscleAssignmentOverrides[exerciseName] = canonical
         }
         saveMappings()
     }
 
+    func role(for exerciseName: String, tag: MuscleTag) -> ExerciseMuscleRole? {
+        resolvedAssignments(for: exerciseName)
+            .first(where: { $0.tag.id == tag.id })?
+            .role
+    }
+
+    func setRole(
+        for exerciseName: String,
+        tag: MuscleTag,
+        role: ExerciseMuscleRole?
+    ) {
+        var current = resolvedAssignments(for: exerciseName)
+        current.removeAll { $0.tag.id == tag.id }
+        if let role {
+            current.append(ExerciseMuscleAssignment(tag: tag, role: role))
+        }
+        setAssignments(for: exerciseName, to: current)
+    }
+
     func toggleTag(for exerciseName: String, tag: MuscleTag) {
-        var current = resolvedTags(for: exerciseName)
+        var current = resolvedAssignments(for: exerciseName)
         let canonicalTagId = tag.id
 
-        if let index = current.firstIndex(where: { $0.id == canonicalTagId }) {
+        if let index = current.firstIndex(where: { $0.tag.id == canonicalTagId }) {
             current.remove(at: index)
         } else {
-            current.append(tag)
+            let role: ExerciseMuscleRole = current.contains(where: { $0.role == .primary })
+                ? .secondary
+                : .primary
+            current.append(ExerciseMuscleAssignment(tag: tag, role: role))
         }
 
-        setTags(for: exerciseName, to: current)
+        setAssignments(for: exerciseName, to: current)
     }
 
     func addCustomTag(for exerciseName: String, name: String) {
         guard let tag = MuscleTag.custom(name) else { return }
-        var current = resolvedTags(for: exerciseName)
-        if current.contains(where: { $0.id == tag.id }) { return }
-        current.append(tag)
-        setTags(for: exerciseName, to: current)
+        var current = resolvedAssignments(for: exerciseName)
+        if current.contains(where: { $0.tag.id == tag.id }) { return }
+        let role: ExerciseMuscleRole = current.contains(where: { $0.role == .primary })
+            ? .secondary
+            : .primary
+        current.append(ExerciseMuscleAssignment(tag: tag, role: role))
+        setAssignments(for: exerciseName, to: current)
     }
 
     var knownCustomTags: [MuscleTag] {
-        let all = muscleTagOverrides.values.flatMap { $0 }.filter { $0.kind == .custom }
+        let all = muscleAssignmentOverrides.values
+            .flatMap { $0 }
+            .map(\.tag)
+            .filter { $0.kind == .custom }
         let grouped = Dictionary(grouping: all, by: { $0.id })
 
         let representatives = grouped.values.compactMap { variants -> MuscleTag? in
@@ -313,17 +410,32 @@ class ExerciseMetadataManager: ObservableObject {
 
     @discardableResult
     func mergeOverridesFromBackup(_ overrides: [String: [MuscleTag]]) -> (inserted: Int, skipped: Int) {
-        guard !overrides.isEmpty else { return (0, 0) }
+        mergeAssignmentOverridesFromBackup(
+            overrides.mapValues { tags in tags.map { .primary($0) } }
+        )
+    }
+
+    @discardableResult
+    func mergeAssignmentOverridesFromBackup(
+        _ overrides: [String: [ExerciseMuscleAssignment]],
+        legacyTagOverrides: [String: [MuscleTag]] = [:]
+    ) -> (inserted: Int, skipped: Int) {
+        var mergedOverrides = overrides
+        for (exerciseName, tags) in legacyTagOverrides where mergedOverrides[exerciseName] == nil {
+            mergedOverrides[exerciseName] = tags.map { .primary($0) }
+        }
+
+        guard !mergedOverrides.isEmpty else { return (0, 0) }
 
         var inserted = 0
         var skipped = 0
-        for (exerciseName, tags) in overrides {
-            guard muscleTagOverrides[exerciseName] == nil else {
+        for (exerciseName, assignments) in mergedOverrides {
+            guard muscleAssignmentOverrides[exerciseName] == nil else {
                 skipped += 1
                 continue
             }
 
-            muscleTagOverrides[exerciseName] = canonicalize(tags)
+            muscleAssignmentOverrides[exerciseName] = canonicalize(assignments)
             inserted += 1
         }
 
@@ -335,63 +447,89 @@ class ExerciseMetadataManager: ObservableObject {
     }
 
     func clearOverrides() {
-        muscleTagOverrides = [:]
-        userDefaults.removeObject(forKey: metadataKey)
+        muscleAssignmentOverrides = [:]
+        userDefaults.removeObject(forKey: Self.assignmentMetadataKey)
+        userDefaults.removeObject(forKey: Self.legacyMetadataKey)
     }
 
     // MARK: - Persistence
 
     private func loadMappings() {
-        guard let data = userDefaults.data(forKey: metadataKey) else { return }
+        if let data = userDefaults.data(forKey: Self.assignmentMetadataKey),
+           let saved = try? JSONDecoder().decode(
+               [String: [ExerciseMuscleAssignment]].self,
+               from: data
+           ) {
+            muscleAssignmentOverrides = saved.mapValues(canonicalize)
+            return
+        }
+
+        guard let data = userDefaults.data(forKey: Self.legacyMetadataKey) else { return }
 
         if let saved = try? JSONDecoder().decode([String: [MuscleTag]].self, from: data) {
-            self.muscleTagOverrides = saved
+            muscleAssignmentOverrides = saved.mapValues { tags in
+                canonicalize(tags.map { .primary($0) })
+            }
+            saveMappings()
             return
         }
 
         // Legacy: [String: MuscleGroup]
         if let saved = try? JSONDecoder().decode([String: MuscleGroup].self, from: data) {
-            self.muscleTagOverrides = saved.mapValues { [MuscleTag.builtIn($0)] }
+            muscleAssignmentOverrides = saved.mapValues { [.primary(.builtIn($0))] }
             saveMappings()
             return
         }
     }
 
     private func saveMappings() {
-        if let data = try? JSONEncoder().encode(muscleTagOverrides) {
-            userDefaults.set(data, forKey: metadataKey)
+        if let data = try? JSONEncoder().encode(muscleAssignmentOverrides) {
+            userDefaults.set(data, forKey: Self.assignmentMetadataKey)
         }
     }
 
-    private func canonicalize(_ tags: [MuscleTag]) -> [MuscleTag] {
-        var seen = Set<String>()
-        let cleaned: [MuscleTag] = tags.compactMap { tag in
+    private func canonicalize(
+        _ assignments: [ExerciseMuscleAssignment]
+    ) -> [ExerciseMuscleAssignment] {
+        var byTagID: [String: ExerciseMuscleAssignment] = [:]
+        for assignment in assignments {
+            let tag = assignment.tag
+            let validTag: MuscleTag?
             switch tag.kind {
             case .builtIn:
-                guard tag.builtInGroup != nil else { return nil }
-                return tag
+                validTag = tag.builtInGroup == nil ? nil : tag
             case .custom:
-                guard !tag.displayName.isEmpty else { return nil }
-                return tag
+                validTag = tag.displayName.isEmpty ? nil : tag
             }
-        }
-        .filter { seen.insert($0.id).inserted }
+            guard let validTag else { continue }
 
-        let builtInOrder: [MuscleGroup: Int] = Dictionary(
-            uniqueKeysWithValues: MuscleGroup.allCases.enumerated().map { ($1, $0) }
-        )
-
-        return cleaned.sorted { lhs, rhs in
-            switch (lhs.builtInGroup, rhs.builtInGroup) {
-            case let (left?, right?):
-                return (builtInOrder[left] ?? 0) < (builtInOrder[right] ?? 0)
-            case (nil, nil):
-                return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
-            case (nil, _?):
-                return false
-            case (_?, nil):
-                return true
+            let normalizedRole: ExerciseMuscleRole = validTag.builtInGroup == .cardio
+                ? .primary
+                : assignment.role
+            let candidate = ExerciseMuscleAssignment(tag: validTag, role: normalizedRole)
+            if let existing = byTagID[validTag.id], existing.role == .primary {
+                continue
             }
+            byTagID[validTag.id] = candidate
         }
+
+        var cleaned = Array(byTagID.values)
+        if !cleaned.isEmpty, !cleaned.contains(where: { $0.role == .primary }),
+           let promoted = cleaned.indices.min(by: { assignmentSortKey(cleaned[$0]) < assignmentSortKey(cleaned[$1]) }) {
+            cleaned[promoted] = .primary(cleaned[promoted].tag)
+        }
+
+        return cleaned.sorted { assignmentSortKey($0) < assignmentSortKey($1) }
+    }
+
+    private func assignmentSortKey(
+        _ assignment: ExerciseMuscleAssignment
+    ) -> String {
+        let roleOrder = assignment.role == .primary ? "0" : "1"
+        if let group = assignment.tag.builtInGroup,
+           let groupIndex = MuscleGroup.allCases.firstIndex(of: group) {
+            return "\(roleOrder)|0|\(String(format: "%03d", groupIndex))"
+        }
+        return "\(roleOrder)|1|\(assignment.tag.displayName.lowercased())"
     }
 }

@@ -228,9 +228,12 @@ extension FeatureGuideManager {
                 icon: "function",
                 text: "Estimated 1RM uses the Epley formula: weight × (1 + reps/30). It's most accurate in the 1-10 rep range."
             )),
-            GuideSection(content: .sectionHeader("Muscle Tags")),
+            GuideSection(content: .sectionHeader("Exercise Muscle Roles")),
             GuideSection(content: .narrative(
-                "Exercises can be tagged with muscle groups (chest, back, quads, etc.) to power the muscle recency suggestions on your dashboard and the muscle balance analytics in Performance Lab. Tag them from Profile → Exercise Tags."
+                "Every exercise can have one or more primary muscles plus secondary muscles. " +
+                "Primary work counts as one effective set and secondary work counts as half, keeping recency, " +
+                "coverage, and Performance Lab analytics realistic without fake precision. " +
+                "Edit roles from Profile → Exercise Muscle Roles."
             )),
         ]
     )
@@ -280,7 +283,8 @@ extension FeatureGuideManager {
             )),
             GuideSection(content: .tip(
                 icon: "tag.fill",
-                text: "Muscle recency depends on exercise tags. The more exercises you tag with muscle groups, the more accurate your coverage data becomes."
+                text: "Muscle recency depends on exercise roles. Set primary and secondary muscles " +
+                    "for custom exercises to keep weighted coverage accurate."
             )),
         ]
     )

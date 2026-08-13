@@ -12,65 +12,65 @@ final class ChangelogStoreTests: XCTestCase {
 
     func testFirstAdoptionShowsOnlyCurrentVersion() throws {
         defer { cleanUpDefaults() }
-        let store = ChangelogStore(defaults: defaults, currentVersion: "1.7.1")
+        let store = ChangelogStore(defaults: defaults, currentVersion: "1.9.2")
 
         let presentation = try XCTUnwrap(store.pendingPresentation())
 
-        XCTAssertEqual(presentation.entries.map(\.version), ["1.7.1"])
+        XCTAssertEqual(presentation.entries.map(\.version), ["1.9.2"])
     }
 
     func testCurrentVersionDoesNotRepeatAfterDismissal() {
         defer { cleanUpDefaults() }
-        let store = ChangelogStore(defaults: defaults, currentVersion: "1.7.1")
+        let store = ChangelogStore(defaults: defaults, currentVersion: "1.9.2")
 
-        store.markSeen(version: "1.7.1")
+        store.markSeen(version: "1.9.2")
 
         XCTAssertNil(store.pendingPresentation())
-        XCTAssertEqual(defaults.string(forKey: ChangelogStore.lastSeenVersionKey), "1.7.1")
+        XCTAssertEqual(defaults.string(forKey: ChangelogStore.lastSeenVersionKey), "1.9.2")
     }
 
     func testNewInstallCanSilentlyAdoptCurrentVersion() {
         defer { cleanUpDefaults() }
-        let store = ChangelogStore(defaults: defaults, currentVersion: "1.7.1")
+        let store = ChangelogStore(defaults: defaults, currentVersion: "1.9.2")
 
         store.markCurrentVersionSeen()
 
         XCTAssertNil(store.pendingPresentation())
-        XCTAssertEqual(store.lastSeenVersion, "1.7.1")
+        XCTAssertEqual(store.lastSeenVersion, "1.9.2")
     }
 
     func testMultipleMissedVersionsArePresentedNewestFirst() throws {
         defer { cleanUpDefaults() }
-        defaults.set("1.5.3", forKey: ChangelogStore.lastSeenVersionKey)
-        let store = ChangelogStore(defaults: defaults, currentVersion: "1.7.1")
+        defaults.set("1.7.2", forKey: ChangelogStore.lastSeenVersionKey)
+        let store = ChangelogStore(defaults: defaults, currentVersion: "1.9.2")
 
         let presentation = try XCTUnwrap(store.pendingPresentation())
 
-        XCTAssertEqual(presentation.entries.map(\.version), ["1.7.1", "1.6.1", "1.6"])
+        XCTAssertEqual(presentation.entries.map(\.version), ["1.9.2", "1.9.1", "1.9", "1.8.2", "1.8"])
     }
 
     func testStoreReloadsSeenVersionWrittenByAnotherInstance() {
         defer { cleanUpDefaults() }
-        let firstStore = ChangelogStore(defaults: defaults, currentVersion: "1.7.1")
-        let secondStore = ChangelogStore(defaults: defaults, currentVersion: "1.7.1")
+        let firstStore = ChangelogStore(defaults: defaults, currentVersion: "1.9.2")
+        let secondStore = ChangelogStore(defaults: defaults, currentVersion: "1.9.2")
 
         secondStore.markCurrentVersionSeen()
 
         XCTAssertNil(firstStore.pendingPresentation())
-        XCTAssertEqual(firstStore.lastSeenVersion, "1.7.1")
+        XCTAssertEqual(firstStore.lastSeenVersion, "1.9.2")
     }
 
     func testDowngradeDoesNotShowAnOlderChangelog() {
         defer { cleanUpDefaults() }
-        defaults.set("1.7.1", forKey: ChangelogStore.lastSeenVersionKey)
-        let store = ChangelogStore(defaults: defaults, currentVersion: "1.6.1")
+        defaults.set("1.9.2", forKey: ChangelogStore.lastSeenVersionKey)
+        let store = ChangelogStore(defaults: defaults, currentVersion: "1.9.1")
 
         XCTAssertNil(store.pendingPresentation())
     }
 
     func testMissingCatalogEntryDoesNotShowTheWrongRelease() {
         defer { cleanUpDefaults() }
-        let store = ChangelogStore(defaults: defaults, currentVersion: "1.8")
+        let store = ChangelogStore(defaults: defaults, currentVersion: "1.9.3")
 
         XCTAssertNil(store.pendingPresentation())
     }
@@ -87,7 +87,14 @@ final class ChangelogStoreTests: XCTestCase {
 
     func testCatalogIsCompleteSortedAndFreeOfEmDashes() throws {
         let entries = ChangelogCatalog.entries
-        XCTAssertEqual(entries.first?.version, "1.7.1")
+        XCTAssertEqual(
+            entries.map(\.version),
+            [
+                "1.9.2", "1.9.1", "1.9", "1.8.2", "1.8", "1.7.2", "1.6.1", "1.6", "1.5.3", "1.5.2",
+                "1.5.1", "1.4.3", "1.4.2", "1.4.1", "1.4", "1.3.1", "1.3.0", "1.2.1", "1.1.0",
+                "1.0.9", "1.0.8", "1.0.7", "1.0.6", "1.0.5", "1.0.2"
+            ]
+        )
         XCTAssertNil(entries.first?.releaseDate)
         XCTAssertTrue(entries.dropFirst().allSatisfy { $0.releaseDate != nil })
 

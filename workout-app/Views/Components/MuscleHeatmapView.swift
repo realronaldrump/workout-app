@@ -142,7 +142,7 @@ struct MuscleHeatmapView: View {
         let recentWorkouts = dataManager.workouts.filter { dateRange.contains($0.date) }
         let resolver = ExerciseIdentityResolver.current
         // swiftlint:disable:next large_tuple
-        var muscleGroupData: [MuscleTag: (sets: Int, exercises: Set<String>, lastDate: Date?)] = [:]
+        var muscleGroupData: [MuscleTag: (sets: Double, exercises: Set<String>, lastDate: Date?)] = [:]
 
         for group in MuscleGroup.allCases {
             muscleGroupData[MuscleTag.builtIn(group)] = (sets: 0, exercises: [], lastDate: nil)
@@ -150,12 +150,16 @@ struct MuscleHeatmapView: View {
 
         for workout in recentWorkouts {
             for exercise in ExerciseAggregation.aggregateExercises(in: workout, resolver: resolver) {
-                let tags = ExerciseMetadataManager.shared.resolvedTags(for: exercise.name)
-                guard !tags.isEmpty else { continue }
+                let assignments = ExerciseMetadataManager.shared.resolvedAssignments(for: exercise.name)
+                guard !assignments.isEmpty else { continue }
 
-                for tag in tags {
+                for assignment in assignments {
+                    let tag = assignment.tag
                     var current = muscleGroupData[tag] ?? (sets: 0, exercises: [], lastDate: nil)
-                    current.sets += exercise.sets.count
+                    current.sets += MuscleContributionPolicy.effectiveSets(
+                        setCount: exercise.sets.count,
+                        assignment: assignment
+                    )
                     current.exercises.insert(exercise.name)
                     if current.lastDate.map({ workout.date > $0 }) ?? true { current.lastDate = workout.date }
                     muscleGroupData[tag] = current
@@ -167,7 +171,7 @@ struct MuscleHeatmapView: View {
         let maxSets = muscleGroupData.values.map { $0.sets }.max() ?? 1
 
         for (group, data) in muscleGroupData {
-            let intensity = maxSets > 0 ? Double(data.sets) / Double(maxSets) : 0
+            let intensity = maxSets > 0 ? data.sets / maxSets : 0
             result[group] = MuscleStats(
                 totalSets: data.sets,
                 exerciseCount: data.exercises.count,
@@ -182,7 +186,7 @@ struct MuscleHeatmapView: View {
 }
 
 struct MuscleStats {
-    let totalSets: Int
+    let totalSets: Double
     let exerciseCount: Int
     let exercises: [String]
     let intensity: Double
@@ -222,7 +226,7 @@ struct MuscleGroupTile: View {
 
                 // Sets count
                 if let stats = stats, stats.totalSets > 0 {
-                    Text("\(stats.totalSets)")
+                    Text(MuscleContributionPolicy.formattedEffectiveSets(stats.totalSets))
                         .font(Theme.Typography.numberSmall)
                         .foregroundColor(color)
                 } else {
@@ -245,7 +249,11 @@ struct MuscleGroupTile: View {
         .buttonStyle(ScaleButtonStyle())
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(muscleGroup.displayName)
-        .accessibilityValue(stats.map { "\($0.totalSets) sets across \($0.exerciseCount) exercises" } ?? "No sets")
+        .accessibilityValue(
+            stats.map {
+                "\(MuscleContributionPolicy.formattedEffectiveSets($0.totalSets)) effective sets across \($0.exerciseCount) exercises"
+            } ?? "No effective sets"
+        )
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 }
@@ -324,10 +332,10 @@ struct MuscleDetailView: View {
     private var detailStats: some View {
         HStack(spacing: dynamicTypeSize.isAccessibilitySize ? Theme.Spacing.lg : Theme.Spacing.xl) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("\(stats.totalSets)")
+                Text(MuscleContributionPolicy.formattedEffectiveSets(stats.totalSets))
                     .font(Theme.Typography.number)
                     .foregroundColor(muscleGroup.tint)
-                Text("sets")
+                Text("effective sets")
                     .font(Theme.Typography.caption)
                     .foregroundColor(Theme.Colors.textSecondary)
             }
