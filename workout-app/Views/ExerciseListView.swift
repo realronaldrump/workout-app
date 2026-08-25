@@ -186,7 +186,7 @@ struct ExerciseListView: View {
         .navigationTitle("All Exercises")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
+            AppToolbarItem(placement: .primaryAction) {
                 sortMenu
             }
         }

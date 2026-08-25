@@ -1541,7 +1541,7 @@ private struct ExerciseRelationshipEditorSheet: View {
             .navigationTitle("Exercise Variant")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
+                AppToolbarItem(placement: .cancellationAction) {
                     AppToolbarButton(title: "Cancel", systemImage: "xmark", variant: .subtle) {
                         dismiss()
                     }

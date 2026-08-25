@@ -55,8 +55,8 @@ struct HealthSyncWizard: View {
             .navigationTitle("Apple Health")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Close", systemImage: "xmark") {
+                AppToolbarItem(placement: .cancellationAction) {
+                    AppToolbarButton(title: "Close", systemImage: "xmark", variant: .subtle) {
                         handleCloseTapped()
                     }
                 }

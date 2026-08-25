@@ -47,17 +47,16 @@ struct HealthCustomRangeSheet: View {
             .navigationTitle("Custom Range")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
+                AppToolbarItem(placement: .cancellationAction) {
+                    AppToolbarButton(title: "Cancel", systemImage: "xmark", variant: .subtle) {
                         dismiss()
                     }
                 }
 
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Apply") {
+                AppToolbarItem(placement: .confirmationAction) {
+                    AppToolbarButton(title: "Apply", systemImage: "checkmark", variant: .accent) {
                         applyRange()
                     }
-                    .fontWeight(.semibold)
                 }
             }
             .onChange(of: startDate) { _, newValue in

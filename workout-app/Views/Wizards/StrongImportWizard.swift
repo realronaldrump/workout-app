@@ -54,8 +54,8 @@ struct StrongImportWizard: View {
             .navigationTitle("Import Data")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Close", systemImage: "xmark") {
+                AppToolbarItem(placement: .cancellationAction) {
+                    AppToolbarButton(title: "Close", systemImage: "xmark", variant: .subtle) {
                         handleCloseTapped()
                     }
                 }

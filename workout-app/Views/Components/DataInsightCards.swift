@@ -308,7 +308,7 @@ private struct DataInsightDetailSheet: View {
             .navigationTitle("Data Insight")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                AppToolbarItem(placement: .topBarTrailing) {
                     AppToolbarButton(title: "Done", systemImage: "checkmark", variant: .accent) {
                         dismiss()
                     }

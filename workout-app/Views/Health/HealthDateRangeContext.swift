@@ -188,6 +188,7 @@ struct HealthDateRangeToolbarMenu: View {
             .font(Theme.Typography.captionBold)
             .foregroundStyle(Theme.Colors.textPrimary)
         }
+        .buttonStyle(.plain)
         .sheet(isPresented: $showingCustomRange) {
             HealthCustomRangeSheet(
                 range: $dateRangeContext.customRange,

@@ -51,10 +51,11 @@ struct SelectiveDataClearSheet: View {
             .navigationTitle("Clear Data")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                        .fixedSize()
-                        .disabled(isClearing)
+                AppToolbarItem(placement: .cancellationAction) {
+                    AppToolbarButton(title: "Cancel", systemImage: "xmark", variant: .subtle) {
+                        dismiss()
+                    }
+                    .disabled(isClearing)
                 }
             }
             .alert("Clear Selected Data?", isPresented: $showingConfirmation) {

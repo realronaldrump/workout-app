@@ -2,6 +2,10 @@ import XCTest
 @testable import workout_app
 
 final class WorkoutCSVExporterTests: XCTestCase {
+    func testWorkoutExportDefaultsSelectEveryAvailableColumn() {
+        XCTAssertEqual(WorkoutExportColumn.defaultColumns, WorkoutExportColumn.allCases)
+    }
+
     func testWorkoutHistoryExportUsesSelectedColumnsAndGymName() throws {
         let workoutDate = date(year: 2026, month: 4, day: 10, hour: 8)
         let workout = Workout(

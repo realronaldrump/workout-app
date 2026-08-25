@@ -95,12 +95,12 @@ struct MultiSelectSheet<Item: Hashable & Identifiable>: View {
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
+                AppToolbarItem(placement: .cancellationAction) {
                     AppToolbarButton(title: "Cancel", systemImage: "xmark", variant: .subtle) {
                         dismiss()
                     }
                 }
-                ToolbarItem(placement: .confirmationAction) {
+                AppToolbarItem(placement: .confirmationAction) {
                     AppToolbarButton(title: "Done", systemImage: "checkmark", variant: .accent) {
                         if localSelection.count == items.count {
                             selectedItems = nil // All selected

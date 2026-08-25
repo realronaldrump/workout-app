@@ -46,8 +46,8 @@ struct QuickStartView: View {
             .navigationTitle(sessionManager.activeSession == nil ? "Quick Start" : "Workout in Progress")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Close", systemImage: "xmark") {
+                AppToolbarItem(placement: .cancellationAction) {
+                    AppToolbarButton(title: "Close", systemImage: "xmark", variant: .subtle) {
                         dismiss()
                     }
                 }

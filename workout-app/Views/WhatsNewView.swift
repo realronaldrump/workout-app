@@ -12,7 +12,7 @@ struct WhatsNewSheetView: View {
             WhatsNewContent(entries: presentation.entries, style: .automatic)
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
-                    ToolbarItem(placement: .topBarTrailing) {
+                    AppToolbarItem(placement: .topBarTrailing) {
                         AppToolbarIconButton(
                             systemImage: "xmark",
                             accessibilityLabel: String(localized: "Close What's New"),

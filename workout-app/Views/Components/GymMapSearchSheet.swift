@@ -242,7 +242,7 @@ struct GymMapSearchSheet: View {
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
+                AppToolbarItem(placement: .cancellationAction) {
                     AppToolbarButton(title: "Close", systemImage: "xmark", variant: .subtle) {
                         dismiss()
                     }

@@ -49,7 +49,7 @@ struct HealthMetricDetailView: View {
         .navigationTitle(metric.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            AppToolbarItem(placement: .topBarTrailing) {
                 HealthDateRangeToolbarMenu(earliestDate: earliestDate)
             }
         }

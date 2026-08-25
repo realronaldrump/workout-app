@@ -68,3 +68,10 @@ disabled_rules:
   - force_try
   - todo
   - vertical_whitespace_between_cases
+
+custom_rules:
+  native_navigation_toolbar_action:
+    name: "Native Navigation Toolbar Action"
+    regex: '\bToolbarItem(Group)?\(placement: \.(cancellationAction|confirmationAction|destructiveAction|navigationBarLeading|navigationBarTrailing|primaryAction|secondaryAction|topBarLeading|topBarTrailing)'
+    message: "Use AppToolbarItem or AppToolbarItemGroup so navigation actions do not inherit the iOS glass container."
+    severity: error

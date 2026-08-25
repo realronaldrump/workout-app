@@ -130,6 +130,49 @@ struct AppPillIconButton: View {
     }
 }
 
+/// Navigation-bar content that keeps the app's lightweight toolbar treatment
+/// instead of inheriting iOS's automatic glass button container.
+struct AppToolbarItem<Content: View>: ToolbarContent {
+    let placement: ToolbarItemPlacement
+    private let content: Content
+
+    init(
+        placement: ToolbarItemPlacement,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.placement = placement
+        self.content = content()
+    }
+
+    var body: some ToolbarContent {
+        ToolbarItem(placement: placement) {
+            content
+        }
+        .sharedBackgroundVisibility(.hidden)
+    }
+}
+
+/// Grouped navigation-bar content with the same containerless treatment.
+struct AppToolbarItemGroup<Content: View>: ToolbarContent {
+    let placement: ToolbarItemPlacement
+    private let content: Content
+
+    init(
+        placement: ToolbarItemPlacement,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.placement = placement
+        self.content = content()
+    }
+
+    var body: some ToolbarContent {
+        ToolbarItemGroup(placement: placement) {
+            content
+        }
+        .sharedBackgroundVisibility(.hidden)
+    }
+}
+
 struct AppToolbarButton: View {
     enum Variant {
         case neutral

@@ -35,18 +35,7 @@ nonisolated enum WorkoutExportColumn: String, CaseIterable, Hashable, Identifiab
     case distance
     case seconds
 
-    static let defaultColumns: [WorkoutExportColumn] = [
-        .workoutStart,
-        .workoutName,
-        .duration,
-        .exercise,
-        .tags,
-        .setNumber,
-        .weight,
-        .reps,
-        .distance,
-        .seconds
-    ]
+    static let defaultColumns = WorkoutExportColumn.allCases
 
     var id: String { rawValue }
 

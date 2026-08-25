@@ -2529,7 +2529,7 @@ private struct ExportCustomRangeSheet: View {
             .navigationTitle("Custom Range")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
+                AppToolbarItem(placement: .cancellationAction) {
                     AppToolbarButton(title: "Cancel", systemImage: "xmark", variant: .subtle) {
                         dismiss()
                     }

@@ -67,8 +67,10 @@ struct ExercisePickerView: View {
             .navigationTitle("Add Exercise")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Close", systemImage: "xmark") { dismiss() }
+                AppToolbarItem(placement: .cancellationAction) {
+                    AppToolbarButton(title: "Close", systemImage: "xmark", variant: .subtle) {
+                        dismiss()
+                    }
                 }
             }
             .searchable(text: $searchText, prompt: "Search exercises")

@@ -101,7 +101,7 @@ struct HealthDashboardView: View {
         .navigationTitle("Workout Health")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            AppToolbarItem(placement: .topBarTrailing) {
                 HealthDateRangeToolbarMenu(earliestDate: earliestDate)
             }
         }
@@ -1312,7 +1312,7 @@ private struct HealthMetricDetailScreen: View {
         .navigationTitle(detail.kind.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            AppToolbarItem(placement: .topBarTrailing) {
                 HealthDateRangeToolbarMenu(earliestDate: earliestDate)
             }
         }

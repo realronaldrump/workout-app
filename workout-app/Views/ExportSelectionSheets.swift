@@ -76,7 +76,7 @@ struct ExportExerciseSelectionSheet: View {
             .navigationTitle("Select Exercises")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
+                AppToolbarItem(placement: .confirmationAction) {
                     AppToolbarButton(title: "Done", systemImage: "checkmark", variant: .accent) {
                         dismiss()
                     }
@@ -168,7 +168,7 @@ struct ExportWorkoutDateSelectionSheet: View {
             .navigationTitle("Select Workout Dates")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
+                AppToolbarItem(placement: .confirmationAction) {
                     AppToolbarButton(title: "Done", systemImage: "checkmark", variant: .accent) {
                         dismiss()
                     }
@@ -272,7 +272,7 @@ struct ExportMuscleGroupSelectionSheet: View {
             .navigationTitle("Select Muscle Groups")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
+                AppToolbarItem(placement: .confirmationAction) {
                     AppToolbarButton(title: "Done", systemImage: "checkmark", variant: .accent) {
                         dismiss()
                     }
@@ -403,7 +403,7 @@ struct ExportWorkoutColumnSelectionSheet: View {
             .navigationTitle("Select Columns")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
+                AppToolbarItem(placement: .confirmationAction) {
                     AppToolbarButton(title: "Done", systemImage: "checkmark", variant: .accent) {
                         dismiss()
                     }
@@ -511,7 +511,7 @@ struct ExportHealthMetricSelectionSheet: View {
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
+                AppToolbarItem(placement: .confirmationAction) {
                     AppToolbarButton(title: "Done", systemImage: "checkmark", variant: .accent) {
                         dismiss()
                     }

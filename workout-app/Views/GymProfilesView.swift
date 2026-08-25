@@ -120,7 +120,7 @@ struct GymProfilesView: View {
             isDetectingCandidateGyms = false
         }
         .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
+            AppToolbarItem(placement: .navigationBarTrailing) {
                 AppToolbarIconButton(systemImage: "plus", accessibilityLabel: "Add gym", variant: .accent) {
                     showingAddSheet = true
                 }
@@ -648,7 +648,7 @@ private struct GymProfileEditorView: View {
             .navigationTitle(mode.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
+                AppToolbarItem(placement: .cancellationAction) {
                     AppToolbarButton(title: "Cancel", systemImage: "xmark", variant: .subtle) {
                         dismiss()
                     }

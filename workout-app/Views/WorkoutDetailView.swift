@@ -220,16 +220,16 @@ struct WorkoutDetailView: View {
         .navigationTitle("Workout Details")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItemGroup(placement: .topBarTrailing) {
+            AppToolbarItemGroup(placement: .topBarTrailing) {
                 if isLoggedWorkout {
-                    Button("Edit", systemImage: "pencil") {
+                    AppToolbarButton(title: "Edit", systemImage: "pencil", variant: .neutral) {
                         showingEdit = true
                         Haptics.selection()
                     }
                     .accessibilityHint("Edit this workout")
                 }
 
-                Button("Repeat", systemImage: "arrow.counterclockwise") {
+                AppToolbarButton(title: "Repeat", systemImage: "arrow.counterclockwise", variant: .accent) {
                     repeatThisWorkout()
                     Haptics.selection()
                 }

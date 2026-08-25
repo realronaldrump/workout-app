@@ -224,7 +224,7 @@ struct HistoryLocationBreakdownSheet: View {
             .navigationTitle("Locations")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
+                AppToolbarItem(placement: .confirmationAction) {
                     AppToolbarButton(title: "Done", systemImage: "xmark", variant: .subtle) {
                         dismiss()
                     }

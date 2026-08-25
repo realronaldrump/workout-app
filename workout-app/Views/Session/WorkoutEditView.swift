@@ -111,7 +111,7 @@ struct WorkoutEditView: View {
             .navigationTitle("Edit Workout")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
+                AppToolbarItem(placement: .cancellationAction) {
                     AppToolbarButton(title: "Close", systemImage: "xmark", variant: .subtle) {
                         dismiss()
                     }
