@@ -2,10 +2,16 @@ import SwiftUI
 
 struct ExerciseRangeBreakdown: View {
     let exerciseName: String
-    let history: [(date: Date, sets: [WorkoutSet])]
+    let sessions: [ExerciseHistorySession]
+    let scope: ExerciseAnalysisScope
 
     @State private var derived: DerivedBreakdown = .empty
     @State private var derivedCacheKey: Int?
+    @State private var selectedMetric: ExerciseMetricSelection?
+
+    private var history: [(date: Date, sets: [WorkoutSet])] {
+        sessions.map { (date: $0.date, sets: $0.sets) }
+    }
 
     fileprivate struct DerivedBreakdown {
         let allSetsCount: Int
@@ -60,6 +66,7 @@ struct ExerciseRangeBreakdown: View {
         let value: String
         let icon: String
         let tint: Color
+        let metric: ExerciseAnalysisMetric
 
         var id: String { label }
     }
@@ -338,19 +345,22 @@ struct ExerciseRangeBreakdown: View {
                 label: "Sessions",
                 value: "\(history.count)",
                 icon: "calendar",
-                tint: Theme.Colors.accent
+                tint: Theme.Colors.accent,
+                metric: .sessions
             ),
             SnapshotMetric(
                 label: "Sets Logged",
                 value: "\(totalSets)",
                 icon: "number.square",
-                tint: Theme.Colors.accentSecondary
+                tint: Theme.Colors.accentSecondary,
+                metric: .setCount
             ),
             SnapshotMetric(
                 label: "Avg Reps",
                 value: formattedDecimal(averageReps),
                 icon: "repeat",
-                tint: Theme.Colors.success
+                tint: Theme.Colors.success,
+                metric: .averageReps
             )
         ]
 
@@ -360,7 +370,8 @@ struct ExerciseRangeBreakdown: View {
                     label: "Avg Load",
                     value: percentText(averageIntensity),
                     icon: "bolt.fill",
-                    tint: Theme.Colors.warning
+                    tint: Theme.Colors.warning,
+                    metric: .estimatedOneRepMax
                 )
             )
         }
@@ -447,6 +458,12 @@ struct ExerciseRangeBreakdown: View {
         .onChange(of: historyFingerprint) { _, _ in
             recomputeIfNeeded()
         }
+        .navigationDestination(item: $selectedMetric) { selection in
+            ExerciseMetricDetailView(
+                selection: selection,
+                sessions: sessions
+            )
+        }
     }
 
     private var sectionHeader: some View {
@@ -487,30 +504,36 @@ struct ExerciseRangeBreakdown: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: Theme.Spacing.sm) {
                 ForEach(snapshotMetrics) { metric in
-                    HStack(spacing: Theme.Spacing.sm) {
-                        Image(systemName: metric.icon)
-                            .font(Theme.Typography.captionBold)
-                            .foregroundStyle(metric.tint)
+                    AnalysisTile(
+                        role: .navigate,
+                        destination: "\(metric.label) analysis",
+                        accessibilityLabel: "\(metric.label), \(metric.value)",
+                        radius: Theme.CornerRadius.pill,
+                        padding: Theme.Spacing.sm,
+                        action: {
+                            selectedMetric = ExerciseMetricSelection(
+                                scope: scope,
+                                metric: metric.metric,
+                                focus: .overview
+                            )
+                        },
+                        content: {
+                            HStack(spacing: Theme.Spacing.sm) {
+                                Image(systemName: metric.icon)
+                                    .font(Theme.Typography.captionBold)
+                                    .foregroundStyle(metric.tint)
 
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(metric.label)
-                                .font(Theme.Typography.caption2Bold)
-                                .foregroundStyle(Theme.Colors.textTertiary)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(metric.label)
+                                        .font(Theme.Typography.caption2Bold)
+                                        .foregroundStyle(Theme.Colors.textTertiary)
 
-                            Text(metric.value)
-                                .font(Theme.Typography.subheadlineBold)
-                                .foregroundStyle(Theme.Colors.textPrimary)
+                                    Text(metric.value)
+                                        .font(Theme.Typography.subheadlineBold)
+                                        .foregroundStyle(Theme.Colors.textPrimary)
+                                }
+                            }
                         }
-                    }
-                    .padding(.horizontal, Theme.Spacing.md)
-                    .padding(.vertical, Theme.Spacing.sm)
-                    .background(
-                        Capsule()
-                            .fill(Theme.Colors.surface)
-                    )
-                    .overlay(
-                        Capsule()
-                            .strokeBorder(Theme.Colors.border.opacity(0.55), lineWidth: 1)
                     )
                 }
             }

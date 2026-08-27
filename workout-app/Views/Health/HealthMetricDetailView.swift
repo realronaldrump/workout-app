@@ -10,6 +10,8 @@ struct HealthMetricDetailView: View {
 
     @State private var model: MetricScreenModel?
     @State private var hasComputedOnce = false
+    @State private var chartSelectionDate: Date?
+    @State private var selectedDay: SelectedHealthDay?
 
     private var earliestDate: Date? {
         healthManager.dailyHealthStore.keys.min()
@@ -48,6 +50,7 @@ struct HealthMetricDetailView: View {
         }
         .navigationTitle(metric.title)
         .navigationBarTitleDisplayMode(.inline)
+        .accessibilityIdentifier("health-metric-detail-\(metric.rawValue)")
         .toolbar {
             AppToolbarItem(placement: .topBarTrailing) {
                 HealthDateRangeToolbarMenu(earliestDate: earliestDate)
@@ -55,6 +58,18 @@ struct HealthMetricDetailView: View {
         }
         .task(id: refreshKey) {
             await recompute()
+        }
+        .navigationDestination(item: $selectedDay) { selection in
+            Group {
+                if let day = healthDay(for: selection.id) {
+                    DailyHealthDetailView(day: day)
+                } else {
+                    EmptyStateCard(
+                        title: "Health day unavailable",
+                        message: "This day is no longer in the local Health cache."
+                    )
+                }
+            }
         }
     }
 
@@ -107,8 +122,34 @@ struct HealthMetricDetailView: View {
             MetricTrendChart(
                 metric: metric,
                 analysis: model.analysis,
-                domain: model.domain
+                domain: model.domain,
+                selectedDate: $chartSelectionDate
             )
+
+            if let selectedMetricDate = selectedMetricDate(in: model),
+               let day = healthDay(for: selectedMetricDate) {
+                let source = MetricSource.healthDay(day.dayStart)
+                AnalysisTile(
+                    role: .revealSource,
+                    destination: "the selected Health day",
+                    accessibilityLabel: "\(metric.title), \(selectedMetricDate.formatted(date: .abbreviated, time: .omitted))",
+                    action: { openMetricSource(source) },
+                    content: {
+                        HStack {
+                            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                                Text(selectedMetricDate.formatted(date: .abbreviated, time: .omitted))
+                                    .font(Theme.Typography.bodyBold)
+                                    .foregroundStyle(Theme.Colors.textPrimary)
+                                Text("View all recorded metrics for this day")
+                                    .font(Theme.Typography.caption)
+                                    .foregroundStyle(Theme.Colors.textSecondary)
+                            }
+                            Spacer()
+                        }
+                    }
+                )
+                .accessibilityIdentifier("health-selected-day-source")
+            }
 
             Divider().overlay(Theme.Colors.border.opacity(0.5))
 
@@ -127,27 +168,88 @@ struct HealthMetricDetailView: View {
             alignment: .leading,
             spacing: Theme.Spacing.md
         ) {
-            footerStat("Median", analysis.median.map(metric.formatDisplay))
-            footerStat(metric.polarity == .lowerIsBetter ? "Lowest" : "Best", analysis.bestDay.map { metric.formatDisplay($0.value) })
-            footerStat(metric.polarity == .lowerIsBetter ? "Highest" : "Quietest", analysis.worstDay.map { metric.formatDisplay($0.value) })
-            footerStat("Recorded", "\(analysis.samples.count) \(metric.dailyNoun)s")
+            footerStat(
+                "Median",
+                analysis.median.map(metric.formatDisplay),
+                focusDate: medianSampleDate(in: analysis)
+            )
+            footerStat(
+                metric.polarity == .lowerIsBetter ? "Lowest" : "Best",
+                analysis.bestDay.map { metric.formatDisplay($0.value) },
+                focusDate: analysis.bestDay?.date
+            )
+            footerStat(
+                metric.polarity == .lowerIsBetter ? "Highest" : "Quietest",
+                analysis.worstDay.map { metric.formatDisplay($0.value) },
+                focusDate: analysis.worstDay?.date
+            )
+            footerStat(
+                "Recorded",
+                "\(analysis.samples.count) \(metric.dailyNoun)s",
+                focusDate: analysis.samples.last?.date
+            )
         }
     }
 
-    private func footerStat(_ label: String, _ value: String?) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(label)
-                .font(Theme.Typography.microLabel)
-                .foregroundStyle(Theme.Colors.textTertiary)
-                .tracking(0.8)
-                .textCase(.uppercase)
-            Text(value ?? "--")
-                .font(Theme.Typography.subheadlineBold)
-                .foregroundStyle(Theme.Colors.textPrimary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
+    private func footerStat(
+        _ label: String,
+        _ value: String?,
+        focusDate: Date?
+    ) -> some View {
+        AnalysisTile(
+            role: .focus,
+            destination: label,
+            accessibilityLabel: "\(label), \(value ?? "--")",
+            radius: Theme.CornerRadius.small,
+            padding: Theme.Spacing.xs,
+            action: {
+                chartSelectionDate = focusDate
+                Haptics.selection()
+            },
+            content: {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(label)
+                        .sectionHeaderStyle()
+                    Text(value ?? "--")
+                        .font(Theme.Typography.subheadlineBold)
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        )
+        .accessibilityIdentifier(
+            "health-footer-\(label.lowercased().replacingOccurrences(of: " ", with: "-"))"
+        )
+    }
+
+    private func medianSampleDate(in analysis: MetricSeriesAnalysis) -> Date? {
+        guard let median = analysis.median else { return nil }
+        return analysis.samples.min {
+            abs($0.value - median) < abs($1.value - median)
+        }?.date
+    }
+
+    private func selectedMetricDate(in model: MetricScreenModel) -> Date? {
+        guard let chartSelectionDate else { return nil }
+        return MetricChartRenderModel(
+            analysis: model.analysis,
+            domain: model.domain
+        )
+        .closestPoint(to: chartSelectionDate)?
+        .date
+    }
+
+    private func openMetricSource(_ source: MetricSource) {
+        guard case .healthDay(let date) = source else { return }
+        selectedDay = SelectedHealthDay(id: date)
+    }
+
+    private func healthDay(for date: Date) -> DailyHealthData? {
+        healthManager.dailyHealthStore.values.first {
+            Calendar.current.isDate($0.dayStart, inSameDayAs: date)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: - States
@@ -340,6 +442,10 @@ struct HealthMetricDetailView: View {
             domain: ranges.display.lowerBound...max(ranges.display.lowerBound, ranges.display.upperBound),
             sleepSummaries: sleepSummaries.sorted { $0.start < $1.start }
         )
+        if let chartSelectionDate,
+           !ranges.display.contains(chartSelectionDate) {
+            self.chartSelectionDate = nil
+        }
         hasComputedOnce = true
     }
 }
@@ -353,6 +459,10 @@ private struct MetricScreenModel {
     let rangeLabel: String
     let domain: ClosedRange<Date>
     let sleepSummaries: [SleepSummary]
+}
+
+private struct SelectedHealthDay: Identifiable, Hashable {
+    let id: Date
 }
 
 private struct MetricRefreshKey: Hashable {

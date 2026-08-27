@@ -821,6 +821,25 @@ final class ExerciseRelationshipManager: ObservableObject {
         save()
     }
 
+#if DEBUG
+    /// Installs process-local relationships for deterministic previews and UI tests.
+    /// Unlike user edits, these never write through to UserDefaults.
+    func installTransientRelationships(_ incoming: [ExerciseRelationship]) {
+        guard !incoming.isEmpty else { return }
+        var updated = relationships
+        for relationship in incoming {
+            let canonical = ExerciseRelationship(
+                exerciseName: relationship.exerciseName,
+                parentName: relationship.parentName,
+                laterality: relationship.laterality,
+                schemaVersion: relationship.schemaVersion
+            )
+            updated[canonical.id] = canonical
+        }
+        relationships = ExerciseIdentityResolver(relationships: updated).relationships
+    }
+#endif
+
     @discardableResult
     func mergeRelationshipsFromBackup(_ incoming: [ExerciseRelationship]) -> (inserted: Int, skipped: Int) {
         guard !incoming.isEmpty else { return (0, 0) }

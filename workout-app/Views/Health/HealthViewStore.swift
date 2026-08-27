@@ -78,8 +78,24 @@ final class HealthViewStore: ObservableObject {
     }
 
     func refreshAuthorizationStatus() {
+#if DEBUG
+        guard !AnalyticsUITestFixture.isEnabled else { return }
+#endif
         healthManager.refreshAuthorizationStatus()
     }
+
+#if DEBUG
+    func installAnalyticsFixture(
+        dailyHealth: [Date: DailyHealthData],
+        workouts: [Workout]
+    ) {
+        authorizationStatus = .authorized
+        dailyHealthStore = dailyHealth
+        self.workouts = workouts
+        lastDailySyncDate = Date()
+        syncError = nil
+    }
+#endif
 
     func requestAuthorization() async throws {
         try await healthManager.requestAuthorization()
@@ -97,6 +113,18 @@ final class HealthViewStore: ObservableObject {
         metric: HealthMetric,
         range: DateInterval
     ) async throws -> [HealthMetricSample] {
-        try await healthManager.fetchMetricSamples(metric: metric, range: range)
+#if DEBUG
+        if AnalyticsUITestFixture.isEnabled {
+            return dailyHealthStore.values
+                .compactMap { day -> HealthMetricSample? in
+                    guard range.contains(day.dayStart),
+                          let value = day.value(for: metric),
+                          value.isFinite else { return nil }
+                    return HealthMetricSample(timestamp: day.dayStart, value: value)
+                }
+                .sorted { $0.timestamp < $1.timestamp }
+        }
+#endif
+        return try await healthManager.fetchMetricSamples(metric: metric, range: range)
     }
 }

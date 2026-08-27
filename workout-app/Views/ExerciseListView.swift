@@ -3,11 +3,13 @@ import SwiftUI
 struct ExerciseListView: View {
     @ObservedObject var dataManager: WorkoutDataManager
     @ObservedObject private var relationshipManager = ExerciseRelationshipManager.shared
+    @ObservedObject private var metadataManager = ExerciseMetadataManager.shared
     @EnvironmentObject var annotationsManager: WorkoutAnnotationsManager
     @EnvironmentObject var gymProfilesManager: GymProfilesManager
     @State private var searchText = ""
     @State private var sortOrder = SortOrder.alphabetical
     @State private var selectedExercise: ExerciseSelection?
+    @State private var selectedExerciseMetric: ExerciseDirectoryMetricSelection?
     @State private var showingQuickStart = false
     @State private var quickStartExercise: String?
     @State private var cachedExercises: [(name: String, stats: ExerciseStats)] = []
@@ -16,6 +18,16 @@ struct ExerciseListView: View {
     @State private var cachedNonFavoriteExerciseRows: [(name: String, stats: ExerciseStats)] = []
     @State private var cachedFavoriteRollupNames: Set<String> = []
     @AppStorage("favoriteExercises") private var favoriteExercisesData: String = "[]"
+
+    private struct ExerciseDirectoryMetricSelection: Identifiable, Hashable {
+        let exerciseName: String
+        let metric: ExerciseAnalysisMetric
+        let focus: ExerciseMetricFocus
+
+        var id: String {
+            "\(exerciseName)|\(metric.rawValue)|\(focus.rawValue)"
+        }
+    }
 
     private static func decodeFavoriteExercises(_ encoded: String) -> Set<String> {
         guard let data = encoded.data(using: .utf8),
@@ -133,6 +145,57 @@ struct ExerciseListView: View {
     }
 
     var body: some View {
+        destinationContent
+            .navigationDestination(item: $selectedExercise) { selection in
+                ExerciseDetailView(
+                    exerciseName: selection.id,
+                    dataManager: dataManager,
+                    annotationsManager: annotationsManager,
+                    gymProfilesManager: gymProfilesManager
+                )
+            }
+            .navigationDestination(item: $selectedExerciseMetric) { route in
+                exerciseMetricDestination(route)
+            }
+            .sheet(isPresented: $showingQuickStart) {
+                QuickStartView(exerciseName: quickStartExercise)
+            }
+            .onAppear {
+                let favorites = Self.decodeFavoriteExercises(favoriteExercisesData)
+                cachedFavoriteExercises = favorites
+                refreshExercises(favorites: favorites)
+            }
+            .onChange(of: searchText) { _, _ in
+                refreshExercises()
+            }
+            .onChange(of: sortOrder) { _, _ in
+                refreshExercises()
+            }
+            .onChange(of: dataManager.workouts) { _, _ in
+                refreshExercises()
+            }
+            .onChange(of: relationshipManager.relationships) { _, _ in
+                dataManager.refreshExerciseIdentityDerivedState()
+                refreshExercises()
+            }
+            .onChange(of: favoriteExercisesData) { _, newValue in
+                refreshFavorites(from: newValue)
+            }
+    }
+
+    private var destinationContent: some View {
+        directoryContent
+        .navigationTitle("All Exercises")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                AppToolbarItem(placement: .primaryAction) {
+                    sortMenu
+                }
+            }
+            .accessibilityIdentifier("exercise-list")
+    }
+
+    private var directoryContent: some View {
         ZStack {
             AdaptiveBackground()
 
@@ -142,40 +205,8 @@ struct ExerciseListView: View {
                     .padding(.top, Theme.Spacing.sm)
 
                 ScrollView(showsIndicators: false) {
-                    LazyVStack(spacing: Theme.Spacing.sm) {
-                        if !cachedFavoriteExerciseRows.isEmpty {
-                            Text("Favorites")
-                                .sectionHeaderStyle()
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.horizontal, Theme.Spacing.xs)
-                                .padding(.top, Theme.Spacing.sm)
-
-                            ForEach(cachedFavoriteExerciseRows, id: \.name) { exercise in
-                                exerciseRow(exercise, showsInlineFavoriteControl: true)
-                            }
-
-                            if !cachedNonFavoriteExerciseRows.isEmpty {
-                                Text("All")
-                                    .sectionHeaderStyle()
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .padding(.horizontal, Theme.Spacing.xs)
-                                    .padding(.top, Theme.Spacing.md)
-                            }
-                        }
-
-                        if cachedExercises.isEmpty {
-                            EmptyStateCard(
-                                icon: "magnifyingglass",
-                                tint: Theme.Colors.textTertiary,
-                                title: "No Matches",
-                                message: "Try a different exercise name."
-                            )
-                            .padding(.top, Theme.Spacing.xl)
-                        } else {
-                            ForEach(cachedNonFavoriteExerciseRows, id: \.name) { exercise in
-                                exerciseRow(exercise)
-                            }
-                        }
+                    LazyVStack(spacing: Theme.Spacing.xs) {
+                        exerciseRowsContent
                     }
                     .padding(.horizontal, Theme.Spacing.lg)
                     .padding(.bottom, Theme.Spacing.xl)
@@ -183,45 +214,64 @@ struct ExerciseListView: View {
             }
             .contentColumn()
         }
-        .navigationTitle("All Exercises")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            AppToolbarItem(placement: .primaryAction) {
-                sortMenu
+    }
+
+    @ViewBuilder
+    private var exerciseRowsContent: some View {
+        if !cachedFavoriteExerciseRows.isEmpty {
+            exerciseSectionLabel("Favorites", topPadding: Theme.Spacing.xs)
+
+            ForEach(cachedFavoriteExerciseRows, id: \.name) { exercise in
+                exerciseRow(exercise, showsInlineFavoriteControl: true)
+            }
+
+            if !cachedNonFavoriteExerciseRows.isEmpty {
+                exerciseSectionLabel("All", topPadding: Theme.Spacing.md)
             }
         }
-        .navigationDestination(item: $selectedExercise) { selection in
-            ExerciseDetailView(
-                exerciseName: selection.id,
-                dataManager: dataManager,
-                annotationsManager: annotationsManager,
-                gymProfilesManager: gymProfilesManager
+
+        if cachedExercises.isEmpty {
+            EmptyStateCard(
+                icon: "magnifyingglass",
+                tint: Theme.Colors.textTertiary,
+                title: "No Matches",
+                message: "Try a different exercise name."
             )
+            .padding(.top, Theme.Spacing.xl)
+        } else {
+            ForEach(cachedNonFavoriteExerciseRows, id: \.name) { exercise in
+                exerciseRow(exercise)
+            }
         }
-        .sheet(isPresented: $showingQuickStart) {
-            QuickStartView(exerciseName: quickStartExercise)
-        }
-        .onAppear {
-            let favorites = Self.decodeFavoriteExercises(favoriteExercisesData)
-            cachedFavoriteExercises = favorites
-            refreshExercises(favorites: favorites)
-        }
-        .onChange(of: searchText) { _, _ in
-            refreshExercises()
-        }
-        .onChange(of: sortOrder) { _, _ in
-            refreshExercises()
-        }
-        .onChange(of: dataManager.workouts) { _, _ in
-            refreshExercises()
-        }
-        .onChange(of: relationshipManager.relationships) { _, _ in
-            dataManager.refreshExerciseIdentityDerivedState()
-            refreshExercises()
-        }
-        .onChange(of: favoriteExercisesData) { _, newValue in
-            refreshFavorites(from: newValue)
-        }
+    }
+
+    private func exerciseSectionLabel(
+        _ title: String,
+        topPadding: CGFloat
+    ) -> some View {
+        Text(title)
+            .sectionHeaderStyle()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, Theme.Spacing.xs)
+            .padding(.top, topPadding)
+    }
+
+    private func exerciseMetricDestination(
+        _ route: ExerciseDirectoryMetricSelection
+    ) -> some View {
+        let selection = ExerciseMetricSelection(
+            scope: ExerciseAnalysisScope(exerciseName: route.exerciseName),
+            metric: route.metric,
+            focus: route.focus
+        )
+        let sessions = dataManager.exerciseHistorySessions(
+            for: route.exerciseName,
+            includingVariants: true
+        )
+        return ExerciseMetricDetailView(
+            selection: selection,
+            sessions: sessions
+        )
     }
 
     private var sortMenu: some View {
@@ -299,21 +349,25 @@ struct ExerciseListView: View {
         showsInlineFavoriteControl: Bool = false
     ) -> some View {
         HStack(spacing: 0) {
-            NavigationLink(
-                destination: ExerciseDetailView(
+            ExerciseRowView(
+                name: exercise.name,
+                stats: exercise.stats,
+                showsCard: false,
+                supportsSessionVolume: supportsSessionVolume(
                     exerciseName: exercise.name,
-                    dataManager: dataManager,
-                    annotationsManager: annotationsManager,
-                    gymProfilesManager: gymProfilesManager
-                )
-            ) {
-                ExerciseRowView(
-                    name: exercise.name,
-                    stats: exercise.stats,
-                    showsCard: false
-                )
-            }
-            .buttonStyle(.plain)
+                    stats: exercise.stats
+                ),
+                onOpen: {
+                    selectedExercise = ExerciseSelection(id: exercise.name)
+                },
+                onMetricTap: { metric, focus in
+                    selectedExerciseMetric = ExerciseDirectoryMetricSelection(
+                        exerciseName: exercise.name,
+                        metric: metric,
+                        focus: focus
+                    )
+                }
+            )
 
             if showsInlineFavoriteControl {
                 Button {
@@ -348,6 +402,20 @@ struct ExerciseListView: View {
             }
         }
     }
+
+    private func supportsSessionVolume(
+        exerciseName: String,
+        stats: ExerciseStats
+    ) -> Bool {
+        let isCardio = metadataManager
+            .resolvedTags(for: exerciseName)
+            .contains(where: { $0.builtInGroup == .cardio })
+        return ExerciseDirectoryMetricPolicy.supportsSessionVolume(
+            exerciseName: exerciseName,
+            isCardio: isCardio,
+            totalVolume: stats.totalVolume
+        )
+    }
 }
 
 struct ExerciseStats {
@@ -362,30 +430,59 @@ struct ExerciseRowView: View {
     let name: String
     let stats: ExerciseStats
     var showsCard: Bool = true
+    let supportsSessionVolume: Bool
+    let onOpen: () -> Void
+    let onMetricTap: (ExerciseAnalysisMetric, ExerciseMetricFocus) -> Void
 
     var body: some View {
-        HStack(spacing: Theme.Spacing.md) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(name)
-                    .font(Theme.Typography.bodyBold)
-                    .foregroundColor(Theme.Colors.textPrimary)
-                    .lineLimit(1)
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            Button(action: onOpen) {
+                HStack(spacing: Theme.Spacing.sm) {
+                    Text(name)
+                        .font(Theme.Typography.bodyBold)
+                        .foregroundColor(Theme.Colors.textPrimary)
+                        .lineLimit(1)
 
-                HStack(spacing: 12) {
-                    ExerciseMetricPill(icon: "repeat", text: "\(stats.frequency)x")
-                    ExerciseMetricPill(icon: "chart.bar.fill", text: SharedFormatters.volumeCompact(stats.totalVolume))
+                    Spacer()
 
-                    if let lastDate = stats.lastPerformed {
-                        ExerciseMetricPill(icon: "clock", text: relativeDateString(for: lastDate))
+                    Image(systemName: "chevron.right")
+                        .font(Theme.Typography.metricLabel)
+                        .foregroundColor(Theme.Colors.textTertiary)
+                        .accessibilityHidden(true)
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Opens exercise details.")
+            .accessibilityIdentifier("exercise-row-\(name)")
+
+            HStack(spacing: Theme.Spacing.xs) {
+                ExerciseMetricPill(
+                    icon: "repeat",
+                    text: "\(stats.frequency)x",
+                    accessibilityLabel: "\(stats.frequency) sessions"
+                ) {
+                    onMetricTap(.sessions, .overview)
+                }
+                if supportsSessionVolume {
+                    ExerciseMetricPill(
+                        icon: "chart.bar.fill",
+                        text: SharedFormatters.volumeCompact(stats.totalVolume),
+                        accessibilityLabel: "\(SharedFormatters.volumeWithUnit(stats.totalVolume)) total volume"
+                    ) {
+                        onMetricTap(.sessionVolume, .total)
+                    }
+                }
+
+                if let lastDate = stats.lastPerformed {
+                    ExerciseMetricPill(
+                        icon: "clock",
+                        text: relativeDateString(for: lastDate),
+                        accessibilityLabel: "Last performed \(relativeDateString(for: lastDate))"
+                    ) {
+                        onMetricTap(.sessions, .overview)
                     }
                 }
             }
-
-            Spacer()
-
-            Image(systemName: "chevron.right")
-                .font(Theme.Typography.captionBold)
-                .foregroundColor(Theme.Colors.textTertiary)
         }
         .padding(Theme.Spacing.lg)
         .modifier(ExerciseRowCardModifier(isEnabled: showsCard))
@@ -419,14 +516,33 @@ private struct ExerciseRowCardModifier: ViewModifier {
 private struct ExerciseMetricPill: View {
     let icon: String
     let text: String
+    let accessibilityLabel: String
+    let action: () -> Void
 
     var body: some View {
-        HStack(spacing: 3) {
-            Image(systemName: icon)
-                .font(Theme.Iconography.micro)
-            Text(text)
-                .font(Theme.Typography.caption)
+        Button(action: action) {
+            HStack(spacing: 3) {
+                Image(systemName: icon)
+                    .font(Theme.Iconography.small)
+                    .accessibilityHidden(true)
+                Text(text)
+                    .font(Theme.Typography.caption)
+            }
+            .foregroundColor(Theme.Colors.textSecondary)
+            .padding(.horizontal, Theme.Spacing.xs)
+            .frame(minHeight: Theme.Layout.minimumTapTarget)
+            .background(Capsule().fill(Theme.Colors.background))
+            .overlay {
+                Capsule()
+                    .strokeBorder(
+                        Theme.Colors.border,
+                        lineWidth: 1
+                    )
+            }
+            .contentShape(Capsule())
         }
-        .foregroundColor(Theme.Colors.textSecondary)
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityHint("Opens this metric's analysis.")
     }
 }

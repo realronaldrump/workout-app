@@ -46,16 +46,7 @@ private struct HistoryTabView: View {
 }
 
 private struct HealthTabRoot: View {
-    @StateObject private var healthStore: HealthViewStore
-
-    init(healthManager: HealthKitManager, dataManager: WorkoutDataManager) {
-        _healthStore = StateObject(
-            wrappedValue: HealthViewStore(
-                healthManager: healthManager,
-                dataManager: dataManager
-            )
-        )
-    }
+    @ObservedObject var healthStore: HealthViewStore
 
     var body: some View {
         NavigationStack {
@@ -122,7 +113,8 @@ struct MainTabView: View {
     let sessionManager: WorkoutSessionManager
     let healthManager: HealthKitManager
 
-    @StateObject private var services = MainTabServices()
+    @StateObject private var services: MainTabServices
+    @StateObject private var healthStore: HealthViewStore
     @StateObject private var iCloudManager = iCloudDocumentManager()
     @StateObject private var logStore = WorkoutLogStore()
     @StateObject private var healthDateRangeContext = HealthDateRangeContext()
@@ -149,8 +141,16 @@ struct MainTabView: View {
     private var insightsEngine: InsightsEngine { services.insightsEngine }
 
     init(sessionManager: WorkoutSessionManager, healthManager: HealthKitManager) {
+        let services = MainTabServices()
         self.sessionManager = sessionManager
         self.healthManager = healthManager
+        _services = StateObject(wrappedValue: services)
+        _healthStore = StateObject(
+            wrappedValue: HealthViewStore(
+                healthManager: healthManager,
+                dataManager: services.dataManager
+            )
+        )
 
 #if DEBUG
         let requestedTab = ProcessInfo.processInfo.environment["WORKOUT_APP_INITIAL_TAB"]
@@ -178,10 +178,7 @@ struct MainTabView: View {
                 }
                 .tag(AppTab.today)
 
-                HealthTabRoot(
-                    healthManager: healthManager,
-                    dataManager: dataManager
-                )
+                HealthTabRoot(healthStore: healthStore)
                 .tabItem {
                     Label("Health", systemImage: "heart.fill")
                 }
@@ -215,6 +212,7 @@ struct MainTabView: View {
         .environmentObject(gymProfilesManager)
         .environmentObject(insightsEngine)
         .environmentObject(healthDateRangeContext)
+        .environmentObject(healthStore)
         .environmentObject(variantEngine)
         .environmentObject(similarityEngine)
         .tint(Theme.Colors.accent)
@@ -354,6 +352,13 @@ struct MainTabView: View {
         guard !hasStartedLaunchFlow else { return }
         hasStartedLaunchFlow = true
 
+#if DEBUG
+        if AnalyticsUITestFixture.isEnabled {
+            bootstrapStoresIfNeeded()
+            return
+        }
+#endif
+
         Task { @MainActor in
             await migrationManager.prepare()
             guard !migrationManager.blocksLaunch else { return }
@@ -369,6 +374,24 @@ struct MainTabView: View {
     private func bootstrapStoresIfNeeded() {
         guard !hasBootstrappedStores else { return }
         hasBootstrappedStores = true
+
+#if DEBUG
+        if AnalyticsUITestFixture.isEnabled {
+            AnalyticsUITestFixture.install(
+                dataManager: dataManager,
+                healthManager: healthManager
+            )
+            healthStore.installAnalyticsFixture(
+                dailyHealth: AnalyticsUITestFixture.dailyHealth,
+                workouts: AnalyticsUITestFixture.workouts
+            )
+            hasSeenOnboarding = true
+            changelogStore.markCurrentVersionSeen()
+            hasCompletedInitialLoad = true
+            refreshOnboardingState()
+            return
+        }
+#endif
 
         Task { @MainActor in
             LegacyProgramCleanup.runIfNeeded()

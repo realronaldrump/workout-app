@@ -164,8 +164,7 @@ struct HomeView: View {
         .navigationDestination(item: $selectedWorkoutMetric) { selection in
             MetricDetailView(
                 kind: selection.kind,
-                workouts: selectedWeekBucket?.workouts ?? weeklyWorkouts,
-                scrollTarget: selection.scrollTarget
+                workouts: selectedWeekBucket?.workouts ?? weeklyWorkouts
             )
         }
         .navigationDestination(item: $selectedChangeMetric) { metric in
@@ -216,7 +215,9 @@ struct HomeView: View {
         .onAppear {
             refreshHomeDerivedState()
             rebuildHomeHighlights()
-            healthManager.refreshAuthorizationStatus()
+            if !isAnalyticsUITestFixture {
+                healthManager.refreshAuthorizationStatus()
+            }
             if !dataManager.workouts.isEmpty {
                 triggerAutoHealthSync()
                 scheduleRecoveryCoverageRefresh()
@@ -552,7 +553,7 @@ struct HomeView: View {
                             WeeklySummaryCarouselCard(
                                 bucket: bucket,
                                 onMetricTap: { kind in
-                                    selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: kind, scrollTarget: nil)
+                                    selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: kind)
                                 },
                                 onWorkoutTap: { workout in
                                     selectedWorkout = workout
@@ -721,6 +722,7 @@ struct HomeView: View {
                     ExploreRow(title: "Performance", subtitle: "Trends", icon: "chart.line.uptrend.xyaxis", tint: Theme.Colors.success)
                 }
                 .buttonStyle(PlainButtonStyle())
+                .accessibilityIdentifier("explore-performance")
 
                 NavigationLink {
                     ExerciseListView(dataManager: dataManager)
@@ -728,6 +730,7 @@ struct HomeView: View {
                     ExploreRow(title: "Exercises", subtitle: "By lift", icon: "figure.strengthtraining.traditional", tint: Theme.Colors.accentSecondary)
                 }
                 .buttonStyle(PlainButtonStyle())
+                .accessibilityIdentifier("explore-exercises")
 
                 NavigationLink {
                     RecoveryCoverageDetailView(engine: recoveryCoverageEngine)
@@ -735,6 +738,7 @@ struct HomeView: View {
                     ExploreRow(title: "Signals", subtitle: "Recovery + coverage", icon: "waveform.path.ecg", tint: Theme.Colors.accentTertiary)
                 }
                 .buttonStyle(PlainButtonStyle())
+                .accessibilityIdentifier("explore-signals")
 
                 Button {
                     showingConsistencyDetail = true
@@ -850,6 +854,9 @@ struct HomeView: View {
 
         for insight in filteredInsights.prefix(3) {
             let highlightValue = SharedFormatters.sanitizedHighlightValue(from: insight.message)
+            let action: (() -> Void)? = insight.exerciseName.map { exerciseName in
+                { selectedExercise = ExerciseSelection(id: exerciseName) }
+            }
             items.append(
                 HighlightItem(
                     id: "\(insight.title)-\(insight.exerciseName ?? "none")-\(Int(insight.date.timeIntervalSince1970))",
@@ -858,11 +865,7 @@ struct HomeView: View {
                     subtitle: insight.date.formatted(date: .abbreviated, time: .omitted),
                     icon: insight.type.iconName,
                     tint: SharedFormatters.highlightTint(for: insight.type),
-                    action: {
-                        if let exerciseName = insight.exerciseName {
-                            selectedExercise = ExerciseSelection(id: exerciseName)
-                        }
-                    }
+                    action: action
                 )
             )
         }
@@ -930,6 +933,7 @@ struct HomeView: View {
     }
 
     private func triggerAutoHealthSync() {
+        guard !isAnalyticsUITestFixture else { return }
         guard healthManager.authorizationStatus == .authorized else { return }
         Task {
             await healthManager.syncRecentWorkoutsIfNeeded(dataManager.workouts)
@@ -1038,6 +1042,7 @@ struct HomeView: View {
     private func scheduleInitialWorkoutRefreshIfNeeded() {
         guard !hasScheduledInitialWorkoutRefresh else { return }
         hasScheduledInitialWorkoutRefresh = true
+        guard !isAnalyticsUITestFixture else { return }
 
         Task {
             await dataManager.loadLatestWorkoutData(
@@ -1052,6 +1057,14 @@ struct HomeView: View {
             rebuildHomeHighlights()
             await refreshRecoveryCoverage()
         }
+    }
+
+    private var isAnalyticsUITestFixture: Bool {
+#if DEBUG
+        AnalyticsUITestFixture.isEnabled
+#else
+        false
+#endif
     }
 
     private func rebuildHomeHighlights() {

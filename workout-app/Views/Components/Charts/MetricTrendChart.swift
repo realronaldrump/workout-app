@@ -15,9 +15,9 @@ struct MetricTrendChart: View {
     let domain: ClosedRange<Date>
     var height: CGFloat = 220
     var showsBestDayMarker: Bool = true
+    @Binding var selectedDate: Date?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var selectedDate: Date?
     @State private var revealProgress: CGFloat = 0
 
     private var render: MetricChartRenderModel {
@@ -221,6 +221,8 @@ struct MetricTrendChart: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(metric.title) trend")
         .accessibilityValue(accessibilitySummary)
+        .accessibilityHint("Swipe up or down to inspect recorded days.")
+        .accessibilityAdjustableAction(adjustSelection)
     }
 
     @ChartContentBuilder
@@ -314,6 +316,10 @@ struct MetricTrendChart: View {
     }
 
     private var accessibilitySummary: String {
+        if let selectedPoint {
+            return "Selected \(selectedPoint.date.formatted(date: .abbreviated, time: .omitted)), "
+                + "\(metric.formatWithUnit(selectedPoint.value)). \(analysis.completed.count) recorded days."
+        }
         guard let mean = analysis.mean else { return "No data in this range" }
         var parts = ["Average \(metric.formatWithUnit(mean)) over \(analysis.completed.count) days"]
         if let range = analysis.typicalRange {
@@ -323,6 +329,24 @@ struct MetricTrendChart: View {
             parts.append("best \(metric.formatWithUnit(best.value)) on \(best.date.formatted(date: .abbreviated, time: .omitted))")
         }
         return parts.joined(separator: ", ") + "."
+    }
+
+    private func adjustSelection(_ direction: AccessibilityAdjustmentDirection) {
+        let points = render.points
+        guard !points.isEmpty else { return }
+        let currentIndex = selectedPoint.flatMap { selected in
+            points.firstIndex(where: { $0.id == selected.id })
+        }
+        let nextIndex: Int
+        switch direction {
+        case .increment:
+            nextIndex = min((currentIndex ?? -1) + 1, points.count - 1)
+        case .decrement:
+            nextIndex = max((currentIndex ?? points.count) - 1, 0)
+        @unknown default:
+            return
+        }
+        selectedDate = points[nextIndex].date
     }
 }
 
@@ -363,7 +387,12 @@ struct MetricChartRenderModel {
 
         // Charts stay responsive by capping drawn marks; statistics still use the
         // complete series, so nothing in the numbers depends on this.
-        let source = MetricChartRenderModel.limited(analysis.samples, to: 180)
+        var source = MetricChartRenderModel.limited(analysis.samples, to: 180)
+        if let best = analysis.bestDay,
+           !source.contains(where: { calendar.isDate($0.date, inSameDayAs: best.date) }) {
+            source.append(best)
+            source.sort { $0.date < $1.date }
+        }
 
         let builtPoints: [Point] = source.map { sample in
             let classification: Band

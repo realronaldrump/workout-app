@@ -413,6 +413,8 @@ struct WorkoutHistoryView: View {
     @State private var selectedDurationBands: Set<HistoryDurationBand>?
     @State private var presentedFilterSheet: HistoryFilterSheet?
     @State private var presentedSummarySheet: HistorySummarySheet?
+    @State private var selectedMetric: WorkoutMetricDetailSelection?
+    @State private var selectedOverviewMonth: Date?
     @State private var derivedState = HistoryDerivedState.empty
     @State private var locallyDeletedWorkoutIDs: Set<UUID> = []
     @State private var recentlyDeletedWorkout: LoggedWorkout?
@@ -491,8 +493,14 @@ struct WorkoutHistoryView: View {
             case .locations:
                 HistoryLocationBreakdownSheet(items: derivedState.locationBreakdown)
                     .presentationDetents([.medium, .large])
-                    .presentationDragIndicator(.visible)
+                .presentationDragIndicator(.visible)
             }
+        }
+        .navigationDestination(item: $selectedMetric) { selection in
+            MetricDetailView(
+                kind: selection.kind,
+                workouts: filteredWorkouts
+            )
         }
         .onAppear { scheduleDerivedStateRefresh(debounceNs: 0) }
         .onChange(of: searchText) { _, _ in scheduleDerivedStateRefresh() }
@@ -655,7 +663,11 @@ struct WorkoutHistoryView: View {
         } else {
             overviewStrip
 
-            ForEach(derivedState.monthSections) { section in
+            if let selectedOverviewSection {
+                selectedMonthContext(selectedOverviewSection)
+            }
+
+            ForEach(displayedMonthSections) { section in
                 monthSection(section)
             }
         }
@@ -680,27 +692,55 @@ struct WorkoutHistoryView: View {
     }
 
     private var overviewSummary: some View {
-            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                Button {
-                    Haptics.selection()
-                    presentedSummarySheet = .locations
-                } label: {
-                    Text("\(derivedState.filteredCount) workout" + (derivedState.filteredCount == 1 ? "" : "s"))
-                        .font(Theme.Typography.bodyBold)
-                        .foregroundStyle(Theme.Colors.textPrimary)
-                }
-                .buttonStyle(.plain)
-                .accessibilityHint("Show location breakdown")
-
-                Text(
-                    "avg \(SharedFormatters.durationMinutes(derivedState.averageDurationMinutes))"
-                    + (derivedState.totalVolume > 0
-                        ? " · \(SharedFormatters.volumeWithUnit(derivedState.totalVolume))"
-                        : "")
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            historySummaryLink(
+                label: "Workouts",
+                value: "\(derivedState.filteredCount)",
+                kind: .sessions
+            )
+            historySummaryLink(
+                label: "Avg Duration",
+                value: SharedFormatters.durationMinutes(derivedState.averageDurationMinutes),
+                kind: .averageDuration
+            )
+            if derivedState.totalVolume > 0 {
+                historySummaryLink(
+                    label: "Volume",
+                    value: SharedFormatters.volumeWithUnit(derivedState.totalVolume),
+                    kind: .totalVolume
                 )
-                .font(Theme.Typography.captionStrong)
-                .foregroundStyle(Theme.Colors.textSecondary)
             }
+        }
+    }
+
+    private func historySummaryLink(
+        label: String,
+        value: String,
+        kind: WorkoutMetricDetailKind
+    ) -> some View {
+        AnalysisTile(
+            role: .navigate,
+            destination: "\(label) analysis",
+            accessibilityLabel: "\(label), \(value)",
+            radius: Theme.CornerRadius.small,
+            padding: Theme.Spacing.xs,
+            action: {
+                selectedMetric = WorkoutMetricDetailSelection(
+                    kind: kind
+                )
+            },
+            content: {
+                HStack(spacing: Theme.Spacing.xs) {
+                    Text(label)
+                        .sectionHeaderStyle()
+                    Text(value)
+                        .font(Theme.Typography.numberSmall)
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                        .monospacedDigit()
+                }
+            }
+        )
+        .accessibilityIdentifier("history-summary-\(kind.rawValue)")
     }
 
     private var overviewChart: some View {
@@ -709,13 +749,101 @@ struct WorkoutHistoryView: View {
                     x: .value("Month", point.monthStart, unit: .month),
                     y: .value("Workouts", point.count)
                 )
-                .foregroundStyle(Theme.Colors.accent.gradient)
+                .foregroundStyle(
+                    selectedOverviewMonth == nil
+                        ? AnyShapeStyle(Theme.Colors.accent.gradient)
+                        : AnyShapeStyle(
+                            isSelectedOverviewMonth(point.monthStart)
+                                ? Theme.Colors.accent
+                                : Theme.Colors.textTertiary
+                        )
+                )
                 .cornerRadius(3)
+
+                if isSelectedOverviewMonth(point.monthStart) {
+                    RuleMark(x: .value("Selected month", point.monthStart, unit: .month))
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                }
             }
+            .chartXSelection(value: $selectedOverviewMonth)
             .chartXAxis(.hidden)
             .chartYAxis(.hidden)
             .frame(width: 124, height: 56)
+            .accessibilityElement(children: .ignore)
             .accessibilityLabel("Workouts per month for the current results")
+            .accessibilityValue(overviewChartAccessibilityValue)
+            .accessibilityHint("Swipe up or down to focus a month and its workouts.")
+            .accessibilityAdjustableAction(adjustOverviewMonth)
+    }
+
+    private func selectedMonthContext(_ section: HistoryMonthSection) -> some View {
+        VStack {
+            HStack(spacing: Theme.Spacing.sm) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                    Text("Focused Month")
+                        .sectionHeaderStyle()
+                    Text(section.title)
+                        .font(Theme.Typography.bodyBold)
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                    Text("\(section.count) contributing workout\(section.count == 1 ? "" : "s")")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                }
+
+                Spacer()
+
+                Button("Show All") {
+                    selectedOverviewMonth = nil
+                    Haptics.selection()
+                }
+                .font(Theme.Typography.metricLabel)
+                .frame(minHeight: Theme.Layout.minimumTapTarget)
+            }
+        }
+        .padding(Theme.Spacing.lg)
+        .tintedSection(Theme.Colors.accent, cornerRadius: Theme.CornerRadius.large)
+    }
+
+    private var selectedOverviewSection: HistoryMonthSection? {
+        guard let selectedOverviewMonth else { return nil }
+        return derivedState.monthSections.first {
+            Calendar.current.isDate($0.id, equalTo: selectedOverviewMonth, toGranularity: .month)
+        }
+    }
+
+    private var displayedMonthSections: [HistoryMonthSection] {
+        selectedOverviewSection.map { [$0] } ?? derivedState.monthSections
+    }
+
+    private func isSelectedOverviewMonth(_ date: Date) -> Bool {
+        guard let selectedOverviewMonth else { return false }
+        return Calendar.current.isDate(date, equalTo: selectedOverviewMonth, toGranularity: .month)
+    }
+
+    private var overviewChartAccessibilityValue: String {
+        if let selectedOverviewSection {
+            return "\(selectedOverviewSection.title), \(selectedOverviewSection.count) workouts."
+        }
+        return "\(derivedState.filteredCount) workouts across \(derivedState.monthlyChart.count) months."
+    }
+
+    private func adjustOverviewMonth(_ direction: AccessibilityAdjustmentDirection) {
+        let months = derivedState.monthlyChart.map(\.monthStart)
+        guard !months.isEmpty else { return }
+        let currentIndex = selectedOverviewMonth.flatMap { selected in
+            months.firstIndex {
+                Calendar.current.isDate($0, equalTo: selected, toGranularity: .month)
+            }
+        }
+        switch direction {
+        case .increment:
+            selectedOverviewMonth = months[min((currentIndex ?? -1) + 1, months.count - 1)]
+        case .decrement:
+            selectedOverviewMonth = months[max((currentIndex ?? months.count) - 1, 0)]
+        @unknown default:
+            return
+        }
     }
 
     private func monthSection(_ section: HistoryMonthSection) -> some View {
@@ -772,6 +900,12 @@ struct WorkoutHistoryView: View {
     private var visibleWorkouts: [Workout] {
         guard !locallyDeletedWorkoutIDs.isEmpty else { return workouts }
         return workouts.filter { !locallyDeletedWorkoutIDs.contains($0.id) }
+    }
+
+    private var filteredWorkouts: [Workout] {
+        derivedState.monthSections.flatMap { section in
+            section.rows.map(\.workout)
+        }
     }
 
     private var hasActiveFilters: Bool {
@@ -887,6 +1021,9 @@ struct WorkoutHistoryView: View {
             selectedExercises,
             validItems: derivedState.exerciseOptions
         )
+        if selectedOverviewMonth != nil, selectedOverviewSection == nil {
+            selectedOverviewMonth = nil
+        }
     }
 
     private func sanitizedSelection<Item: Hashable>(

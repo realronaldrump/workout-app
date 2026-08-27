@@ -3,6 +3,12 @@ import HealthKit
 
 extension HealthKitManager {
     func checkAuthorizationStatus() {
+#if DEBUG
+        // UI analytics fixtures intentionally exercise Health screens without asking the
+        // simulator for real HealthKit permission. The manager starts this check from init,
+        // so allowing it to finish later can overwrite the fixture's authorized state.
+        guard !AnalyticsUITestFixture.isEnabled else { return }
+#endif
         // Keep a sync entry point for callers like init(), but do the actual work in the async version
         // so other code can await the status update when it matters (e.g., onboarding flows).
         Task { @MainActor in
@@ -13,6 +19,9 @@ extension HealthKitManager {
     /// Async flavor that completes only after HealthKit returns a request-status response.
     /// This prevents race conditions where the UI proceeds assuming the status has been updated.
     func checkAuthorizationStatusAsync() async {
+#if DEBUG
+        guard !AnalyticsUITestFixture.isEnabled else { return }
+#endif
         guard let healthStore = healthStore else {
             authorizationStatus = .unavailable
             return

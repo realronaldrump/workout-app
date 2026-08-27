@@ -2,14 +2,15 @@ import SwiftUI
 
 struct ExerciseStatsCards: View {
     let exerciseName: String
-    let history: [(date: Date, sets: [WorkoutSet])]
+    let sessions: [ExerciseHistorySession]
+    let scope: ExerciseAnalysisScope
     var showsPerformanceStats: Bool = true
+    @EnvironmentObject private var dataManager: WorkoutDataManager
     @ObservedObject private var metadataManager = ExerciseMetadataManager.shared
     @ObservedObject private var metricManager = ExerciseMetricManager.shared
 
-    @State private var selectedStat: ExerciseStatKind?
+    @State private var selectedMetric: ExerciseMetricSelection?
     @State private var derived: DerivedStats = .empty
-    @State private var derivedCacheKey: Int?
 
     fileprivate struct StatsSummary {
         let totalSets: Int
@@ -76,10 +77,15 @@ struct ExerciseStatsCards: View {
 
     private var stats: StatsSummary { derived.stats }
     private var cardioStats: CardioSummary { derived.cardioStats }
+    private var history: [(date: Date, sets: [WorkoutSet])] {
+        sessions.map { (date: $0.date, sets: $0.sets) }
+    }
 
     private var historyFingerprint: Int {
         var hasher = Hasher()
+        hasher.combine(dataManager.datasetRevision)
         hasher.combine(exerciseName)
+        hasher.combine(scope)
         hasher.combine(isCardio)
         hasher.combine(metricManager.preferences(for: exerciseName))
         for session in history {
@@ -89,95 +95,59 @@ struct ExerciseStatsCards: View {
         return hasher.finalize()
     }
 
-    private func recomputeIfNeeded() {
-        let key = historyFingerprint
-        guard key != derivedCacheKey else { return }
-        derived = computeDerived()
-        derivedCacheKey = key
-    }
+    private func refreshDerived() async {
+        let metrics: [ExerciseAnalysisMetric] = isCardio
+            ? [.sessions, .distance, .duration, .count]
+            : [.setCount, .maxLoad, .averageReps, .sessionVolume]
+        var analyses: [ExerciseAnalysisMetric: ExerciseMetricAnalysis] = [:]
+        analyses.reserveCapacity(metrics.count)
 
-    private func computeDerived() -> DerivedStats {
-        var totalSets = 0
-        var maxWeight: Double = 0
-        var totalReps = 0
-        var maxVolume: Double = 0
-
-        var totalDistance: Double = 0
-        var totalSeconds: Double = 0
-        var totalCount = 0
-        var bestDistance: Double = 0
-        var bestSeconds: Double = 0
-        var bestCount = 0
-
-        var volumes: [Double] = []
-        var setCounts: [Double] = []
-        var averageReps: [Double] = []
-        var topWeights: [Double] = []
-        let orderedHistory = history.sorted { $0.date < $1.date }
-
-        for session in orderedHistory {
-            var sessionVolume: Double = 0
-            var sessionDistance: Double = 0
-            var sessionSeconds: Double = 0
-            var sessionCount = 0
-            var sessionReps = 0
-            var sessionTopWeight: Double = 0
-            for set in session.sets {
-                totalSets += 1
-                totalReps += set.reps
-                sessionReps += set.reps
-                sessionTopWeight = max(sessionTopWeight, set.weight)
-                sessionVolume += set.weight * Double(set.reps)
-                sessionDistance += set.distance
-                sessionSeconds += set.seconds
-                sessionCount += set.reps
-            }
-
-            volumes.append(sessionVolume)
-            setCounts.append(Double(session.sets.count))
-            averageReps.append(session.sets.isEmpty ? 0 : Double(sessionReps) / Double(session.sets.count))
-            topWeights.append(sessionTopWeight)
-
-            if sessionVolume > maxVolume { maxVolume = sessionVolume }
-            totalDistance += sessionDistance
-            totalSeconds += sessionSeconds
-            totalCount += sessionCount
-            if sessionDistance > bestDistance { bestDistance = sessionDistance }
-            if sessionSeconds > bestSeconds { bestSeconds = sessionSeconds }
-            if sessionCount > bestCount { bestCount = sessionCount }
+        for metric in metrics {
+            analyses[metric] = await ExerciseAnalysisCache.shared.analysis(
+                datasetRevision: dataManager.datasetRevision,
+                scope: scope,
+                metric: metric,
+                sessions: sessions
+            )
         }
+        guard !Task.isCancelled else { return }
 
-        let allSets = history.flatMap { $0.sets }
-        maxWeight = ExerciseLoad.bestWeight(in: allSets, exerciseName: exerciseName)
-        let avgReps = totalSets == 0 ? 0 : Double(totalReps) / Double(totalSets)
-
-        let cardioCfg: ResolvedCardioMetricConfiguration? = isCardio
+        let allSets = sessions.flatMap(\.sets)
+        let cardioCfg = isCardio
             ? metricManager.resolvedCardioConfiguration(for: exerciseName, historySets: allSets)
             : nil
+        let setCount = analyses[.setCount]
+        let maxLoad = analyses[.maxLoad]
+        let averageReps = analyses[.averageReps]
+        let sessionVolume = analyses[.sessionVolume]
+        let distance = analyses[.distance]
+        let duration = analyses[.duration]
+        let count = analyses[.count]
+        let sessionCount = analyses[.sessions]
 
-        return DerivedStats(
+        derived = DerivedStats(
             stats: StatsSummary(
-                totalSets: totalSets,
-                maxWeight: maxWeight,
-                avgReps: avgReps,
-                maxVolume: maxVolume
+                totalSets: Int((setCount?.totalValue ?? 0).rounded()),
+                maxWeight: maxLoad?.bestValue ?? 0,
+                avgReps: averageReps?.headlineValue ?? 0,
+                maxVolume: sessionVolume?.bestValue ?? 0
             ),
             cardioStats: CardioSummary(
-                sessions: history.count,
-                totalDistance: totalDistance,
-                totalSeconds: totalSeconds,
-                totalCount: totalCount,
-                bestDistance: bestDistance,
-                bestSeconds: bestSeconds,
-                bestCount: bestCount
+                sessions: Int((sessionCount?.headlineValue ?? 0).rounded()),
+                totalDistance: distance?.totalValue ?? 0,
+                totalSeconds: duration?.totalValue ?? 0,
+                totalCount: Int((count?.totalValue ?? 0).rounded()),
+                bestDistance: distance?.bestValue ?? 0,
+                bestSeconds: duration?.bestValue ?? 0,
+                bestCount: Int((count?.bestValue ?? 0).rounded())
             ),
             cardioConfig: cardioCfg,
             series: SessionSeries(
-                volumes: volumes,
-                setCounts: setCounts,
-                averageReps: averageReps,
-                topWeights: topWeights,
-                medianGapDays: Self.medianGapDays(in: orderedHistory)
+                volumes: sessionVolume?.observations.map(\.value) ?? [],
+                setCounts: setCount?.observations.map(\.value) ?? [],
+                averageReps: averageReps?.observations.map(\.value) ?? [],
+                topWeights: maxLoad?.observations.map(\.value) ?? [],
+                medianGapDays: Self.medianGapDays(in: history.sorted { $0.date < $1.date })
             )
         )
     }
@@ -217,7 +187,8 @@ struct ExerciseStatsCards: View {
                     title: "Sessions",
                     value: "\(cardio.sessions)",
                     icon: "calendar",
-                    color: Theme.Colors.cardio
+                    color: Theme.Colors.cardio,
+                    onTap: { open(.sessions) }
                 )
 
                 if cardio.totalDistance > 0 {
@@ -226,7 +197,8 @@ struct ExerciseStatsCards: View {
                         value: WorkoutValueFormatter.distanceText(cardio.totalDistance),
                         subtitle: "dist",
                         icon: "location.fill",
-                        color: Theme.Colors.cardio
+                        color: Theme.Colors.cardio,
+                        onTap: { open(.distance) }
                     )
                 }
 
@@ -235,7 +207,8 @@ struct ExerciseStatsCards: View {
                         title: "Total Time",
                         value: WorkoutValueFormatter.durationText(seconds: cardio.totalSeconds),
                         icon: "clock.fill",
-                        color: Theme.Colors.cardio
+                        color: Theme.Colors.cardio,
+                        onTap: { open(.duration) }
                     )
                 }
 
@@ -245,7 +218,8 @@ struct ExerciseStatsCards: View {
                         value: "\(cardio.totalCount)",
                         subtitle: cardioConfig.countLabel,
                         icon: "number",
-                        color: Theme.Colors.cardio
+                        color: Theme.Colors.cardio,
+                        onTap: { open(.count) }
                     )
                 }
 
@@ -258,7 +232,8 @@ struct ExerciseStatsCards: View {
                                 value: WorkoutValueFormatter.distanceText(cardio.bestDistance),
                                 subtitle: "dist",
                                 icon: "trophy.fill",
-                                color: Theme.Colors.gold
+                                color: Theme.Colors.gold,
+                                onTap: { open(.distance, focus: .recordHistory) }
                             )
                         }
                     case .duration:
@@ -267,7 +242,8 @@ struct ExerciseStatsCards: View {
                                 title: "Best Time",
                                 value: WorkoutValueFormatter.durationText(seconds: cardio.bestSeconds),
                                 icon: "trophy.fill",
-                                color: Theme.Colors.gold
+                                color: Theme.Colors.gold,
+                                onTap: { open(.duration, focus: .recordHistory) }
                             )
                         }
                     case .count:
@@ -277,7 +253,8 @@ struct ExerciseStatsCards: View {
                                 value: "\(cardio.bestCount)",
                                 subtitle: cardioConfig.countLabel,
                                 icon: "trophy.fill",
-                                color: Theme.Colors.gold
+                                color: Theme.Colors.gold,
+                                onTap: { open(.count, focus: .recordHistory) }
                             )
                         }
                     }
@@ -294,7 +271,7 @@ struct ExerciseStatsCards: View {
                         ? nil
                         : String(format: "%.1f per session", series.setCounts.reduce(0, +) / Double(series.setCounts.count)),
                     sparkline: series.setCounts,
-                    onTap: { selectedStat = .totalSets }
+                    onTap: { open(.setCount) }
                 )
 
                 if showsPerformanceStats {
@@ -303,9 +280,12 @@ struct ExerciseStatsCards: View {
                         value: ExerciseLoad.formatWeight(stats.maxWeight, exerciseName: exerciseName),
                         icon: "scalemass.fill",
                         color: Theme.Colors.accentSecondary,
-                        delta: Self.recentDelta(series.topWeights),
+                        delta: Self.recentDelta(
+                            series.topWeights,
+                            higherIsBetter: !isAssisted
+                        ),
                         sparkline: series.topWeights,
-                        onTap: { selectedStat = .maxWeight }
+                        onTap: { open(.maxLoad) }
                     )
                 } else {
                     ExerciseStatTile(
@@ -313,7 +293,8 @@ struct ExerciseStatsCards: View {
                         value: "\(history.count)",
                         icon: "calendar",
                         color: Theme.Colors.accentSecondary,
-                        footnote: series.medianGapDays.map { String(format: "every %.0f days", $0) }
+                        footnote: series.medianGapDays.map { String(format: "every %.0f days", $0) },
+                        onTap: { open(.sessions) }
                     )
                 }
 
@@ -324,7 +305,7 @@ struct ExerciseStatsCards: View {
                     color: Theme.Colors.accentTertiary,
                     delta: Self.recentDelta(series.averageReps),
                     sparkline: series.averageReps,
-                    onTap: { selectedStat = .avgReps }
+                    onTap: { open(.averageReps) }
                 )
 
                 if !isAssisted {
@@ -336,16 +317,32 @@ struct ExerciseStatsCards: View {
                         footnote: "best of \(history.count) sessions",
                         delta: Self.recentDelta(series.volumes),
                         sparkline: series.volumes,
-                        onTap: { selectedStat = .maxVolume }
+                        onTap: { open(.sessionVolume) }
                     )
                 }
             }
         }
-        .onAppear { recomputeIfNeeded() }
-        .onChange(of: historyFingerprint) { _, _ in recomputeIfNeeded() }
-        .navigationDestination(item: $selectedStat) { kind in
-            ExerciseStatDetailView(kind: kind, exerciseName: exerciseName, history: history)
+        .task(id: historyFingerprint) {
+            await refreshDerived()
         }
+        .navigationDestination(item: $selectedMetric) { selection in
+            ExerciseMetricDetailView(
+                selection: selection,
+                sessions: sessions,
+                countLabel: cardioConfig.countLabel
+            )
+        }
+    }
+
+    private func open(
+        _ metric: ExerciseAnalysisMetric,
+        focus: ExerciseMetricFocus = .overview
+    ) {
+        selectedMetric = ExerciseMetricSelection(
+            scope: scope,
+            metric: metric,
+            focus: focus
+        )
     }
 }
 

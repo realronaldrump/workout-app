@@ -263,6 +263,18 @@ struct HomeWeekBucket: Identifiable {
         stats.totalWorkouts == 0 ? "--" : SharedFormatters.volumeCompact(stats.totalVolume)
     }
 
+    var setsValue: String {
+        stats.totalWorkouts == 0 ? "--" : "\(stats.totalSets)"
+    }
+
+    var averageDurationValue: String {
+        guard !workouts.isEmpty else { return "--" }
+        let totalMinutes = workouts.reduce(0) { $0 + $1.estimatedDurationMinutes() }
+        return SharedFormatters.durationMinutes(
+            Double(totalMinutes) / Double(workouts.count)
+        )
+    }
+
     var sessionHeader: String {
         if isSavedBreakWeek {
             return "Saved Break"
@@ -327,24 +339,29 @@ struct WeeklySummaryCarouselCard: View {
                     )
             }
 
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: Theme.Spacing.md) {
-                    SummaryPill(title: "Sessions", value: bucket.sessionsValue, onTap: bucket.workouts.isEmpty ? nil : {
-                        onMetricTap(.sessions)
-                    })
-                    SummaryPill(title: "Volume", value: bucket.volumeValue, onTap: bucket.workouts.isEmpty ? nil : {
-                        onMetricTap(.totalVolume)
-                    })
-                }
-
-                VStack(spacing: Theme.Spacing.sm) {
-                    SummaryPill(title: "Sessions", value: bucket.sessionsValue, onTap: bucket.workouts.isEmpty ? nil : {
-                        onMetricTap(.sessions)
-                    })
-                    SummaryPill(title: "Volume", value: bucket.volumeValue, onTap: bucket.workouts.isEmpty ? nil : {
-                        onMetricTap(.totalVolume)
-                    })
-                }
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible(), spacing: Theme.Spacing.xs),
+                    GridItem(.flexible(), spacing: Theme.Spacing.xs)
+                ],
+                spacing: Theme.Spacing.xs
+            ) {
+                SummaryPill(title: "Sessions", value: bucket.sessionsValue, onTap: bucket.workouts.isEmpty ? nil : {
+                    onMetricTap(.sessions)
+                })
+                .accessibilityIdentifier("home-summary-sessions")
+                SummaryPill(title: "Volume", value: bucket.volumeValue, onTap: bucket.workouts.isEmpty ? nil : {
+                    onMetricTap(.totalVolume)
+                })
+                .accessibilityIdentifier("home-summary-totalVolume")
+                SummaryPill(title: "Sets", value: bucket.setsValue, onTap: bucket.workouts.isEmpty ? nil : {
+                    onMetricTap(.totalSets)
+                })
+                .accessibilityIdentifier("home-summary-totalSets")
+                SummaryPill(title: "Avg Duration", value: bucket.averageDurationValue, onTap: bucket.workouts.isEmpty ? nil : {
+                    onMetricTap(.averageDuration)
+                })
+                .accessibilityIdentifier("home-summary-averageDuration")
             }
 
             if bucket.workouts.isEmpty {

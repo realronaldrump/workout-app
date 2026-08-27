@@ -5,7 +5,8 @@ import Charts
 struct MetricDetailView: View {
     let kind: WorkoutMetricDetailKind
     let workouts: [Workout]
-    var scrollTarget: MetricDetailScrollTarget?
+    var weeklyCounts: [PerformanceWeeklyCount] = []
+    var averageSessionsPerWeek: Double?
 
     @EnvironmentObject var dataManager: WorkoutDataManager
     @EnvironmentObject var annotationsManager: WorkoutAnnotationsManager
@@ -14,10 +15,12 @@ struct MetricDetailView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @AppStorage("intentionalRestDays") private var intentionalRestDays: Int = 1
 
-    @State private var hasAutoScrolled = false
     @State private var selectedStreakRunId: String?
     @State private var selectedSessionDay: Date?
     @State private var selectedVolumeWorkoutId: UUID?
+    @State private var selectedValueDate: Date?
+    @State private var selectedValueWorkout: Workout?
+    @State private var selectedFrequencyWeek: Date?
     @State private var presentation = MetricDetailPresentation.empty
 
     private var sundayCalendar: Calendar {
@@ -45,45 +48,50 @@ struct MetricDetailView: View {
         ZStack {
             detailBackground
 
-            ScrollViewReader { proxy in
-                ScrollView(showsIndicators: false) {
-                    LazyVStack(alignment: .leading, spacing: Theme.Spacing.xl) {
-                        heroCard
+            ScrollView(showsIndicators: false) {
+                LazyVStack(alignment: .leading, spacing: Theme.Spacing.xl) {
+                    heroCard
 
-                        switch kind {
-                        case .sessions:
-                            sessionsSection
-                        case .streak:
-                            streakSection
-                        case .totalVolume:
-                            totalVolumeSection
-                        }
+                    switch kind {
+                    case .sessions:
+                        sessionsSection
+                    case .streak:
+                        streakSection
+                    case .totalVolume:
+                        totalVolumeSection
+                    case .totalSets, .averageDuration:
+                        workoutValueSection
+                    case .averageFrequency:
+                        averageFrequencySection
                     }
-                    .padding(.horizontal, Theme.Spacing.lg)
-                    .padding(.vertical, Theme.Spacing.xl)
-                    .frame(maxWidth: 920, alignment: .leading)
-                    .frame(maxWidth: .infinity, alignment: .center)
                 }
-                .onAppear {
-                    refreshPresentation()
-                    autoScrollIfNeeded(using: proxy)
-                }
-                .onChange(of: workouts) { _, _ in
-                    refreshPresentation()
-                }
-                .onChange(of: dataManager.workouts) { _, _ in
-                    refreshPresentation()
-                }
-                .onChange(of: intentionalRestDays) { _, _ in
-                    refreshPresentation()
-                }
-                .onChange(of: intentionalBreaksManager.savedBreaks) { _, _ in
-                    refreshPresentation()
-                }
+                .padding(.horizontal, Theme.Spacing.lg)
+                .padding(.vertical, Theme.Spacing.xl)
+                .frame(maxWidth: 920, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .center)
+            }
+            .onAppear {
+                refreshPresentation()
+            }
+            .onChange(of: workouts) { _, _ in
+                refreshPresentation()
+            }
+            .onChange(of: dataManager.workouts) { _, _ in
+                refreshPresentation()
+            }
+            .onChange(of: intentionalRestDays) { _, _ in
+                refreshPresentation()
+            }
+            .onChange(of: intentionalBreaksManager.savedBreaks) { _, _ in
+                refreshPresentation()
             }
         }
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
+        .accessibilityIdentifier("workout-metric-detail-\(kind.rawValue)")
+        .navigationDestination(item: $selectedValueWorkout) { workout in
+            WorkoutDetailView(workout: workout)
+        }
     }
 
     private func refreshPresentation() {
@@ -163,6 +171,21 @@ struct MetricDetailView: View {
                         value: SharedFormatters.volumePrecise(peakVolumeSession.map { normalizedVolume(for: $0) } ?? 0),
                         tint: Theme.Colors.accentSecondary
                     )
+                    HeroChip(title: "Sessions", value: "\(workouts.count)", tint: Theme.Colors.warning)
+                case .totalSets:
+                    HeroChip(title: "Total", value: "\(totalSetCount)", tint: Theme.Colors.accent)
+                    HeroChip(title: "Avg / Session", value: formattedSetAverage, tint: Theme.Colors.success)
+                    HeroChip(title: "Peak Session", value: "\(peakSetCount)", tint: Theme.Colors.accentTertiary)
+                    HeroChip(title: "Sessions", value: "\(workouts.count)", tint: Theme.Colors.warning)
+                case .averageDuration:
+                    HeroChip(title: "Average", value: formattedAverageDuration, tint: Theme.Colors.accent)
+                    HeroChip(title: "Shortest", value: formattedShortestDuration, tint: Theme.Colors.success)
+                    HeroChip(title: "Longest", value: formattedLongestDuration, tint: Theme.Colors.accentTertiary)
+                    HeroChip(title: "Sessions", value: "\(workouts.count)", tint: Theme.Colors.warning)
+                case .averageFrequency:
+                    HeroChip(title: "Average / Week", value: formattedAverageFrequency, tint: Theme.Colors.accent)
+                    HeroChip(title: "Active Weeks", value: "\(activeFrequencyWeekCount)", tint: Theme.Colors.success)
+                    HeroChip(title: "Peak Week", value: "\(peakFrequencyWeekCount)", tint: Theme.Colors.accentTertiary)
                     HeroChip(title: "Sessions", value: "\(workouts.count)", tint: Theme.Colors.warning)
                 }
             }
@@ -707,7 +730,6 @@ struct MetricDetailView: View {
             Text("Top Exercises By Volume")
                 .font(Theme.Typography.title3)
                 .foregroundColor(Theme.Colors.textPrimary)
-                .id(MetricDetailScrollTarget.topExercisesByVolume)
 
             if exerciseTotals.isEmpty {
                 EmptyStateTile(message: "No exercises available.")
@@ -750,6 +772,283 @@ struct MetricDetailView: View {
         .softCard(cornerRadius: Theme.CornerRadius.medium, elevation: 1)
     }
 
+    private var workoutValueSection: some View {
+        LazyVStack(alignment: .leading, spacing: Theme.Spacing.lg) {
+            sectionHeader(
+                title: kind == .totalSets ? "Set History" : "Session Duration",
+                subtitle: kind == .totalSets
+                    ? "Sets logged in each workout"
+                    : "Elapsed minutes for each workout"
+            )
+
+            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                if let selectedValueObservation {
+                    AnalysisTile(
+                        role: .revealSource,
+                        destination: "the source workout",
+                        accessibilityLabel: "\(workoutValueText(selectedValueObservation.value)), \(selectedValueObservation.date.formatted(date: .abbreviated, time: .omitted))",
+                        action: { openValueSource(selectedValueObservation) },
+                        content: {
+                            HStack {
+                                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                                    Text(workoutValueText(selectedValueObservation.value))
+                                        .font(Theme.Typography.cardHeader)
+                                        .foregroundStyle(Theme.Colors.textPrimary)
+                                    Text(selectedValueObservation.workoutName)
+                                        .font(Theme.Typography.caption)
+                                        .foregroundStyle(Theme.Colors.textSecondary)
+                                }
+                                Spacer()
+                                Text(selectedValueObservation.date.formatted(date: .abbreviated, time: .omitted))
+                                    .font(Theme.Typography.caption)
+                                    .foregroundStyle(Theme.Colors.textTertiary)
+                            }
+                        }
+                    )
+                }
+
+                SelectableMetricChart(
+                    points: workoutValueObservations,
+                    style: .bars,
+                    tint: Theme.Colors.accent,
+                    title: title,
+                    valueText: workoutValueText,
+                    selectedDate: $selectedValueDate
+                )
+            }
+            .padding(Theme.Spacing.lg)
+            .softCard(elevation: 1)
+
+            sectionHeader(
+                title: "Top Sessions",
+                subtitle: "Highest values in this range"
+            )
+
+            ForEach(Array(topWorkoutValueObservations.enumerated()), id: \.element.id) { index, observation in
+                AnalysisTile(
+                    role: .revealSource,
+                    destination: "the source workout",
+                    accessibilityLabel: "\(observation.workoutName), \(workoutValueText(observation.value))",
+                    action: { openValueSource(observation) },
+                    content: {
+                        HStack(spacing: Theme.Spacing.sm) {
+                            Text("#\(index + 1)")
+                                .font(Theme.Typography.metricLabel)
+                                .foregroundStyle(Theme.Colors.accent)
+                                .frame(width: 32)
+                            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                                Text(observation.workoutName)
+                                    .font(Theme.Typography.bodyBold)
+                                    .foregroundStyle(Theme.Colors.textPrimary)
+                                Text(observation.date.formatted(date: .abbreviated, time: .omitted))
+                                    .font(Theme.Typography.caption)
+                                    .foregroundStyle(Theme.Colors.textSecondary)
+                            }
+                            Spacer()
+                            Text(workoutValueText(observation.value))
+                                .font(Theme.Typography.numberSmall)
+                                .foregroundStyle(Theme.Colors.textPrimary)
+                                .monospacedDigit()
+                        }
+                    }
+                )
+            }
+        }
+    }
+
+    private var averageFrequencySection: some View {
+        LazyVStack(alignment: .leading, spacing: Theme.Spacing.lg) {
+            sectionHeader(
+                title: "Weekly Frequency",
+                subtitle: "Sessions logged in each week of the selected range"
+            )
+
+            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                PerformanceWeeklyChart(
+                    weeks: frequencyWeeks,
+                    selectedWeekStart: $selectedFrequencyWeek,
+                    averageOverride: resolvedAverageFrequency
+                )
+
+                if let selectedFrequencyWeekStart {
+                    HStack {
+                        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                            Text("Week of \(selectedFrequencyWeekStart.formatted(date: .abbreviated, time: .omitted))")
+                                .font(Theme.Typography.sectionHeader2)
+                                .foregroundStyle(Theme.Colors.textPrimary)
+                            Text("\(selectedFrequencyWorkouts.count) contributing workout\(selectedFrequencyWorkouts.count == 1 ? "" : "s")")
+                                .font(Theme.Typography.caption)
+                                .foregroundStyle(Theme.Colors.textSecondary)
+                        }
+
+                        Spacer()
+
+                        Button("Show All") {
+                            selectedFrequencyWeek = nil
+                            Haptics.selection()
+                        }
+                        .font(Theme.Typography.metricLabel)
+                        .frame(minHeight: Theme.Layout.minimumTapTarget)
+                    }
+
+                    ForEach(selectedFrequencyWorkouts) { workout in
+                        NavigationLink(destination: WorkoutDetailView(workout: workout)) {
+                            MetricWorkoutRow(
+                                workout: workout,
+                                subtitle: workout.date.formatted(date: .abbreviated, time: .shortened),
+                                exerciseCount: exerciseCount(for: workout),
+                                highlight: true
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .padding(Theme.Spacing.lg)
+            .softCard(elevation: 1)
+        }
+    }
+
+    private var frequencyWeeks: [PerformanceWeeklyCount] {
+        guard weeklyCounts.isEmpty else { return weeklyCounts }
+        guard let firstDate = workouts.map(\.date).min(),
+              let lastDate = workouts.map(\.date).max() else { return [] }
+
+        let calendar = sundayCalendar
+        let firstWeek = calendar.dateInterval(of: .weekOfYear, for: firstDate)?.start
+            ?? calendar.startOfDay(for: firstDate)
+        let lastWeek = calendar.dateInterval(of: .weekOfYear, for: lastDate)?.start
+            ?? calendar.startOfDay(for: lastDate)
+        let counts = Dictionary(grouping: workouts) { workout in
+            calendar.dateInterval(of: .weekOfYear, for: workout.date)?.start
+                ?? calendar.startOfDay(for: workout.date)
+        }
+
+        var result: [PerformanceWeeklyCount] = []
+        var cursor = firstWeek
+        while cursor <= lastWeek {
+            result.append(
+                PerformanceWeeklyCount(
+                    weekStart: cursor,
+                    count: counts[cursor]?.count ?? 0
+                )
+            )
+            guard let next = calendar.date(byAdding: .weekOfYear, value: 1, to: cursor),
+                  next > cursor else { break }
+            cursor = next
+        }
+        return result
+    }
+
+    private var resolvedAverageFrequency: Double {
+        if let averageSessionsPerWeek {
+            return averageSessionsPerWeek
+        }
+        guard !frequencyWeeks.isEmpty else { return 0 }
+        return Double(frequencyWeeks.reduce(0) { $0 + $1.count }) / Double(frequencyWeeks.count)
+    }
+
+    private var formattedAverageFrequency: String {
+        String(format: "%.1f", resolvedAverageFrequency)
+    }
+
+    private var activeFrequencyWeekCount: Int {
+        frequencyWeeks.filter { $0.count >= 1 }.count
+    }
+
+    private var peakFrequencyWeekCount: Int {
+        frequencyWeeks.map(\.count).max() ?? 0
+    }
+
+    private var selectedFrequencyWeekStart: Date? {
+        guard let selectedFrequencyWeek else { return nil }
+        return frequencyWeeks.first {
+            sundayCalendar.isDate(
+                $0.weekStart,
+                equalTo: selectedFrequencyWeek,
+                toGranularity: .weekOfYear
+            )
+        }?.weekStart
+    }
+
+    private var selectedFrequencyWorkouts: [Workout] {
+        guard let selectedFrequencyWeekStart else { return [] }
+        return workouts
+            .filter {
+                sundayCalendar.isDate(
+                    $0.date,
+                    equalTo: selectedFrequencyWeekStart,
+                    toGranularity: .weekOfYear
+                )
+            }
+            .sorted { $0.date > $1.date }
+    }
+
+    private var workoutValueObservations: [MetricObservation] {
+        workouts
+            .sorted { $0.date < $1.date }
+            .compactMap { workout in
+                let value: Double
+                switch kind {
+                case .totalSets:
+                    value = Double(
+                        ExerciseAggregation.totalSets(
+                            for: workout,
+                            resolver: ExerciseIdentityResolver.current
+                        )
+                    )
+                case .averageDuration:
+                    value = Double(workout.estimatedDurationMinutes())
+                case .sessions, .streak, .totalVolume, .averageFrequency:
+                    return nil
+                }
+                guard value > 0 else { return nil }
+                return MetricObservation(
+                    id: "\(kind.rawValue)|\(workout.id.uuidString)",
+                    date: workout.date,
+                    value: value,
+                    source: .workout(workout.id),
+                    workoutName: workout.name
+                )
+            }
+    }
+
+    private var topWorkoutValueObservations: [MetricObservation] {
+        Array(
+            workoutValueObservations
+                .sorted {
+                    if $0.value == $1.value { return $0.date > $1.date }
+                    return $0.value > $1.value
+                }
+                .prefix(10)
+        )
+    }
+
+    private var selectedValueObservation: MetricObservation? {
+        guard let selectedValueDate else { return nil }
+        return workoutValueObservations.min {
+            abs($0.date.timeIntervalSince(selectedValueDate)) <
+                abs($1.date.timeIntervalSince(selectedValueDate))
+        }
+    }
+
+    private func openValueSource(_ observation: MetricObservation) {
+        guard case .workout(let workoutID) = observation.source else { return }
+        selectedValueWorkout = workouts.first { $0.id == workoutID }
+            ?? dataManager.workouts.first { $0.id == workoutID }
+    }
+
+    private func workoutValueText(_ value: Double) -> String {
+        switch kind {
+        case .totalSets:
+            return "\(Int(value.rounded())) sets"
+        case .averageDuration:
+            return SharedFormatters.durationMinutes(value)
+        case .sessions, .streak, .totalVolume, .averageFrequency:
+            return "\(Int(value.rounded()))"
+        }
+    }
+
     private func sectionHeader(title: String, subtitle: String) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(title)
@@ -767,6 +1066,9 @@ struct MetricDetailView: View {
         case .sessions: return "Sessions"
         case .streak: return "Streak"
         case .totalVolume: return "Total Volume"
+        case .totalSets: return "Total Sets"
+        case .averageDuration: return "Average Duration"
+        case .averageFrequency: return "Average Per Week"
         }
     }
 
@@ -784,6 +1086,12 @@ struct MetricDetailView: View {
             return "\(currentStreakRun?.workoutDayCount ?? 0) day streak"
         case .totalVolume:
             return "\(SharedFormatters.volumeCompact(totalVolume))"
+        case .totalSets:
+            return "\(totalSetCount) sets"
+        case .averageDuration:
+            return formattedAverageDuration
+        case .averageFrequency:
+            return "\(formattedAverageFrequency) / week"
         }
     }
 
@@ -801,6 +1109,12 @@ struct MetricDetailView: View {
             return "Streaks honor your rest allowance plus any saved intentional break dates."
         case .totalVolume:
             return "Track progression, inspect outliers, and identify top-contributing exercises."
+        case .totalSets:
+            return "Inspect how much work each session contained."
+        case .averageDuration:
+            return "Compare session length without treating longer as automatically better."
+        case .averageFrequency:
+            return "See how consistently sessions were distributed across the selected range."
         }
     }
 
@@ -822,6 +1136,41 @@ struct MetricDetailView: View {
 
     private var peakVolumeSession: Workout? {
         presentation.peakVolumeSession
+    }
+
+    private var totalSetCount: Int {
+        workoutValueObservations.reduce(0) { $0 + Int($1.value.rounded()) }
+    }
+
+    private var averageSetCount: Double {
+        guard !workoutValueObservations.isEmpty else { return 0 }
+        return Double(totalSetCount) / Double(workoutValueObservations.count)
+    }
+
+    private var peakSetCount: Int {
+        Int((workoutValueObservations.map(\.value).max() ?? 0).rounded())
+    }
+
+    private var averageDurationMinutes: Double {
+        let values = workoutValueObservations.map(\.value)
+        guard !values.isEmpty else { return 0 }
+        return values.reduce(0, +) / Double(values.count)
+    }
+
+    private var formattedSetAverage: String {
+        String(format: "%.1f", averageSetCount)
+    }
+
+    private var formattedAverageDuration: String {
+        SharedFormatters.durationMinutes(averageDurationMinutes)
+    }
+
+    private var formattedShortestDuration: String {
+        SharedFormatters.durationMinutes(workoutValueObservations.map(\.value).min() ?? 0)
+    }
+
+    private var formattedLongestDuration: String {
+        SharedFormatters.durationMinutes(workoutValueObservations.map(\.value).max() ?? 0)
     }
 
     private var selectedSessionDayLabel: String {
@@ -1231,18 +1580,6 @@ struct MetricDetailView: View {
         }
     }
 
-    private func autoScrollIfNeeded(using proxy: ScrollViewProxy) {
-        guard !hasAutoScrolled else { return }
-        guard let scrollTarget else { return }
-        hasAutoScrolled = true
-        Task { @MainActor in
-            await Task.yield()
-            withAnimation(Theme.Animation.smooth) {
-                proxy.scrollTo(scrollTarget, anchor: .top)
-            }
-        }
-    }
-
     private func syncSelections(using nextPresentation: MetricDetailPresentation) {
         if let selectedSessionDay,
            !nextPresentation.sessionDayBuckets.contains(where: {
@@ -1254,6 +1591,11 @@ struct MetricDetailView: View {
         if let selectedVolumeWorkoutId,
            !nextPresentation.volumeWorkouts.contains(where: { $0.id == selectedVolumeWorkoutId }) {
             self.selectedVolumeWorkoutId = nil
+        }
+
+        if selectedFrequencyWeek != nil,
+           selectedFrequencyWeekStart == nil {
+            selectedFrequencyWeek = nil
         }
 
         let fallbackStreakRunID = nextPresentation.currentStreakRun?.id
@@ -1759,13 +2101,6 @@ private struct SessionDayBucket: Identifiable {
     let count: Int
 
     var id: Date { dayStart }
-}
-
-private struct SessionWeekBucket: Identifiable {
-    let weekStart: Date
-    let count: Int
-
-    var id: Date { weekStart }
 }
 
 private struct SessionDisplayDay: Identifiable {

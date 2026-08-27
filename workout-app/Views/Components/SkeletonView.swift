@@ -26,26 +26,6 @@ struct SkeletonModifier: ViewModifier {
     }
 }
 
-/// A multi-row skeleton placeholder mimicking a card's content.
-struct SkeletonCard: View {
-    var lines: Int = 3
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            SkeletonRect(width: 120, height: 14)
-            ForEach(0..<lines, id: \.self) { i in
-                SkeletonRect(
-                    width: i == lines - 1 ? 180 : nil,
-                    height: 12
-                )
-                .frame(maxWidth: i == lines - 1 ? 180 : .infinity, alignment: .leading)
-            }
-        }
-        .padding(Theme.Spacing.lg)
-        .softCard(elevation: 1)
-    }
-}
-
 /// A skeleton that mimics a chart placeholder.
 struct SkeletonChart: View {
     var height: CGFloat = Theme.ChartHeight.standard

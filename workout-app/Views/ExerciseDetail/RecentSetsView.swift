@@ -2,16 +2,22 @@ import SwiftUI
 
 struct RecentSetsView: View {
     let exerciseName: String
-    let history: [(date: Date, sets: [WorkoutSet])]
+    let sessions: [ExerciseHistorySession]
+    @EnvironmentObject private var dataManager: WorkoutDataManager
     @ObservedObject private var metadataManager = ExerciseMetadataManager.shared
     @ObservedObject private var metricManager = ExerciseMetricManager.shared
     @State private var visibleCount: Int = 5
+    @State private var selectedWorkout: Workout?
 
-    private var sortedSessions: [(date: Date, sets: [WorkoutSet])] {
-        history.sorted { $0.date > $1.date }
+    private var history: [(date: Date, sets: [WorkoutSet])] {
+        sessions.map { (date: $0.date, sets: $0.sets) }
     }
 
-    private var recentSessions: [(date: Date, sets: [WorkoutSet])] {
+    private var sortedSessions: [ExerciseHistorySession] {
+        sessions.sorted { $0.date > $1.date }
+    }
+
+    private var recentSessions: [ExerciseHistorySession] {
         Array(sortedSessions.prefix(visibleCount))
     }
 
@@ -37,39 +43,50 @@ struct RecentSetsView: View {
                 .foregroundColor(Theme.Colors.textPrimary)
 
             VStack(spacing: Theme.Spacing.md) {
-                ForEach(recentSessions, id: \.date) { session in
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(session.date.formatted(date: .abbreviated, time: .shortened))
-                            .font(Theme.Typography.subheadline)
-                            .foregroundColor(Theme.Colors.textSecondary)
+                ForEach(recentSessions, id: \.workoutId) { session in
+                    AnalysisTile(
+                        role: .revealSource,
+                        destination: "the source workout",
+                        accessibilityLabel: "\(session.date.formatted(date: .abbreviated, time: .shortened)), \(session.sets.count) sets",
+                        padding: Theme.Spacing.lg,
+                        action: {
+                            selectedWorkout = dataManager.workouts.first {
+                                $0.id == session.workoutId
+                            }
+                        },
+                        content: {
+                            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                                Text(session.date.formatted(date: .abbreviated, time: .shortened))
+                                    .font(Theme.Typography.subheadline)
+                                    .foregroundColor(Theme.Colors.textSecondary)
 
-                        ForEach(Array(session.sets.enumerated()), id: \.offset) { index, set in
-                            HStack {
-                                Text("Set \(index + 1)")
-                                    .font(Theme.Typography.caption)
-                                    .foregroundColor(Theme.Colors.textTertiary)
-                                    .frame(width: 50, alignment: .leading)
+                                ForEach(Array(session.sets.enumerated()), id: \.offset) { index, set in
+                                    HStack {
+                                        Text("Set \(index + 1)")
+                                            .font(Theme.Typography.caption)
+                                            .foregroundColor(Theme.Colors.textTertiary)
+                                            .frame(width: 50, alignment: .leading)
 
-                                if isCardio {
-                                    Text(cardioSetSummary(set))
-                                        .font(Theme.Typography.body)
+                                        if isCardio {
+                                            Text(cardioSetSummary(set))
+                                                .font(Theme.Typography.body)
 
-                                    Spacer()
-                                } else {
-                                    Text("\(Int(set.weight)) lbs × \(set.reps)")
-                                        .font(Theme.Typography.body)
+                                            Spacer()
+                                        } else {
+                                            Text("\(Int(set.weight)) lbs × \(set.reps)")
+                                                .font(Theme.Typography.body)
 
-                                    Spacer()
+                                            Spacer()
 
-                                    Text("\(Int(set.weight * Double(set.reps))) lbs")
-                                        .font(Theme.Typography.caption)
-                                        .foregroundColor(Theme.Colors.textSecondary)
+                                            Text("\(Int(set.weight * Double(set.reps))) lbs")
+                                                .font(Theme.Typography.caption)
+                                                .foregroundColor(Theme.Colors.textSecondary)
+                                        }
+                                    }
                                 }
                             }
                         }
-                    }
-                    .padding(Theme.Spacing.lg)
-                    .softCard(elevation: 2)
+                    )
                 }
 
                 if canShowMore {
@@ -87,6 +104,9 @@ struct RecentSetsView: View {
                     .softCard(elevation: 1)
                 }
             }
+        }
+        .navigationDestination(item: $selectedWorkout) { workout in
+            WorkoutDetailView(workout: workout)
         }
     }
 

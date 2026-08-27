@@ -128,6 +128,36 @@ final class HealthPerformanceTests: XCTestCase {
         XCTAssertTrue(sampled.contains { $0.value == 500 })
     }
 
+    func testMetricTrendRenderKeepsLowerIsBetterBestSampleWhenDownsampling() {
+        let calendar = Calendar(identifier: .gregorian)
+        let start = calendar.date(
+            from: DateComponents(year: 2020, month: 1, day: 1)
+        ) ?? .distantPast
+        let samples = (0..<1_000).map { index in
+            MetricDaySample(
+                date: calendar.date(byAdding: .day, value: index, to: start) ?? start,
+                value: index == 333 ? 40 : 60 + Double(index % 5)
+            )
+        }
+        let end = samples.last?.date ?? start
+        let analysis = MetricSeriesAnalysis(
+            metric: .restingHeartRate,
+            samples: samples,
+            range: DateInterval(start: start, end: end),
+            calendar: calendar,
+            now: calendar.date(byAdding: .day, value: 1, to: end) ?? end
+        )
+
+        let render = MetricChartRenderModel(
+            analysis: analysis,
+            domain: start...end
+        )
+
+        XCTAssertEqual(analysis.bestDay?.value, 40)
+        XCTAssertTrue(render.points.contains { $0.value == 40 })
+        XCTAssertEqual(render.bestPoint?.value, 40)
+    }
+
     @MainActor
     func testHealthCacheBootstrapLoadsEveryStoreWithoutBlockingMainActor() async {
         let defaultsContext = makeIsolatedDefaults()

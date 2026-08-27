@@ -350,25 +350,6 @@ nonisolated struct RespiratoryRateSample: Identifiable, Codable {
     }
 }
 
-// MARK: - Sync Status
-
-enum HealthSyncStatus: Codable {
-    case notSynced
-    case syncing
-    case synced(Date)
-    case failed(String)
-
-    var isSynced: Bool {
-        if case .synced = self { return true }
-        return false
-    }
-
-    var isSyncing: Bool {
-        if case .syncing = self { return true }
-        return false
-    }
-}
-
 // MARK: - Authorization Status
 
 enum HealthKitAuthorizationStatus {

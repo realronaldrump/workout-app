@@ -1,7 +1,7 @@
 import Combine
 import Foundation
 
-struct ExerciseHistorySession {
+nonisolated struct ExerciseHistorySession: Hashable, Sendable {
     let workoutId: UUID
     let date: Date
     let sets: [WorkoutSet]
@@ -276,6 +276,15 @@ class WorkoutDataManager: ObservableObject {
             )
         )
     }
+
+#if DEBUG
+    func installAnalyticsFixture(_ fixtureWorkouts: [Workout]) {
+        importedWorkouts = fixtureWorkouts
+        loggedWorkouts = []
+        loggedWorkoutIds = []
+        mergeSources()
+    }
+#endif
 
     private func applyImportedWorkouts(
         _ imported: [Workout],

@@ -1,6 +1,6 @@
 import Foundation
 
-nonisolated struct WorkoutSet: Identifiable, Codable, Hashable {
+nonisolated struct WorkoutSet: Identifiable, Codable, Hashable, Sendable {
     var id = UUID()
     let date: Date
     let workoutName: String

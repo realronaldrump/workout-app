@@ -40,6 +40,30 @@ final class ExerciseRelationshipTests: XCTestCase {
         )
     }
 
+    func testTransientFixtureRelationshipsDoNotWriteUserDefaults() {
+        let fixture = makeIsolatedRelationshipManager()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let persistedKeysBefore = Set(fixture.defaults.dictionaryRepresentation().keys)
+
+        fixture.manager.installTransientRelationships([
+            ExerciseRelationship(
+                exerciseName: "Fixture Row - Left",
+                parentName: "Fixture Row",
+                laterality: .left
+            )
+        ])
+
+        XCTAssertEqual(
+            fixture.manager.relationship(for: "Fixture Row - Left")?.parentName,
+            "Fixture Row"
+        )
+        XCTAssertEqual(
+            Set(fixture.defaults.dictionaryRepresentation().keys),
+            persistedKeysBefore
+        )
+        XCTAssertNil(fixture.defaults.data(forKey: "ExerciseRelationships"))
+    }
+
     func testCustomizedDefaultSideWinsAcrossManagerReload() {
         let fixture = makeIsolatedRelationshipManager()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }

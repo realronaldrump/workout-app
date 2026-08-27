@@ -146,7 +146,7 @@ final class RecoveryCoverageEngine: ObservableObject {
         if let avgRecent = average(recentHRV), let avgBase = average(baseHRV), avgBase > 0 {
             let percentChange = ((avgRecent - avgBase) / avgBase) * 100
             signals.append(RecoverySignal(
-                metric: "HRV",
+                metric: .heartRateVariability,
                 icon: "waveform.path.ecg",
                 currentValue: avgRecent,
                 baselineValue: avgBase,
@@ -161,7 +161,7 @@ final class RecoveryCoverageEngine: ObservableObject {
         if let avgRecent = average(recentRHR), let avgBase = average(baseRHR), avgBase > 0 {
             let percentChange = ((avgRecent - avgBase) / avgBase) * 100
             signals.append(RecoverySignal(
-                metric: "Resting HR",
+                metric: .restingHeartRate,
                 icon: "heart",
                 currentValue: avgRecent,
                 baselineValue: avgBase,
@@ -176,7 +176,7 @@ final class RecoveryCoverageEngine: ObservableObject {
         if let avgRecent = average(recentSleep), let avgBase = average(baseSleep), avgBase > 0 {
             let percentChange = ((avgRecent - avgBase) / avgBase) * 100
             signals.append(RecoverySignal(
-                metric: "Sleep",
+                metric: .sleep,
                 icon: "moon.zzz.fill",
                 currentValue: avgRecent,
                 baselineValue: avgBase,
@@ -322,7 +322,7 @@ final class RecoveryCoverageEngine: ObservableObject {
 // MARK: - Models
 
 nonisolated struct RecoverySignal: Identifiable, Sendable {
-    let metric: String
+    let metric: HealthMetric
     let icon: String
     let currentValue: Double
     let baselineValue: Double
@@ -330,7 +330,7 @@ nonisolated struct RecoverySignal: Identifiable, Sendable {
     /// Signed percent change from baseline.
     let percentChange: Double
 
-    var id: String { metric }
+    var id: String { metric.id }
 }
 
 nonisolated struct FrequencyInsight: Identifiable, Sendable {

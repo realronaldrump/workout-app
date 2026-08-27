@@ -10,6 +10,7 @@ struct BodyCompositionTrendChart: View {
 
     let color: Color
     let fullDomain: ClosedRange<Date>?
+    let comparisonStartDate: Date?
 
     let showMA7: Bool
     let showRA30: Bool
@@ -40,6 +41,7 @@ struct BodyCompositionTrendChart: View {
         forecast: [ForecastPoint],
         color: Color,
         fullDomain: ClosedRange<Date>? = nil,
+        comparisonStartDate: Date? = nil,
         showMA7: Bool,
         showRA30: Bool,
         showTrend: Bool,
@@ -57,6 +59,7 @@ struct BodyCompositionTrendChart: View {
         self.forecast = forecast
         self.color = color
         self.fullDomain = fullDomain
+        self.comparisonStartDate = comparisonStartDate
         self.showMA7 = showMA7
         self.showRA30 = showRA30
         self.showTrend = showTrend
@@ -179,6 +182,28 @@ struct BodyCompositionTrendChart: View {
                             .font(Theme.Typography.caption2Bold)
                             .foregroundStyle(Theme.Colors.textSecondary)
                     }
+            }
+
+            if let comparisonStartPoint {
+                RuleMark(x: .value("Change start", comparisonStartPoint.date))
+                    .foregroundStyle(Theme.Colors.warning)
+                    .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
+                    .annotation(position: .top, alignment: .leading) {
+                        Text("Start")
+                            .font(Theme.Typography.metricLabel)
+                            .foregroundStyle(Theme.Colors.warning)
+                    }
+
+                if let latest = points.last {
+                    RuleMark(x: .value("Latest", latest.date))
+                        .foregroundStyle(Theme.Colors.accent)
+                        .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
+                        .annotation(position: .top, alignment: .trailing) {
+                            Text("Latest")
+                                .font(Theme.Typography.metricLabel)
+                                .foregroundStyle(Theme.Colors.accent)
+                        }
+                }
             }
 
             // Area fill — gradient under the primary line
@@ -401,10 +426,20 @@ struct BodyCompositionTrendChart: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Body composition trend")
         .accessibilityValue(accessibilitySummary)
+        .accessibilityHint("Swipe up or down to inspect readings.")
+        .accessibilityAdjustableAction(adjustSelection)
     }
 
     private var averageValue: Double? {
         cachedAverageValue
+    }
+
+    private var comparisonStartPoint: TimeSeriesPoint? {
+        guard let comparisonStartDate else { return nil }
+        return points.min {
+            abs($0.date.timeIntervalSince(comparisonStartDate)) <
+                abs($1.date.timeIntervalSince(comparisonStartDate))
+        }
     }
 
     // MARK: - Selection
@@ -457,11 +492,32 @@ struct BodyCompositionTrendChart: View {
     }
 
     private var accessibilitySummary: String {
+        if let selectedPoint {
+            return "Selected \(selectedPoint.date.formatted(date: .abbreviated, time: .omitted)), "
+                + "\(headerValueText(selectedPoint.value)). \(points.count) readings."
+        }
         guard let first = points.first, let last = points.last else { return "No data points" }
         let low = cachedMinimumValue ?? first.value
         let high = cachedMaximumValue ?? first.value
         return "\(points.count) readings. First \(headerValueText(first.value)); "
             + "latest \(headerValueText(last.value)); low \(headerValueText(low)); high \(headerValueText(high))."
+    }
+
+    private func adjustSelection(_ direction: AccessibilityAdjustmentDirection) {
+        guard !points.isEmpty else { return }
+        let currentIndex = selectedPoint.flatMap { selected in
+            points.firstIndex(where: { $0.id == selected.id })
+        }
+        let nextIndex: Int
+        switch direction {
+        case .increment:
+            nextIndex = min((currentIndex ?? -1) + 1, points.count - 1)
+        case .decrement:
+            nextIndex = max((currentIndex ?? points.count) - 1, 0)
+        @unknown default:
+            return
+        }
+        selectedPoint = points[nextIndex]
     }
 
     private func isTapLike(_ translation: CGSize) -> Bool {

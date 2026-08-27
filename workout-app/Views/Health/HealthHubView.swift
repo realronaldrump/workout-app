@@ -210,6 +210,7 @@ struct HealthHubView: View {
                                 HealthSummaryCard(model: card)
                             }
                         )
+                        .accessibilityIdentifier("health-summary-\(card.metric.rawValue)")
                     }
                 }
             }
@@ -335,6 +336,7 @@ struct HealthHubView: View {
                         HealthCategoryCard(category: category)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityIdentifier("health-category-\(category.rawValue)")
                 }
             }
         }
@@ -442,6 +444,9 @@ struct HealthHubView: View {
     }
 
     private func catchUpRecentHealthData(force: Bool = false) async {
+#if DEBUG
+        guard !AnalyticsUITestFixture.isEnabled else { return }
+#endif
         guard healthManager.authorizationStatus == .authorized else { return }
         guard !isCatchUpSyncing, !healthManager.isDailySyncing else { return }
 

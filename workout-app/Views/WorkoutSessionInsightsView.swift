@@ -1,13 +1,23 @@
 import SwiftUI
 import Charts
 
+private enum SessionInsightFocus: Hashable {
+    case volume
+    case exercises
+    case health
+}
+
 struct WorkoutSessionInsightsView: View {
     let workout: Workout
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject var healthManager: HealthKitManager
     @EnvironmentObject var dataManager: WorkoutDataManager
     @EnvironmentObject var annotationsManager: WorkoutAnnotationsManager
     @EnvironmentObject var gymProfilesManager: GymProfilesManager
+    @State private var selectedFocus: SessionInsightFocus?
+    @State private var selectedVolumeExerciseName: String?
+    @State private var selectedExercise: ExerciseSelection?
     private let maxContentWidth: CGFloat = 760
     private var statColumns: [GridItem] {
         [GridItem(.adaptive(minimum: 120, maximum: 210), spacing: Theme.Spacing.md)]
@@ -35,26 +45,45 @@ struct WorkoutSessionInsightsView: View {
         ZStack {
             AdaptiveBackground()
 
-            ScrollView(showsIndicators: false) {
-                LazyVStack(alignment: .leading, spacing: Theme.Spacing.xxl) {
-                    header
+            ScrollViewReader { proxy in
+                ScrollView(showsIndicators: false) {
+                    LazyVStack(alignment: .leading, spacing: Theme.Spacing.xxl) {
+                        header
 
-                    volumeChartSection
+                        volumeChartSection
+                            .id(SessionInsightFocus.volume)
 
-                    statsSection
+                        statsSection
 
-                    healthSnapshotSection
+                        healthSnapshotSection
+                            .id(SessionInsightFocus.health)
 
-                    exerciseLinksSection
+                        exerciseLinksSection
+                            .id(SessionInsightFocus.exercises)
+                    }
+                    .padding(.vertical, Theme.Spacing.xxl)
+                    .padding(.horizontal, Theme.Spacing.lg)
+                    .frame(maxWidth: maxContentWidth, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .center)
                 }
-                .padding(.vertical, Theme.Spacing.xxl)
-                .padding(.horizontal, Theme.Spacing.lg)
-                .frame(maxWidth: maxContentWidth, alignment: .leading)
-                .frame(maxWidth: .infinity, alignment: .center)
+                .onChange(of: selectedFocus) { _, focus in
+                    guard let focus else { return }
+                    withAnimation(reduceMotion ? nil : Theme.Animation.smooth) {
+                        proxy.scrollTo(focus, anchor: .top)
+                    }
+                }
             }
         }
         .navigationTitle("Session")
         .navigationBarTitleDisplayMode(.inline)
+        .navigationDestination(item: $selectedExercise) { selection in
+            ExerciseDetailView(
+                exerciseName: selection.id,
+                dataManager: dataManager,
+                annotationsManager: annotationsManager,
+                gymProfilesManager: gymProfilesManager
+            )
+        }
     }
 
     private var header: some View {
@@ -82,18 +111,54 @@ struct WorkoutSessionInsightsView: View {
                     .padding(Theme.Spacing.lg)
                     .softCard(elevation: 1)
             } else {
+                if let selectedVolumeExercise {
+                    AnalysisTile(
+                        role: .navigate,
+                        destination: "\(selectedVolumeExercise.name) analysis",
+                        accessibilityLabel: "\(selectedVolumeExercise.name), \(SharedFormatters.volumeWithUnit(selectedVolumeExercise.volume))",
+                        action: {
+                            selectedExercise = ExerciseSelection(id: selectedVolumeExercise.name)
+                        },
+                        content: {
+                            HStack(spacing: Theme.Spacing.sm) {
+                                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                                    Text("Selected Exercise")
+                                        .sectionHeaderStyle()
+                                    Text(selectedVolumeExercise.name)
+                                        .font(Theme.Typography.bodyBold)
+                                        .foregroundStyle(Theme.Colors.textPrimary)
+                                    Text(SharedFormatters.volumeWithUnit(selectedVolumeExercise.volume))
+                                        .font(Theme.Typography.caption)
+                                        .foregroundStyle(Theme.Colors.textSecondary)
+                                }
+                            }
+                        }
+                    )
+                }
+
                 Chart(exerciseVolumes) { point in
                     BarMark(
                         x: .value("Volume", point.volume),
                         y: .value("Exercise", point.name)
                     )
-                    .foregroundStyle(Theme.Colors.accent)
+                    .foregroundStyle(
+                        selectedVolumeExerciseName == nil || selectedVolumeExerciseName == point.name
+                            ? Theme.Colors.accent
+                            : Theme.Colors.textTertiary
+                    )
                     .annotation(position: .trailing) {
                         Text(SharedFormatters.volumeCompact(point.volume))
                             .font(Theme.Typography.caption)
                             .foregroundStyle(Theme.Colors.textTertiary)
                     }
+
+                    if selectedVolumeExerciseName == point.name {
+                        RuleMark(y: .value("Selected exercise", point.name))
+                            .foregroundStyle(Theme.Colors.textPrimary)
+                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                    }
                 }
+                .chartYSelection(value: $selectedVolumeExerciseName)
                 .frame(height: CGFloat(exerciseVolumes.count) * 38 + 20)
                 .chartPlotStyle { plotArea in
                     plotArea.clipped()
@@ -126,6 +191,11 @@ struct WorkoutSessionInsightsView: View {
             + "\(SharedFormatters.volumeCompact(highest.volume)). Total \(SharedFormatters.volumeCompact(total))."
     }
 
+    private var selectedVolumeExercise: ExerciseVolumePoint? {
+        guard let selectedVolumeExerciseName else { return nil }
+        return exerciseVolumes.first { $0.name == selectedVolumeExerciseName }
+    }
+
     private var statsSection: some View {
         return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             Text("Stats")
@@ -137,15 +207,21 @@ struct WorkoutSessionInsightsView: View {
                     title: "Volume",
                     value: SharedFormatters.volumeCompact(
                         ExerciseAggregation.totalVolume(for: workout, resolver: ExerciseIdentityResolver.current)
-                    )
+                    ),
+                    isSelected: selectedFocus == .volume,
+                    action: { selectedFocus = .volume }
                 )
                 MetricStatPill(
                     title: "Total Sets",
-                    value: "\(ExerciseAggregation.totalSets(for: workout, resolver: ExerciseIdentityResolver.current))"
+                    value: "\(ExerciseAggregation.totalSets(for: workout, resolver: ExerciseIdentityResolver.current))",
+                    isSelected: selectedFocus == .exercises,
+                    action: { selectedFocus = .exercises }
                 )
                 MetricStatPill(
                     title: "Exercises",
-                    value: "\(ExerciseAggregation.exerciseCount(for: workout, resolver: ExerciseIdentityResolver.current))"
+                    value: "\(ExerciseAggregation.exerciseCount(for: workout, resolver: ExerciseIdentityResolver.current))",
+                    isSelected: selectedFocus == .exercises,
+                    action: { selectedFocus = .exercises }
                 )
             }
         }
@@ -162,13 +238,28 @@ struct WorkoutSessionInsightsView: View {
             if let data = healthManager.getHealthData(for: workout.id) {
                 LazyVGrid(columns: statColumns, spacing: Theme.Spacing.md) {
                     if let avgHR = data.avgHeartRate {
-                        MetricStatPill(title: "Avg HR", value: "\(Int(avgHR)) bpm")
+                        MetricStatPill(
+                            title: "Avg HR",
+                            value: "\(Int(avgHR)) bpm",
+                            isSelected: selectedFocus == .health,
+                            action: { selectedFocus = .health }
+                        )
                     }
                     if let maxHR = data.maxHeartRate {
-                        MetricStatPill(title: "Max HR", value: "\(Int(maxHR)) bpm")
+                        MetricStatPill(
+                            title: "Max HR",
+                            value: "\(Int(maxHR)) bpm",
+                            isSelected: selectedFocus == .health,
+                            action: { selectedFocus = .health }
+                        )
                     }
                     if let cals = data.activeCalories {
-                        MetricStatPill(title: "Calories", value: "\(Int(cals)) cal")
+                        MetricStatPill(
+                            title: "Calories",
+                            value: "\(Int(cals)) cal",
+                            isSelected: selectedFocus == .health,
+                            action: { selectedFocus = .health }
+                        )
                     }
                 }
 
@@ -242,18 +333,25 @@ struct WorkoutSessionInsightsView: View {
 private struct MetricStatPill: View {
     let title: String
     let value: String
+    let isSelected: Bool
+    let action: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Colors.textSecondary)
-            Text(value)
-                .font(Theme.Typography.headline)
-                .foregroundStyle(Theme.Colors.textPrimary)
-        }
-        .padding(Theme.Spacing.md)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .softCard(elevation: 1)
+        AnalysisTile(
+            role: .focus,
+            destination: title,
+            accessibilityLabel: "\(title), \(value)",
+            isSelected: isSelected,
+            action: action,
+            content: {
+                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                    Text(title)
+                        .sectionHeaderStyle()
+                    Text(value)
+                        .font(Theme.Typography.cardHeader)
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                }
+            }
+        )
     }
 }

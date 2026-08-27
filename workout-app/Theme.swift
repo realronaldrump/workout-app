@@ -881,21 +881,3 @@ struct SwipeHintModifier: ViewModifier {
             }
     }
 }
-
-// MARK: - Inline Section Surface
-
-/// Alternating surface tint for visual rhythm between stacked full-bleed sections.
-struct InlineSectionSurface: ViewModifier {
-    var isAlternate: Bool = false
-
-    func body(content: Content) -> some View {
-        content
-            .padding(.horizontal, Theme.Spacing.lg)
-            .padding(.vertical, Theme.Spacing.lg)
-            .background(
-                isAlternate
-                    ? Theme.Colors.surfaceRaised
-                    : Color.clear
-            )
-    }
-}

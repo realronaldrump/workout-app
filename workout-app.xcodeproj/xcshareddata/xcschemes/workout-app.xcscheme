@@ -41,6 +41,17 @@
                ReferencedContainer = "container:workout-app.xcodeproj">
             </BuildableReference>
          </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "7A2000082F60000000817762"
+               BuildableName = "workout-appUITests.xctest"
+               BlueprintName = "workout-appUITests"
+               ReferencedContainer = "container:workout-app.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
    </TestAction>
    <LaunchAction

@@ -22,6 +22,7 @@ struct ExerciseDetailView: View {
     @State private var didInitializeProgressRange = false
     @State private var selectedVariantWorkout: Workout?
     @State private var scopedHistory: [(date: Date, sets: [WorkoutSet])] = []
+    @State private var scopedHistorySessions: [ExerciseHistorySession] = []
     @State private var exerciseWorkouts: [Workout] = []
     @State private var isLoadingExerciseDetail = false
     @State private var exerciseDetailError: String?
@@ -125,7 +126,7 @@ struct ExerciseDetailView: View {
     private struct ExercisePerformanceTrack: Identifiable {
         let name: String
         let label: String
-        let history: [(date: Date, sets: [WorkoutSet])]
+        let sessions: [ExerciseHistorySession]
 
         var id: String { name }
     }
@@ -564,13 +565,23 @@ struct ExerciseDetailView: View {
         for targetName: String,
         includingVariants: Bool
     ) -> [(date: Date, sets: [WorkoutSet])] {
+        filteredHistorySessions(
+            for: targetName,
+            includingVariants: includingVariants
+        )
+        .map { (date: $0.date, sets: $0.sets) }
+    }
+
+    private func filteredHistorySessions(
+        for targetName: String,
+        includingVariants: Bool
+    ) -> [ExerciseHistorySession] {
         let sourceHistory = exerciseWorkouts.isEmpty
             ? dataManager.exerciseHistorySessions(for: targetName, includingVariants: includingVariants)
             : historySessions(from: exerciseWorkouts, targetName: targetName, includingVariants: includingVariants)
 
         return sourceHistory
             .filter { matchesSelectedGymScope(workoutId: $0.workoutId) }
-            .map { (date: $0.date, sets: $0.sets) }
     }
 
     private func matchesSelectedGymScope(workoutId: UUID) -> Bool {
@@ -586,10 +597,11 @@ struct ExerciseDetailView: View {
     }
 
     private func refreshScopedHistory() {
-        scopedHistory = filteredHistoryTuples(
+        scopedHistorySessions = filteredHistorySessions(
             for: exerciseName,
             includingVariants: !isVariantPage
         )
+        scopedHistory = scopedHistorySessions.map { (date: $0.date, sets: $0.sets) }
 
         let sets = scopedHistory.flatMap(\.sets)
         if isCardio {
@@ -642,10 +654,26 @@ struct ExerciseDetailView: View {
 
     private var performanceTracks: [ExercisePerformanceTrack] {
         exactTrackNamesForBreakdown().compactMap { track in
-            let history = filteredHistoryTuples(for: track.name, includingVariants: false)
-            guard !history.isEmpty else { return nil }
-            return ExercisePerformanceTrack(name: track.name, label: track.label, history: history)
+            let sessions = filteredHistorySessions(for: track.name, includingVariants: false)
+            guard !sessions.isEmpty else { return nil }
+            return ExercisePerformanceTrack(name: track.name, label: track.label, sessions: sessions)
         }
+    }
+
+    private var exerciseAnalysisGymScope: ExerciseAnalysisGymScope {
+        switch selectedGymScope {
+        case .all: return .all
+        case .unassigned: return .unassigned
+        case .gym(let id): return .gym(id)
+        }
+    }
+
+    private func analysisScope(for performanceTrackName: String) -> ExerciseAnalysisScope {
+        ExerciseAnalysisScope(
+            exerciseName: exerciseName,
+            performanceTrackName: performanceTrackName,
+            gym: exerciseAnalysisGymScope
+        )
     }
 
     private func exactTrackNamesForBreakdown() -> [(name: String, label: String)] {
@@ -890,7 +918,8 @@ struct ExerciseDetailView: View {
                             .tracking(0.8)
                         PersonalRecordsView(
                             exerciseName: track.name,
-                            history: track.history,
+                            sessions: track.sessions,
+                            scope: analysisScope(for: track.name),
                             title: ""
                         )
                     }
@@ -899,7 +928,8 @@ struct ExerciseDetailView: View {
         } else {
             PersonalRecordsView(
                 exerciseName: exerciseName,
-                history: scopedHistory
+                sessions: scopedHistorySessions,
+                scope: analysisScope(for: exerciseName)
             )
         }
     }
@@ -1014,9 +1044,12 @@ struct ExerciseDetailView: View {
 
                     ExerciseStatsCards(
                         exerciseName: exerciseName,
-                        history: scopedHistory,
+                        sessions: scopedHistorySessions,
+                        scope: analysisScope(for: exerciseName),
                         showsPerformanceStats: !showsAggregateBreakdown
                     )
+
+                    personalRecordsSection
 
                     relationshipPanel
 
@@ -1046,7 +1079,11 @@ struct ExerciseDetailView: View {
                     }
 
                     if !isCardio && !showsAggregateBreakdown {
-                        ExerciseRangeBreakdown(exerciseName: exerciseName, history: scopedHistory)
+                        ExerciseRangeBreakdown(
+                            exerciseName: exerciseName,
+                            sessions: scopedHistorySessions,
+                            scope: analysisScope(for: exerciseName)
+                        )
                     }
 
                     if !exerciseInsights.isEmpty {
@@ -1110,11 +1147,9 @@ struct ExerciseDetailView: View {
                         }
                     }
 
-                    personalRecordsSection
-
                     RecentSetsView(
                         exerciseName: exerciseName,
-                        history: scopedHistory
+                        sessions: scopedHistorySessions
                     )
                 }
                 .padding(Theme.Spacing.xl)
@@ -1123,6 +1158,7 @@ struct ExerciseDetailView: View {
         }
         .navigationTitle(exerciseName)
         .navigationBarTitleDisplayMode(.large)
+        .accessibilityIdentifier("exercise-detail-\(exerciseName)")
         .navigationDestination(item: $selectedVariantWorkout) { workout in
             WorkoutDetailView(workout: workout)
         }

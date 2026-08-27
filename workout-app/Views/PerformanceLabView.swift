@@ -38,6 +38,8 @@ struct PerformanceLabView: View {
     @State private var selectedWorkout: Workout?
     @State private var selectedExercise: ExerciseSelection?
     @State private var selectedChangeMetric: ChangeMetric?
+    @State private var selectedWorkoutMetric: WorkoutMetricDetailSelection?
+    @State private var selectedActivityWeek: Date?
     @State private var derivedAnalytics = DerivedAnalytics()
     @State private var derivedRefreshTask: Task<Void, Never>?
 
@@ -158,6 +160,19 @@ struct PerformanceLabView: View {
         derivedAnalytics.selectedRangeWorkouts
     }
 
+    private var selectedWeeklyContributorWorkouts: [Workout] {
+        guard let selectedActivityWeek else { return [] }
+        return selectedRangeWorkouts
+            .filter {
+                Calendar.current.isDate(
+                    $0.date,
+                    equalTo: selectedActivityWeek,
+                    toGranularity: .weekOfYear
+                )
+            }
+            .sorted { $0.date > $1.date }
+    }
+
     private var selectedChangeWindow: ChangeMetricWindow? {
         guard let current = selectedRangeInterval else { return nil }
         let previous = previousInterval(matching: current)
@@ -211,6 +226,7 @@ struct PerformanceLabView: View {
         }
         .navigationTitle("Performance")
         .navigationBarTitleDisplayMode(.inline)
+        .accessibilityIdentifier("performance-lab")
         .navigationDestination(item: $selectedWorkout) { workout in
             WorkoutDetailView(workout: workout)
         }
@@ -233,6 +249,14 @@ struct PerformanceLabView: View {
                 metric: metric,
                 window: selectedChangeWindow ?? fallbackWindow,
                 workouts: workouts
+            )
+        }
+        .navigationDestination(item: $selectedWorkoutMetric) { selection in
+            MetricDetailView(
+                kind: selection.kind,
+                workouts: selectedRangeWorkouts,
+                weeklyCounts: derivedAnalytics.weeklyCounts,
+                averageSessionsPerWeek: derivedAnalytics.averageWorkoutsPerWeek
             )
         }
         .onAppear {
@@ -328,7 +352,7 @@ struct PerformanceLabView: View {
                     endDate: $customEndDate,
                     earliestSelectableDate: earliestWorkoutDate,
                     latestSelectableDate: latestSelectableDate
-                )
+                    )
             }
         }
     }
@@ -402,21 +426,29 @@ struct PerformanceLabView: View {
         glanceTile(
             value: "\(selectedRangeWorkouts.count)",
             label: "In \(selectedWindowContextLabel)",
-            icon: "calendar"
+            icon: "calendar",
+            metric: .sessions
         )
         glanceTile(
             value: avgPerWeekText,
             label: "Avg / Week",
-            icon: "chart.bar.fill"
+            icon: "chart.bar.fill",
+            metric: .averageFrequency
         )
         glanceTile(
             value: "\(currentStreak)",
             label: currentStreak == bestStreak && currentStreak > 0 ? "Day Streak \u{2605}" : "Day Streak",
-            icon: "flame.fill"
+            icon: "flame.fill",
+            metric: .streak
         )
     }
 
-    private func glanceTile(value: String, label: String, icon: String) -> some View {
+    private func glanceTile(
+        value: String,
+        label: String,
+        icon: String,
+        metric: WorkoutMetricDetailKind
+    ) -> some View {
         let tileColor: Color = {
             switch icon {
             case "flame.fill": return Theme.Colors.accentSecondary
@@ -425,29 +457,34 @@ struct PerformanceLabView: View {
             }
         }()
 
-        return VStack(spacing: Theme.Spacing.sm) {
-            Image(systemName: icon)
-                .font(Theme.Iconography.title3)
-                .foregroundColor(tileColor)
-                .frame(width: 40, height: 40)
-                .background(
-                    Circle()
-                        .fill(tileColor.opacity(Theme.Opacity.subtleFill))
+        return AnalysisTile(
+            role: .navigate,
+            destination: "\(label) analysis",
+            accessibilityLabel: "\(label), \(value)",
+            action: {
+                selectedWorkoutMetric = WorkoutMetricDetailSelection(
+                    kind: metric
                 )
-            Text(value)
-                .font(Theme.Typography.number)
-                .foregroundColor(Theme.Colors.textPrimary)
-            Text(label)
-                .font(Theme.Typography.metricLabel)
-                .foregroundColor(Theme.Colors.textSecondary)
-                .textCase(.uppercase)
-                .tracking(0.5)
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, Theme.Spacing.lg)
-        .padding(.horizontal, Theme.Spacing.sm)
-        .softCard(elevation: 2)
+            },
+            content: {
+                VStack(spacing: Theme.Spacing.sm) {
+                    Image(systemName: icon)
+                        .font(Theme.Iconography.title3)
+                        .foregroundColor(tileColor)
+                    Text(value)
+                        .font(Theme.Typography.number)
+                        .foregroundColor(Theme.Colors.textPrimary)
+                    Text(label)
+                        .font(Theme.Typography.metricLabel)
+                        .foregroundColor(Theme.Colors.textSecondary)
+                        .textCase(.uppercase)
+                        .tracking(0.5)
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+            }
+        )
+        .accessibilityIdentifier("performance-glance-\(metric.rawValue)")
     }
 
     // MARK: - Comparison (Recent vs Before)
@@ -780,14 +817,74 @@ struct PerformanceLabView: View {
                     .padding(Theme.Spacing.lg)
                     .softCard(elevation: 2)
             } else {
-                PerformanceWeeklyChart(weeks: weeks)
+                PerformanceWeeklyChart(
+                    weeks: weeks,
+                    selectedWeekStart: $selectedActivityWeek
+                )
                     .padding(Theme.Spacing.lg)
                     .softCard(elevation: 2)
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("Weekly activity")
-                    .accessibilityValue(
-                        "\(weeks.reduce(0) { $0 + $1.count }) workouts across \(weeks.count) weeks."
+
+                if let selectedActivityWeek {
+                    weeklyContributors(
+                        weekStart: selectedActivityWeek,
+                        workouts: selectedWeeklyContributorWorkouts
                     )
+                }
+            }
+        }
+    }
+
+    private func weeklyContributors(
+        weekStart: Date,
+        workouts: [Workout]
+    ) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Week of \(weekStart.formatted(date: .abbreviated, time: .omitted))")
+                        .font(Theme.Typography.sectionHeader2)
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                    Text("\(workouts.count) contributing workout\(workouts.count == 1 ? "" : "s")")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                Spacer()
+
+                Button("Show All") {
+                    selectedActivityWeek = nil
+                    Haptics.selection()
+                }
+                .font(Theme.Typography.metricLabel)
+                .frame(minHeight: Theme.Layout.minimumTapTarget)
+            }
+
+            if workouts.isEmpty {
+                Text("No workouts were recorded in this week.")
+                    .font(Theme.Typography.body)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+            } else {
+                ForEach(workouts) { workout in
+                    AnalysisTile(
+                        role: .revealSource,
+                        destination: "the source workout",
+                        accessibilityLabel: "\(workout.name), \(workout.date.formatted(date: .abbreviated, time: .shortened))",
+                        action: { selectedWorkout = workout },
+                        content: {
+                            HStack(spacing: Theme.Spacing.sm) {
+                                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                                    Text(workout.name)
+                                        .font(Theme.Typography.bodyBold)
+                                        .foregroundStyle(Theme.Colors.textPrimary)
+                                    Text(workout.date.formatted(date: .abbreviated, time: .shortened))
+                                        .font(Theme.Typography.caption)
+                                        .foregroundStyle(Theme.Colors.textSecondary)
+                                }
+                            }
+                        }
+                    )
+                }
             }
         }
     }
@@ -841,6 +938,7 @@ struct PerformanceLabView: View {
         guard let range = selectedRangeInterval,
               let window = selectedChangeWindow else {
             derivedAnalytics = DerivedAnalytics()
+            selectedActivityWeek = nil
             return
         }
 
@@ -915,6 +1013,16 @@ struct PerformanceLabView: View {
             ),
             weeklyCounts: weeklyWorkoutCounts(workouts: currentWorkouts, range: range)
         )
+        if let selectedActivityWeek,
+           !derivedAnalytics.weeklyCounts.contains(where: {
+               Calendar.current.isDate(
+                   $0.weekStart,
+                   equalTo: selectedActivityWeek,
+                   toGranularity: .weekOfYear
+               )
+           }) {
+            self.selectedActivityWeek = nil
+        }
     }
 
     // MARK: - Helpers

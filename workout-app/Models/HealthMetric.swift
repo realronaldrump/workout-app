@@ -10,7 +10,7 @@ enum HealthHubCategory: String, CaseIterable, Identifiable {
     case body
     case sessions
 
-    var id: String { rawValue }
+    nonisolated var id: String { rawValue }
 
     var title: String {
         switch self {
@@ -99,7 +99,7 @@ enum HealthMetric: String, CaseIterable, Identifiable, Sendable {
     case bodyMass
     case bodyFatPercentage
 
-    var id: String { rawValue }
+    nonisolated var id: String { rawValue }
 
     var title: String {
         switch self {

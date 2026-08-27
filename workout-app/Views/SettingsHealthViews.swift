@@ -968,11 +968,6 @@ private struct FlowLayout: Layout {
     }
 }
 
-// MARK: - Legacy Aliases (preserve compilation)
-
-typealias HealthHistorySyncView = HealthDataSettingsView
-typealias HealthCacheManagementView = HealthDataSettingsView
-
 struct SleepSourceSettingsView: View {
     @EnvironmentObject private var healthManager: HealthKitManager
     let workouts: [Workout]

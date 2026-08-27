@@ -5,6 +5,7 @@ import SwiftUI
 struct RecoveryCoverageDetailView: View {
     @ObservedObject var engine: RecoveryCoverageEngine
     @State private var selectedFrequencyWindow: FrequencyInsightWindow = .twelveWeeks
+    @State private var selectedHealthMetric: HealthMetric?
 
     private var frequencyInsights: [FrequencyInsight] {
         engine.frequencyInsights(for: selectedFrequencyWindow)
@@ -38,6 +39,10 @@ struct RecoveryCoverageDetailView: View {
         }
         .navigationTitle("Recovery & Coverage")
         .navigationBarTitleDisplayMode(.inline)
+        .accessibilityIdentifier("recovery-coverage-detail")
+        .navigationDestination(item: $selectedHealthMetric) { metric in
+            HealthMetricDetailView(metric: metric)
+        }
     }
 
     private var headerSection: some View {
@@ -70,58 +75,65 @@ struct RecoveryCoverageDetailView: View {
 
                 VStack(spacing: Theme.Spacing.md) {
                     ForEach(engine.recoverySignals) { signal in
-                        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                            HStack {
-                                Image(systemName: signal.icon)
-                                    .font(Theme.Typography.subheadlineBold)
-                                    .foregroundColor(Theme.Colors.accentSecondary)
-                                Text(signal.metric)
-                                    .font(Theme.Typography.headline)
-                                    .foregroundColor(Theme.Colors.textPrimary)
+                        AnalysisTile(
+                            role: .navigate,
+                            destination: "\(signal.metric.title) analysis",
+                            accessibilityLabel: "\(signal.metric.title), \(String(format: "%.1f", signal.currentValue)) \(signal.unit)",
+                            action: { selectedHealthMetric = signal.metric },
+                            content: {
+                                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                                    HStack {
+                                        Image(systemName: signal.icon)
+                                            .font(Theme.Typography.subheadlineBold)
+                                            .foregroundColor(Theme.Colors.accentSecondary)
+                                        Text(signal.metric.title)
+                                            .font(Theme.Typography.headline)
+                                            .foregroundColor(Theme.Colors.textPrimary)
 
-                                Spacer()
+                                        Spacer()
 
-                                Text(String(format: "%+.1f%%", signal.percentChange))
-                                    .font(Theme.Typography.metricLabel)
-                                    .foregroundColor(Theme.Colors.textSecondary)
-                                    .textCase(.uppercase)
-                                    .tracking(0.5)
+                                        Text(String(format: "%+.1f%%", signal.percentChange))
+                                            .font(Theme.Typography.metricLabel)
+                                            .foregroundColor(Theme.Colors.textSecondary)
+                                            .textCase(.uppercase)
+                                            .tracking(0.5)
+                                    }
+
+                                    HStack(spacing: Theme.Spacing.lg) {
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text("Current")
+                                                .font(Theme.Typography.metricLabel)
+                                                .foregroundColor(Theme.Colors.textTertiary)
+                                                .textCase(.uppercase)
+                                            Text(String(format: "%.1f %@", signal.currentValue, signal.unit))
+                                                .font(Theme.Typography.headline)
+                                                .foregroundColor(Theme.Colors.textPrimary)
+                                        }
+
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text("Baseline")
+                                                .font(Theme.Typography.metricLabel)
+                                                .foregroundColor(Theme.Colors.textTertiary)
+                                                .textCase(.uppercase)
+                                            Text(String(format: "%.1f %@", signal.baselineValue, signal.unit))
+                                                .font(Theme.Typography.headline)
+                                                .foregroundColor(Theme.Colors.textSecondary)
+                                        }
+
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text("Deviation")
+                                                .font(Theme.Typography.metricLabel)
+                                                .foregroundColor(Theme.Colors.textTertiary)
+                                                .textCase(.uppercase)
+                                            Text(String(format: "%+.1f%%", signal.percentChange))
+                                                .font(Theme.Typography.headline)
+                                                .foregroundColor(Theme.Colors.textPrimary)
+                                        }
+                                    }
+                                }
                             }
-
-                            HStack(spacing: Theme.Spacing.lg) {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("Current")
-                                        .font(Theme.Typography.metricLabel)
-                                        .foregroundColor(Theme.Colors.textTertiary)
-                                        .textCase(.uppercase)
-                                    Text(String(format: "%.1f %@", signal.currentValue, signal.unit))
-                                        .font(Theme.Typography.headline)
-                                        .foregroundColor(Theme.Colors.textPrimary)
-                                }
-
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("Baseline")
-                                        .font(Theme.Typography.metricLabel)
-                                        .foregroundColor(Theme.Colors.textTertiary)
-                                        .textCase(.uppercase)
-                                    Text(String(format: "%.1f %@", signal.baselineValue, signal.unit))
-                                        .font(Theme.Typography.headline)
-                                        .foregroundColor(Theme.Colors.textSecondary)
-                                }
-
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("Deviation")
-                                        .font(Theme.Typography.metricLabel)
-                                        .foregroundColor(Theme.Colors.textTertiary)
-                                        .textCase(.uppercase)
-                                    Text(String(format: "%+.1f%%", signal.percentChange))
-                                        .font(Theme.Typography.headline)
-                                        .foregroundColor(Theme.Colors.textPrimary)
-                                }
-                            }
-                        }
-                        .padding(Theme.Spacing.md)
-                        .softCard(elevation: 1)
+                        )
+                        .accessibilityIdentifier("recovery-signal-\(signal.metric.rawValue)")
                     }
                 }
             }

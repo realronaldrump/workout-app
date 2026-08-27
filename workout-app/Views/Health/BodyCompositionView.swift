@@ -20,6 +20,8 @@ struct BodyCompositionView: View {
     @State private var showRA30 = true
     @State private var showTrend = false
     @State private var showForecast = false
+    @State private var selectedIntervalDeltaID: String?
+    @State private var selectedBodyStatFocus: BodyStatFocus?
 
     @State private var expandedDays: Set<Date> = []
     @State private var dataRefreshTask: Task<Void, Never>?
@@ -88,11 +90,13 @@ struct BodyCompositionView: View {
         }
         .navigationTitle("Body Composition")
         .navigationBarTitleDisplayMode(.inline)
+        .accessibilityIdentifier("body-composition")
         .onAppear {
             healthManager.refreshAuthorizationStatus()
             refreshData()
         }
         .onChange(of: dateRangeContext.selectedRange) { _, _ in
+            selectedIntervalDeltaID = nil
             refreshData()
         }
         .onChange(of: dateRangeContext.customRange) { _, _ in
@@ -102,6 +106,8 @@ struct BodyCompositionView: View {
         }
         .onChange(of: metricKind) { _, _ in
             expandedDays.removeAll()
+            selectedIntervalDeltaID = nil
+            selectedBodyStatFocus = nil
             refreshData()
         }
         .onChange(of: reportGranularity) { _, newValue in
@@ -220,31 +226,80 @@ struct BodyCompositionView: View {
 
         var stats: [BodyStatItem] = []
         if let latest {
-            stats.append(BodyStatItem(title: "Current", value: formatValue(latest)))
+            stats.append(BodyStatItem(title: "Current", value: formatValue(latest), focus: .current))
         }
         if let latestMA7 {
-            stats.append(BodyStatItem(title: "7-day avg", value: formatValue(latestMA7)))
+            stats.append(BodyStatItem(title: "7-day avg", value: formatValue(latestMA7), focus: .sevenDay))
         }
         if let latestRA30 {
-            stats.append(BodyStatItem(title: "30-day avg", value: formatValue(latestRA30)))
+            stats.append(BodyStatItem(title: "30-day avg", value: formatValue(latestRA30), focus: .thirtyDay))
         }
         if let pace {
-            stats.append(BodyStatItem(title: "Weekly Pace", value: formatDeltaPerWeek(pace)))
+            stats.append(BodyStatItem(title: "Weekly Pace", value: formatDeltaPerWeek(pace), focus: .pace))
         }
 
         return ViewThatFits(in: .horizontal) {
             HStack(spacing: Theme.Spacing.md) {
                 ForEach(stats) { stat in
-                    BodyStatCard(title: stat.title, value: stat.value, subtitle: stat.subtitle)
+                    bodyStatCard(stat)
                 }
             }
 
             LazyVGrid(columns: compactStatColumns, spacing: Theme.Spacing.md) {
                 ForEach(stats) { stat in
-                    BodyStatCard(title: stat.title, value: stat.value, subtitle: stat.subtitle)
+                    bodyStatCard(stat)
                 }
             }
         }
+    }
+
+    private func bodyStatCard(_ stat: BodyStatItem) -> some View {
+        AnalysisTile(
+            role: .focus,
+            destination: stat.title,
+            accessibilityLabel: "\(stat.title), \(stat.value)",
+            isSelected: selectedBodyStatFocus == stat.focus,
+            action: {
+                withAnimation(reduceMotion ? nil : Theme.Animation.smooth) {
+                    selectedBodyStatFocus = stat.focus
+                    switch stat.focus {
+                    case .current:
+                        selectedTab = .overview
+                        showMA7 = false
+                        showRA30 = false
+                        showTrend = false
+                        showForecast = false
+                    case .sevenDay:
+                        selectedTab = .overview
+                        showMA7 = true
+                        showRA30 = false
+                        showTrend = false
+                        showForecast = false
+                    case .thirtyDay:
+                        selectedTab = .overview
+                        showMA7 = false
+                        showRA30 = true
+                        showTrend = false
+                        showForecast = false
+                    case .pace:
+                        selectedTab = .overview
+                        showMA7 = false
+                        showRA30 = false
+                        showTrend = true
+                        showForecast = false
+                    }
+                }
+                Haptics.selection()
+            },
+            content: {
+                BodyStatCard(
+                    title: stat.title,
+                    value: stat.value,
+                    subtitle: stat.subtitle
+                )
+            }
+        )
+        .accessibilityIdentifier("body-stat-\(stat.focus.rawValue)")
     }
 
     private var intervalChangesSection: some View {
@@ -264,18 +319,52 @@ struct BodyCompositionView: View {
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: Theme.Spacing.md) {
                         ForEach(model.intervalDeltas) { delta in
-                            DeltaCard(title: delta.label, delta: delta.delta, baselineDate: delta.baselineDate, unit: metricKind.unitLabel)
+                            intervalDeltaCard(delta)
                         }
                     }
 
                     LazyVGrid(columns: compactStatColumns, spacing: Theme.Spacing.md) {
                         ForEach(model.intervalDeltas) { delta in
-                            DeltaCard(title: delta.label, delta: delta.delta, baselineDate: delta.baselineDate, unit: metricKind.unitLabel)
+                            intervalDeltaCard(delta)
                         }
                     }
                 }
+
+                if let selectedIntervalDelta {
+                    Text(intervalDeltaExplanation(selectedIntervalDelta))
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
+    }
+
+    private func intervalDeltaCard(_ delta: IntervalDelta) -> some View {
+        DeltaCard(
+            title: delta.label,
+            delta: delta.delta,
+            baselineDate: delta.baselineDate,
+            unit: metricKind.unitLabel,
+            isSelected: selectedIntervalDeltaID == delta.id,
+            action: {
+                withAnimation(reduceMotion ? nil : Theme.Animation.smooth) {
+                    selectedIntervalDeltaID = selectedIntervalDeltaID == delta.id ? nil : delta.id
+                }
+                Haptics.selection()
+            }
+        )
+    }
+
+    private var selectedIntervalDelta: IntervalDelta? {
+        guard let selectedIntervalDeltaID else { return nil }
+        return model.intervalDeltas.first { $0.id == selectedIntervalDeltaID }
+    }
+
+    private func intervalDeltaExplanation(_ delta: IntervalDelta) -> String {
+        let baseline = delta.baselineDate?.formatted(date: .abbreviated, time: .omitted)
+            ?? "the first available reading"
+        return "\(delta.label) compares the latest reading with \(baseline). The chart marks both endpoints."
     }
 
     private var trendForecastSection: some View {
@@ -323,6 +412,7 @@ struct BodyCompositionView: View {
                     forecast: model.forecastPoints,
                     color: Theme.Colors.accent,
                     fullDomain: displayRange.start...domainEnd,
+                    comparisonStartDate: selectedIntervalDelta?.baselineDate,
                     showMA7: showMA7,
                     showRA30: showRA30,
                     showTrend: showTrend,
@@ -367,6 +457,7 @@ struct BodyCompositionView: View {
             guard isEnabled else { return }
             withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.15)) {
                 isOn.wrappedValue.toggle()
+                selectedBodyStatFocus = nil
             }
             Haptics.selection()
         } label: {
@@ -796,8 +887,16 @@ private struct BodyStatItem: Identifiable {
     let title: String
     let value: String
     var subtitle: String? = nil
+    let focus: BodyStatFocus
 
     var id: String { title }
+}
+
+private enum BodyStatFocus: String, Hashable {
+    case current
+    case sevenDay
+    case thirtyDay
+    case pace
 }
 
 private struct BodyStatCard: View {
@@ -826,10 +925,9 @@ private struct BodyStatCard: View {
                 .foregroundStyle(Theme.Colors.textPrimary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
-        }
-        .padding(Theme.Spacing.md)
+            }
+            .padding(Theme.Spacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .softCard(elevation: 1)
     }
 }
 
@@ -838,6 +936,8 @@ private struct DeltaCard: View {
     let delta: Double
     let baselineDate: Date?
     let unit: String
+    let isSelected: Bool
+    let action: () -> Void
 
     private var sign: String { delta >= 0 ? "+" : "" }
 
@@ -855,30 +955,36 @@ private struct DeltaCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            HStack {
-                Text(title)
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textTertiary)
-                Spacer(minLength: 0)
-                if let subtitle {
-                    Text(subtitle)
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textSecondary)
+        AnalysisTile(
+            role: .focus,
+            destination: "the \(title) comparison on the chart",
+            accessibilityLabel: "\(title), \(deltaText)",
+            isSelected: isSelected,
+            action: action,
+            content: {
+                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                    HStack {
+                        Text(title)
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Colors.textTertiary)
+                        Spacer(minLength: 0)
+                        if let subtitle {
+                            Text(subtitle)
+                                .font(Theme.Typography.caption)
+                                .foregroundStyle(Theme.Colors.textSecondary)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                        }
+                    }
+
+                    Text(deltaText)
+                        .font(Theme.Typography.numberSmall)
+                        .foregroundStyle(tint)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
                 }
             }
-
-            Text(deltaText)
-                .font(Theme.Typography.numberSmall)
-                .foregroundStyle(tint)
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
-        }
-        .padding(Theme.Spacing.md)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .softCard(elevation: 1)
+        )
     }
 }
 

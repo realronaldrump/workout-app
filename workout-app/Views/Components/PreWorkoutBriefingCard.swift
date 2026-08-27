@@ -72,7 +72,7 @@ struct PreWorkoutBriefingCard: View {
                         Image(systemName: signal.icon)
                             .font(Theme.Iconography.small)
                             .foregroundColor(Theme.Colors.accentSecondary)
-                        Text(signal.metric)
+                        Text(signal.metric.title)
                             .font(Theme.Typography.microcopy)
                             .foregroundColor(Theme.Colors.textTertiary)
                         Text(String(format: "%.1f", signal.currentValue))
@@ -87,7 +87,7 @@ struct PreWorkoutBriefingCard: View {
                     }
                     .accessibilityElement(children: .combine)
                     .accessibilityLabel(
-                        "\(signal.metric): \(String(format: "%.1f", signal.currentValue)) \(signal.unit), " +
+                        "\(signal.metric.title): \(String(format: "%.1f", signal.currentValue)) \(signal.unit), " +
                         "\(String(format: "%+.1f", signal.percentChange)) percent vs baseline"
                     )
                 }

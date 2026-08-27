@@ -464,7 +464,7 @@ struct WorkoutCSVExporter {
 
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd HH:mm"
-        dateFormatter.timeZone = TimeZone.current
+        dateFormatter.timeZone = calendar.timeZone
         dateFormatter.locale = Locale(identifier: "en_US_POSIX")
 
         let trimmedUnit = weightUnit?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -546,7 +546,7 @@ struct WorkoutCSVExporter {
         func writeBreakRow(_ context: WorkoutExportBreakContext) throws {
             let dayFormatter = DateFormatter()
             dayFormatter.dateFormat = "yyyy-MM-dd"
-            dayFormatter.timeZone = TimeZone.current
+            dayFormatter.timeZone = calendar.timeZone
             dayFormatter.locale = Locale(identifier: "en_US_POSIX")
 
             let rowValues =
