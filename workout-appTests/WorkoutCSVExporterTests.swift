@@ -34,11 +34,11 @@ final class WorkoutCSVExporterTests: XCTestCase {
         )
 
         let csv = try XCTUnwrap(String(data: data, encoding: .utf8))
-        let lines = csv.components(separatedBy: "\n")
+        let lines = csv.components(separatedBy: "\r\n")
 
-        XCTAssertEqual(lines[0], "Workout Name,Gym,Exercise,Weight (lbs),Reps")
-        XCTAssertEqual(lines[1], "\"Upper, A\",\"Downtown, Gym\",Bench Press,185,5")
-        XCTAssertEqual(lines[2], ",,,190,3")
+        XCTAssertEqual(lines[0], "Record Type,Workout Name,Gym,Exercise,Weight (lbs),Reps,Workout ID,Exercise ID,Set ID")
+        XCTAssertEqual(lines[1], "set,\"Upper, A\",\"Downtown, Gym\",Bench Press,185,5,\(workout.id),\(workout.exercises[0].id),\(workout.exercises[0].sets[0].id)")
+        XCTAssertEqual(lines[2], "set,\"Upper, A\",\"Downtown, Gym\",Bench Press,190,3,\(workout.id),\(workout.exercises[0].id),\(workout.exercises[0].sets[1].id)")
     }
 
     func testWorkoutHistoryExportCanIncludeIntentionalBreakContextRows() throws {
@@ -89,15 +89,15 @@ final class WorkoutCSVExporterTests: XCTestCase {
         )
 
         let csv = try XCTUnwrap(String(data: data, encoding: .utf8))
-        let lines = csv.components(separatedBy: "\n")
+        let lines = csv.components(separatedBy: "\r\n")
 
         XCTAssertEqual(
             lines[0],
-            "Record Type,Workout Start,Workout Name,Exercise,Weight (lbs),Reps,Break Start,Break End,Break Name,Break Days"
+            "Record Type,Workout Start,Workout Name,Exercise,Weight (lbs),Reps,Workout ID,Exercise ID,Set ID,Break ID,Break Start,Break End,Break Name,Break Days"
         )
-        XCTAssertEqual(lines[1], "Workout,2026-04-10 08:00,Upper A,Bench Press,185,5,,,,")
-        XCTAssertEqual(lines[2], "Break,,,,,,2026-04-12,2026-04-14,\"Vacation, Recovery\",3")
-        XCTAssertEqual(lines[3], "Workout,2026-04-15 08:00,Lower A,Squat,225,5,,,,")
+        XCTAssertEqual(lines[1], "set,2026-04-10T08:00:00.000-06:00,Upper A,Bench Press,185,5,\(firstWorkout.id),\(firstWorkout.exercises[0].id),\(firstWorkout.exercises[0].sets[0].id),,,,,")
+        XCTAssertEqual(lines[2], "break,,,,,,,,,\(breakRange.id),2026-04-12,2026-04-14,\"Vacation, Recovery\",3")
+        XCTAssertEqual(lines[3], "set,2026-04-15T08:00:00.000-06:00,Lower A,Squat,225,5,\(secondWorkout.id),\(secondWorkout.exercises[0].id),\(secondWorkout.exercises[0].sets[0].id),,,,,")
     }
 
     func testWorkoutHistoryExportRejectsEmptyColumnSelection() throws {
@@ -219,9 +219,9 @@ final class WorkoutCSVExporterTests: XCTestCase {
         )
 
         let csv = try XCTUnwrap(String(data: data, encoding: .utf8))
-        let lines = csv.components(separatedBy: "\n")
-        XCTAssertEqual(lines[0], "Exercise,Parent Exercise,Side,Weight,Reps")
-        XCTAssertEqual(lines[1], "Leg Extension (Machine) - Left,Leg Extension (Machine),Left,50,10")
+        let lines = csv.components(separatedBy: "\r\n")
+        XCTAssertEqual(lines[0], "Record Type,Exercise,Parent Exercise,Side,Weight (unit unspecified),Reps,Workout ID,Exercise ID,Set ID")
+        XCTAssertEqual(lines[1], "set,Leg Extension (Machine) - Left,Leg Extension (Machine),Left,50,10,\(workout.id),\(workout.exercises[0].id),\(workout.exercises[0].sets[0].id)")
     }
 
     func testExerciseListExportIncludesRelationshipMetadataWhenTagsAreIncluded() throws {
@@ -256,7 +256,7 @@ final class WorkoutCSVExporterTests: XCTestCase {
         )
 
         let csv = try XCTUnwrap(String(data: data, encoding: .utf8))
-        let lines = csv.components(separatedBy: "\n")
+        let lines = csv.components(separatedBy: "\r\n")
         XCTAssertEqual(lines[0], "Exercise,Tags,Parent Exercise,Side")
         XCTAssertEqual(lines[1], "Leg Extension (Machine) - Right,Quads,Leg Extension (Machine),Right")
     }

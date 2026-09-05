@@ -17,7 +17,7 @@ struct BackupFilesView: View {
                             icon: "icloud.slash",
                             tint: Theme.Colors.textTertiary,
                             title: "No Backup Files",
-                            message: "Exported CSVs and master backups will appear here."
+                            message: "Exported files and master backups will appear here."
                         )
                         .padding(.top, 50)
                     } else {

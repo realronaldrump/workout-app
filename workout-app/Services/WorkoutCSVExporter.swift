@@ -3,6 +3,7 @@ import Foundation
 enum WorkoutExportError: LocalizedError {
     case invalidDateRange
     case noWorkoutsInRange
+    case noSetsInRange
     case noExercisesInRange
     case noColumnsSelected
 
@@ -12,10 +13,12 @@ enum WorkoutExportError: LocalizedError {
             return "Invalid date range"
         case .noWorkoutsInRange:
             return "No workouts found in that date range"
+        case .noSetsInRange:
+            return "No logged sets found in that date range"
         case .noExercisesInRange:
             return "No exercises found in that date range"
         case .noColumnsSelected:
-            return "Select at least one CSV column"
+            return "Select at least one export field"
         }
     }
 }
@@ -25,6 +28,7 @@ nonisolated enum WorkoutExportColumn: String, CaseIterable, Hashable, Identifiab
     case workoutName
     case gymName
     case duration
+    case durationText
     case exercise
     case parentExercise
     case side
@@ -48,7 +52,9 @@ nonisolated enum WorkoutExportColumn: String, CaseIterable, Hashable, Identifiab
         case .gymName:
             return "Gym"
         case .duration:
-            return "Duration"
+            return "Workout Duration (seconds)"
+        case .durationText:
+            return "Logged Duration"
         case .exercise:
             return "Exercise"
         case .parentExercise:
@@ -56,7 +62,7 @@ nonisolated enum WorkoutExportColumn: String, CaseIterable, Hashable, Identifiab
         case .side:
             return "Side"
         case .tags:
-            return "Tags"
+            return "Muscle Roles"
         case .setNumber:
             return "Set"
         case .weight:
@@ -64,22 +70,24 @@ nonisolated enum WorkoutExportColumn: String, CaseIterable, Hashable, Identifiab
         case .reps:
             return "Reps"
         case .distance:
-            return "Distance"
+            return "Distance (unit unspecified)"
         case .seconds:
-            return "Seconds"
+            return "Set Duration (seconds)"
         }
     }
 
     var subtitle: String {
         switch self {
         case .workoutStart:
-            return "Start date and time for the workout."
+            return "Start date and time with a time-zone offset."
         case .workoutName:
             return "Workout title."
         case .gymName:
             return "Assigned gym profile name."
         case .duration:
-            return "Logged workout duration."
+            return "Numeric duration in seconds; blank when the logged value cannot be parsed."
+        case .durationText:
+            return "The original duration as logged, such as 45m or 1h 5m."
         case .exercise:
             return "Exercise name."
         case .parentExercise:
@@ -95,7 +103,7 @@ nonisolated enum WorkoutExportColumn: String, CaseIterable, Hashable, Identifiab
         case .reps:
             return "Logged rep count."
         case .distance:
-            return "Distance for cardio sets."
+            return "Distance as logged. The app does not store a distance unit."
         case .seconds:
             return "Time for duration-based sets."
         }
@@ -109,7 +117,7 @@ nonisolated enum WorkoutExportColumn: String, CaseIterable, Hashable, Identifiab
             return "text.badge.checkmark"
         case .gymName:
             return "mappin.and.ellipse"
-        case .duration:
+        case .duration, .durationText:
             return "timer"
         case .exercise:
             return "dumbbell"
@@ -142,36 +150,9 @@ nonisolated enum WorkoutExportColumn: String, CaseIterable, Hashable, Identifiab
     }
 }
 
-private nonisolated struct WorkoutExportRowContext {
-    let workoutStart: String
-    let workoutName: String
-    let gymName: String
-    let duration: String
-    let exerciseName: String
-    let parentExerciseName: String
-    let side: String
-    let muscles: String
-    let setOrder: String
-    let weight: String
-    let reps: String
-    let distance: String
-    let seconds: String
-}
-
-private nonisolated struct WorkoutExportBreakContext {
-    let startDate: Date
-    let endDate: Date
-    let name: String
-    let dayCount: Int
-}
-
 struct WorkoutCSVExporter {
-    /// A compact, human-friendly export:
-    /// - One CSV header.
-    /// - Workout-level fields are only populated on the first set row of each workout.
-    /// - Exercise + muscle roles are only populated on the first set row of each exercise.
-    /// - Distance/Seconds columns are only included if selected and any set uses them.
-    /// - Columns are emitted in the selected order.
+    /// One complete record per set, with stable IDs, numeric values, and selected columns.
+    /// Missing values are empty cells; no row inherits context from an earlier row.
     nonisolated static func exportWorkoutHistoryCSV(
         workouts: [Workout],
         startDate: Date,
@@ -202,7 +183,7 @@ struct WorkoutCSVExporter {
             calendar: calendar
         ) { line in
             if wroteAnyLine {
-                data.append(0x0A)
+                data.append(contentsOf: [0x0D, 0x0A])
             }
             data.append(contentsOf: line.utf8)
             wroteAnyLine = true
@@ -242,7 +223,7 @@ struct WorkoutCSVExporter {
                 calendar: calendar
             ) { line in
                 if wroteAnyLine {
-                    try handle.write(contentsOf: Data([0x0A]))
+                    try handle.write(contentsOf: Data([0x0D, 0x0A]))
                 }
                 try handle.write(contentsOf: Data(line.utf8))
                 wroteAnyLine = true
@@ -259,7 +240,8 @@ struct WorkoutCSVExporter {
 
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyyMMdd"
-        dateFormatter.timeZone = TimeZone.current
+        dateFormatter.timeZone = calendar.timeZone
+        dateFormatter.calendar = Calendar(identifier: .gregorian)
         dateFormatter.locale = Locale(identifier: "en_US_POSIX")
 
         let start = dateFormatter.string(from: calendar.startOfDay(for: startDate))
@@ -292,7 +274,7 @@ struct WorkoutCSVExporter {
             calendar: calendar
         ) { line in
             if wroteAnyLine {
-                data.append(0x0A)
+                data.append(contentsOf: [0x0D, 0x0A])
             }
             data.append(contentsOf: line.utf8)
             wroteAnyLine = true
@@ -324,7 +306,7 @@ struct WorkoutCSVExporter {
                 calendar: calendar
             ) { line in
                 if wroteAnyLine {
-                    try handle.write(contentsOf: Data([0x0A]))
+                    try handle.write(contentsOf: Data([0x0D, 0x0A]))
                 }
                 try handle.write(contentsOf: Data(line.utf8))
                 wroteAnyLine = true
@@ -342,7 +324,8 @@ struct WorkoutCSVExporter {
 
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyyMMdd"
-        dateFormatter.timeZone = TimeZone.current
+        dateFormatter.timeZone = calendar.timeZone
+        dateFormatter.calendar = Calendar(identifier: .gregorian)
         dateFormatter.locale = Locale(identifier: "en_US_POSIX")
 
         let start = dateFormatter.string(from: calendar.startOfDay(for: startDate))
@@ -362,7 +345,8 @@ struct WorkoutCSVExporter {
 
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyyMMdd"
-        dateFormatter.timeZone = TimeZone.current
+        dateFormatter.timeZone = calendar.timeZone
+        dateFormatter.calendar = Calendar(identifier: .gregorian)
         dateFormatter.locale = Locale(identifier: "en_US_POSIX")
 
         let start = dateFormatter.string(from: calendar.startOfDay(for: startDate))
@@ -381,7 +365,8 @@ struct WorkoutCSVExporter {
 
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyyMMdd"
-        dateFormatter.timeZone = TimeZone.current
+        dateFormatter.timeZone = calendar.timeZone
+        dateFormatter.calendar = Calendar(identifier: .gregorian)
         dateFormatter.locale = Locale(identifier: "en_US_POSIX")
 
         let start = dateFormatter.string(from: calendar.startOfDay(for: startDate))
@@ -400,7 +385,8 @@ struct WorkoutCSVExporter {
 
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyyMMdd"
-        dateFormatter.timeZone = TimeZone.current
+        dateFormatter.timeZone = calendar.timeZone
+        dateFormatter.calendar = Calendar(identifier: .gregorian)
         dateFormatter.locale = Locale(identifier: "en_US_POSIX")
 
         let start = dateFormatter.string(from: calendar.startOfDay(for: startDate))
@@ -440,150 +426,14 @@ struct WorkoutCSVExporter {
         calendar: Calendar,
         writeLine: (String) throws -> Void
     ) throws {
-        let requestedColumns = uniqueColumns(selectedColumns)
-        guard !requestedColumns.isEmpty else {
-            throw WorkoutExportError.noColumnsSelected
-        }
-
-        let range = try normalizedDayRange(startDate: startDate, endDateInclusive: endDateInclusive, calendar: calendar)
-
-        let filtered = workouts
-            .filter { workout in
-                workout.date >= range.start && workout.date < range.endExclusive
-            }
-            .sorted { $0.date < $1.date }
-
-        guard !filtered.isEmpty else {
-            throw WorkoutExportError.noWorkoutsInRange
-        }
-
-        let columns = columnsWithAvailableData(requestedColumns, for: filtered)
-        guard !columns.isEmpty else {
-            throw WorkoutExportError.noColumnsSelected
-        }
-
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd HH:mm"
-        dateFormatter.timeZone = calendar.timeZone
-        dateFormatter.locale = Locale(identifier: "en_US_POSIX")
-
-        let trimmedUnit = weightUnit?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let weightHeader: String
-        if let unit = trimmedUnit, !unit.isEmpty {
-            weightHeader = "Weight (\(unit))"
-        } else {
-            weightHeader = "Weight"
-        }
-
-        let breakContexts = includeIntentionalBreaks
-            ? breakContextsOverlapping(intentionalBreaks, range: range, calendar: calendar)
-            : []
-
-        let headers: [String]
-        if includeIntentionalBreaks {
-            headers = ["Record Type"] +
-                columns.map { $0.header(weightHeader: weightHeader) } +
-                ["Break Start", "Break End", "Break Name", "Break Days"]
-        } else {
-            headers = columns.map { $0.header(weightHeader: weightHeader) }
-        }
-
-        try writeLine(headers.map(csvEscape).joined(separator: ","))
-
-        func writeWorkoutRows(for workout: Workout) throws {
-            var didPrintWorkoutInfo = false
-            // Preserve the order exercises were logged/recorded in the workout model.
-            // (Some previous versions alphabetized here, which made exports differ from what users logged.)
-            let exercises = workout.exercises
-            for exercise in exercises {
-                var didPrintExerciseInfo = false
-                let sets = exercise.sets.sorted { lhs, rhs in
-                    if lhs.setOrder != rhs.setOrder { return lhs.setOrder < rhs.setOrder }
-                    return lhs.date < rhs.date
-                }
-
-                for set in sets {
-                    let workoutStart = didPrintWorkoutInfo ? "" : dateFormatter.string(from: workout.date)
-                    let workoutName = didPrintWorkoutInfo ? "" : workout.name
-                    let duration = didPrintWorkoutInfo ? "" : workout.duration
-
-                    let exerciseName = didPrintExerciseInfo ? "" : exercise.name
-                    let identity = resolver.displayIdentity(for: exercise.name)
-                    let parentExerciseName = didPrintExerciseInfo || !identity.isVariant ? "" : identity.aggregateName
-                    let side = didPrintExerciseInfo ? "" : (identity.sideLabel ?? "")
-                    let muscles = didPrintExerciseInfo ? "" : (exerciseTagsByName[exercise.name] ?? "")
-
-                    let context = WorkoutExportRowContext(
-                        workoutStart: workoutStart,
-                        workoutName: workoutName,
-                        gymName: didPrintWorkoutInfo ? "" : (gymNamesByWorkoutID[workout.id] ?? ""),
-                        duration: duration,
-                        exerciseName: exerciseName,
-                        parentExerciseName: parentExerciseName,
-                        side: side,
-                        muscles: muscles,
-                        setOrder: String(set.setOrder),
-                        weight: formatCompactNumber(set.weight, decimals: 1),
-                        reps: String(set.reps),
-                        distance: set.distance > 0 ? formatCompactNumber(set.distance, decimals: 1) : "",
-                        seconds: set.seconds > 0 ? formatCompactNumber(set.seconds, decimals: 1) : ""
-                    )
-
-                    var rowValues = columns
-                        .map { value(for: $0, context: context) }
-
-                    if includeIntentionalBreaks {
-                        rowValues = ["Workout"] + rowValues + Array(repeating: "", count: 4)
-                    }
-
-                    try writeLine(rowValues.map(csvEscape).joined(separator: ","))
-                    didPrintWorkoutInfo = true
-                    didPrintExerciseInfo = true
-                }
-            }
-        }
-
-        func writeBreakRow(_ context: WorkoutExportBreakContext) throws {
-            let dayFormatter = DateFormatter()
-            dayFormatter.dateFormat = "yyyy-MM-dd"
-            dayFormatter.timeZone = calendar.timeZone
-            dayFormatter.locale = Locale(identifier: "en_US_POSIX")
-
-            let rowValues =
-                ["Break"] +
-                Array(repeating: "", count: columns.count) +
-                [
-                    dayFormatter.string(from: context.startDate),
-                    dayFormatter.string(from: context.endDate),
-                    context.name,
-                    String(context.dayCount)
-                ]
-
-            try writeLine(rowValues.map(csvEscape).joined(separator: ","))
-        }
-
-        if includeIntentionalBreaks {
-            var nextBreakIndex = breakContexts.startIndex
-
-            for workout in filtered {
-                while nextBreakIndex < breakContexts.endIndex,
-                      breakContexts[nextBreakIndex].startDate <= workout.date {
-                    try writeBreakRow(breakContexts[nextBreakIndex])
-                    nextBreakIndex = breakContexts.index(after: nextBreakIndex)
-                }
-
-                try writeWorkoutRows(for: workout)
-            }
-
-            while nextBreakIndex < breakContexts.endIndex {
-                try writeBreakRow(breakContexts[nextBreakIndex])
-                nextBreakIndex = breakContexts.index(after: nextBreakIndex)
-            }
-        } else {
-            for workout in filtered {
-                try writeWorkoutRows(for: workout)
-            }
-        }
+        let document = try WorkoutExportDocument(
+            workouts: workouts, startDate: startDate, endDateInclusive: endDateInclusive,
+            exerciseTagsByName: exerciseTagsByName, gymNamesByWorkoutID: gymNamesByWorkoutID,
+            selectedColumns: selectedColumns, intentionalBreaks: intentionalBreaks,
+            includeIntentionalBreaks: includeIntentionalBreaks, weightUnit: weightUnit,
+            resolver: resolver, calendar: calendar
+        )
+        try document.writeCSVLines(writeLine)
     }
 
     private nonisolated static func writeExerciseListCSVLines(
@@ -614,31 +464,15 @@ struct WorkoutCSVExporter {
             throw WorkoutExportError.noExercisesInRange
         }
 
-        let relationshipRows = sortedNames.map { name in
-            let identity = resolver.displayIdentity(for: name)
-            return (
-                name: name,
-                tags: exerciseTagsByName[name] ?? "",
-                parent: identity.isVariant ? identity.aggregateName : "",
-                side: identity.sideLabel ?? ""
-            )
-        }
-
-        let hasRelationshipMetadata = relationshipRows.contains { !$0.parent.isEmpty || !$0.side.isEmpty }
-
         if includeTags {
-            let headers = hasRelationshipMetadata
-                ? ["Exercise", "Tags", "Parent Exercise", "Side"]
-                : ["Exercise", "Tags"]
-            try writeLine(headers.joined(separator: ","))
+            try writeLine("Exercise,Tags,Parent Exercise,Side")
             for name in sortedNames {
                 let identity = resolver.displayIdentity(for: name)
-                var row = [csvEscape(name), csvEscape(exerciseTagsByName[name] ?? "")]
-                if hasRelationshipMetadata {
-                    row.append(csvEscape(identity.isVariant ? identity.aggregateName : ""))
-                    row.append(csvEscape(identity.sideLabel ?? ""))
-                }
-                try writeLine(row.joined(separator: ","))
+                let row = [
+                    name, exerciseTagsByName[name] ?? "",
+                    identity.isVariant ? identity.aggregateName : "", identity.sideLabel ?? ""
+                ]
+                try writeLine(row.map(csvEscape).joined(separator: ","))
             }
         } else {
             try writeLine("Exercise")
@@ -648,112 +482,7 @@ struct WorkoutCSVExporter {
         }
     }
 
-    private nonisolated static func uniqueColumns(_ columns: [WorkoutExportColumn]) -> [WorkoutExportColumn] {
-        var seen = Set<WorkoutExportColumn>()
-        return columns.filter { column in
-            seen.insert(column).inserted
-        }
-    }
-
-    private nonisolated static func columnsWithAvailableData(
-        _ columns: [WorkoutExportColumn],
-        for workouts: [Workout]
-    ) -> [WorkoutExportColumn] {
-        let allSets = workouts.flatMap { $0.exercises.flatMap(\.sets) }
-        let includesDistance = allSets.contains { $0.distance > 0 }
-        let includesSeconds = allSets.contains { $0.seconds > 0 }
-
-        return columns.filter { column in
-            switch column {
-            case .distance:
-                return includesDistance
-            case .seconds:
-                return includesSeconds
-            default:
-                return true
-            }
-        }
-    }
-
-    private nonisolated static func breakContextsOverlapping(
-        _ ranges: [IntentionalBreakRange],
-        range: (start: Date, endExclusive: Date),
-        calendar: Calendar
-    ) -> [WorkoutExportBreakContext] {
-        let exportEndInclusive = calendar.date(byAdding: .day, value: -1, to: range.endExclusive) ?? range.start
-
-        return ranges.compactMap { breakRange in
-            let breakStart = calendar.startOfDay(for: breakRange.startDate)
-            let breakEndInclusive = calendar.startOfDay(for: breakRange.endDate)
-            let breakEndExclusive = calendar.date(byAdding: .day, value: 1, to: breakEndInclusive) ?? breakEndInclusive
-
-            guard breakStart < range.endExclusive, breakEndExclusive > range.start else {
-                return nil
-            }
-
-            let clippedStart = max(breakStart, range.start)
-            let clippedEnd = min(breakEndInclusive, exportEndInclusive)
-            guard clippedStart <= clippedEnd else { return nil }
-
-            let span = calendar.dateComponents([.day], from: clippedStart, to: clippedEnd).day ?? 0
-            return WorkoutExportBreakContext(
-                startDate: clippedStart,
-                endDate: clippedEnd,
-                name: breakRange.displayName ?? "",
-                dayCount: max(span + 1, 1)
-            )
-        }
-        .sorted { lhs, rhs in
-            if lhs.startDate != rhs.startDate { return lhs.startDate < rhs.startDate }
-            if lhs.endDate != rhs.endDate { return lhs.endDate < rhs.endDate }
-            return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
-        }
-    }
-
-    private nonisolated static func value(for column: WorkoutExportColumn, context: WorkoutExportRowContext) -> String {
-        switch column {
-        case .workoutStart:
-            return context.workoutStart
-        case .workoutName:
-            return context.workoutName
-        case .gymName:
-            return context.gymName
-        case .duration:
-            return context.duration
-        case .exercise:
-            return context.exerciseName
-        case .parentExercise:
-            return context.parentExerciseName
-        case .side:
-            return context.side
-        case .tags:
-            return context.muscles
-        case .setNumber:
-            return context.setOrder
-        case .weight:
-            return context.weight
-        case .reps:
-            return context.reps
-        case .distance:
-            return context.distance
-        case .seconds:
-            return context.seconds
-        }
-    }
-
     private nonisolated static func csvEscape(_ field: String) -> String {
-        if field.contains("\"") || field.contains(",") || field.contains("\n") || field.contains("\r") {
-            let escaped = field.replacingOccurrences(of: "\"", with: "\"\"")
-            return "\"\(escaped)\""
-        }
-        return field
-    }
-
-    private nonisolated static func formatCompactNumber(_ value: Double, decimals: Int) -> String {
-        if value.truncatingRemainder(dividingBy: 1) == 0 {
-            return String(Int(value))
-        }
-        let format = "%.\(decimals)f"
-        return String(format: format, locale: Locale(identifier: "en_US_POSIX"), value)
+        WorkoutExportValue.text(field).csv
     }
 }

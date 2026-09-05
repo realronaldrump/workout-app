@@ -28,6 +28,8 @@ struct ExportWorkoutsView: View {
     @State private var activeSheet: ExportSheet?
 
     // Workouts category
+    @State private var includePDFJournal = false
+    @State private var workoutExportFormat: WorkoutExportFormat = .csv
     @State private var workoutMode: WorkoutExportMode = .allWorkouts
     @State private var selectedWorkoutColumns: Set<WorkoutExportColumn> = Set(WorkoutExportColumn.defaultColumns)
     @State private var includeBreakRangesInWorkoutExport = false
@@ -127,6 +129,15 @@ struct ExportWorkoutsView: View {
             guard selectedRange == .custom else { return }
             clearAllExportState()
             pruneSelections()
+        }
+        .onChange(of: includePDFJournal) { _, _ in
+            clearWorkoutExportState()
+        }
+        .onChange(of: workoutExportFormat) { _, _ in
+            clearWorkoutExportState()
+        }
+        .onChange(of: selectedWorkoutColumns) { _, _ in
+            clearWorkoutExportState()
         }
         .onChange(of: workoutMode) { _, _ in
             clearWorkoutExportState()
@@ -285,8 +296,8 @@ private extension ExportWorkoutsView {
         return VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             cardEyebrow(
                 text: "Step 2",
-                title: "Workout CSV",
-                systemImage: "tablecells",
+                title: "Workout Export",
+                systemImage: workoutExportFormat.systemImage,
                 tint: ExportCategory.workouts.tint
             )
 
@@ -298,15 +309,44 @@ private extension ExportWorkoutsView {
                 )
             }
 
+            ExportFieldGroup(label: "Format") {
+                Picker("Format", selection: $workoutExportFormat) {
+                    ForEach(WorkoutExportFormat.allCases) { format in
+                        Text(format.title).tag(format)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .accessibilityIdentifier("workoutExportFormat")
+
+                Text(workoutExportFormat.subtitle)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if workoutExportFormat == .pdf {
+                Toggle(isOn: $includePDFJournal) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Include workout journal")
+                            .font(Theme.Typography.captionBold)
+                        Text("Adds every selected set after the visual overview.")
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Colors.textSecondary)
+                    }
+                }
+                .tint(ExportCategory.workouts.tint)
+                .accessibilityIdentifier("includePDFJournal")
+            }
+
             workoutModeDetail
 
             ExportFieldGroup(
-                label: "CSV columns",
+                label: "Fields",
                 trailing: "\(selectedWorkoutColumns.count) of \(WorkoutExportColumn.allCases.count)"
             ) {
                 ExportSelectionButton(
-                    title: "Columns",
-                    summary: selectedWorkoutColumns.isEmpty ? "Choose columns" : "\(selectedWorkoutColumns.count) selected",
+                    title: "Fields",
+                    summary: selectedWorkoutColumns.isEmpty ? "Choose fields" : "\(selectedWorkoutColumns.count) selected",
                     previewText: selectedWorkoutColumnPreviewText,
                     action: { openSheet(.workoutColumns) }
                 )
@@ -316,7 +356,7 @@ private extension ExportWorkoutsView {
 
             VStack(spacing: Theme.Spacing.md) {
                 ExportPrimaryButton(
-                    title: "Export Workout CSV",
+                    title: "Export \(workoutExportFormat.title)",
                     isRunning: isExportingWorkouts,
                     isEnabled: workoutExportButtonEnabled,
                     tint: ExportCategory.workouts.tint,
@@ -410,7 +450,7 @@ private extension ExportWorkoutsView {
                 RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
                     .strokeBorder(Theme.Colors.border.opacity(0.4), lineWidth: 1)
             )
-            .accessibilityHint("Adds saved break ranges that overlap the export range as context rows in the workout CSV")
+            .accessibilityHint("Adds saved break ranges that overlap the export range as context in the export")
         }
     }
 
@@ -456,7 +496,7 @@ private extension ExportWorkoutsView {
 
     var workoutExportDisabledReason: String {
         if selectedWorkoutColumns.isEmpty {
-            return "Select at least one CSV column to enable export."
+            return "Select at least one field to enable export."
         }
         switch workoutMode {
         case .allWorkouts:
@@ -1617,6 +1657,9 @@ private extension ExportWorkoutsView {
     @MainActor
     func performWorkoutAllExport() {
         let selectedColumns = orderedSelectedWorkoutColumns
+        let format = workoutExportFormat
+        let includeJournal = includePDFJournal
+        let calendar = Calendar.current
         let includeBreakRanges = includeBreakRangesInWorkoutExport
         let breakRanges = includeBreakRanges ? breakRangesInSelection : []
         let analyticsPayload = workoutColumnAnalyticsPayload(for: selectedColumns)
@@ -1644,6 +1687,7 @@ private extension ExportWorkoutsView {
         }
 
         let exerciseTagsByName = exerciseTagsByName(for: workoutsSnapshot)
+        let exerciseMusclesByName = exerciseMusclesByName(for: workoutsSnapshot)
         let gymNamesByWorkoutID = gymNamesByWorkoutID(for: workoutsSnapshot)
         let storageSnapshot = iCloudManager.storageSnapshot()
         let unit = weightUnit
@@ -1657,23 +1701,26 @@ private extension ExportWorkoutsView {
 
                 let fileName = try WorkoutCSVExporter.makeWorkoutExportFileName(
                     startDate: start,
-                    endDateInclusive: end
+                    endDateInclusive: end,
+                    calendar: calendar
                 )
-                let fileURL = directory.appendingPathComponent(fileName)
+                let fileURL = directory.appendingPathComponent(format.fileName(from: fileName))
 
-                try WorkoutCSVExporter.exportWorkoutHistoryCSV(
-                    to: fileURL,
+                let document = try WorkoutExportDocument(
                     workouts: workoutsSnapshot,
                     startDate: start,
                     endDateInclusive: end,
                     exerciseTagsByName: exerciseTagsByName,
+                    exerciseMusclesByName: exerciseMusclesByName,
                     gymNamesByWorkoutID: gymNamesByWorkoutID,
                     selectedColumns: selectedColumns,
                     intentionalBreaks: breakRanges,
                     includeIntentionalBreaks: includeBreakRanges,
                     weightUnit: unit,
-                    resolver: resolver
+                    resolver: resolver,
+                    calendar: calendar
                 )
+                try document.write(to: fileURL, format: format, includePDFJournal: includeJournal)
 
                 await MainActor.run {
                     workoutExportFileURL = fileURL
@@ -1790,6 +1837,9 @@ private extension ExportWorkoutsView {
     func performExerciseHistoryExport() {
         let selectedNames = selectedExerciseNamesInRange
         let selectedColumns = orderedSelectedWorkoutColumns
+        let format = workoutExportFormat
+        let includeJournal = includePDFJournal
+        let calendar = Calendar.current
         let includeBreakRanges = includeBreakRangesInWorkoutExport
         let breakRanges = includeBreakRanges ? breakRangesInSelection : []
         let resolver = exerciseRelationshipManager.resolverSnapshot()
@@ -1822,13 +1872,15 @@ private extension ExportWorkoutsView {
             )
         }
 
-        guard let bounds = dayBounds(for: workoutsSnapshot) else {
+        guard !workoutsSnapshot.isEmpty else {
             isExportingWorkouts = false
             showError(WorkoutExportError.noWorkoutsInRange)
             return
         }
+        let bounds = effectiveDayRange
 
         let exerciseTagsByName = exerciseTagsByName(for: workoutsSnapshot)
+        let exerciseMusclesByName = exerciseMusclesByName(for: workoutsSnapshot)
         let gymNamesByWorkoutID = gymNamesByWorkoutID(for: workoutsSnapshot)
         let storageSnapshot = iCloudManager.storageSnapshot()
         let unit = weightUnit
@@ -1843,23 +1895,26 @@ private extension ExportWorkoutsView {
                 let fileName = try WorkoutCSVExporter.makeExerciseHistoryExportFileName(
                     startDate: bounds.start,
                     endDateInclusive: bounds.endInclusive,
-                    selectedExerciseCount: selectedExerciseCount
+                    selectedExerciseCount: selectedExerciseCount,
+                    calendar: calendar
                 )
-                let fileURL = directory.appendingPathComponent(fileName)
+                let fileURL = directory.appendingPathComponent(format.fileName(from: fileName))
 
-                try WorkoutCSVExporter.exportWorkoutHistoryCSV(
-                    to: fileURL,
+                let document = try WorkoutExportDocument(
                     workouts: workoutsSnapshot,
                     startDate: bounds.start,
                     endDateInclusive: bounds.endInclusive,
                     exerciseTagsByName: exerciseTagsByName,
+                    exerciseMusclesByName: exerciseMusclesByName,
                     gymNamesByWorkoutID: gymNamesByWorkoutID,
                     selectedColumns: selectedColumns,
                     intentionalBreaks: breakRanges,
                     includeIntentionalBreaks: includeBreakRanges,
                     weightUnit: unit,
-                    resolver: resolver
+                    resolver: resolver,
+                    calendar: calendar
                 )
+                try document.write(to: fileURL, format: format, includePDFJournal: includeJournal)
 
                 await MainActor.run {
                     workoutExportFileURL = fileURL
@@ -1889,6 +1944,9 @@ private extension ExportWorkoutsView {
     func performMuscleGroupExport() {
         let selectedTagIds = selectedMuscleTagIdsInRange
         let selectedColumns = orderedSelectedWorkoutColumns
+        let format = workoutExportFormat
+        let includeJournal = includePDFJournal
+        let calendar = Calendar.current
         let includeBreakRanges = includeBreakRangesInWorkoutExport
         let breakRanges = includeBreakRanges ? breakRangesInSelection : []
         let analyticsPayload = workoutColumnAnalyticsPayload(for: selectedColumns)
@@ -1921,13 +1979,15 @@ private extension ExportWorkoutsView {
             )
         }
 
-        guard let bounds = dayBounds(for: workoutsSnapshot) else {
+        guard !workoutsSnapshot.isEmpty else {
             isExportingWorkouts = false
             showError(WorkoutExportError.noWorkoutsInRange)
             return
         }
+        let bounds = effectiveDayRange
 
         let exerciseTagsByName = exerciseTagsByName(for: workoutsSnapshot)
+        let exerciseMusclesByName = exerciseMusclesByName(for: workoutsSnapshot)
         let gymNamesByWorkoutID = gymNamesByWorkoutID(for: workoutsSnapshot)
         let storageSnapshot = iCloudManager.storageSnapshot()
         let unit = weightUnit
@@ -1943,23 +2003,26 @@ private extension ExportWorkoutsView {
                 let fileName = try WorkoutCSVExporter.makeMuscleGroupExportFileName(
                     startDate: bounds.start,
                     endDateInclusive: bounds.endInclusive,
-                    selectedGroupCount: selectedGroupCount
+                    selectedGroupCount: selectedGroupCount,
+                    calendar: calendar
                 )
-                let fileURL = directory.appendingPathComponent(fileName)
+                let fileURL = directory.appendingPathComponent(format.fileName(from: fileName))
 
-                try WorkoutCSVExporter.exportWorkoutHistoryCSV(
-                    to: fileURL,
+                let document = try WorkoutExportDocument(
                     workouts: workoutsSnapshot,
                     startDate: bounds.start,
                     endDateInclusive: bounds.endInclusive,
                     exerciseTagsByName: exerciseTagsByName,
+                    exerciseMusclesByName: exerciseMusclesByName,
                     gymNamesByWorkoutID: gymNamesByWorkoutID,
                     selectedColumns: selectedColumns,
                     intentionalBreaks: breakRanges,
                     includeIntentionalBreaks: includeBreakRanges,
                     weightUnit: unit,
-                    resolver: resolver
+                    resolver: resolver,
+                    calendar: calendar
                 )
+                try document.write(to: fileURL, format: format, includePDFJournal: includeJournal)
 
                 await MainActor.run {
                     workoutExportFileURL = fileURL
@@ -1989,6 +2052,9 @@ private extension ExportWorkoutsView {
     func performWorkoutDatesExport() {
         let selectedIds = selectedWorkoutDateIdsInRange
         let selectedColumns = orderedSelectedWorkoutColumns
+        let format = workoutExportFormat
+        let includeJournal = includePDFJournal
+        let calendar = Calendar.current
         let includeBreakRanges = includeBreakRangesInWorkoutExport
         let breakRanges = includeBreakRanges ? breakRangesInSelection : []
         let analyticsPayload = workoutColumnAnalyticsPayload(for: selectedColumns)
@@ -2009,13 +2075,15 @@ private extension ExportWorkoutsView {
             selectedIds.contains(dayIdentifier(for: workout.date))
         }
 
-        guard let bounds = dayBounds(for: workoutsSnapshot) else {
+        guard !workoutsSnapshot.isEmpty else {
             isExportingWorkouts = false
             showError(WorkoutExportError.noWorkoutsInRange)
             return
         }
+        let bounds = effectiveDayRange
 
         let exerciseTagsByName = exerciseTagsByName(for: workoutsSnapshot)
+        let exerciseMusclesByName = exerciseMusclesByName(for: workoutsSnapshot)
         let gymNamesByWorkoutID = gymNamesByWorkoutID(for: workoutsSnapshot)
         let storageSnapshot = iCloudManager.storageSnapshot()
         let unit = weightUnit
@@ -2031,23 +2099,26 @@ private extension ExportWorkoutsView {
                 let fileName = try WorkoutCSVExporter.makeWorkoutDatesExportFileName(
                     startDate: bounds.start,
                     endDateInclusive: bounds.endInclusive,
-                    selectedDateCount: selectedDateCount
+                    selectedDateCount: selectedDateCount,
+                    calendar: calendar
                 )
-                let fileURL = directory.appendingPathComponent(fileName)
+                let fileURL = directory.appendingPathComponent(format.fileName(from: fileName))
 
-                try WorkoutCSVExporter.exportWorkoutHistoryCSV(
-                    to: fileURL,
+                let document = try WorkoutExportDocument(
                     workouts: workoutsSnapshot,
                     startDate: bounds.start,
                     endDateInclusive: bounds.endInclusive,
                     exerciseTagsByName: exerciseTagsByName,
+                    exerciseMusclesByName: exerciseMusclesByName,
                     gymNamesByWorkoutID: gymNamesByWorkoutID,
                     selectedColumns: selectedColumns,
                     intentionalBreaks: breakRanges,
                     includeIntentionalBreaks: includeBreakRanges,
                     weightUnit: unit,
-                    resolver: resolver
+                    resolver: resolver,
+                    calendar: calendar
                 )
+                try document.write(to: fileURL, format: format, includePDFJournal: includeJournal)
 
                 await MainActor.run {
                     workoutExportFileURL = fileURL
@@ -2175,16 +2246,13 @@ private extension ExportWorkoutsView {
         return String(format: "%04d-%02d-%02d", year, month, day)
     }
 
-    func dayBounds(for workouts: [Workout]) -> (start: Date, endInclusive: Date)? {
-        let calendar = Calendar.current
-        guard let earliest = workouts.map(\.date).min(),
-              let latest = workouts.map(\.date).max() else {
-            return nil
-        }
-        return (
-            start: calendar.startOfDay(for: earliest),
-            endInclusive: calendar.startOfDay(for: latest)
-        )
+    func exerciseMusclesByName(for workouts: [Workout]) -> [String: [WorkoutExportMuscle]] {
+        let names = Set(workouts.flatMap { $0.exercises.map(\.name) })
+        return Dictionary(uniqueKeysWithValues: names.map { name in
+            (name, exerciseMetadataManager.resolvedAssignments(for: name).map {
+                WorkoutExportMuscle(name: $0.tag.displayName, role: $0.role.rawValue)
+            })
+        })
     }
 
     func exerciseTagsByName(for workouts: [Workout]) -> [String: String] {
@@ -2219,6 +2287,7 @@ private extension ExportWorkoutsView {
     func workoutColumnAnalyticsPayload(for columns: [WorkoutExportColumn]) -> [String: String] {
         [
             "Export.columnCount": "\(columns.count)",
+            "Export.format": workoutExportFormat.rawValue,
             "Export.includesGym": columns.contains(.gymName) ? "true" : "false"
         ]
     }

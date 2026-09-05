@@ -36,6 +36,9 @@ $(SRCROOT)/workout-app/Services/MuscleRecencySuggestionEngine.swift
 $(SRCROOT)/workout-app/Services/WorkoutAnalytics.swift
 $(SRCROOT)/workout-app/Services/WorkoutAnnotationsManager.swift
 $(SRCROOT)/workout-app/Services/WorkoutCSVExporter.swift
+$(SRCROOT)/workout-app/Services/WorkoutExportDocument.swift
+$(SRCROOT)/workout-app/Services/WorkoutExportSerialization.swift
+$(SRCROOT)/workout-app/Services/WorkoutReportRenderer.swift
 $(SRCROOT)/workout-app/Services/WorkoutDataManager.swift
 $(SRCROOT)/workout-app/Services/WorkoutIdentityStore.swift
 $(SRCROOT)/workout-app/Services/WorkoutLogStore.swift
@@ -108,3 +111,8 @@ $(SRCROOT)/workout-app/Views/Components/EmptyFrequencyWindowState.swift
 $(SRCROOT)/workout-app/Views/Components/LongestStreaksPreview.swift
 $(SRCROOT)/workout-app/Views/Components/StatCard.swift
 $(SRCROOT)/workout-app/Views/ExerciseMetricDetailView.swift
+$(SRCROOT)/workout-app/Services/WorkoutPDFAnalytics.swift
+$(SRCROOT)/workout-app/Services/WorkoutPDFCanvas.swift
+$(SRCROOT)/workout-app/Services/WorkoutPDFCharts.swift
+$(SRCROOT)/workout-app/Services/WorkoutPDFRenderer.swift
+$(SRCROOT)/workout-app/Services/WorkoutPDFJournal.swift

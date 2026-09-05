@@ -152,7 +152,7 @@ final class iCloudDocumentManager: ObservableObject {
     }
 
     func deleteAllExportAndBackupFiles() async throws {
-        try await deleteFiles(matchingExtensions: ["csv", AppBackupService.backupFileExtension])
+        try await deleteStoredExportAndBackupFiles()
     }
 
     func countWorkoutFiles() async -> Int {
@@ -184,13 +184,11 @@ final class iCloudDocumentManager: ObservableObject {
         }.value
     }
 
-    private func deleteFiles(matchingExtensions extensions: Set<String>) async throws {
+    private func deleteStoredExportAndBackupFiles() async throws {
         let directories = await storageSearchDirectories()
         guard !directories.isEmpty else { return }
 
-        let lowercasedExtensions = Set(extensions.map { $0.lowercased() })
-
-        try await Task.detached(priority: .utility) { [directories, lowercasedExtensions] in
+        try await Task.detached(priority: .utility) { [directories] in
             var failures: [String] = []
             for containerURL in directories {
                 do {
@@ -199,7 +197,7 @@ final class iCloudDocumentManager: ObservableObject {
                         includingPropertiesForKeys: [.nameKey],
                         options: .skipsHiddenFiles
                     )
-                    for file in files where lowercasedExtensions.contains(file.pathExtension.lowercased()) {
+                    for file in files where Self.isExportOrBackupFile(file) {
                         do {
                             try FileManager.default.removeItem(at: file)
                             print("Deleted file: \(file.lastPathComponent)")
@@ -288,8 +286,25 @@ final class iCloudDocumentManager: ObservableObject {
         }
     }
 
+    /// Recognize generated report/JSON names without treating unrelated documents as app exports.
+    nonisolated static func isExportOrBackupFile(_ url: URL) -> Bool {
+        let ext = url.pathExtension.lowercased()
+        if ext == "csv" || ext == AppBackupService.backupFileExtension { return true }
+        guard ext == "html" || ext == "json" || ext == "pdf" else { return false }
+        let name = url.lastPathComponent.lowercased()
+        return ["workout_export_", "exercise_history_", "muscle_group_export_", "workout_dates_"]
+            .contains { name.hasPrefix($0) }
+    }
+
     nonisolated static func listExportAndBackupFiles(in directory: URL) -> [URL] {
-        listWorkoutFiles(in: directory) + listBackupFiles(in: directory)
+        do {
+            return try FileManager.default.contentsOfDirectory(
+                at: directory, includingPropertiesForKeys: [.nameKey, .creationDateKey], options: .skipsHiddenFiles
+            ).filter(isExportOrBackupFile)
+        } catch {
+            print("Failed to list exports and backups: \(error)")
+            return []
+        }
     }
 
     /// Combines storage directories in priority order and collapses migrated copies by filename.
@@ -322,9 +337,7 @@ final class iCloudDocumentManager: ObservableObject {
         named fileName: String,
         in directories: [URL]
     ) throws -> Int {
-        let fileExtension = URL(fileURLWithPath: fileName).pathExtension.lowercased()
-        let allowedExtensions = ["csv", AppBackupService.backupFileExtension]
-        guard allowedExtensions.contains(fileExtension) else { return 0 }
+        guard isExportOrBackupFile(URL(fileURLWithPath: fileName)) else { return 0 }
 
         var deletedCount = 0
         var failures: [String] = []
@@ -451,7 +464,7 @@ final class iCloudDocumentManager: ObservableObject {
         )
     }
 
-    /// Migrates both CSV exports/imports and native backups when iCloud becomes available.
+    /// Migrates exports in every supported format, CSV imports, and native backups when iCloud becomes available.
     @discardableResult
     nonisolated static func migrateExportAndBackupFiles(
         from sourceDirectory: URL,

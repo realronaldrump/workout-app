@@ -390,17 +390,17 @@ struct ExportWorkoutColumnSelectionSheet: View {
                     }
 
                     if selectedColumns.isEmpty {
-                        Text("Select at least one column before exporting workout CSVs.")
+                        Text("Select at least one field before exporting.")
                             .font(Theme.Typography.caption)
                             .foregroundStyle(Theme.Colors.error)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .accessibilityLabel("Select at least one column before exporting workout CSVs")
+                            .accessibilityLabel("Select at least one field before exporting")
                     }
                 }
                 .padding(Theme.Spacing.xl)
                 .contentColumn()
             }
-            .navigationTitle("Select Columns")
+            .navigationTitle("Select Fields")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 AppToolbarItem(placement: .confirmationAction) {
