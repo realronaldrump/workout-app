@@ -459,7 +459,7 @@ struct ExerciseRowView: View {
                 ExerciseMetricPill(
                     icon: "repeat",
                     text: "\(stats.frequency)x",
-                    accessibilityLabel: "\(stats.frequency) sessions"
+                    accessibilityLabel: SharedFormatters.count(stats.frequency, "session")
                 ) {
                     onMetricTap(.sessions, .overview)
                 }

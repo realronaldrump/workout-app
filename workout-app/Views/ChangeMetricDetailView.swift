@@ -1571,7 +1571,7 @@ private struct SessionWorkoutCard: View {
                     icon: "figure.strengthtraining.traditional"
                 )
                 WorkoutMetricPill(
-                    label: "\(setCount) sets",
+                    label: SharedFormatters.count(setCount, "set"),
                     icon: "number.square"
                 )
                 WorkoutMetricPill(

@@ -92,7 +92,7 @@ struct ProgressReviewSection: View {
 
                 Spacer()
 
-                Text("\(block.sessionCount) sessions")
+                Text(SharedFormatters.count(block.sessionCount, "session"))
                     .font(Theme.Typography.captionBold)
                     .foregroundStyle(Theme.Colors.textSecondary)
             }
@@ -358,7 +358,7 @@ struct ProgressReviewView: View {
                     Text(blockDateLabel(block))
                         .font(Theme.Typography.title3)
                         .foregroundStyle(Theme.Colors.textPrimary)
-                    Text("\(block.sessionCount) sessions")
+                    Text(SharedFormatters.count(block.sessionCount, "session"))
                         .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.Colors.textSecondary)
                 }

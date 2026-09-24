@@ -53,6 +53,36 @@ final class WorkoutLogStore: ObservableObject {
         }.value
     }
 
+    /// Like `upsert(_:)`, but waits for the write to reach the database and throws if it
+    /// fails, rolling back the in-memory change. Use when the caller is about to discard
+    /// the only other copy of the data (e.g. the in-progress session draft).
+    func save(_ workout: LoggedWorkout) async throws {
+        var copy = workout
+        copy.updatedAt = Date()
+
+        let previous = workouts.first { $0.id == workout.id }
+        if let index = workouts.firstIndex(where: { $0.id == workout.id }) {
+            workouts[index] = copy
+        } else {
+            workouts.append(copy)
+        }
+        workouts.sort { $0.startedAt > $1.startedAt }
+
+        let persistedWorkout = copy
+        do {
+            try await enqueuePersistence { database in
+                try database.saveLoggedWorkout(persistedWorkout)
+            }.value
+        } catch {
+            if let previous, let index = workouts.firstIndex(where: { $0.id == previous.id }) {
+                workouts[index] = previous
+            } else {
+                workouts.removeAll { $0.id == workout.id }
+            }
+            throw error
+        }
+    }
+
     func delete(id: UUID) async {
         workouts.removeAll { $0.id == id }
         _ = try? await enqueuePersistence { database in

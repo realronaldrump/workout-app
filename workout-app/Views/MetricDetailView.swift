@@ -1079,15 +1079,15 @@ struct MetricDetailView: View {
                 return "No sessions yet"
             }
             if stackedSessionDayCount == 0 {
-                return "\(uniqueWorkoutDayCount) active days"
+                return SharedFormatters.count(uniqueWorkoutDayCount, "active day")
             }
-            return "\(workouts.count) sessions"
+            return SharedFormatters.count(workouts.count, "session")
         case .streak:
             return "\(currentStreakRun?.workoutDayCount ?? 0) day streak"
         case .totalVolume:
             return "\(SharedFormatters.volumeCompact(totalVolume))"
         case .totalSets:
-            return "\(totalSetCount) sets"
+            return SharedFormatters.count(totalSetCount, "set")
         case .averageDuration:
             return formattedAverageDuration
         case .averageFrequency:
@@ -1901,7 +1901,7 @@ private struct MetricWorkoutRow: View {
                 Text(workout.duration)
                     .font(Theme.Typography.captionBold)
                     .foregroundColor(Theme.Colors.textSecondary)
-                Text("\(exerciseCount) exercises")
+                Text(SharedFormatters.count(exerciseCount, "exercise"))
                     .font(Theme.Typography.caption)
                     .foregroundColor(Theme.Colors.textTertiary)
             }

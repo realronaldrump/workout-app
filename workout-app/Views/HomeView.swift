@@ -92,8 +92,8 @@ struct HomeView: View {
                         PreWorkoutBriefingCard(
                             recoverySignals: recoveryCoverageEngine.recoverySignals,
                             muscleSuggestions: cachedMuscleSuggestions,
-                            onStartSession: { groupName in
-                                startQuickSession(exercise: groupName)
+                            onStartSession: { exerciseName in
+                                startQuickSession(exercise: exerciseName)
                             },
                             onExerciseTap: { name in
                                 selectedExercise = ExerciseSelection(id: name)
@@ -380,8 +380,10 @@ struct HomeView: View {
                         minWidth: Theme.Layout.minimumTapTarget,
                         minHeight: Theme.Layout.minimumTapTarget
                     )
+                    .contentShape(.rect)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Dismiss tagging reminder")
         }
         .padding(Theme.Spacing.md)
         .glassBackground(opacity: 0.1, cornerRadius: Theme.CornerRadius.large, elevation: 1)

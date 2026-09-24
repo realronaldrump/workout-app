@@ -15,6 +15,8 @@ struct ExercisePickerView: View {
     @State private var recentMembership: Set<String> = []
     @AppStorage("favoriteExercises") private var favoriteExercisesData: String = "[]"
 
+    /// Exercises already in the current workout; shown as added instead of silently no-oping.
+    var alreadyAdded: Set<String> = []
     let onSelect: (String) -> Void
 
     var body: some View {
@@ -124,16 +126,42 @@ struct ExercisePickerView: View {
         }
     }
 
+    /// Every search word must appear somewhere in the name, so "db bench" finds
+    /// "Bench Press (Dumbbell)"-style names. Names starting with the query rank first.
     private var filteredExercises: [String] {
         guard !query.isEmpty else { return allExercises }
-        return allExercises.filter { $0.localizedCaseInsensitiveContains(query) }
+        let tokens = query
+            .split(whereSeparator: \.isWhitespace)
+            .map { expandedSearchToken(String($0)) }
+        let matches = allExercises.filter { name in
+            tokens.allSatisfy { alternatives in
+                alternatives.contains { name.range(of: $0, options: [.caseInsensitive, .diacriticInsensitive]) != nil }
+            }
+        }
+        let prefixMatches = matches.filter {
+            $0.range(of: query, options: [.caseInsensitive, .diacriticInsensitive, .anchored]) != nil
+        }
+        let prefixSet = Set(prefixMatches)
+        return prefixMatches + matches.filter { !prefixSet.contains($0) }
+    }
+
+    /// Common gym shorthand mapped to the words used in exercise names.
+    private func expandedSearchToken(_ token: String) -> [String] {
+        switch token.lowercased() {
+        case "db": return [token, "dumbbell"]
+        case "bb": return [token, "barbell"]
+        case "kb": return [token, "kettlebell"]
+        case "ohp": return [token, "overhead press"]
+        case "rdl": return [token, "romanian deadlift"]
+        default: return [token]
+        }
     }
 
     private var shouldShowCreateOption: Bool {
         guard !query.isEmpty else { return false }
         return !allExercises.contains {
             $0.compare(query, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
-        }
+        } && !isAlreadyAdded(query)
     }
 
     private var createRow: some View {
@@ -159,25 +187,33 @@ struct ExercisePickerView: View {
     }
 
     private func exerciseRow(_ name: String) -> some View {
-        HStack(spacing: Theme.Spacing.sm) {
+        let isAdded = isAlreadyAdded(name)
+        return HStack(spacing: Theme.Spacing.sm) {
             Button {
                 select(name)
             } label: {
                 HStack {
                     Text(name)
                         .font(Theme.Typography.body)
-                        .foregroundStyle(Theme.Colors.textPrimary)
+                        .foregroundStyle(isAdded ? Theme.Colors.textSecondary : Theme.Colors.textPrimary)
                         .multilineTextAlignment(.leading)
                     Spacer(minLength: Theme.Spacing.sm)
-                    Image(systemName: "plus")
-                        .foregroundStyle(Theme.Colors.accent)
-                        .accessibilityHidden(true)
+                    if isAdded {
+                        Label("Added", systemImage: "checkmark")
+                            .font(Theme.Typography.captionBold)
+                            .foregroundStyle(Theme.Colors.success)
+                    } else {
+                        Image(systemName: "plus")
+                            .foregroundStyle(Theme.Colors.accent)
+                            .accessibilityHidden(true)
+                    }
                 }
                 .frame(maxWidth: .infinity, minHeight: Theme.Layout.minimumTapTarget, alignment: .leading)
                 .contentShape(.rect)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Add \(name)")
+            .disabled(isAdded)
+            .accessibilityLabel(isAdded ? "\(name), already in this workout" : "Add \(name)")
 
             Button {
                 toggleFavorite(name)
@@ -199,6 +235,11 @@ struct ExercisePickerView: View {
             }
             .tint(Theme.Colors.warning)
         }
+    }
+
+    private func isAlreadyAdded(_ name: String) -> Bool {
+        let normalized = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return alreadyAdded.contains { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == normalized }
     }
 
     private func select(_ name: String) {

@@ -41,6 +41,13 @@ enum SharedFormatters {
         return String(format: "%.0f", volume)
     }
 
+    // MARK: - Counts
+
+    /// "1 set", "3 sets". Pass `plural` for irregular nouns.
+    nonisolated static func count(_ value: Int, _ singular: String, plural: String? = nil) -> String {
+        "\(value) \(value == 1 ? singular : (plural ?? singular + "s"))"
+    }
+
     // MARK: - Elapsed Time Formatting
 
     /// Formats a `TimeInterval` as `h:mm:ss` or `m:ss`.

@@ -2,7 +2,9 @@ import Foundation
 
 enum WorkoutValueFormatter {
     nonisolated static func numberText(_ value: Double, decimals: Int) -> String {
-        if value.truncatingRemainder(dividingBy: 1) == 0 {
+        if value.isFinite,
+           value.truncatingRemainder(dividingBy: 1) == 0,
+           abs(value) < 1e15 {
             return String(Int(value))
         }
         let format = "%.\(decimals)f"
@@ -29,6 +31,16 @@ enum WorkoutValueFormatter {
         return String(format: "%d:%02d", minutes, secs)
     }
 
+    /// Parses a user-entered decimal, accepting either "." or "," as the decimal separator
+    /// (decimal keypads show "," in many locales).
+    nonisolated static func parseDecimal(_ text: String) -> Double? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let normalized = trimmed.replacingOccurrences(of: ",", with: ".")
+        guard let value = Double(normalized), value.isFinite else { return nil }
+        return value
+    }
+
     /// Parses duration from:
     /// - `h:mm:ss` or `m:ss` (contains `:`)
     /// - a plain number (treated as minutes; may be decimal)
@@ -50,8 +62,8 @@ enum WorkoutValueFormatter {
             return nil
         }
 
-        // Treat as minutes (supports decimals like 12.5).
-        if let minutes = Double(trimmed) {
+        // Treat as minutes (supports decimals like 12.5 or 12,5).
+        if let minutes = parseDecimal(trimmed), minutes >= 0 {
             return minutes * 60.0
         }
         return nil

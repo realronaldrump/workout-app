@@ -10,7 +10,10 @@ struct WorkoutEditView: View {
     let workoutId: UUID
 
     @State private var draft: LoggedWorkout?
+    @State private var original: LoggedWorkout?
     @State private var showingDeleteAlert = false
+    @State private var showingDiscardChangesAlert = false
+    @State private var exercisePendingRemoval: LoggedExercise?
     @State private var errorMessage: String?
     @State private var isSaving = false
 
@@ -60,6 +63,9 @@ struct WorkoutEditView: View {
                                             },
                                             onDeleteSet: { setId in
                                                 deleteSet(exerciseId: exercise.id, setId: setId)
+                                            },
+                                            onRemoveExercise: {
+                                                exercisePendingRemoval = exercise
                                             }
                                         )
                                     }
@@ -113,7 +119,11 @@ struct WorkoutEditView: View {
             .toolbar {
                 AppToolbarItem(placement: .cancellationAction) {
                     AppToolbarButton(title: "Close", systemImage: "xmark", variant: .subtle) {
-                        dismiss()
+                        if hasUnsavedChanges {
+                            showingDiscardChangesAlert = true
+                        } else {
+                            dismiss()
+                        }
                     }
                 }
             }
@@ -122,7 +132,7 @@ struct WorkoutEditView: View {
                     AppPrimaryButton(
                         title: isSaving ? "Saving…" : "Save Changes",
                         systemImage: "checkmark",
-                        isEnabled: !isSaving
+                        isEnabled: !isSaving && hasUnsavedChanges
                     ) {
                         save()
                     }
@@ -138,10 +148,42 @@ struct WorkoutEditView: View {
             } message: {
                 Text("This permanently deletes the logged workout.")
             }
+            .alert("Discard Changes?", isPresented: $showingDiscardChangesAlert) {
+                Button("Keep Editing", role: .cancel) {}
+                Button("Discard", role: .destructive) { dismiss() }
+            } message: {
+                Text("Your edits to this workout haven't been saved.")
+            }
+            .alert(
+                "Remove Exercise?",
+                isPresented: Binding(
+                    get: { exercisePendingRemoval != nil },
+                    set: { if !$0 { exercisePendingRemoval = nil } }
+                ),
+                presenting: exercisePendingRemoval
+            ) { exercise in
+                Button("Remove", role: .destructive) {
+                    draft?.exercises.removeAll { $0.id == exercise.id }
+                    exercisePendingRemoval = nil
+                    Haptics.selection()
+                }
+                Button("Cancel", role: .cancel) { exercisePendingRemoval = nil }
+            } message: { exercise in
+                Text("\(exercise.name) and its sets will be removed when you save.")
+            }
+            .interactiveDismissDisabled(hasUnsavedChanges || isSaving)
             .onAppear {
-                draft = logStore.workout(id: workoutId)
+                guard draft == nil else { return }
+                let loaded = logStore.workout(id: workoutId)
+                draft = loaded
+                original = loaded
             }
         }
+    }
+
+    private var hasUnsavedChanges: Bool {
+        guard let draft else { return false }
+        return draft != original
     }
 
     private var bindingForName: Binding<String> {
@@ -212,11 +254,14 @@ struct WorkoutEditView: View {
         guard !isSaving else { return }
 
         let trimmedName = workout.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        workout.name = trimmedName.isEmpty ? workout.name : trimmedName
+        workout.name = trimmedName.isEmpty ? (original?.name ?? workout.name) : trimmedName
+
+        // Exercises whose sets were all deleted would otherwise be saved as empty entries.
+        workout.exercises.removeAll { $0.sets.isEmpty }
 
         let setCount = workout.exercises.flatMap(\.sets).count
         if setCount == 0 {
-            errorMessage = "Workout must contain at least one set."
+            errorMessage = "Workout must contain at least one set. To remove it entirely, use Delete Workout."
             return
         }
 
@@ -231,12 +276,12 @@ struct WorkoutEditView: View {
                     let distance = max(set.distance ?? 0, 0)
                     let seconds = max(set.seconds ?? 0, 0)
                     if count <= 0 && distance <= 0 && seconds <= 0 {
-                        errorMessage = "All completed cardio sets must have distance, time, or count."
+                        errorMessage = "\(exercise.name), set \(set.order) needs a distance, time, or count."
                         return
                     }
                 } else {
                     if set.weight < 0 || set.reps <= 0 {
-                        errorMessage = "All sets must have weight and reps."
+                        errorMessage = "\(exercise.name), set \(set.order) needs a weight and at least 1 rep."
                         return
                     }
                 }
@@ -247,7 +292,14 @@ struct WorkoutEditView: View {
         errorMessage = nil
 
         Task { @MainActor in
-            await logStore.upsert(workout)
+            do {
+                try await logStore.save(workout)
+            } catch {
+                isSaving = false
+                errorMessage = "Couldn't save changes: \(error.localizedDescription)"
+                Haptics.notify(.error)
+                return
+            }
             await dataManager.setLoggedWorkoutsOffMain(logStore.workouts)
             isSaving = false
             Haptics.notify(.success)
@@ -270,6 +322,7 @@ private struct LoggedExerciseEditorCard: View {
     let setBinding: (UUID) -> Binding<LoggedSet>
     let onAddSet: () -> Void
     let onDeleteSet: (UUID) -> Void
+    let onRemoveExercise: () -> Void
 
     private let weightUnit = "lbs"
     @ObservedObject private var metadataManager = ExerciseMetadataManager.shared
@@ -302,6 +355,18 @@ private struct LoggedExerciseEditorCard: View {
                     .foregroundColor(Theme.Colors.textPrimary)
 
                 Spacer()
+
+                Button(role: .destructive) {
+                    onRemoveExercise()
+                } label: {
+                    Image(systemName: "minus.circle")
+                        .font(Theme.Typography.subheadlineBold)
+                        .frame(width: Theme.Layout.minimumTapTarget, height: Theme.Layout.minimumTapTarget)
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Theme.Colors.error)
+                .accessibilityLabel("Remove \(exercise.name)")
 
                 Button {
                     onAddSet()
@@ -411,12 +476,16 @@ private struct LoggedSetEditorRow: View {
                 .strokeBorder(Theme.Colors.border.opacity(0.7), lineWidth: 1)
         )
         .toolbar {
-            ToolbarItemGroup(placement: .keyboard) {
-                Spacer()
-                Button("Done") { focusedField = nil }
-                    .font(Theme.Typography.captionBold)
-                    .foregroundStyle(Theme.Colors.accent)
-                    .buttonStyle(.plain)
+            // Only the row being edited contributes keyboard items, so the keyboard shows a
+            // single "Done" button instead of one per set row.
+            if focusedField != nil {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") { focusedField = nil }
+                        .font(Theme.Typography.captionBold)
+                        .foregroundStyle(Theme.Colors.accent)
+                        .buttonStyle(.plain)
+                }
             }
         }
     }
@@ -490,9 +559,7 @@ private struct LoggedSetEditorRow: View {
     }
 
     private func parseDouble(_ text: String) -> Double? {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-        return Double(trimmed)
+        WorkoutValueFormatter.parseDecimal(text)
     }
 
     private func parseInt(_ text: String) -> Int? {

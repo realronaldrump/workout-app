@@ -2,19 +2,38 @@ import Combine
 import Foundation
 import SwiftUI
 import UIKit
+import UserNotifications
 
 @MainActor
 final class RestTimerState: ObservableObject {
+    static let durationPreferenceKey = "restTimerDurationSeconds"
+    static let defaultDuration = 90
+
     @Published private(set) var secondsRemaining: Int = 0
     @Published private(set) var isActive: Bool = false
-    @Published private(set) var duration: Int = 90
+    /// Default rest length started after a completed set. Persisted across launches.
+    @Published private(set) var duration: Int
+    /// Length of the countdown currently running (default duration plus any extensions).
+    /// Drives the progress ring so extending a rest does not change the saved default.
+    @Published private(set) var currentTotal: Int
+
+    private let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        let stored = defaults.integer(forKey: Self.durationPreferenceKey)
+        let initial = stored > 0 ? Self.clamp(stored) : Self.defaultDuration
+        self.duration = initial
+        self.currentTotal = initial
+    }
 
     nonisolated deinit {}
 
     func setDuration(_ seconds: Int) {
-        let clamped = max(15, min(600, seconds))
+        let clamped = Self.clamp(seconds)
         guard clamped != duration else { return }
         duration = clamped
+        defaults.set(clamped, forKey: Self.durationPreferenceKey)
     }
 
     func update(isActive: Bool, secondsRemaining: Int) {
@@ -25,6 +44,26 @@ final class RestTimerState: ObservableObject {
         if self.secondsRemaining != clampedSeconds {
             self.secondsRemaining = clampedSeconds
         }
+    }
+
+    /// Picks up a default changed elsewhere (e.g. Settings) while the app was running.
+    func syncDurationFromDefaults() {
+        let stored = defaults.integer(forKey: Self.durationPreferenceKey)
+        guard stored > 0 else { return }
+        let clamped = Self.clamp(stored)
+        if clamped != duration {
+            duration = clamped
+        }
+    }
+
+    func setCurrentTotal(_ seconds: Int) {
+        let clamped = max(1, seconds)
+        guard clamped != currentTotal else { return }
+        currentTotal = clamped
+    }
+
+    private static func clamp(_ seconds: Int) -> Int {
+        max(15, min(600, seconds))
     }
 }
 
@@ -332,15 +371,25 @@ final class WorkoutSessionManager: ObservableObject {
     // MARK: - Rest Timer
 
     func startRestTimer() {
+        restTimer.syncDurationFromDefaults()
+        restTimer.setCurrentTotal(restTimerDuration)
         beginRestTimer(until: Date().addingTimeInterval(TimeInterval(restTimerDuration)))
     }
 
+    /// Adds time to the running rest (or starts a short rest if none is running)
+    /// without changing the saved default duration.
     func extendRestTimer(by seconds: Int) {
         let clampedSeconds = max(0, seconds)
         guard clampedSeconds > 0 else { return }
 
-        let anchor = max(restTimerEndTime ?? Date(), Date())
-        beginRestTimer(until: anchor.addingTimeInterval(TimeInterval(clampedSeconds)))
+        let now = Date()
+        if let endTime = restTimerEndTime, endTime > now, restTimerIsActive {
+            restTimer.setCurrentTotal(restTimer.currentTotal + clampedSeconds)
+            beginRestTimer(until: endTime.addingTimeInterval(TimeInterval(clampedSeconds)))
+        } else {
+            restTimer.setCurrentTotal(clampedSeconds)
+            beginRestTimer(until: now.addingTimeInterval(TimeInterval(clampedSeconds)))
+        }
     }
 
     func incompleteSetsWithEnteredDataCount() -> Int {
@@ -381,6 +430,9 @@ final class WorkoutSessionManager: ObservableObject {
     private func beginRestTimer(until endTime: Date) {
         restTimerEndTime = endTime
         restTimerTask?.cancel()
+        if !Self.isRunningTests {
+            RestTimerNotifier.schedule(at: endTime)
+        }
 
         updateRestTimerState(notifyOnCompletion: false)
         restTimerTask = Task { [weak self] in
@@ -402,13 +454,19 @@ final class WorkoutSessionManager: ObservableObject {
         restTimerTask = nil
         restTimerEndTime = nil
         restTimer.update(isActive: false, secondsRemaining: 0)
+        if !Self.isRunningTests {
+            RestTimerNotifier.cancel()
+        }
     }
 
     func setRestTimerDuration(_ seconds: Int) {
         restTimer.setDuration(seconds)
     }
 
-    func finish() async throws -> LoggedWorkout {
+    /// Validates the active session and builds the workout to save, without ending the session.
+    /// Callers should persist the result and then call `completeFinish(_:)`, so the in-progress
+    /// draft is only deleted once the finished workout is safely stored.
+    func prepareFinishedWorkout() throws -> LoggedWorkout {
         guard let session = activeSession else { throw WorkoutSessionError.noActiveSession }
 
         var totalLoggedSets = 0
@@ -465,7 +523,7 @@ final class WorkoutSessionManager: ObservableObject {
         guard totalLoggedSets > 0 else { throw WorkoutSessionError.noCompletedSets }
 
         let endedAt = Date()
-        let workout = LoggedWorkout(
+        return LoggedWorkout(
             id: session.id,
             startedAt: session.startedAt,
             endedAt: endedAt,
@@ -475,18 +533,29 @@ final class WorkoutSessionManager: ObservableObject {
             createdAt: endedAt,
             updatedAt: endedAt
         )
+    }
 
+    /// Ends the active session after its workout has been persisted.
+    func completeFinish(_ workout: LoggedWorkout) async {
         cancelRestTimer()
-        activeSession = nil
+        if activeSession?.id == workout.id {
+            activeSession = nil
+        }
         await deleteDraftFile()
+        let completedSetCount = workout.exercises.reduce(0) { $0 + $1.sets.count }
         AppAnalytics.shared.track(
             AnalyticsSignal.sessionFinished,
             payload: [
-                "Session.exerciseCount": "\(loggedExercises.count)",
-                "Session.completedSetCount": "\(totalLoggedSets)"
+                "Session.exerciseCount": "\(workout.exercises.count)",
+                "Session.completedSetCount": "\(completedSetCount)"
             ],
-            floatValue: max(0, endedAt.timeIntervalSince(session.startedAt))
+            floatValue: max(0, workout.endedAt.timeIntervalSince(workout.startedAt))
         )
+    }
+
+    func finish() async throws -> LoggedWorkout {
+        let workout = try prepareFinishedWorkout()
+        await completeFinish(workout)
         return workout
     }
 
@@ -659,6 +728,60 @@ final class WorkoutSessionManager: ObservableObject {
 
     private static var isRunningTests: Bool {
         ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    }
+}
+
+/// Schedules a local notification for the end of a rest period so lifters who lock their
+/// phone between sets still get alerted. Notifications are not shown while the app is in the
+/// foreground (no presentation delegate), where the in-app timer and haptic handle it.
+private enum RestTimerNotifier {
+    private static let identifier = "rest-timer-complete"
+    /// Bumped on every schedule/cancel so an in-flight scheduling task never re-adds a
+    /// notification after the timer was cancelled or rescheduled.
+    private static var generation = 0
+
+    static func schedule(at endTime: Date) {
+        let interval = endTime.timeIntervalSinceNow
+        guard interval > 1 else {
+            cancel()
+            return
+        }
+
+        generation += 1
+        let scheduledGeneration = generation
+        Task { @MainActor in
+            let center = UNUserNotificationCenter.current()
+            let settings = await center.notificationSettings()
+            switch settings.authorizationStatus {
+            case .notDetermined:
+                let granted = (try? await center.requestAuthorization(options: [.alert, .sound])) ?? false
+                guard granted else { return }
+            case .authorized, .provisional, .ephemeral:
+                break
+            default:
+                return
+            }
+
+            let remaining = endTime.timeIntervalSinceNow
+            guard remaining > 1, scheduledGeneration == generation else { return }
+
+            let content = UNMutableNotificationContent()
+            content.title = "Rest complete"
+            content.body = "Time for your next set."
+            content.sound = .default
+
+            let trigger = UNTimeIntervalNotificationTrigger(timeInterval: remaining, repeats: false)
+            let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
+            center.removePendingNotificationRequests(withIdentifiers: [identifier])
+            try? await center.add(request)
+        }
+    }
+
+    static func cancel() {
+        generation += 1
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(withIdentifiers: [identifier])
+        center.removeDeliveredNotifications(withIdentifiers: [identifier])
     }
 }
 

@@ -8,6 +8,8 @@ struct FinishSessionSummary: Hashable {
     let cardioDistance: Double
     let cardioSeconds: Double
     let cardioCount: Int
+    /// Set once the workout is saved so the summary shows a fixed duration instead of a live timer.
+    var endedAt: Date? = nil
 }
 
 struct FinishSessionSheet: View {
@@ -144,20 +146,27 @@ struct FinishSessionSheet: View {
 
     private var summaryCard: some View {
         VStack(spacing: Theme.Spacing.sm) {
-            HStack {
-                Text("Elapsed")
-                Spacer()
-                Text(summary.startedAt, style: .timer)
-                    .monospacedDigit()
-                    .foregroundStyle(Theme.Colors.textPrimary)
+            if let endedAt = summary.endedAt {
+                statRow(
+                    title: "Duration",
+                    value: SharedFormatters.elapsed(endedAt.timeIntervalSince(summary.startedAt))
+                )
+            } else {
+                HStack {
+                    Text("Elapsed")
+                    Spacer()
+                    Text(summary.startedAt, style: .timer)
+                        .monospacedDigit()
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                }
+                .accessibilityElement(children: .combine)
             }
-            .accessibilityElement(children: .combine)
 
             statRow(title: "Exercises", value: "\(summary.exerciseCount)")
             statRow(title: "Completed sets", value: "\(summary.completedSetCount)")
 
             if summary.strengthVolume > 0 {
-                statRow(title: "Volume", value: SharedFormatters.volumeCompact(summary.strengthVolume))
+                statRow(title: "Volume", value: SharedFormatters.volumeWithUnit(summary.strengthVolume))
             }
             if summary.cardioDistance > 0 {
                 statRow(

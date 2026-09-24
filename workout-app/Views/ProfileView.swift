@@ -104,7 +104,7 @@ struct ProfileView: View {
                     }
                 )
                 .frame(maxWidth: .infinity)
-                .accessibilityLabel("\(dataManager.workouts.count) workouts")
+                .accessibilityLabel(SharedFormatters.count(dataManager.workouts.count, "workout"))
                 .accessibilityHint("Double tap to view workout history")
 
                 MetricTileButton(
@@ -117,7 +117,7 @@ struct ProfileView: View {
                     }
                 )
                 .frame(maxWidth: .infinity)
-                .accessibilityLabel("\(uniqueExercisesCount) exercises")
+                .accessibilityLabel(SharedFormatters.count(uniqueExercisesCount, "exercise"))
                 .accessibilityHint("Double tap to view exercise list")
     }
 

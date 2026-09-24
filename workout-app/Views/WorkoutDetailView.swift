@@ -747,7 +747,7 @@ struct ExerciseCard: View {
     }
 
     private var setCountLabel: some View {
-        Label("\(exercise.sets.count) sets", systemImage: "number")
+        Label(SharedFormatters.count(exercise.sets.count, "set"), systemImage: "number")
             .font(Theme.Typography.caption)
             .foregroundStyle(Theme.Colors.textSecondary)
     }

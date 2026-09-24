@@ -834,7 +834,7 @@ struct ExerciseDetailView: View {
                             Text(SharedFormatters.volumeCompact(breakdown.volume))
                                 .font(Theme.Typography.captionBold)
                                 .foregroundColor(Theme.Colors.textPrimary)
-                            Text("\(breakdown.sets) sets")
+                            Text(SharedFormatters.count(breakdown.sets, "set"))
                                 .font(Theme.Typography.caption)
                                 .foregroundColor(Theme.Colors.textTertiary)
                         }

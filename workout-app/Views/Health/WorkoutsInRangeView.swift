@@ -20,7 +20,7 @@ struct WorkoutsInRangeView: View {
                             .font(Theme.Typography.screenTitle)
                             .foregroundStyle(Theme.Colors.textPrimary)
                             .tracking(1.5)
-                        Text("\(rangeLabel) • \(sortedWorkouts.count) sessions")
+                        Text("\(rangeLabel) • \(SharedFormatters.count(sortedWorkouts.count, "session"))")
                             .font(Theme.Typography.body)
                             .foregroundStyle(Theme.Colors.textSecondary)
                     }

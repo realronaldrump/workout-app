@@ -957,11 +957,31 @@ struct WorkoutHistoryView: View {
             }
             .font(Theme.Typography.subheadlineStrong)
             .frame(minHeight: Theme.Layout.minimumTapTarget)
+
+            Button {
+                withAnimation(.snappy) { recentlyDeletedWorkout = nil }
+            } label: {
+                Image(systemName: "xmark")
+                    .font(Theme.Typography.captionBold)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .frame(width: Theme.Layout.minimumTapTarget, height: Theme.Layout.minimumTapTarget)
+                    .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Dismiss")
         }
-        .padding(.horizontal, Theme.Spacing.lg)
-        .padding(.vertical, Theme.Spacing.sm)
+        .padding(.leading, Theme.Spacing.lg)
+        .padding(.trailing, Theme.Spacing.xs)
+        .padding(.vertical, Theme.Spacing.xs)
         .glassBackground(opacity: 0.24, cornerRadius: Theme.CornerRadius.xlarge, elevation: 1, interactive: true)
         .padding(.horizontal, Theme.Spacing.lg)
+        .transition(.move(edge: .bottom).combined(with: .opacity))
+        .task(id: workout.id) {
+            // Auto-dismiss the undo affordance so it doesn't linger over the list forever.
+            try? await Task.sleep(for: .seconds(8))
+            guard !Task.isCancelled, recentlyDeletedWorkout?.id == workout.id else { return }
+            withAnimation(.snappy) { recentlyDeletedWorkout = nil }
+        }
     }
 
     private func undoDeletion(_ workout: LoggedWorkout) {

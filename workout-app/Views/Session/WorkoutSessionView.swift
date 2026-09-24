@@ -29,9 +29,14 @@ struct WorkoutSessionView: View {
     @State private var showingDiscardAlert = false
     @State private var showingUncheckedSetAlert = false
     @State private var showingRestSettings = false
+    @State private var showingRenameAlert = false
+    @State private var renameText = ""
+    @State private var showingGymPicker = false
     @State private var finishErrorMessage: String?
     @State private var isFinishing = false
     @State private var finishDidSave = false
+    /// Snapshot shown on the success screen; the live summary resets once the session ends.
+    @State private var finishedSummary: FinishSessionSummary?
     @State private var pendingUncheckedSetCount = 0
     @State private var exerciseCardContexts: [String: SessionExerciseContext] = [:]
     @State private var cachedMuscleSuggestions: [MuscleGroupSuggestion] = []
@@ -63,7 +68,6 @@ struct WorkoutSessionView: View {
                             RestTimerCard(
                                 timer: sessionManager.restTimer,
                                 onExtendThirtySeconds: {
-                                    sessionManager.setRestTimerDuration(sessionManager.restTimerDuration + 30)
                                     sessionManager.extendRestTimer(by: 30)
                                     Haptics.selection()
                                 },
@@ -141,7 +145,9 @@ struct WorkoutSessionView: View {
                 }
             }
             .sheet(isPresented: $showingExercisePicker) {
-                ExercisePickerView { selected in
+                ExercisePickerView(
+                    alreadyAdded: Set(sessionManager.activeSession?.exercises.map(\.name) ?? [])
+                ) { selected in
                     addExerciseWithPrefill(name: selected)
                 }
             }
@@ -149,7 +155,7 @@ struct WorkoutSessionView: View {
                 FinishSessionSheet(
                     isFinishing: isFinishing,
                     didSave: finishDidSave,
-                    summary: cachedSummary,
+                    summary: finishedSummary ?? cachedSummary,
                     errorMessage: finishErrorMessage,
                     onFinish: { finishSession() },
                     onDismissError: { finishErrorMessage = nil },
@@ -188,6 +194,35 @@ struct WorkoutSessionView: View {
             } message: {
                 Text(uncheckedSetAlertMessage)
             }
+            .alert("Rename Workout", isPresented: $showingRenameAlert) {
+                TextField("Workout name", text: $renameText)
+                    .textInputAutocapitalization(.words)
+                Button("Cancel", role: .cancel) {}
+                Button("Save") {
+                    sessionManager.updateSessionName(renameText)
+                }
+            }
+            .sheet(isPresented: $showingGymPicker) {
+                GymSelectionSheet(
+                    title: "Choose Gym",
+                    gyms: gymProfilesManager.sortedGyms,
+                    selected: sessionManager.activeSession?.gymProfileId.map { GymSelection.gym($0) } ?? .unassigned,
+                    showAllGyms: false,
+                    showUnassigned: true,
+                    lastUsedGymId: gymProfilesManager.lastUsedGymProfileId,
+                    showLastUsed: gymProfilesManager.lastUsedGymProfileId != nil,
+                    showAddNew: false,
+                    onSelect: { selection in
+                        switch selection {
+                        case .unassigned, .allGyms:
+                            sessionManager.setGymProfileId(nil)
+                        case .gym(let id):
+                            sessionManager.setGymProfileId(id)
+                        }
+                    },
+                    onAddNew: nil
+                )
+            }
             .sheet(isPresented: $showingRestSettings) {
                 RestTimerSettingsSheet(
                     timer: sessionManager.restTimer,
@@ -200,6 +235,7 @@ struct WorkoutSessionView: View {
                     .presentationDragIndicator(.visible)
             }
             .onAppear {
+                sessionManager.restTimer.syncDurationFromDefaults()
                 // Keep increment options aligned with pounds-only behavior.
                 let isAllowed = allowedWeightIncrements.contains { abs($0 - weightIncrement) < 0.0001 }
                 if weightIncrement <= 0 || !isAllowed {
@@ -376,18 +412,52 @@ struct WorkoutSessionView: View {
     }
 
     private func headerCard(_ session: ActiveWorkoutSession) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text(session.name)
-                .font(Theme.Typography.title3)
-                .foregroundStyle(Theme.Colors.textPrimary)
-                .lineLimit(2)
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            Button {
+                renameText = session.name
+                showingRenameAlert = true
+                Haptics.selection()
+            } label: {
+                HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.sm) {
+                    Text(session.name)
+                        .font(Theme.Typography.title3)
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                    Image(systemName: "pencil")
+                        .font(Theme.Typography.captionBold)
+                        .foregroundStyle(Theme.Colors.textTertiary)
+                        .accessibilityHidden(true)
+                }
+                .frame(minHeight: Theme.Layout.minimumTapTarget)
+                .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Workout name, \(session.name)")
+            .accessibilityHint("Renames this workout")
 
-            Label(gymLabel(for: session.gymProfileId), systemImage: "mappin.and.ellipse")
+            Button {
+                showingGymPicker = true
+                Haptics.selection()
+            } label: {
+                HStack(spacing: Theme.Spacing.xs) {
+                    Label(gymLabel(for: session.gymProfileId), systemImage: "mappin.and.ellipse")
+                    Image(systemName: "chevron.down")
+                        .font(Theme.Typography.caption2Bold)
+                        .accessibilityHidden(true)
+                }
                 .font(Theme.Typography.captionBold)
                 .foregroundStyle(Theme.Colors.textSecondary)
+                .frame(minHeight: Theme.Layout.minimumTapTarget)
+                .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Gym, \(gymLabel(for: session.gymProfileId))")
+            .accessibilityHint("Changes the gym for this workout")
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(Theme.Spacing.lg)
+        .padding(.horizontal, Theme.Spacing.lg)
+        .padding(.vertical, Theme.Spacing.md)
         .softCard(elevation: 1)
     }
 
@@ -441,8 +511,25 @@ struct WorkoutSessionView: View {
             defer { isFinishing = false }
 
             do {
-                let logged = try await sessionManager.finish()
-                await logStore.upsert(logged)
+                // Save before ending the session so a failed write never loses the workout:
+                // the draft is only deleted once the finished workout is stored.
+                let logged = try sessionManager.prepareFinishedWorkout()
+                do {
+                    try await logStore.save(logged)
+                } catch {
+                    throw WorkoutFinishSaveError(underlying: error)
+                }
+                finishedSummary = FinishSessionSummary(
+                    startedAt: logged.startedAt,
+                    exerciseCount: logged.exercises.count,
+                    completedSetCount: cachedSummary.completedSetCount,
+                    strengthVolume: cachedSummary.strengthVolume,
+                    cardioDistance: cachedSummary.cardioDistance,
+                    cardioSeconds: cachedSummary.cardioSeconds,
+                    cardioCount: cachedSummary.cardioCount,
+                    endedAt: logged.endedAt
+                )
+                await sessionManager.completeFinish(logged)
                 await dataManager.setLoggedWorkoutsOffMain(logStore.workouts)
 
                 annotationsManager.setGym(for: logged.id, gymProfileId: logged.gymProfileId)
@@ -475,6 +562,7 @@ struct WorkoutSessionView: View {
     private func completeFinishedSessionPresentation() {
         showingFinishSheet = false
         finishDidSave = false
+        finishedSummary = nil
         sessionManager.isPresentingSessionUI = false
         dismiss()
     }
@@ -672,6 +760,14 @@ struct WorkoutSessionView: View {
 
 }
 
+private struct WorkoutFinishSaveError: LocalizedError {
+    let underlying: Error
+
+    var errorDescription: String? {
+        "Couldn't save your workout (\(underlying.localizedDescription)). Your session is still here, so try again."
+    }
+}
+
 // MARK: - Rest Timer UI
 
 private struct RestTimerCard: View {
@@ -707,7 +803,7 @@ private struct RestTimerCard: View {
         HStack(spacing: Theme.Spacing.md) {
             ZStack {
                 let remaining = timer.secondsRemaining
-                let progress = timer.duration > 0 ? Double(remaining) / Double(timer.duration) : 0
+                let progress = timer.currentTotal > 0 ? min(1, Double(remaining) / Double(timer.currentTotal)) : 0
 
                 Circle()
                     .stroke(Theme.Colors.border, lineWidth: 3)
@@ -772,7 +868,7 @@ private struct RestTimerSettingsSheet: View {
     @ObservedObject var timer: RestTimerState
     let onSelectDuration: (Int) -> Void
 
-    private let presets = [30, 60, 90, 120, 180, 300]
+    private let presets = [30, 45, 60, 90, 120, 150, 180, 240, 300]
 
     var body: some View {
         ScrollView {
@@ -791,7 +887,10 @@ private struct RestTimerSettingsSheet: View {
                     }
                 }
 
-                Text("Choose the default rest time started after a completed set.")
+                Text(
+                    "Choose the default rest time started after a completed set. Your choice is remembered, "
+                        + "and you'll get a notification when rest ends if your phone is locked."
+                )
                     .font(Theme.Typography.subheadline)
                     .foregroundStyle(Theme.Colors.textSecondary)
 
@@ -900,10 +999,30 @@ private struct SessionExerciseCard: View {
                 Spacer()
 
                 Menu {
-                    Button("History") {
+                    Button("History", systemImage: "clock.arrow.circlepath") {
                         showingHistory = true
                     }
-                    Button("Remove Exercise", role: .destructive) {
+                    if let position = exercisePosition {
+                        if position.index > 0 {
+                            Button("Move Up", systemImage: "arrow.up") {
+                                sessionManager.moveExercise(
+                                    from: IndexSet(integer: position.index),
+                                    to: position.index - 1
+                                )
+                                Haptics.selection()
+                            }
+                        }
+                        if position.index < position.count - 1 {
+                            Button("Move Down", systemImage: "arrow.down") {
+                                sessionManager.moveExercise(
+                                    from: IndexSet(integer: position.index),
+                                    to: position.index + 2
+                                )
+                                Haptics.selection()
+                            }
+                        }
+                    }
+                    Button("Remove Exercise", systemImage: "trash", role: .destructive) {
                         showingRemoveExerciseAlert = true
                     }
                 } label: {
@@ -917,12 +1036,16 @@ private struct SessionExerciseCard: View {
             }
 
             LazyVStack(spacing: Theme.Spacing.sm) {
+                let recentSets: [WorkoutSet] = isCardio ? [] : lastSessionSets
                 ForEach(Array(exercise.sets.enumerated()), id: \.element.id) { index, set in
                     SessionSetRow(
                         exerciseId: exercise.id,
                         exerciseName: exercise.name,
                         set: set,
                         previousSet: index > 0 ? exercise.sets[index - 1] : nil,
+                        lastSessionSet: recentSets.indices.contains(set.order - 1)
+                            ? recentSets[set.order - 1]
+                            : nil,
                         weightUnit: weightUnit,
                         weightIncrement: weightIncrement,
                         cardioConfig: cardioConfig
@@ -932,7 +1055,18 @@ private struct SessionExerciseCard: View {
 
             HStack(spacing: Theme.Spacing.sm) {
                 Button {
-                    if let rec {
+                    if let lastEntered = lastEnteredSet {
+                        // Most lifters repeat the previous set, so carry its values forward.
+                        sessionManager.addSet(
+                            exerciseId: exercise.id,
+                            prefill: SetPrefill(
+                                weight: lastEntered.weight,
+                                reps: lastEntered.reps,
+                                distance: lastEntered.distance,
+                                seconds: lastEntered.seconds
+                            )
+                        )
+                    } else if let rec {
                         sessionManager.addSet(exerciseId: exercise.id, prefill: SetPrefill(weight: rec.suggestedWeight, reps: defaultReps(rec.repRange)))
                     } else {
                         sessionManager.addSet(exerciseId: exercise.id)
@@ -968,6 +1102,24 @@ private struct SessionExerciseCard: View {
         } message: {
             Text("This will remove \(exercise.name) and all of its sets from the current session.")
         }
+    }
+
+    /// Sets from the most recent saved session of this exercise, in set order.
+    private var lastSessionSets: [WorkoutSet] {
+        guard let latest = context?.history.max(by: { $0.date < $1.date }) else { return [] }
+        return latest.sets.sorted { $0.setOrder < $1.setOrder }
+    }
+
+    private var exercisePosition: (index: Int, count: Int)? {
+        guard let exercises = sessionManager.activeSession?.exercises,
+              let index = exercises.firstIndex(where: { $0.id == exercise.id }) else { return nil }
+        return (index, exercises.count)
+    }
+
+    private var lastEnteredSet: ActiveSet? {
+        exercise.sets
+            .sorted { $0.order < $1.order }
+            .last { $0.weight != nil || $0.reps != nil || $0.distance != nil || $0.seconds != nil }
     }
 
     private func recommendationLine(_ rec: ExerciseRecommendation) -> String {
@@ -1009,6 +1161,7 @@ private struct SessionSetRow: View {
     let exerciseName: String
     let set: ActiveSet
     let previousSet: ActiveSet?
+    let lastSessionSet: WorkoutSet?
     let weightUnit: String
     let weightIncrement: Double
     let cardioConfig: ResolvedCardioMetricConfiguration?
@@ -1036,6 +1189,7 @@ private struct SessionSetRow: View {
         exerciseName: String,
         set: ActiveSet,
         previousSet: ActiveSet?,
+        lastSessionSet: WorkoutSet?,
         weightUnit: String,
         weightIncrement: Double,
         cardioConfig: ResolvedCardioMetricConfiguration?
@@ -1044,6 +1198,7 @@ private struct SessionSetRow: View {
         self.exerciseName = exerciseName
         self.set = set
         self.previousSet = previousSet
+        self.lastSessionSet = lastSessionSet
         self.weightUnit = weightUnit
         self.weightIncrement = weightIncrement
         self.cardioConfig = cardioConfig
@@ -1074,6 +1229,27 @@ private struct SessionSetRow: View {
                 .accessibilityHint(set.isCompleted ? "Marks this set incomplete" : "Validates and completes this set")
 
                 Spacer(minLength: Theme.Spacing.sm)
+
+                if let lastSessionSet, cardioConfig == nil, lastSessionSet.reps > 0 {
+                    Button {
+                        applyLastSession(lastSessionSet)
+                    } label: {
+                        Text("Last: \(WorkoutValueFormatter.weightText(lastSessionSet.weight)) × \(lastSessionSet.reps)")
+                            .font(Theme.Typography.microcopy)
+                            .foregroundStyle(Theme.Colors.textSecondary)
+                            .monospacedDigit()
+                            .lineLimit(1)
+                            .padding(.horizontal, Theme.Spacing.sm)
+                            .frame(minHeight: Theme.Layout.minimumTapTarget)
+                            .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(set.isCompleted)
+                    .accessibilityLabel(
+                        "Last session, \(WorkoutValueFormatter.weightText(lastSessionSet.weight)) \(weightUnit) for \(lastSessionSet.reps) reps"
+                    )
+                    .accessibilityHint("Fills this set with last session's weight and reps")
+                }
 
                 Menu {
                     if let previousSet, cardioConfig == nil {
@@ -1109,12 +1285,16 @@ private struct SessionSetRow: View {
                 .strokeBorder(Theme.Colors.border.opacity(0.7), lineWidth: 1)
         )
         .toolbar {
-            ToolbarItemGroup(placement: .keyboard) {
-                Spacer()
-                Button("Done") { focusedField = nil }
-                    .font(Theme.Typography.captionBold)
-                    .foregroundStyle(Theme.Colors.accent)
-                .buttonStyle(.plain)
+            // Only the row being edited contributes keyboard items; otherwise every visible
+            // set row adds its own "Done" button to the shared keyboard toolbar.
+            if focusedField != nil {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") { focusedField = nil }
+                        .font(Theme.Typography.captionBold)
+                        .foregroundStyle(Theme.Colors.accent)
+                        .buttonStyle(.plain)
+                }
             }
         }
         .onChange(of: focusedField) { _, newValue in
@@ -1327,6 +1507,13 @@ private struct SessionSetRow: View {
         commitImmediately()
     }
 
+    private func applyLastSession(_ source: WorkoutSet) {
+        weightText = WorkoutValueFormatter.weightText(source.weight)
+        repsText = String(source.reps)
+        commitImmediately()
+        Haptics.selection()
+    }
+
     private func copyFromSet(_ source: ActiveSet) {
         if let weight = source.weight {
             weightText = WorkoutValueFormatter.weightText(weight)
@@ -1383,15 +1570,17 @@ private struct SessionSetRow: View {
     }
 
     private func parseDouble(_ text: String) -> Double? {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-        return Double(trimmed)
+        WorkoutValueFormatter.parseDecimal(text)
     }
 
     private func parseInt(_ text: String) -> Int? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
-        return Int(trimmed)
+        if let value = Int(trimmed) { return value }
+        // Tolerate pasted values such as "8.0".
+        guard let decimal = WorkoutValueFormatter.parseDecimal(trimmed), decimal.isFinite,
+              decimal >= 0, decimal < Double(Int.max) else { return nil }
+        return Int(decimal.rounded())
     }
 
 }

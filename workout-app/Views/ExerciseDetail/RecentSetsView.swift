@@ -47,7 +47,8 @@ struct RecentSetsView: View {
                     AnalysisTile(
                         role: .revealSource,
                         destination: "the source workout",
-                        accessibilityLabel: "\(session.date.formatted(date: .abbreviated, time: .shortened)), \(session.sets.count) sets",
+                        accessibilityLabel: session.date.formatted(date: .abbreviated, time: .shortened)
+                            + ", " + SharedFormatters.count(session.sets.count, "set"),
                         padding: Theme.Spacing.lg,
                         action: {
                             selectedWorkout = dataManager.workouts.first {

@@ -482,7 +482,7 @@ struct ExerciseRangeBreakdown: View {
                 Spacer(minLength: Theme.Spacing.md)
 
                 if totalSets > 0 {
-                    Text("\(totalSets) sets")
+                    Text(SharedFormatters.count(totalSets, "set"))
                         .font(Theme.Typography.captionBold)
                         .foregroundStyle(Theme.Colors.textPrimary)
                         .padding(.horizontal, Theme.Spacing.md)
@@ -699,7 +699,7 @@ struct ExerciseRangeBreakdown: View {
                 Spacer(minLength: Theme.Spacing.sm)
 
                 VStack(alignment: .trailing, spacing: 2) {
-                    Text("\(bucket.count) sets")
+                    Text(SharedFormatters.count(bucket.count, "set"))
                         .font(Theme.Typography.captionBold)
                         .foregroundStyle(Theme.Colors.textPrimary)
 

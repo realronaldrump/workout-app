@@ -106,7 +106,7 @@ struct QuickStartView: View {
                     .foregroundStyle(Theme.Colors.textPrimary)
             }
 
-            LabeledContent("Progress", value: "\(exerciseCount) exercises · \(setCount) sets")
+            LabeledContent("Progress", value: "\(SharedFormatters.count(exerciseCount, "exercise")) · \(SharedFormatters.count(setCount, "set"))")
         }
     }
 

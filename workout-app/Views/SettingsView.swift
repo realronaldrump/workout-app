@@ -20,6 +20,7 @@ struct SettingsView: View {
     @State private var dataClearSheet: DataClearSheetRoute?
 
     @AppStorage("weightIncrement") private var weightIncrement: Double = 2.5
+    @AppStorage(RestTimerState.durationPreferenceKey) private var restTimerDuration: Int = RestTimerState.defaultDuration
     @AppStorage("intentionalRestDays") private var intentionalRestDays: Int = 1
     @AppStorage("sessionsPerWeekGoal") private var sessionsPerWeekGoal: Int = 4
     @AppStorage("preferredSleepSourceName") private var preferredSleepSourceName: String = ""
@@ -195,6 +196,38 @@ struct SettingsView: View {
                             Picker("Weight increment", selection: $weightIncrement) {
                                 ForEach(incrementOptions, id: \.self) { option in
                                     Text(incrementLabel(option)).tag(option)
+                                }
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.menu)
+                        }
+                        .padding()
+                        .softCard(elevation: 1)
+
+                        Divider().padding(.leading, 50)
+
+                        // Default rest timer started after each completed set
+                        HStack(spacing: Theme.Spacing.sm) {
+                            Image(systemName: "timer")
+                                .font(Theme.Typography.subheadlineStrong)
+                                .foregroundStyle(.white)
+                                .frame(width: 32, height: 32)
+                                .background(Theme.Colors.accent)
+                                .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Rest Timer")
+                                    .font(Theme.Typography.body)
+                                Text("Starts automatically after each completed set")
+                                    .font(Theme.Typography.caption)
+                                    .foregroundStyle(Theme.Colors.textSecondary)
+                            }
+
+                            Spacer()
+
+                            Picker("Rest timer", selection: $restTimerDuration) {
+                                ForEach(restTimerOptions, id: \.self) { seconds in
+                                    Text(restTimerLabel(seconds)).tag(seconds)
                                 }
                             }
                             .labelsHidden()
@@ -465,10 +498,20 @@ struct SettingsView: View {
     }
 
     private func incrementLabel(_ value: Double) -> String {
-        if value.truncatingRemainder(dividingBy: 1) == 0 {
-            return "\(Int(value))"
-        }
-        return String(format: "%.2f", locale: Locale(identifier: "en_US_POSIX"), value)
+        // "1.25 lbs", "2.5 lbs", "5 lbs"
+        "\(value.formatted(.number.precision(.fractionLength(0...2)))) lbs"
+    }
+
+    private var restTimerOptions: [Int] {
+        let presets = [30, 45, 60, 90, 120, 150, 180, 240, 300]
+        return Array(Set(presets + [restTimerDuration])).sorted()
+    }
+
+    private func restTimerLabel(_ seconds: Int) -> String {
+        let minutes = seconds / 60
+        let remainder = seconds % 60
+        if minutes == 0 { return "\(remainder) sec" }
+        return remainder == 0 ? "\(minutes) min" : "\(minutes):\(String(format: "%02d", remainder))"
     }
 
     private func normalizeIncrementIfNeeded() {

@@ -73,3 +73,50 @@ struct ActiveSet: Codable, Identifiable, Hashable, Sendable {
         self.completedAt = completedAt
     }
 }
+
+// Tolerant decoding so a draft written by an older app version (missing newer fields)
+// still restores instead of silently losing the in-progress workout.
+extension ActiveWorkoutSession {
+    private enum CodingKeys: String, CodingKey {
+        case id, startedAt, name, gymProfileId, exercises
+        case dismissedMuscleGroupSuggestions, lastModifiedAt, schemaVersion
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let startedAt = try container.decode(Date.self, forKey: .startedAt)
+        self.init(
+            id: try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID(),
+            startedAt: startedAt,
+            name: try container.decodeIfPresent(String.self, forKey: .name) ?? "Workout",
+            gymProfileId: try container.decodeIfPresent(UUID.self, forKey: .gymProfileId),
+            exercises: try container.decodeIfPresent([ActiveExercise].self, forKey: .exercises) ?? [],
+            dismissedMuscleGroupSuggestions: try container.decodeIfPresent(
+                [String].self,
+                forKey: .dismissedMuscleGroupSuggestions
+            ) ?? [],
+            lastModifiedAt: try container.decodeIfPresent(Date.self, forKey: .lastModifiedAt) ?? startedAt,
+            schemaVersion: try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 4
+        )
+    }
+}
+
+extension ActiveSet {
+    private enum CodingKeys: String, CodingKey {
+        case id, order, weight, reps, distance, seconds, isCompleted, completedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            id: try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID(),
+            order: try container.decodeIfPresent(Int.self, forKey: .order) ?? 1,
+            weight: try container.decodeIfPresent(Double.self, forKey: .weight),
+            reps: try container.decodeIfPresent(Int.self, forKey: .reps),
+            distance: try container.decodeIfPresent(Double.self, forKey: .distance),
+            seconds: try container.decodeIfPresent(Double.self, forKey: .seconds),
+            isCompleted: try container.decodeIfPresent(Bool.self, forKey: .isCompleted) ?? false,
+            completedAt: try container.decodeIfPresent(Date.self, forKey: .completedAt)
+        )
+    }
+}

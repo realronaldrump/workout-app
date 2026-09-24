@@ -161,7 +161,9 @@ struct PreWorkoutBriefingCard: View {
                     Spacer()
 
                     Button {
-                        onStartSession(suggestion.group.displayName)
+                        // Start with a real exercise for this group; passing the muscle group
+                        // name would add a bogus "Chest"/"Back" exercise to the session.
+                        onStartSession(suggestion.options.first?.name)
                     } label: {
                         Image(systemName: "plus.circle")
                             .font(Theme.Typography.bodyLarge)
@@ -170,7 +172,10 @@ struct PreWorkoutBriefingCard: View {
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Start \(suggestion.group.displayName) session")
+                    .accessibilityLabel(
+                        suggestion.options.first.map { "Start session with \($0.name)" }
+                            ?? "Start \(suggestion.group.displayName) session"
+                    )
                 }
             }
         }

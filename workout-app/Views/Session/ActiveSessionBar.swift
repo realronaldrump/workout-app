@@ -74,10 +74,10 @@ struct ActiveSessionBar: View {
                     elapsedTimer(from: session.startedAt)
                     Text("\u{2022}")
                         .accessibilityHidden(true)
-                    Text("\(exerciseCount) exercises")
+                    Text(SharedFormatters.count(exerciseCount, "exercise"))
                     Text("\u{2022}")
                         .accessibilityHidden(true)
-                    Text("\(setCount) sets")
+                    Text(SharedFormatters.count(setCount, "set"))
                 }
                 .font(Theme.Typography.caption)
                 .foregroundStyle(Theme.Colors.textSecondary)
@@ -109,7 +109,7 @@ struct ActiveSessionBar: View {
 
                 HStack(spacing: Theme.Spacing.xs) {
                     elapsedTimer(from: session.startedAt)
-                    Text("\(exerciseCount) ex \u{2022} \(setCount) sets")
+                    Text("\(exerciseCount) ex \u{2022} \(SharedFormatters.count(setCount, "set"))")
                 }
                 .font(Theme.Typography.caption)
                 .foregroundStyle(Theme.Colors.textSecondary)
