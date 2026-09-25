@@ -213,10 +213,7 @@ struct ChangeMetricDetailView: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             HStack(alignment: .top, spacing: Theme.Spacing.md) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("VS LAST WEEK")
-                        .font(Theme.Typography.metricLabel)
-                        .foregroundStyle(Theme.Colors.textTertiary)
-                        .tracking(1.0)
+                    BrandBandLabel(text: "vs last week", systemImage: "arrow.left.arrow.right")
 
                     Text(sessionsHeroHeadline)
                         .font(Theme.Typography.sectionHeader)
@@ -261,25 +258,16 @@ struct ChangeMetricDetailView: View {
             }
         }
         .padding(Theme.Spacing.lg)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            Theme.Colors.accent.opacity(0.14),
-                            Theme.Colors.surface,
-                            Theme.Colors.accentSecondary.opacity(0.08)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge)
-                .strokeBorder(Theme.Colors.border.opacity(0.45), lineWidth: 1)
-        )
-        .shadow(color: Theme.Colors.accent.opacity(0.08), radius: 16, x: 0, y: 8)
+        .background(alignment: .topTrailing) {
+            RadialGradient(
+                colors: [Theme.Colors.accent.opacity(0.14), Theme.Colors.accent.opacity(0)],
+                center: .topTrailing,
+                startRadius: 0,
+                endRadius: 260
+            )
+            .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge, style: .continuous))
+        }
+        .softCard(cornerRadius: Theme.CornerRadius.xlarge, elevation: 2)
     }
 
     private var sessionsMetricGridSection: some View {
@@ -483,44 +471,72 @@ struct ChangeMetricDetailView: View {
     }
 
     private var headerSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+        let tint = metric.isPositive ? Theme.Colors.success : Theme.Colors.warning
+
+        return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            HStack(alignment: .center, spacing: Theme.Spacing.sm) {
+                BrandBandLabel(text: metric.title, systemImage: "arrow.left.arrow.right")
+
+                Spacer(minLength: Theme.Spacing.sm)
+
+                HStack(spacing: 4) {
+                    Image(systemName: metric.isPositive ? "arrow.up.right" : "arrow.down.right")
+                        .accessibilityHidden(true)
+                    Text(percentLabel)
+                }
+                .font(Theme.Typography.captionBold)
+                .foregroundStyle(tint)
+                .padding(.horizontal, Theme.Spacing.sm)
+                .padding(.vertical, Theme.Spacing.xs)
+                .background(Capsule().fill(tint.opacity(Theme.Opacity.mediumFill)))
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("\(percentLabel) \(metric.isPositive ? "increase" : "decrease")")
+            }
+
+            Text(formatValue(metric.current))
+                .font(Theme.Typography.metricLarge)
+                .foregroundStyle(Theme.Colors.textPrimary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+                .contentTransition(.numericText())
+
             Text(windowLabel)
                 .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Colors.textTertiary)
+                .foregroundStyle(Theme.Colors.textSecondary)
 
-            HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.md) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Current")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                    Text(formatValue(metric.current))
-                        .font(Theme.Typography.title2)
-                        .foregroundStyle(Theme.Colors.textPrimary)
-                }
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Previous")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                    Text(formatValue(metric.previous))
-                        .font(Theme.Typography.title2)
-                        .foregroundStyle(Theme.Colors.textPrimary)
-                }
-
-                Spacer()
-
-                VStack(alignment: .trailing, spacing: 4) {
-                    Text(deltaLabel)
-                        .font(Theme.Typography.captionBold)
-                        .foregroundStyle(metric.isPositive ? Theme.Colors.success : Theme.Colors.error)
-                    Text(percentLabel)
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textTertiary)
-                }
+            HStack(spacing: Theme.Spacing.sm) {
+                changeChip(title: "Previous", value: formatValue(metric.previous), tint: Theme.Colors.textTertiary)
+                changeChip(title: "Change", value: deltaLabel, tint: tint)
             }
         }
         .padding(Theme.Spacing.lg)
-        .softCard(elevation: 2)
+        .background(alignment: .topTrailing) {
+            RadialGradient(
+                colors: [Theme.Colors.accent.opacity(0.14), Theme.Colors.accent.opacity(0)],
+                center: .topTrailing,
+                startRadius: 0,
+                endRadius: 260
+            )
+            .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge, style: .continuous))
+        }
+        .softCard(cornerRadius: Theme.CornerRadius.xlarge, elevation: 2)
+    }
+
+    private func changeChip(title: String, value: String, tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .sectionHeaderStyle()
+            Text(value)
+                .font(Theme.Typography.title3)
+                .foregroundStyle(Theme.Colors.textPrimary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, Theme.Spacing.md)
+        .padding(.vertical, Theme.Spacing.sm)
+        .statChipChrome(tint: tint)
+        .accessibilityElement(children: .combine)
     }
 
     private var chartSection: some View {
@@ -529,9 +545,7 @@ struct ChangeMetricDetailView: View {
         let currentPoints = presentation.currentChartPoints
 
         return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Trend")
-                .font(Theme.Typography.title3)
-                .foregroundStyle(Theme.Colors.textPrimary)
+            SectionHeading(title: "Trend", subtitle: windowLabel)
 
             if points.isEmpty {
                 Text("Not enough data to chart.")
@@ -1254,15 +1268,7 @@ struct ChangeMetricDetailView: View {
     }
 
     private func sectionHeader(title: String, subtitle: String) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(title)
-                .font(Theme.Typography.sectionHeader2)
-                .foregroundColor(Theme.Colors.textPrimary)
-                .tracking(0.8)
-            Text(subtitle)
-                .font(Theme.Typography.caption)
-                .foregroundColor(Theme.Colors.textSecondary)
-        }
+        SectionHeading(title: title, subtitle: subtitle)
     }
 }
 
@@ -1399,15 +1405,8 @@ private struct SessionMetricTile: View {
         .padding(.horizontal, Theme.Spacing.lg)
         .padding(.vertical, Theme.Spacing.md)
         .frame(minHeight: 138, alignment: .topLeading)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
-                .fill(Theme.Colors.surface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
-                .strokeBorder(tint.opacity(0.18), lineWidth: 1)
-        )
-        .shadow(color: Theme.Colors.shadowOpacity > 0 ? Color.black.opacity(Theme.Colors.shadowOpacity) : .clear, radius: 8, x: 0, y: 4)
+        .statChipChrome(tint: tint, cornerRadius: Theme.CornerRadius.large)
+        .accessibilityElement(children: .combine)
     }
 }
 

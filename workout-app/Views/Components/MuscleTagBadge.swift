@@ -6,18 +6,23 @@ struct MuscleTagBadge: View {
 
     var body: some View {
         HStack(spacing: 5) {
-            Image(systemName: tag.iconName)
-                .font(Theme.Typography.microLabel)
+            // Identity rides on the dot; the label stays in ink so light muscle
+            // hues (shoulders, calves) never become unreadable text.
+            Circle()
+                .fill(tag.tint)
+                .frame(width: 7, height: 7)
+                .accessibilityHidden(true)
             Text(tag.displayName)
                 .font(Theme.Typography.metricLabel)
+                .foregroundColor(Theme.Colors.textPrimary)
                 .lineLimit(1)
             if let role {
-                Text(role == .primary ? "P" : "S")
+                Text(role == .primary ? "Primary" : "Secondary")
                     .font(Theme.Typography.microLabel)
+                    .foregroundColor(Theme.Colors.textTertiary)
                     .accessibilityHidden(true)
             }
         }
-        .foregroundColor(tag.tint)
         .padding(.horizontal, Theme.Spacing.sm)
         .padding(.vertical, 5)
         .background(

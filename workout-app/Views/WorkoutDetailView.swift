@@ -174,10 +174,11 @@ struct WorkoutDetailView: View {
                         healthDataSection
                     }
 
-                    VStack(alignment: .leading, spacing: 16) {
-                        Text("Exercises")
-                            .font(Theme.Typography.sectionHeader2)
-                            .foregroundColor(Theme.Colors.textPrimary)
+                    VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+                        SectionHeading(
+                            title: "Exercises",
+                            subtitle: "Tap a lift to see every set"
+                        )
 
                         ForEach(workout.exercises) { exercise in
                             ExerciseCard(
@@ -484,13 +485,10 @@ struct WorkoutDetailView: View {
     @ViewBuilder
     private var healthDataSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            HStack {
-                Text("Health Data")
-                    .font(Theme.Typography.sectionHeader2)
-                    .foregroundColor(Theme.Colors.textPrimary)
-
-                Spacer()
-
+            SectionHeading(
+                title: "Health Data",
+                subtitle: cachedHealthData == nil ? nil : "Tap for heart rate, recovery, and sleep context"
+            ) {
                 syncButton
             }
 
@@ -526,35 +524,39 @@ struct WorkoutDetailView: View {
             }
             .foregroundColor(.white)
             .padding(.horizontal, Theme.Spacing.md)
-            .padding(.vertical, Theme.Spacing.xs)
-            .surfaceButtonChrome(
-                fill: Theme.Colors.accent,
-                cornerRadius: Theme.CornerRadius.large
-            )
+            .padding(.vertical, 7)
+            .background(Capsule().fill(Theme.accentGradient))
+            .frame(minHeight: Theme.Layout.minimumTapTarget)
+            .contentShape(.rect)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(AppInteractionButtonStyle())
         .disabled(healthManager.isSyncing)
         .opacity(healthManager.isSyncing ? 0.7 : 1.0)
     }
 
     private var noHealthDataCard: some View {
-        VStack(spacing: Theme.Spacing.md) {
-            Image(systemName: "heart.text.square")
-                .font(Theme.Iconography.feature)
-                .foregroundColor(Theme.Colors.textTertiary)
+        HStack(alignment: .top, spacing: Theme.Spacing.md) {
+            IconTile(systemImage: "heart.text.square.fill", tint: Theme.Colors.error, size: 40)
 
-            Text("No health data yet")
-                .font(Theme.Typography.headline)
-                .foregroundColor(Theme.Colors.textSecondary)
+            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                Text("No health data yet")
+                    .font(Theme.Typography.headline)
+                    .foregroundColor(Theme.Colors.textPrimary)
 
-            Text("Sync this workout to load heart rate, sleep, and recovery context.")
-                .font(Theme.Typography.caption)
-                .foregroundColor(Theme.Colors.textTertiary)
-                .multilineTextAlignment(.center)
+                Text("Sync this workout to load heart rate, sleep, and recovery context from Apple Health.")
+                    .font(Theme.Typography.caption)
+                    .foregroundColor(Theme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
         }
-        .frame(maxWidth: .infinity)
-        .padding(Theme.Spacing.xl)
-        .softCard(elevation: 2)
+        .padding(Theme.Spacing.lg)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
+                .strokeBorder(Theme.Colors.border, style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
+        )
     }
 
     // MARK: - Actions
@@ -737,26 +739,42 @@ struct ExerciseCard: View {
             .frame(minHeight: Theme.Layout.minimumTapTarget)
 
             if isExpanded {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 4) {
                     ForEach(Array(exercise.sets.enumerated()), id: \.offset) { index, set in
                         setRow(index: index, set: set)
-                        .padding(.horizontal)
-                        .padding(.vertical, Theme.Spacing.xs)
-                        .background(
-                            RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                                .fill(
-                                    highlightedSetIDs.contains(set.id)
-                                        ? Theme.Colors.accentTint
-                                        : Color.clear
-                                )
-                        )
+                            .padding(.horizontal, Theme.Spacing.sm)
+                            .padding(.vertical, 6)
+                            .background(
+                                RoundedRectangle(cornerRadius: Theme.CornerRadius.small, style: .continuous)
+                                    .fill(
+                                        highlightedSetIDs.contains(set.id)
+                                            ? Theme.Colors.gold.opacity(Theme.Opacity.mediumFill)
+                                            : (index.isMultiple(of: 2) ? Theme.Colors.surfaceRaised : Color.clear)
+                                    )
+                            )
+                    }
 
-                        if index < exercise.sets.count - 1 {
-                            Divider()
+                    if let onViewHistory {
+                        Button {
+                            Haptics.selection()
+                            onViewHistory(exercise.name)
+                        } label: {
+                            HStack(spacing: 4) {
+                                Text("Open lift history")
+                                Image(systemName: "arrow.right")
+                                    .font(Theme.Typography.microLabel)
+                            }
+                            .font(Theme.Typography.captionBold)
+                            .foregroundStyle(Theme.Colors.accent)
+                            .frame(minHeight: Theme.Layout.minimumTapTarget)
+                            .contentShape(.rect)
                         }
+                        .buttonStyle(.plain)
                     }
                 }
-                .padding(.vertical, 8)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            } else if !exercise.sets.isEmpty {
+                setPreviewStrip
             }
         }
         .padding(Theme.Spacing.lg)
@@ -772,10 +790,39 @@ struct ExerciseCard: View {
         .accessibilityHint("Long press for more options: View History, Quick Start")
     }
 
+    /// Collapsed cards still show the shape of the work: every set as a compact chip.
+    private var setPreviewStrip: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 4) {
+                ForEach(Array(exercise.sets.enumerated()), id: \.offset) { _, set in
+                    let isRecord = highlightedSetIDs.contains(set.id)
+                    HStack(spacing: 3) {
+                        if isRecord {
+                            Image(systemName: "trophy.fill")
+                                .font(Theme.Typography.microLabel)
+                                .foregroundStyle(Theme.Colors.gold)
+                        }
+                        Text(isCardio ? cardioSetSummary(set) : "\(WorkoutValueFormatter.weightText(set.weight))×\(set.reps)")
+                            .font(Theme.Typography.caption2Bold)
+                            .monospacedDigit()
+                            .foregroundStyle(Theme.Colors.textSecondary)
+                    }
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 4)
+                    .background(
+                        Capsule().fill(isRecord ? Theme.Colors.gold.opacity(Theme.Opacity.mediumFill) : Theme.Colors.surfaceRaised)
+                    )
+                    .overlay(Capsule().strokeBorder(Theme.Colors.border.opacity(0.5), lineWidth: 1))
+                }
+            }
+        }
+        .scrollClipDisabled()
+        .accessibilityHidden(true)
+    }
+
     private var exerciseTitle: some View {
         Text(exercise.name)
-            .font(Theme.Typography.condensed)
-            .tracking(-0.2)
+            .font(Theme.Typography.title4Bold)
             .foregroundStyle(Theme.Colors.textPrimary)
             .lineLimit(2)
             .fixedSize(horizontal: false, vertical: true)
@@ -795,43 +842,59 @@ struct ExerciseCard: View {
 
     @ViewBuilder
     private func setRow(index: Int, set: WorkoutSet) -> some View {
-        let title = "Set \(index + 1)"
+        let isRecord = highlightedSetIDs.contains(set.id)
+        // Weights keep their decimals (22.5 lbs used to display as 22).
+        let loadText = "\(WorkoutValueFormatter.weightText(set.weight)) lbs × \(set.reps)"
+        let volumeText = "\(WorkoutValueFormatter.weightText(set.weight * Double(set.reps))) lbs"
 
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: Theme.Spacing.md) {
-                Text(title)
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textTertiary)
+        HStack(spacing: Theme.Spacing.md) {
+            Text("\(index + 1)")
+                .font(Theme.Typography.caption2Bold)
+                .foregroundStyle(isRecord ? Color.white : Theme.Colors.textSecondary)
+                .frame(width: 24, height: 24)
+                .background(
+                    Circle().fill(isRecord ? AnyShapeStyle(Theme.Colors.gold) : AnyShapeStyle(Theme.Colors.border.opacity(0.4)))
+                )
+                .accessibilityLabel("Set \(index + 1)")
 
-                if isCardio {
-                    Text(cardioSetSummary(set))
-                        .font(Theme.Typography.body)
-                } else {
-                    Text("\(Int(set.weight)) lbs × \(set.reps)")
-                        .font(Theme.Typography.body)
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: Theme.Spacing.sm) {
+                    Text(isCardio ? cardioSetSummary(set) : loadText)
+                        .font(Theme.Typography.bodyBold)
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                        .monospacedDigit()
+
+                    if isRecord {
+                        Image(systemName: "trophy.fill")
+                            .font(Theme.Typography.caption2Bold)
+                            .foregroundStyle(Theme.Colors.gold)
+                            .accessibilityLabel("Personal record")
+                    }
 
                     Spacer(minLength: Theme.Spacing.xs)
 
-                    Text("\(Int(set.weight * Double(set.reps))) lbs")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textSecondary)
+                    if !isCardio {
+                        Text(volumeText)
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Colors.textSecondary)
+                            .monospacedDigit()
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(isCardio ? cardioSetSummary(set) : loadText)
+                        .font(Theme.Typography.bodyBold)
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if !isCardio {
+                        Text(volumeText)
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Colors.textSecondary)
+                    }
                 }
             }
-
-            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                Text(title)
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textTertiary)
-
-                Text(
-                    isCardio
-                        ? cardioSetSummary(set)
-                        : "\(Int(set.weight)) lbs × \(set.reps) · \(Int(set.weight * Double(set.reps))) lbs"
-                )
-                .font(Theme.Typography.body)
-                .fixedSize(horizontal: false, vertical: true)
-            }
         }
+        .accessibilityElement(children: .combine)
     }
 
     private var cardioSummaryChips: some View {
@@ -892,7 +955,7 @@ struct ExerciseCard: View {
         if parts.isEmpty, set.reps > 0 {
             parts.append("\(set.reps) \(cardioConfig.countLabel)")
         }
-        return parts.isEmpty ? "—" : parts.joined(separator: " | ")
+        return parts.isEmpty ? "No data" : parts.joined(separator: " · ")
     }
 
 }

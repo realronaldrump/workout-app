@@ -35,6 +35,10 @@ struct HealthMetricDetailView: View {
 
             ScrollView(showsIndicators: false) {
                 LazyVStack(alignment: .leading, spacing: Theme.Spacing.xl) {
+                    // The range scopes everything on this screen, so it sits above it
+                    // in plain view instead of behind a toolbar menu.
+                    HealthDateRangeSection(earliestDate: earliestDate)
+
                     if let model {
                         content(model)
                     } else if hasComputedOnce {
@@ -51,11 +55,6 @@ struct HealthMetricDetailView: View {
         .navigationTitle(metric.title)
         .navigationBarTitleDisplayMode(.inline)
         .accessibilityIdentifier("health-metric-detail-\(metric.rawValue)")
-        .toolbar {
-            AppToolbarItem(placement: .topBarTrailing) {
-                HealthDateRangeToolbarMenu(earliestDate: earliestDate)
-            }
-        }
         .task(id: refreshKey) {
             await recompute()
         }

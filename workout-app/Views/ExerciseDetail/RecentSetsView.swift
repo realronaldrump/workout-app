@@ -39,7 +39,7 @@ struct RecentSetsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             Text("Recent Sessions")
-                .font(Theme.Typography.title2)
+                .font(Theme.Typography.sectionHeader2)
                 .foregroundColor(Theme.Colors.textPrimary)
 
             VStack(spacing: Theme.Spacing.md) {

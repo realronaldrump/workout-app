@@ -33,7 +33,7 @@ struct RecoveryCoverageDetailView: View {
                         }
                     }
                 }
-                .padding(.vertical, Theme.Spacing.xxl)
+                .padding(.vertical, Theme.Spacing.xl)
                 .contentColumn()
             }
         }
@@ -46,16 +46,12 @@ struct RecoveryCoverageDetailView: View {
     }
 
     private var headerSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text("Recovery + Coverage")
-                .font(Theme.Typography.sectionHeader)
-                .foregroundColor(Theme.Colors.textPrimary)
-                .tracking(1.0)
-
-            Text("See how your recent recovery metrics are moving and how consistently each muscle group has been trained.")
-                .font(Theme.Typography.caption)
-                .foregroundColor(Theme.Colors.textSecondary)
-        }
+        StatsPageHeader(
+            eyebrow: "Signals",
+            title: "Recovery & Coverage",
+            subtitle: "How your recovery metrics are moving and how consistently each muscle group gets trained.",
+            systemImage: "waveform.path.ecg"
+        )
         .padding(.horizontal, Theme.Spacing.lg)
     }
 

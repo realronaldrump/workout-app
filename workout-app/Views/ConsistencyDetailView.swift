@@ -43,9 +43,10 @@ struct ConsistencyDetailView: View {
 
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: Theme.Spacing.xl) {
-                    heroCard
-
+                    // The window scopes the headline numbers too, so it leads the page.
                     rangePicker
+
+                    heroCard
 
                     weeklyExplorerSection
 
@@ -226,41 +227,14 @@ struct ConsistencyDetailView: View {
     }
 
     private var consistencyBackground: some View {
-        ZStack {
-            AdaptiveBackground()
-
-            LinearGradient(
-                colors: [
-                    Theme.Colors.accent.opacity(0.14),
-                    Theme.Colors.accentSecondary.opacity(0.08),
-                    Theme.Colors.background
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
-
-            Circle()
-                .fill(Theme.Colors.accent.opacity(0.08))
-                .frame(width: 320, height: 320)
-                .offset(x: 170, y: -260)
-                .blur(radius: 4)
-
-            Circle()
-                .fill(Theme.Colors.accentSecondary.opacity(0.07))
-                .frame(width: 240, height: 240)
-                .offset(x: -180, y: -150)
-                .blur(radius: 2)
-        }
+        AdaptiveBackground()
     }
 
     private var heroCard: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                Text("CONSISTENCY ENGINE")
-                    .font(Theme.Typography.metricLabel)
-                    .foregroundColor(Theme.Colors.textTertiary)
-                    .tracking(1.0)
+                BrandBandLabel(text: "Consistency", systemImage: "calendar.badge.checkmark")
+                    .padding(.bottom, Theme.Spacing.xs)
 
                 ViewThatFits(in: .horizontal) {
                     HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.md) {
@@ -288,17 +262,24 @@ struct ConsistencyDetailView: View {
                     )
                     .interpolationMethod(.catmullRom)
                     .foregroundStyle(Theme.Colors.accent)
+                    .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
 
                     AreaMark(
                         x: .value("Week", bucket.weekStart),
                         y: .value("Sessions", bucket.sessions)
                     )
                     .interpolationMethod(.catmullRom)
-                    .foregroundStyle(Theme.Colors.accent.opacity(0.18))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [Theme.Colors.accent.opacity(0.2), Theme.Colors.accent.opacity(0.01)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
                 }
                 .chartYAxis {
                     AxisMarks(position: .leading) { value in
-                        AxisGridLine(stroke: StrokeStyle(lineWidth: 1, dash: [3]))
+                        AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
                             .foregroundStyle(Theme.Colors.border.opacity(0.5))
                         AxisValueLabel {
                             if let count = value.as(Int.self) {
@@ -345,30 +326,23 @@ struct ConsistencyDetailView: View {
             }
         }
         .padding(Theme.Spacing.lg)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            Theme.Colors.surface,
-                            Theme.Colors.surfaceRaised
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge)
-                .strokeBorder(Theme.Colors.border.opacity(0.5), lineWidth: 1)
-        )
-        .shadow(color: Theme.Colors.accent.opacity(0.08), radius: 20, x: 0, y: 10)
+        .background(alignment: .topTrailing) {
+            RadialGradient(
+                colors: [Theme.Colors.accent.opacity(0.14), Theme.Colors.accent.opacity(0)],
+                center: .topTrailing,
+                startRadius: 0,
+                endRadius: 260
+            )
+            .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge, style: .continuous))
+        }
+        .softCard(cornerRadius: Theme.CornerRadius.xlarge, elevation: 2)
     }
 
     private var heroAverageValue: some View {
         Text(String(format: "%.1f", averageSessionsPerWeek))
             .font(Theme.Typography.metricLarge)
-            .foregroundStyle(Theme.accentGradient)
+            .foregroundStyle(Theme.Colors.textPrimary)
+            .contentTransition(.numericText())
             .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
             .minimumScaleFactor(dynamicTypeSize.isAccessibilitySize ? 1 : 0.6)
             .fixedSize(horizontal: false, vertical: true)
@@ -383,42 +357,13 @@ struct ConsistencyDetailView: View {
 
     private var rangePicker: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text("Window")
-                .font(Theme.Typography.metricLabel)
-                .foregroundColor(Theme.Colors.textTertiary)
-                .tracking(0.8)
+            FilterRowLabel(title: "Window")
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: Theme.Spacing.sm) {
-                    ForEach(ConsistencyRange.allCases) { option in
-                        Button {
-                            withAnimation(Theme.Animation.spring) {
-                                selectedRange = option
-                            }
-                            Haptics.selection()
-                        } label: {
-                            Text(option.label)
-                                .font(Theme.Typography.captionBold)
-                                .foregroundColor(selectedRange == option ? .white : Theme.Colors.textSecondary)
-                                .padding(.horizontal, Theme.Spacing.md)
-                                .padding(.vertical, 10)
-                                .background(
-                                    Capsule()
-                                        .fill(selectedRange == option ? AnyShapeStyle(Theme.accentGradient) : AnyShapeStyle(Theme.Colors.surface))
-                                )
-                                .overlay(
-                                    Capsule()
-                                        .strokeBorder(
-                                            selectedRange == option ? Theme.Colors.accent.opacity(0.25) : Theme.Colors.border.opacity(0.55),
-                                            lineWidth: 1
-                                        )
-                                )
-                        }
-                        .buttonStyle(AppInteractionButtonStyle())
-                    }
-                }
-                .padding(1)
-            }
+            TimeRangePillPicker(
+                options: ConsistencyRange.allCases,
+                selected: $selectedRange,
+                label: { $0.label }
+            )
         }
     }
 
@@ -757,15 +702,7 @@ struct ConsistencyDetailView: View {
     }
 
     private func sectionHeader(title: String, subtitle: String) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(title)
-                .font(Theme.Typography.sectionHeader2)
-                .foregroundColor(Theme.Colors.textPrimary)
-                .tracking(0.8)
-            Text(subtitle)
-                .font(Theme.Typography.caption)
-                .foregroundColor(Theme.Colors.textSecondary)
-        }
+        SectionHeading(title: title, subtitle: subtitle)
     }
 
     private func emptyCard(message: String) -> some View {
@@ -1152,14 +1089,8 @@ private struct HeroMetricChip: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, Theme.Spacing.md)
         .padding(.vertical, Theme.Spacing.sm)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                .fill(tint.opacity(0.08))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                .strokeBorder(tint.opacity(0.22), lineWidth: 1)
-        )
+        .statChipChrome(tint: tint)
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -1289,14 +1220,8 @@ private struct DetailMetricTile: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, Theme.Spacing.md)
         .padding(.vertical, Theme.Spacing.sm)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                .fill(Theme.Colors.surfaceRaised)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                .strokeBorder(tint.opacity(0.22), lineWidth: 1)
-        )
+        .statChipChrome(tint: tint)
+        .accessibilityElement(children: .combine)
     }
 }
 

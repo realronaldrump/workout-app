@@ -334,6 +334,7 @@ struct SectionHeading<Accessory: View>: View {
                     Text(subtitle)
                         .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.Colors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             Spacer(minLength: Theme.Spacing.sm)

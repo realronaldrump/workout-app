@@ -185,13 +185,8 @@ struct ExerciseListView: View {
 
     private var destinationContent: some View {
         directoryContent
-        .navigationTitle("All Exercises")
+            .navigationTitle("All Exercises")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                AppToolbarItem(placement: .primaryAction) {
-                    sortMenu
-                }
-            }
             .accessibilityIdentifier("exercise-list")
     }
 
@@ -199,13 +194,25 @@ struct ExerciseListView: View {
         ZStack {
             AdaptiveBackground()
 
-            VStack(spacing: Theme.Spacing.md) {
+            VStack(spacing: Theme.Spacing.sm) {
                 searchField
                     .padding(.horizontal, Theme.Spacing.lg)
                     .padding(.top, Theme.Spacing.sm)
 
+                sortChips
+                    .padding(.horizontal, Theme.Spacing.lg)
+
                 ScrollView(showsIndicators: false) {
-                    LazyVStack(spacing: Theme.Spacing.xs) {
+                    LazyVStack(spacing: Theme.Spacing.sm) {
+                        if !cachedExercises.isEmpty {
+                            Text(directorySummary)
+                                .font(Theme.Typography.caption)
+                                .foregroundStyle(Theme.Colors.textSecondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, Theme.Spacing.xs)
+                                .padding(.top, Theme.Spacing.xs)
+                        }
+
                         exerciseRowsContent
                     }
                     .padding(.horizontal, Theme.Spacing.lg)
@@ -274,29 +281,29 @@ struct ExerciseListView: View {
         )
     }
 
-    private var sortMenu: some View {
-        Menu {
-            Picker("Sort Order", selection: $sortOrder) {
-                ForEach(SortOrder.allCases, id: \.self) { order in
-                    Label(order.rawValue, systemImage: sortIcon(for: order))
-                        .tag(order)
-                }
-            }
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "arrow.up.arrow.down")
-                    .font(Theme.Typography.captionBold)
-                    .foregroundStyle(Theme.Colors.accent)
-                Text(sortOrder.rawValue)
-                    .font(Theme.Typography.captionBold)
-                    .foregroundStyle(Theme.Colors.textPrimary)
-                    .textCase(.uppercase)
-                    .tracking(0.8)
-            }
-            .padding(.horizontal, Theme.Spacing.md)
-            .frame(minHeight: 44)
+    private var sortChips: some View {
+        HStack(spacing: Theme.Spacing.sm) {
+            Image(systemName: "arrow.up.arrow.down")
+                .font(Theme.Typography.captionBold)
+                .foregroundStyle(Theme.Colors.textTertiary)
+                .accessibilityHidden(true)
+
+            TimeRangePillPicker(
+                options: SortOrder.allCases,
+                selected: $sortOrder,
+                label: { $0.rawValue },
+                selectionHint: "Double-tap to sort exercises this way"
+            )
         }
-        .buttonStyle(.plain)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Sort exercises")
+    }
+
+    private var directorySummary: String {
+        let total = SharedFormatters.count(cachedExercises.count, "exercise")
+        let favorites = cachedFavoriteRollupNames.count
+        guard favorites > 0 else { return total }
+        return "\(total) · \(favorites) favorite\(favorites == 1 ? "" : "s")"
     }
 
     private var searchField: some View {
@@ -331,19 +338,6 @@ struct ExerciseListView: View {
         .glassBackground(cornerRadius: Theme.CornerRadius.xlarge, elevation: 1)
     }
 
-    private func sortIcon(for order: SortOrder) -> String {
-        switch order {
-        case .alphabetical:
-            return "textformat"
-        case .volume:
-            return "scalemass"
-        case .frequency:
-            return "calendar"
-        case .recent:
-            return "clock"
-        }
-    }
-
     private func exerciseRow(
         _ exercise: (name: String, stats: ExerciseStats),
         showsInlineFavoriteControl: Bool = false
@@ -357,6 +351,7 @@ struct ExerciseListView: View {
                     exerciseName: exercise.name,
                     stats: exercise.stats
                 ),
+                primaryMuscle: primaryMuscle(for: exercise.name),
                 onOpen: {
                     selectedExercise = ExerciseSelection(id: exercise.name)
                 },
@@ -403,6 +398,11 @@ struct ExerciseListView: View {
         }
     }
 
+    private func primaryMuscle(for exerciseName: String) -> MuscleTag? {
+        let assignments = metadataManager.resolvedAssignments(for: exerciseName)
+        return assignments.first(where: { $0.role == .primary })?.tag ?? assignments.first?.tag
+    }
+
     private func supportsSessionVolume(
         exerciseName: String,
         stats: ExerciseStats
@@ -431,27 +431,84 @@ struct ExerciseRowView: View {
     let stats: ExerciseStats
     var showsCard: Bool = true
     let supportsSessionVolume: Bool
+    var primaryMuscle: MuscleTag?
     let onOpen: () -> Void
     let onMetricTap: (ExerciseAnalysisMetric, ExerciseMetricFocus) -> Void
+
+    private let monogramSize: CGFloat = 42
+
+    private var tint: Color {
+        primaryMuscle?.tint ?? Theme.Colors.accent
+    }
+
+    private var monogram: String {
+        let words = name
+            .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+            .prefix(2)
+        let letters = words.compactMap(\.first).map { String($0) }.joined()
+        return letters.isEmpty ? "?" : letters.uppercased()
+    }
+
+    /// One line of identity under the name: the main muscle and, for loaded lifts,
+    /// the best weight on record.
+    private var detailLine: String? {
+        var parts: [String] = []
+        if let primaryMuscle {
+            parts.append(primaryMuscle.displayName)
+        }
+        if stats.maxWeight > 0, !ExerciseLoad.isAssistedExercise(name) {
+            parts.append("Best \(ExerciseLoad.formatWeight(stats.maxWeight, exerciseName: name))")
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
             Button(action: onOpen) {
-                HStack(spacing: Theme.Spacing.sm) {
-                    Text(name)
-                        .font(Theme.Typography.bodyBold)
-                        .foregroundColor(Theme.Colors.textPrimary)
+                HStack(spacing: Theme.Spacing.md) {
+                    Text(monogram)
+                        .font(Theme.Typography.subheadlineBold)
+                        .foregroundStyle(.white)
                         .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .frame(width: monogramSize, height: monogramSize)
+                        .background(
+                            RoundedRectangle(cornerRadius: monogramSize * 0.28, style: .continuous)
+                                .fill(
+                                    LinearGradient(
+                                        colors: [tint.opacity(0.75), tint],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                        )
+                        .accessibilityHidden(true)
 
-                    Spacer()
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(name)
+                            .font(Theme.Typography.bodyBold)
+                            .foregroundColor(Theme.Colors.textPrimary)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.leading)
+
+                        if let detailLine {
+                            Text(detailLine)
+                                .font(Theme.Typography.caption)
+                                .foregroundColor(Theme.Colors.textSecondary)
+                                .lineLimit(1)
+                        }
+                    }
+
+                    Spacer(minLength: Theme.Spacing.sm)
 
                     Image(systemName: "chevron.right")
-                        .font(Theme.Typography.metricLabel)
+                        .font(Theme.Typography.captionBold)
                         .foregroundColor(Theme.Colors.textTertiary)
                         .accessibilityHidden(true)
                 }
+                .contentShape(.rect)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PressableCardButtonStyle())
             .accessibilityHint("Opens exercise details.")
             .accessibilityIdentifier("exercise-row-\(name)")
 
@@ -483,8 +540,12 @@ struct ExerciseRowView: View {
                     }
                 }
             }
+            // Pills line up under the name rather than the monogram.
+            .padding(.leading, monogramSize + Theme.Spacing.md)
         }
-        .padding(Theme.Spacing.lg)
+        .padding(.horizontal, Theme.Spacing.md)
+        .padding(.top, Theme.Spacing.md)
+        .padding(.bottom, Theme.Spacing.xs)
         .modifier(ExerciseRowCardModifier(isEnabled: showsCard))
     }
 
@@ -521,27 +582,25 @@ private struct ExerciseMetricPill: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 3) {
+            HStack(spacing: 4) {
                 Image(systemName: icon)
-                    .font(Theme.Iconography.small)
+                    .font(Theme.Typography.caption2Bold)
+                    .foregroundColor(Theme.Colors.accent)
                     .accessibilityHidden(true)
                 Text(text)
-                    .font(Theme.Typography.caption)
+                    .font(Theme.Typography.captionStrong)
+                    .foregroundColor(Theme.Colors.textSecondary)
+                    .lineLimit(1)
             }
-            .foregroundColor(Theme.Colors.textSecondary)
-            .padding(.horizontal, Theme.Spacing.xs)
+            .padding(.horizontal, Theme.Spacing.sm)
+            .padding(.vertical, 5)
+            .background(Capsule().fill(Theme.Colors.surfaceRaised))
+            .overlay(Capsule().strokeBorder(Theme.Colors.border.opacity(0.6), lineWidth: 1))
+            // The visible pill stays compact; the hit area keeps the 44pt minimum.
             .frame(minHeight: Theme.Layout.minimumTapTarget)
-            .background(Capsule().fill(Theme.Colors.background))
-            .overlay {
-                Capsule()
-                    .strokeBorder(
-                        Theme.Colors.border,
-                        lineWidth: 1
-                    )
-            }
-            .contentShape(Capsule())
+            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(AppInteractionButtonStyle())
         .accessibilityLabel(accessibilityLabel)
         .accessibilityHint("Opens this metric's analysis.")
     }

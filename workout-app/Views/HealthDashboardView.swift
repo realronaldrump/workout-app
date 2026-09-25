@@ -100,11 +100,6 @@ struct HealthDashboardView: View {
         }
         .navigationTitle("Workout Health")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            AppToolbarItem(placement: .topBarTrailing) {
-                HealthDateRangeToolbarMenu(earliestDate: earliestDate)
-            }
-        }
         .navigationDestination(item: $selectedDetailKind) { kind in
             if let detail = detailFor(kind) {
                 HealthMetricDetailScreen(
@@ -179,23 +174,21 @@ struct HealthDashboardView: View {
     // MARK: - Sections
 
     private var headerSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text("Workout Health")
-                .font(Theme.Typography.screenTitle)
-                .foregroundStyle(Theme.Colors.textPrimary)
-                .tracking(1.5)
+        VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
+            StatsPageHeader(
+                eyebrow: "Sessions",
+                title: "Workout Health",
+                subtitle: headerSubtitle,
+                systemImage: "heart.text.square.fill"
+            )
 
-            Text(headerSubtitle)
-                .font(Theme.Typography.body)
-                .foregroundStyle(Theme.Colors.textSecondary)
+            HealthDateRangeSection(earliestDate: earliestDate)
         }
     }
 
     private var categorySection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text("Metric Focus")
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Colors.textTertiary)
+            FilterRowLabel(title: "Metric Focus")
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: Theme.Spacing.sm) {
@@ -232,8 +225,9 @@ struct HealthDashboardView: View {
         return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             if !cards.isEmpty {
                 Text("Highlights")
-                    .font(Theme.Typography.title2)
+                    .font(Theme.Typography.sectionHeader2)
                     .foregroundStyle(Theme.Colors.textPrimary)
+                    .accessibilityAddTraits(.isHeader)
 
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: Theme.Spacing.md) {
@@ -259,8 +253,9 @@ struct HealthDashboardView: View {
         return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             HStack {
                 Text("Quick Stats")
-                    .font(Theme.Typography.title2)
+                    .font(Theme.Typography.sectionHeader2)
                     .foregroundStyle(Theme.Colors.textPrimary)
+                    .accessibilityAddTraits(.isHeader)
                 Spacer()
                 if dateRangeContext.selectedRange != .allTime {
                     Text("vs previous")
@@ -291,8 +286,9 @@ struct HealthDashboardView: View {
         let availableKinds = filteredKinds.filter { detailFor($0) != nil }
         return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             Text("Trends")
-                .font(Theme.Typography.title2)
+                .font(Theme.Typography.sectionHeader2)
                 .foregroundStyle(Theme.Colors.textPrimary)
+                .accessibilityAddTraits(.isHeader)
 
             LazyVStack(spacing: Theme.Spacing.md) {
                 if availableKinds.isEmpty {
@@ -333,8 +329,9 @@ struct HealthDashboardView: View {
     private var recentSessionsSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             Text("Recent Workout Health")
-                .font(Theme.Typography.title2)
+                .font(Theme.Typography.sectionHeader2)
                 .foregroundStyle(Theme.Colors.textPrimary)
+                .accessibilityAddTraits(.isHeader)
 
             if currentHealthData.isEmpty {
                 EmptyMetricCard(
@@ -413,8 +410,9 @@ struct HealthDashboardView: View {
                 .accessibilityHidden(true)
 
             Text("No workout health data yet")
-                .font(Theme.Typography.title2)
+                .font(Theme.Typography.sectionHeader2)
                 .foregroundStyle(Theme.Colors.textPrimary)
+                .accessibilityAddTraits(.isHeader)
 
             Text("Sync Apple Health workouts to see sleep, cardio, activity, heart rate, and body trends tied to training days.")
                 .font(Theme.Typography.body)

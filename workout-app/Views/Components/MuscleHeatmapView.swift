@@ -108,10 +108,10 @@ struct MuscleHeatmapView: View {
     }
 
     private var muscleBalanceTitle: some View {
-        Text("Muscle Balance")
-            .font(Theme.Typography.sectionHeader)
+        Text("Effective Sets")
+            .font(Theme.Typography.sectionHeader2)
             .foregroundColor(Theme.Colors.textPrimary)
-            .tracking(1.0)
+            .accessibilityAddTraits(.isHeader)
     }
 
     private var dateRangeText: some View {
@@ -204,46 +204,63 @@ struct MuscleGroupTile: View {
         muscleGroup.tint
     }
 
-    private var opacity: Double {
-        guard let stats = stats, stats.totalSets > 0 else { return 0.2 }
-        return 0.3 + (stats.intensity * 0.7)
+    /// Share of the busiest muscle's work. Magnitude reads on one hue (the brand
+    /// accent) so the grid works as a heatmap; the muscle's own color is identity only.
+    private var intensity: Double {
+        guard let stats, stats.totalSets > 0 else { return 0 }
+        return min(max(stats.intensity, 0), 1)
     }
 
     var body: some View {
         Button(action: onTap) {
-            VStack(spacing: Theme.Spacing.sm) {
-                // Icon
-                Image(systemName: muscleGroup.iconName)
-                    .font(Theme.Iconography.title2Strong)
-                    .foregroundColor(color.opacity(opacity))
+            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(color)
+                        .frame(width: 8, height: 8)
+                        .accessibilityHidden(true)
+                    Text(muscleGroup.shortName)
+                        .font(Theme.Typography.captionBold)
+                        .foregroundColor(Theme.Colors.textPrimary)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                        .minimumScaleFactor(0.8)
+                }
 
-                // Name
-                Text(muscleGroup.shortName)
-                    .font(Theme.Typography.captionBold)
-                    .foregroundColor(Theme.Colors.textPrimary)
-                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
-                    .multilineTextAlignment(.center)
-
-                // Sets count
                 if let stats = stats, stats.totalSets > 0 {
                     Text(MuscleContributionPolicy.formattedEffectiveSets(stats.totalSets))
-                        .font(Theme.Typography.numberSmall)
-                        .foregroundColor(color)
+                        .font(Theme.Typography.title2)
+                        .foregroundColor(Theme.Colors.textPrimary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
                 } else {
-                    Text("—")
-                        .font(Theme.Typography.caption)
+                    Text("0")
+                        .font(Theme.Typography.title2)
                         .foregroundColor(Theme.Colors.textTertiary)
                 }
+
+                GeometryReader { proxy in
+                    ZStack(alignment: .leading) {
+                        Capsule()
+                            .fill(Theme.Colors.border.opacity(0.35))
+                        Capsule()
+                            .fill(Theme.Colors.accent)
+                            .frame(width: intensity > 0 ? max(proxy.size.width * CGFloat(intensity), 4) : 0)
+                    }
+                }
+                .frame(height: 4)
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, Theme.Spacing.lg)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(Theme.Spacing.md)
             .background(
-                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                    .fill(color.opacity(isSelected ? 0.15 : 0.05))
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
+                    .fill(Theme.Colors.accent.opacity(0.03 + intensity * 0.16))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                    .strokeBorder(isSelected ? color.opacity(0.5) : Color.clear, lineWidth: 1)
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
+                    .strokeBorder(
+                        isSelected ? Theme.Colors.accent : Theme.Colors.border.opacity(0.45),
+                        lineWidth: isSelected ? 1.5 : 1
+                    )
             )
         }
         .buttonStyle(ScaleButtonStyle())

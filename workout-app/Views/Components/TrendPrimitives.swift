@@ -70,6 +70,8 @@ struct Sparkline: View {
     let values: [Double]
     var tint: Color = Theme.Colors.accent
     var areaFill = true
+    /// Marks the latest value so the line has a "you are here" end.
+    var showsEndDot = true
 
     var body: some View {
         GeometryReader { geometry in
@@ -92,6 +94,15 @@ struct Sparkline: View {
                         tint,
                         style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round)
                     )
+
+                if showsEndDot, let last = points.last {
+                    Circle()
+                        .fill(tint)
+                        .frame(width: 7, height: 7)
+                        // A surface-colored ring keeps the dot legible where it meets the line.
+                        .overlay(Circle().strokeBorder(Theme.Colors.cardBackground, lineWidth: 1.5).padding(-1.5))
+                        .position(last)
+                }
             }
         }
         .accessibilityHidden(true)

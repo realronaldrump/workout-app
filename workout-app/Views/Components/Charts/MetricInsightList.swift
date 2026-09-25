@@ -14,9 +14,7 @@ struct MetricInsightList: View {
     var body: some View {
         if !insights.isEmpty {
             VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-                Text(title)
-                    .font(Theme.Typography.sectionHeader2)
-                    .foregroundStyle(Theme.Colors.textPrimary)
+                SectionHeading(title: title)
 
                 VStack(spacing: Theme.Spacing.sm) {
                     ForEach(Array(insights.enumerated()), id: \.element.id) { index, insight in

@@ -30,6 +30,8 @@ struct HealthCategoryDetailView: View {
                         categoryHeader(rangeLabel: model.rangeLabel)
                             .staggeredAppear(index: 0)
 
+                        HealthDateRangeSection(earliestDate: model.earliestDate)
+
                         spotlightSection(model)
                             .staggeredAppear(index: 1)
 
@@ -47,6 +49,7 @@ struct HealthCategoryDetailView: View {
                         }
                     } else if hasComputedOnce {
                         categoryHeader(rangeLabel: dateRangeContext.rangeLabel(earliest: nil))
+                        HealthDateRangeSection(earliestDate: nil)
                         emptyState
                     } else {
                         loadingSkeleton
@@ -59,11 +62,6 @@ struct HealthCategoryDetailView: View {
         }
         .navigationTitle(category.title)
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            AppToolbarItem(placement: .topBarTrailing) {
-                HealthDateRangeToolbarMenu(earliestDate: model?.earliestDate)
-            }
-        }
         .task(id: refreshKey) {
             await recompute()
         }
@@ -72,27 +70,14 @@ struct HealthCategoryDetailView: View {
     // MARK: - Header
 
     private func categoryHeader(rangeLabel: String) -> some View {
-        HStack(spacing: Theme.Spacing.md) {
-            Image(systemName: category.icon)
-                .font(Theme.Iconography.title2)
-                .foregroundStyle(category.tint)
-                .frame(width: 48, height: 48)
-                .background(Circle().fill(category.tint.opacity(Theme.Opacity.subtleFill)))
-                .overlay(Circle().strokeBorder(category.tint.opacity(0.15), lineWidth: 1))
-
-            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                Text(category.subtitle)
-                    .font(Theme.Typography.body)
-                    .foregroundStyle(Theme.Colors.textSecondary)
-                Text(rangeLabel)
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textTertiary)
-            }
-
-            Spacer()
+        StatsPageHeader(
+            eyebrow: "Health",
+            title: category.title,
+            subtitle: category.subtitle,
+            systemImage: "heart.fill"
+        ) {
+            IconTile(systemImage: category.icon, tint: category.tint, size: 52)
         }
-        .padding(Theme.Spacing.md)
-        .tintedSection(category.tint)
     }
 
     // MARK: - Spotlight

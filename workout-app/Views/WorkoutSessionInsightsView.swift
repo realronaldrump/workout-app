@@ -61,7 +61,7 @@ struct WorkoutSessionInsightsView: View {
                         exerciseLinksSection
                             .id(SessionInsightFocus.exercises)
                     }
-                    .padding(.vertical, Theme.Spacing.xxl)
+                    .padding(.vertical, Theme.Spacing.xl)
                     .padding(.horizontal, Theme.Spacing.lg)
                     .frame(maxWidth: maxContentWidth, alignment: .leading)
                     .frame(maxWidth: .infinity, alignment: .center)
@@ -87,22 +87,17 @@ struct WorkoutSessionInsightsView: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text(workout.name)
-                .font(Theme.Typography.screenTitle)
-                .foregroundStyle(Theme.Colors.textPrimary)
-                .tracking(1.5)
-            Text(workout.date.formatted(date: .abbreviated, time: .shortened))
-                .font(Theme.Typography.body)
-                .foregroundStyle(Theme.Colors.textSecondary)
-        }
+        StatsPageHeader(
+            eyebrow: "Session breakdown",
+            title: workout.name,
+            subtitle: workout.date.formatted(date: .complete, time: .shortened),
+            systemImage: "chart.bar.doc.horizontal"
+        )
     }
 
     private var volumeChartSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Volume by Exercise")
-                .font(Theme.Typography.title3)
-                .foregroundStyle(Theme.Colors.textPrimary)
+            SectionHeading(title: "Volume by Exercise", subtitle: "Tap a bar to open that lift")
 
             if exerciseVolumes.isEmpty {
                 Text("No exercise volume data.")

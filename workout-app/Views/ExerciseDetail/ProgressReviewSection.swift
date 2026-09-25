@@ -17,7 +17,7 @@ struct ProgressReviewSection: View {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                     Text("Progress Review")
-                        .font(Theme.Typography.title3)
+                        .font(Theme.Typography.sectionHeader2)
                         .foregroundStyle(Theme.Colors.textPrimary)
 
                     Text("Compare your last two training blocks for this lift.")
@@ -252,14 +252,12 @@ struct ProgressReviewView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text(review.exerciseName)
-                .font(Theme.Typography.screenTitle)
-                .foregroundStyle(Theme.Colors.textPrimary)
-                .tracking(1.2)
-
-            Text("This review compares the last two blocks for the same lift using actual sets, rep ranges, and session context.")
-                .font(Theme.Typography.microcopy)
-                .foregroundStyle(Theme.Colors.textSecondary)
+            StatsPageHeader(
+                eyebrow: "Progress review",
+                title: review.exerciseName,
+                subtitle: "Compares the last two blocks for this lift using actual sets, rep ranges, and session context.",
+                systemImage: "arrow.triangle.2.circlepath"
+            )
         }
     }
 

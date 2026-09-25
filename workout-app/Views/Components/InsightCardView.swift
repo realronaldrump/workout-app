@@ -21,52 +21,74 @@ struct InsightCardView: View {
     }
 
     var body: some View {
-        Button(
-            action: {
-                Haptics.selection()
-                onTap?()
-            },
-            label: {
-                HStack(spacing: Theme.Spacing.lg) {
-                    Image(systemName: insight.type.iconName)
-                        .font(Theme.Typography.title4Bold)
-                        .foregroundColor(iconColor)
-                        .frame(width: 40, height: 40)
-                        .background(iconColor.opacity(0.10))
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-
-                    VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                        Text(insight.title)
-                            .font(Theme.Typography.headline)
-                            .foregroundColor(Theme.Colors.textPrimary)
-
-                        Text(insight.message)
-                            .font(Theme.Typography.subheadline)
-                            .foregroundColor(Theme.Colors.textSecondary)
-                            .lineLimit(2)
-                            .multilineTextAlignment(.leading)
-                    }
-
-                    Spacer()
-
-                    if insight.actionLabel != nil {
-                        Image(systemName: "chevron.right")
-                            .font(Theme.Typography.captionStrong)
-                            .foregroundColor(Theme.Colors.textTertiary)
-                    }
-                }
-                .padding(Theme.Spacing.lg)
-                .softCard(elevation: 1)
+        Group {
+            if let onTap {
+                Button(
+                    action: {
+                        Haptics.selection()
+                        onTap()
+                    },
+                    label: { card(showsChevron: true) }
+                )
+                .buttonStyle(ScaleButtonStyle())
+            } else {
+                // Without an action this is information, not a control, so it should
+                // not announce itself as a button or swallow taps.
+                card(showsChevron: false)
             }
-        )
-        .buttonStyle(ScaleButtonStyle())
-        .opacity(isAppearing ? 1 : 0)
-        .offset(y: isAppearing ? 0 : 10)
+        }
+        .opacity(isAppearing || reduceMotion ? 1 : 0)
+        .offset(y: isAppearing || reduceMotion ? 0 : 10)
         .onAppear {
             withAnimation(reduceMotion ? nil : Theme.Animation.spring) {
                 isAppearing = true
             }
         }
+    }
+
+    private func card(showsChevron: Bool) -> some View {
+        HStack(alignment: .top, spacing: Theme.Spacing.md) {
+            IconTile(systemImage: insight.type.iconName, tint: iconColor, size: 38)
+
+            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                Text(insight.title)
+                    .font(Theme.Typography.headline)
+                    .foregroundColor(Theme.Colors.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text(insight.message)
+                    .font(Theme.Typography.subheadline)
+                    .foregroundColor(Theme.Colors.textSecondary)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text(insight.date.formatted(.relative(presentation: .named)))
+                    .font(Theme.Typography.caption2Bold)
+                    .foregroundColor(Theme.Colors.textTertiary)
+            }
+
+            Spacer(minLength: 0)
+
+            if showsChevron {
+                Image(systemName: "chevron.right")
+                    .font(Theme.Typography.captionStrong)
+                    .foregroundColor(Theme.Colors.textTertiary)
+                    .padding(.top, Theme.Spacing.xs)
+                    .accessibilityHidden(true)
+            }
+        }
+        .padding(Theme.Spacing.lg)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(alignment: .leading) {
+            LinearGradient(
+                colors: [iconColor.opacity(0.09), iconColor.opacity(0)],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+            .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous))
+        }
+        .softCard(elevation: 1)
+        .accessibilityElement(children: .combine)
     }
 }
 

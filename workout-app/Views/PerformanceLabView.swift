@@ -297,15 +297,12 @@ struct PerformanceLabView: View {
     // MARK: - Header
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text("Your Performance")
-                .font(Theme.Typography.screenTitle)
-                .foregroundColor(Theme.Colors.textPrimary)
-                .tracking(1.5)
-            Text(headerSubtitle)
-                .font(Theme.Typography.microcopy)
-                .foregroundColor(Theme.Colors.textSecondary)
-        }
+        StatsPageHeader(
+            eyebrow: "Performance",
+            title: "Your Training, Measured",
+            subtitle: headerSubtitle,
+            systemImage: "chart.line.uptrend.xyaxis"
+        )
     }
 
     private var headerSubtitle: String {
@@ -334,14 +331,9 @@ struct PerformanceLabView: View {
     // MARK: - Time Range
 
     private var timeRangeSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Time Range")
-                .font(Theme.Typography.title2)
-                .foregroundColor(Theme.Colors.textPrimary)
-
-            Text(selectedRangeDetailLabel)
-                .font(Theme.Typography.caption)
-                .foregroundColor(Theme.Colors.textSecondary)
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            // One filter row that scopes every section below it.
+            FilterRowLabel(title: "Showing", detail: selectedRangeDetailLabel)
 
             timeRangePicker
 
@@ -400,8 +392,9 @@ struct PerformanceLabView: View {
 
         return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             Text("At a Glance")
-                .font(Theme.Typography.title2)
+                .font(Theme.Typography.sectionHeader2)
                 .foregroundColor(Theme.Colors.textPrimary)
+                .accessibilityAddTraits(.isHeader)
 
             if dynamicTypeSize.isAccessibilitySize {
                 LazyVGrid(columns: glanceGridColumns, spacing: Theme.Spacing.md) {
@@ -467,21 +460,23 @@ struct PerformanceLabView: View {
                 )
             },
             content: {
-                VStack(spacing: Theme.Spacing.sm) {
-                    Image(systemName: icon)
-                        .font(Theme.Iconography.title3)
-                        .foregroundColor(tileColor)
+                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                    IconTile(systemImage: icon, tint: tileColor, size: 30)
                     Text(value)
                         .font(Theme.Typography.number)
                         .foregroundColor(Theme.Colors.textPrimary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .contentTransition(.numericText())
                     Text(label)
                         .font(Theme.Typography.metricLabel)
                         .foregroundColor(Theme.Colors.textSecondary)
                         .textCase(.uppercase)
                         .tracking(0.5)
-                        .multilineTextAlignment(.center)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .frame(maxWidth: .infinity)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         )
         .accessibilityIdentifier("performance-glance-\(metric.rawValue)")
@@ -495,8 +490,9 @@ struct PerformanceLabView: View {
 
         return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             Text("Trending")
-                .font(Theme.Typography.title2)
+                .font(Theme.Typography.sectionHeader2)
                 .foregroundColor(Theme.Colors.textPrimary)
+                .accessibilityAddTraits(.isHeader)
 
             if let window {
                 Text(window.label)
@@ -539,10 +535,11 @@ struct PerformanceLabView: View {
 
         return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             Text("Strength Trends")
-                .font(Theme.Typography.title2)
+                .font(Theme.Typography.sectionHeader2)
                 .foregroundColor(Theme.Colors.textPrimary)
+                .accessibilityAddTraits(.isHeader)
 
-            Text("Best load per exercise \u{2014} \(selectedWindowTrendSubtitle)")
+            Text("Best load per exercise, \(selectedWindowTrendSubtitle)")
                 .font(Theme.Typography.caption)
                 .foregroundColor(Theme.Colors.textSecondary)
 
@@ -658,8 +655,9 @@ struct PerformanceLabView: View {
 
         return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             Text("Muscle Focus")
-                .font(Theme.Typography.title2)
+                .font(Theme.Typography.sectionHeader2)
                 .foregroundColor(Theme.Colors.textPrimary)
+                .accessibilityAddTraits(.isHeader)
 
             Text("Distribution across tagged groups in \(selectedRangeDetailLabel).")
                 .font(Theme.Typography.caption)
@@ -807,8 +805,9 @@ struct PerformanceLabView: View {
 
         return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             Text("Weekly Activity")
-                .font(Theme.Typography.title2)
+                .font(Theme.Typography.sectionHeader2)
                 .foregroundColor(Theme.Colors.textPrimary)
+                .accessibilityAddTraits(.isHeader)
 
             if weeks.isEmpty {
                 Text("Your weekly training pattern will appear here.")

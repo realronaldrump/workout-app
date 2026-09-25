@@ -11,11 +11,12 @@ struct MuscleBalanceDetailView: View {
 
             ScrollView(showsIndicators: false) {
                 LazyVStack(alignment: .leading, spacing: Theme.Spacing.xxl) {
-                    Text("Muscle Balance")
-                        .font(Theme.Typography.screenTitle)
-                        .foregroundStyle(Theme.Colors.textPrimary)
-                        .tracking(1.5)
-                        .padding(.top, Theme.Spacing.md)
+                    StatsPageHeader(
+                        eyebrow: rangeLabel ?? "Muscles",
+                        title: "Muscle Balance",
+                        subtitle: "How your training load spreads across muscle groups.",
+                        systemImage: "figure.strengthtraining.traditional"
+                    )
 
                     MuscleHeatmapView(
                         dataManager: dataManager,
@@ -23,7 +24,7 @@ struct MuscleBalanceDetailView: View {
                         rangeLabel: rangeLabel
                     )
                 }
-                .padding(.vertical, Theme.Spacing.xxl)
+                .padding(.vertical, Theme.Spacing.xl)
                 .padding(.horizontal, Theme.Spacing.lg)
                 .contentColumn()
             }

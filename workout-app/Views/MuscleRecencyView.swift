@@ -27,22 +27,39 @@ struct MuscleRecencyView: View {
             AdaptiveBackground()
 
             ScrollView(showsIndicators: false) {
-                LazyVStack(alignment: .leading, spacing: Theme.Spacing.xxl) {
-                    Text("Muscle Recency")
-                        .font(Theme.Typography.screenTitle)
-                        .foregroundStyle(Theme.Colors.textPrimary)
-                        .tracking(1.5)
-                        .padding(.top, Theme.Spacing.md)
+                LazyVStack(alignment: .leading, spacing: Theme.Spacing.xl) {
+                    StatsPageHeader(
+                        eyebrow: "Recency",
+                        title: "Muscle Recency",
+                        subtitle: "When each muscle group last reached one effective set of work.",
+                        systemImage: "clock.arrow.circlepath"
+                    )
 
-                    Text("See when each muscle group last reached one effective set of work.")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textSecondary)
+                    ForEach(RecencyBucket.allCases, id: \.self) { bucket in
+                        let rows = recencyRows.filter { RecencyBucket(daysSince: $0.daysSince) == bucket }
+                        if !rows.isEmpty {
+                            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                                HStack(spacing: Theme.Spacing.sm) {
+                                    Text(bucket.title)
+                                        .sectionHeaderStyle()
+                                    Text("\(rows.count)")
+                                        .font(Theme.Typography.caption2Bold)
+                                        .foregroundStyle(Theme.Colors.textSecondary)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 2)
+                                        .background(Capsule().fill(Theme.Colors.border.opacity(0.4)))
+                                }
+                                .accessibilityElement(children: .combine)
+                                .accessibilityAddTraits(.isHeader)
 
-                    ForEach(recencyRows) { row in
-                        recencyRow(row)
+                                ForEach(rows) { row in
+                                    recencyRow(row)
+                                }
+                            }
+                        }
                     }
                 }
-                .padding(.vertical, Theme.Spacing.xxl)
+                .padding(.vertical, Theme.Spacing.xl)
                 .padding(.horizontal, Theme.Spacing.lg)
                 .contentColumn()
             }
@@ -67,45 +84,56 @@ struct MuscleRecencyView: View {
     }
 
     private func recencyRow(_ row: MuscleGroupRecency) -> some View {
-        HStack(spacing: Theme.Spacing.md) {
-            ZStack {
-                Circle()
-                    .fill(row.group.color.opacity(0.14))
-                    .frame(width: 38, height: 38)
-                Image(systemName: row.group.iconName)
-                    .font(Theme.Typography.bodyBold)
-                    .foregroundStyle(row.group.color)
-            }
+        // Full when trained today, empty at two weeks: freshness at a glance.
+        let freshness = row.daysSince.map { max(0, 1 - Double($0) / 14) } ?? 0
 
-            VStack(alignment: .leading, spacing: 3) {
-                Text(row.group.displayName)
-                    .font(Theme.Typography.bodyBold)
-                    .foregroundColor(Theme.Colors.textPrimary)
+        return HStack(alignment: .center, spacing: Theme.Spacing.md) {
+            Capsule()
+                .fill(row.group.color)
+                .frame(width: 4, height: 44)
+                .accessibilityHidden(true)
 
-                if let topExercise = row.lastExercise {
-                    Text(topExercise.name)
-                        .font(Theme.Typography.caption)
-                        .foregroundColor(Theme.Colors.textSecondary)
-                        .lineLimit(1)
-                } else {
-                    Text("No tagged workouts yet")
-                        .font(Theme.Typography.caption)
-                        .foregroundColor(Theme.Colors.textTertiary)
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(row.group.displayName)
+                        .font(Theme.Typography.bodyBold)
+                        .foregroundColor(Theme.Colors.textPrimary)
+
+                    Spacer(minLength: Theme.Spacing.sm)
+
+                    Text(row.daysSince.map { $0 == 0 ? "Today" : "\($0)d" } ?? "Never")
+                        .font(Theme.Typography.title3)
+                        .foregroundStyle(row.lastTrained == nil ? Theme.Colors.textTertiary : Theme.Colors.textPrimary)
+                        .monospacedDigit()
                 }
-            }
 
-            Spacer()
+                HStack(alignment: .firstTextBaseline) {
+                    Text(row.lastExercise?.name ?? "No tagged workouts yet")
+                        .font(Theme.Typography.caption)
+                        .foregroundColor(row.lastExercise == nil ? Theme.Colors.textTertiary : Theme.Colors.textSecondary)
+                        .lineLimit(1)
 
-            VStack(alignment: .trailing, spacing: 3) {
-                Text(lastWorkedLabel(for: row))
-                    .font(Theme.Typography.captionBold)
-                    .foregroundStyle(row.lastTrained == nil ? Theme.Colors.textTertiary : Theme.Colors.textPrimary)
-                Text(lastWorkedDateLabel(for: row))
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textTertiary)
+                    Spacer(minLength: Theme.Spacing.sm)
+
+                    Text(lastWorkedDateLabel(for: row))
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Colors.textTertiary)
+                }
+
+                GeometryReader { proxy in
+                    ZStack(alignment: .leading) {
+                        Capsule()
+                            .fill(Theme.Colors.border.opacity(0.35))
+                        Capsule()
+                            .fill(row.group.color.opacity(0.85))
+                            .frame(width: proxy.size.width * CGFloat(freshness))
+                    }
+                }
+                .frame(height: 4)
+                .accessibilityHidden(true)
             }
         }
-        .padding(Theme.Spacing.lg)
+        .padding(Theme.Spacing.md)
         .softCard(elevation: 1)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(row.group.displayName), \(lastWorkedLabel(for: row)), \(lastWorkedDateLabel(for: row))")
@@ -119,5 +147,34 @@ struct MuscleRecencyView: View {
     private func lastWorkedDateLabel(for row: MuscleGroupRecency) -> String {
         guard let lastTrained = row.lastTrained else { return "No date available" }
         return lastTrained.formatted(date: .abbreviated, time: .omitted)
+    }
+}
+
+/// Groups muscles by how long they have been resting.
+private enum RecencyBucket: CaseIterable {
+    case fresh
+    case dueSoon
+    case overdue
+    case never
+
+    init(daysSince: Int?) {
+        guard let daysSince else {
+            self = .never
+            return
+        }
+        switch daysSince {
+        case ...3: self = .fresh
+        case 4...7: self = .dueSoon
+        default: self = .overdue
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .fresh: return "Trained recently"
+        case .dueSoon: return "This week"
+        case .overdue: return "Waiting a while"
+        case .never: return "Not trained yet"
+        }
     }
 }

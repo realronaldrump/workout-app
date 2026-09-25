@@ -48,23 +48,18 @@ struct WorkoutHealthInsightsView: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            Text(workout.name)
-                .font(Theme.Typography.screenTitle)
-                .foregroundStyle(Theme.Colors.textPrimary)
-                .tracking(1.5)
-            Text(workout.date.formatted(date: .abbreviated, time: .shortened))
-                .font(Theme.Typography.body)
-                .foregroundStyle(Theme.Colors.textSecondary)
-        }
+        StatsPageHeader(
+            eyebrow: "Workout health",
+            title: workout.name,
+            subtitle: workout.date.formatted(date: .complete, time: .shortened),
+            systemImage: "heart.fill"
+        )
     }
 
     @ViewBuilder
     private func rawSamplesSection(data: WorkoutHealthData) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Raw Samples")
-                .font(Theme.Typography.title3)
-                .foregroundStyle(Theme.Colors.textPrimary)
+            SectionHeading(title: "Raw Samples")
 
             if data.heartRateSamples.isEmpty, data.hrvSamples.isEmpty, data.bloodOxygenSamples.isEmpty {
                 VStack(alignment: .leading, spacing: Theme.Spacing.md) {

@@ -7,6 +7,12 @@ struct DailyHealthDetailView: View {
         [GridItem(.adaptive(minimum: 132, maximum: 210), spacing: Theme.Spacing.md)]
     }
 
+    private var dayEyebrow: String {
+        if Calendar.current.isDateInToday(day.dayStart) { return "Today" }
+        if Calendar.current.isDateInYesterday(day.dayStart) { return "Yesterday" }
+        return "Daily summary"
+    }
+
     private var dayTitle: String {
         day.dayStart.formatted(.dateTime.weekday(.wide).month(.abbreviated).day())
     }
@@ -98,21 +104,12 @@ struct DailyHealthDetailView: View {
     }
 
     private var headerSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            Text(dayTitle)
-                .font(Theme.Typography.title2)
-                .foregroundStyle(Theme.Colors.textPrimary)
-
-            if Calendar.current.isDateInToday(day.dayStart) {
-                Text("Today")
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textSecondary)
-            } else if Calendar.current.isDateInYesterday(day.dayStart) {
-                Text("Yesterday")
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textSecondary)
-            }
-        }
+        StatsPageHeader(
+            eyebrow: dayEyebrow,
+            title: dayTitle,
+            subtitle: "Everything Apple Health recorded for this day.",
+            systemImage: "calendar"
+        )
     }
 
     private var overviewSection: some View {

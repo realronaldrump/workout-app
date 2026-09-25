@@ -311,7 +311,8 @@ struct ExerciseProgressChart: View {
                     .foregroundColor(Theme.Colors.textTertiary)
                 Text(formatValue(selected.value))
                     .font(Theme.Typography.title3)
-                    .foregroundColor(chartColor)
+                    .foregroundColor(Theme.Colors.textPrimary)
+                    .contentTransition(.numericText())
             }
 
             Spacer()
@@ -340,17 +341,23 @@ struct ExerciseProgressChart: View {
             plotArea.clipped()
         }
         .chartXAxis {
-            AxisMarks { _ in
+            AxisMarks(values: .automatic(desiredCount: 4)) { _ in
                 AxisGridLine()
-                AxisValueLabel(format: .dateTime.month().day())
+                    .foregroundStyle(Theme.Colors.border.opacity(0.35))
+                AxisValueLabel(format: .dateTime.month(.abbreviated).day())
+                    .font(Theme.Typography.caption2)
+                    .foregroundStyle(Theme.Colors.textTertiary)
             }
         }
         .chartYAxis {
-            AxisMarks { value in
+            AxisMarks(position: .trailing, values: .automatic(desiredCount: 4)) { value in
                 AxisGridLine()
+                    .foregroundStyle(Theme.Colors.border.opacity(0.35))
                 AxisValueLabel {
                     if let axisValue = value.as(Double.self) {
                         Text(formatAxisValue(axisValue))
+                            .font(Theme.Typography.caption2)
+                            .foregroundStyle(Theme.Colors.textTertiary)
                     }
                 }
             }
@@ -483,7 +490,13 @@ struct ExerciseProgressChart: View {
                 yStart: .value("Baseline", derived.yDomain.lowerBound),
                 yEnd: .value(chartLabel, isAppearing ? dataPoint.value : derived.yDomain.lowerBound)
             )
-            .foregroundStyle(chartColor.opacity(0.15))
+            .foregroundStyle(
+                LinearGradient(
+                    colors: [chartColor.opacity(0.18), chartColor.opacity(0.01)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
             .interpolationMethod(.catmullRom)
         }
     }
@@ -496,7 +509,7 @@ struct ExerciseProgressChart: View {
                 y: .value(chartLabel, isAppearing ? dataPoint.value : derived.yDomain.lowerBound)
             )
             .foregroundStyle(by: .value("Series", ChartSeries.progress.rawValue))
-            .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round))
+            .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
             .interpolationMethod(.catmullRom)
         }
     }
@@ -524,7 +537,12 @@ struct ExerciseProgressChart: View {
                 y: .value(chartLabel, isAppearing ? dataPoint.value : derived.yDomain.lowerBound)
             )
             .foregroundStyle(dataPoint.date == derived.prDate ? Theme.Colors.gold : chartColor)
-            .symbolSize(dataPoint.date == derived.prDate ? 100 : 50)
+            // Dense histories read better as a line; keep dots for sparse series and the PR.
+            .symbolSize(
+                dataPoint.date == derived.prDate
+                    ? 110
+                    : (derived.indexedChartData.count > 30 ? 0 : 36)
+            )
             .annotation(position: .top) {
                 if dataPoint.date == derived.prDate {
                     Image(systemName: "trophy.fill")
@@ -559,8 +577,8 @@ struct ExerciseProgressChart: View {
     private var selectionRuleMark: some ChartContent {
         if let selected = selectedDataPoint {
             RuleMark(x: .value("Selected", selected.date))
-                .foregroundStyle(chartColor.opacity(0.3))
-                .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                .foregroundStyle(Theme.Colors.textPrimary.opacity(0.3))
+                .lineStyle(StrokeStyle(lineWidth: 1))
         }
     }
 

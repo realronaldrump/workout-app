@@ -70,7 +70,7 @@ struct PersonalRecordsView: View {
             } else {
                 if !title.isEmpty {
                     Text(title)
-                        .font(Theme.Typography.title2)
+                        .font(Theme.Typography.sectionHeader2)
                         .foregroundColor(Theme.Colors.textPrimary)
                 }
 

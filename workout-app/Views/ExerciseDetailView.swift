@@ -34,6 +34,7 @@ struct ExerciseDetailView: View {
     @State private var progressReviewTask: Task<Void, Never>?
     @State private var progressReviewGeneration: UInt64 = 0
     @State private var relationshipEditorRequest: ExerciseRelationshipEditorRequest?
+    @State private var sectionTracker = StatsSectionTracker()
 
     enum ChartType: String, CaseIterable, Hashable {
         case weight = "Max Weight"
@@ -348,77 +349,6 @@ struct ExerciseDetailView: View {
         let endText = bounds.end.formatted(style)
         if startText == endText { return startText }
         return "\(startText) - \(endText)"
-    }
-
-    private var progressChartRangeControls: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            progressRangeMenu
-
-            if let label = progressRangeDetailLabel {
-                Text(label)
-                    .font(Theme.Typography.caption)
-                    .foregroundColor(Theme.Colors.textTertiary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-            }
-        }
-    }
-
-    private var progressRangeMenu: some View {
-        Menu {
-            ForEach(ProgressRange.presets, id: \.self) { range in
-                Button {
-                    selectedProgressRange = range
-                    Haptics.selection()
-                } label: {
-                    if selectedProgressRange == range {
-                        Label(range.menuTitle, systemImage: "checkmark")
-                    } else {
-                        Text(range.menuTitle)
-                    }
-                }
-            }
-
-            Divider()
-
-            Button {
-                openCustomProgressRangePicker()
-            } label: {
-                if selectedProgressRange == .custom {
-                    Label("Edit Custom Range…", systemImage: "slider.horizontal.3")
-                } else {
-                    Text("Custom Range…")
-                }
-            }
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "calendar")
-                    .font(Theme.Typography.captionBold)
-                    .foregroundStyle(Theme.Colors.accent)
-
-                Text("Range \(selectedProgressRange.shortLabel)")
-                    .font(Theme.Typography.captionBold)
-                    .foregroundStyle(Theme.Colors.textPrimary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
-
-                Image(systemName: "chevron.down")
-                    .font(Theme.Typography.captionBold)
-                    .foregroundStyle(Theme.Colors.textTertiary)
-            }
-            .padding(.horizontal, Theme.Spacing.md)
-            .padding(.vertical, Theme.Spacing.sm)
-            .frame(minHeight: 44)
-            .surfaceButtonChrome(
-                fill: Theme.Colors.surface,
-                cornerRadius: Theme.CornerRadius.large
-            )
-            .contentShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large))
-        }
-        .buttonStyle(.plain)
-        .disabled(scopedHistory.isEmpty)
-        .accessibilityLabel("Chart date range")
-        .accessibilityValue(selectedProgressRange.menuTitle)
     }
 
     @ViewBuilder
@@ -1025,139 +955,93 @@ struct ExerciseDetailView: View {
         ZStack {
             AdaptiveBackground()
 
-            ScrollView {
-                LazyVStack(spacing: Theme.Spacing.xl) {
-                    if isLoadingExerciseDetail && scopedHistory.isEmpty {
-                        HStack(spacing: Theme.Spacing.sm) {
-                            ProgressView()
-                            Text("Loading exercise history")
-                                .font(Theme.Typography.caption)
-                                .foregroundColor(Theme.Colors.textSecondary)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    } else if let exerciseDetailError, scopedHistory.isEmpty {
-                        Text("Unable to load exercise history: \(exerciseDetailError)")
-                            .font(Theme.Typography.caption)
-                            .foregroundColor(Theme.Colors.warning)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(spacing: Theme.Spacing.xl) {
+                        exerciseHeader
+
+                        if isLoadingExerciseDetail && scopedHistory.isEmpty {
+                            HStack(spacing: Theme.Spacing.sm) {
+                                ProgressView()
+                                Text("Loading exercise history")
+                                    .font(Theme.Typography.caption)
+                                    .foregroundColor(Theme.Colors.textSecondary)
+                            }
                             .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-
-                    ExerciseStatsCards(
-                        exerciseName: exerciseName,
-                        sessions: scopedHistorySessions,
-                        scope: analysisScope(for: exerciseName),
-                        showsPerformanceStats: !showsAggregateBreakdown
-                    )
-
-                    personalRecordsSection
-
-                    relationshipPanel
-
-                    VStack(alignment: .leading, spacing: 16) {
-                        ViewThatFits(in: .horizontal) {
-                            HStack {
-                                progressChartTitle
-                                Spacer()
-                                progressChartControls
-                            }
-
-                            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                                progressChartTitle
-                                progressChartControls
-                            }
-                        }
-
-                        if isDeletedScope {
-                            Text("Deleted gym. Select a valid location.")
+                        } else if let exerciseDetailError, scopedHistory.isEmpty {
+                            Text("Unable to load exercise history: \(exerciseDetailError)")
                                 .font(Theme.Typography.caption)
                                 .foregroundColor(Theme.Colors.warning)
+                                .frame(maxWidth: .infinity, alignment: .leading)
                         }
 
-                        progressChartRangeControls
-
-                        progressChartCard
-                    }
-
-                    if !isCardio && !showsAggregateBreakdown {
-                        ExerciseRangeBreakdown(
+                        ExerciseStatsCards(
                             exerciseName: exerciseName,
                             sessions: scopedHistorySessions,
-                            scope: analysisScope(for: exerciseName)
+                            scope: analysisScope(for: exerciseName),
+                            showsPerformanceStats: !showsAggregateBreakdown
                         )
-                    }
+                        .statsSection(ExerciseDetailSection.overview.rawValue, tracker: $sectionTracker)
 
-                    if !exerciseInsights.isEmpty {
-                        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-                            Text("Insights")
-                                .font(Theme.Typography.title3)
-                                .foregroundColor(Theme.Colors.textPrimary)
+                        personalRecordsSection
+                            .statsSection(ExerciseDetailSection.records.rawValue, tracker: $sectionTracker)
 
-                            LazyVStack(spacing: Theme.Spacing.md) {
-                                ForEach(exerciseInsights) { insight in
-                                    InsightCardView(insight: insight)
-                                }
-                            }
-                        }
-                    }
+                        relationshipPanel
 
-                    if !exerciseContextPatterns.isEmpty {
-                        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-                            Text("Context Patterns")
-                                .font(Theme.Typography.title3)
-                                .foregroundColor(Theme.Colors.textPrimary)
+                        progressSection
+                            .statsSection(ExerciseDetailSection.progress.rawValue, tracker: $sectionTracker)
 
-                            Text("Where this lift tends to change when the surrounding workout changes.")
-                                .font(Theme.Typography.caption)
-                                .foregroundColor(Theme.Colors.textSecondary)
-
-                            ForEach(exerciseContextPatterns) { pattern in
-                                MetricTileButton(
-                                    action: { selectedVariantWorkout = pattern.representativeWorkout },
-                                    content: {
-                                        WorkoutVariantPatternCard(pattern: pattern, maxEvidence: 1)
-                                    }
-                                )
-                            }
-                        }
-                    }
-
-                    if !isCardio && !showsAggregateBreakdown {
-                        if let progressReview {
-                            ProgressReviewSection(
-                                review: progressReview,
-                                gymNameProvider: { gymId in
-                                    gymProfilesManager.gymName(for: gymId)
-                                }
+                        if !isCardio && !showsAggregateBreakdown {
+                            ExerciseRangeBreakdown(
+                                exerciseName: exerciseName,
+                                sessions: scopedHistorySessions,
+                                scope: analysisScope(for: exerciseName)
                             )
-                        } else if isLoadingProgressReview {
-                            VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-                                Text("Progress Review")
-                                    .font(Theme.Typography.title3)
-                                    .foregroundColor(Theme.Colors.textPrimary)
-
-                                HStack(spacing: Theme.Spacing.sm) {
-                                    ProgressView()
-                                    Text("Comparing the last two blocks for this lift.")
-                                        .font(Theme.Typography.caption)
-                                        .foregroundColor(Theme.Colors.textSecondary)
-                                }
-                                .padding(Theme.Spacing.lg)
-                                .softCard(elevation: 1)
-                            }
+                            .statsSection(ExerciseDetailSection.ranges.rawValue, tracker: $sectionTracker)
                         }
-                    }
 
-                    RecentSetsView(
-                        exerciseName: exerciseName,
-                        sessions: scopedHistorySessions
-                    )
+                        if !exerciseInsights.isEmpty || !exerciseContextPatterns.isEmpty {
+                            insightsSection
+                                .statsSection(ExerciseDetailSection.insights.rawValue, tracker: $sectionTracker)
+                        }
+
+                        if !isCardio && !showsAggregateBreakdown {
+                            progressReviewContent
+                                .statsSection(ExerciseDetailSection.review.rawValue, tracker: $sectionTracker)
+                        }
+
+                        RecentSetsView(
+                            exerciseName: exerciseName,
+                            sessions: scopedHistorySessions
+                        )
+                        .statsSection(ExerciseDetailSection.sets.rawValue, tracker: $sectionTracker)
+                    }
+                    .padding(.horizontal, Theme.Spacing.xl)
+                    .padding(.top, Theme.Spacing.md)
+                    .padding(.bottom, Theme.Spacing.xl)
+                    .contentColumn()
                 }
-                .padding(Theme.Spacing.xl)
-                .contentColumn()
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    if jumpSections.count >= 3 {
+                        SectionJumpBar(
+                            sections: jumpSections,
+                            activeID: sectionTracker.activeID(in: jumpSections),
+                            onSelect: { id in
+                                withAnimation(Theme.Animation.smooth) {
+                                    proxy.scrollTo(id, anchor: .top)
+                                }
+                            }
+                        )
+                        .contentColumn()
+                        .padding(.horizontal, Theme.Spacing.lg)
+                        .padding(.vertical, Theme.Spacing.xs)
+                    }
+                }
             }
         }
         .navigationTitle(exerciseName)
-        .navigationBarTitleDisplayMode(.large)
+        // The poster header carries the name; the bar keeps a compact title for context.
+        .navigationBarTitleDisplayMode(.inline)
         .accessibilityIdentifier("exercise-detail-\(exerciseName)")
         .navigationDestination(item: $selectedVariantWorkout) { workout in
             WorkoutDetailView(workout: workout)
@@ -1241,9 +1125,6 @@ struct ExerciseDetailView: View {
         .onChange(of: healthManager.authorizationStatus) { _, _ in
             scheduleProgressReviewRefresh()
         }
-        .onChange(of: selectedChart) { _, _ in
-            Haptics.selection()
-        }
         .onDisappear {
             exerciseDetailTask?.cancel()
             progressReviewTask?.cancel()
@@ -1251,38 +1132,228 @@ struct ExerciseDetailView: View {
         }
     }
 
-    private var progressChartTitle: some View {
-        Text("Progress Chart")
-            .font(Theme.Typography.title2)
-            .foregroundColor(Theme.Colors.textPrimary)
+    // MARK: - Page sections
+
+    private enum ExerciseDetailSection: String, CaseIterable {
+        case overview
+        case records
+        case progress
+        case ranges
+        case insights
+        case review
+        case sets
+
+        var title: String {
+            switch self {
+            case .overview: return "Overview"
+            case .records: return "Records"
+            case .progress: return "Progress"
+            case .ranges: return "Rep Ranges"
+            case .insights: return "Insights"
+            case .review: return "Review"
+            case .sets: return "Sessions"
+            }
+        }
     }
 
-    private var progressChartControls: some View {
-        HStack(spacing: Theme.Spacing.sm) {
+    private var jumpSections: [StatsSectionAnchor] {
+        guard !scopedHistory.isEmpty else { return [] }
+        return ExerciseDetailSection.allCases.compactMap { section -> StatsSectionAnchor? in
+            switch section {
+            case .ranges, .review:
+                guard !isCardio && !showsAggregateBreakdown else { return nil }
+            case .insights:
+                guard !exerciseInsights.isEmpty || !exerciseContextPatterns.isEmpty else { return nil }
+            case .overview, .records, .progress, .sets:
+                break
+            }
+            return StatsSectionAnchor(id: section.rawValue, title: section.title)
+        }
+    }
+
+    private var primaryMuscleTag: MuscleTag? {
+        let assignments = metadataManager.resolvedAssignments(for: exerciseName)
+        return assignments.first(where: { $0.role == .primary })?.tag ?? assignments.first?.tag
+    }
+
+    private var headerEyebrow: String {
+        if isVariantPage { return "Variant" }
+        if isCardio { return "Cardio" }
+        return primaryMuscleTag?.displayName ?? "Exercise"
+    }
+
+    private var headerSubtitle: String? {
+        let dates = scopedHistory.map(\.date)
+        guard let latest = dates.max(), let earliest = dates.min() else {
+            return isLoadingExerciseDetail ? nil : "No sessions logged in this scope yet."
+        }
+        var parts = [SharedFormatters.count(dates.count, "session")]
+        parts.append("last \(latest.formatted(.relative(presentation: .named)))")
+        if dates.count > 1 {
+            parts.append("since \(earliest.formatted(.dateTime.month(.abbreviated).year()))")
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private var exerciseHeader: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            StatsPageHeader(
+                eyebrow: headerEyebrow,
+                title: exerciseName,
+                subtitle: headerSubtitle,
+                systemImage: isCardio ? "heart.fill" : "dumbbell.fill"
+            )
+
+            let assignments = metadataManager.resolvedAssignments(for: exerciseName)
+            if !assignments.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: Theme.Spacing.xs) {
+                        ForEach(assignments) { assignment in
+                            MuscleTagBadge(tag: assignment.tag, role: assignment.role)
+                        }
+                    }
+                }
+                .scrollClipDisabled()
+            }
+
+            // Location scopes every stat, record, chart, and set on this page, so it
+            // lives up here rather than inside the chart's controls.
             locationMenu
 
-            Picker("Chart Type", selection: $selectedChart) {
-                ForEach(availableChartTypes, id: \.self) { type in
-                    Text(type.displayName(for: exerciseName)).tag(type)
+            if isDeletedScope {
+                Label("Deleted gym. Select a valid location.", systemImage: "exclamationmark.triangle.fill")
+                    .font(Theme.Typography.caption)
+                    .foregroundColor(Theme.Colors.warning)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var progressSection: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            SectionHeading(title: "Progress", subtitle: progressRangeDetailLabel)
+
+            if availableChartTypes.count > 1 {
+                TimeRangePillPicker(
+                    options: availableChartTypes,
+                    selected: $selectedChart,
+                    label: { $0.displayName(for: exerciseName) },
+                    selectionHint: "Double-tap to chart this measure"
+                )
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel("Chart measure")
+            }
+
+            TimeRangePillPicker(
+                options: ProgressRange.allCases,
+                selected: $selectedProgressRange,
+                label: { $0.shortLabel },
+                isSpecialOption: { $0 == .custom },
+                onCustomTap: { openCustomProgressRangePicker() }
+            )
+            .disabled(scopedHistory.isEmpty)
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("Chart date range")
+
+            progressChartCard
+        }
+    }
+
+    private var insightsSection: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
+            if !exerciseInsights.isEmpty {
+                VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+                    SectionHeading(title: "Insights")
+
+                    LazyVStack(spacing: Theme.Spacing.md) {
+                        ForEach(exerciseInsights) { insight in
+                            InsightCardView(insight: insight)
+                        }
+                    }
                 }
             }
-            .pickerStyle(.menu)
+
+            if !exerciseContextPatterns.isEmpty {
+                VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+                    SectionHeading(
+                        title: "Context Patterns",
+                        subtitle: "Where this lift tends to change when the surrounding workout changes."
+                    )
+
+                    ForEach(exerciseContextPatterns) { pattern in
+                        MetricTileButton(
+                            action: { selectedVariantWorkout = pattern.representativeWorkout },
+                            content: {
+                                WorkoutVariantPatternCard(pattern: pattern, maxEvidence: 1)
+                            }
+                        )
+                    }
+                }
+            }
         }
-        .frame(minHeight: Theme.Layout.minimumTapTarget)
+    }
+
+    @ViewBuilder
+    private var progressReviewContent: some View {
+        if let progressReview {
+            ProgressReviewSection(
+                review: progressReview,
+                gymNameProvider: { gymId in
+                    gymProfilesManager.gymName(for: gymId)
+                }
+            )
+        } else if isLoadingProgressReview {
+            VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+                SectionHeading(title: "Progress Review")
+
+                HStack(spacing: Theme.Spacing.sm) {
+                    ProgressView()
+                    Text("Comparing the last two blocks for this lift.")
+                        .font(Theme.Typography.caption)
+                        .foregroundColor(Theme.Colors.textSecondary)
+                }
+                .padding(Theme.Spacing.lg)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .softCard(elevation: 1)
+            }
+        }
     }
 
     private var locationMenu: some View {
         Button {
             showingLocationPicker = true
+            Haptics.selection()
         } label: {
-            HStack(spacing: 6) {
-                GymBadge(text: locationLabel, style: locationBadgeStyle)
-                Image(systemName: "chevron.down")
+            HStack(spacing: Theme.Spacing.sm) {
+                Image(systemName: "mappin.and.ellipse")
+                    .font(Theme.Typography.captionBold)
+                    .foregroundColor(Theme.Colors.accent)
+                    .accessibilityHidden(true)
+                Text("Showing")
                     .font(Theme.Typography.caption)
+                    .foregroundColor(Theme.Colors.textSecondary)
+                GymBadge(text: locationLabel, style: locationBadgeStyle)
+                Spacer(minLength: Theme.Spacing.sm)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(Theme.Typography.caption2Bold)
                     .foregroundColor(Theme.Colors.textTertiary)
+                    .accessibilityHidden(true)
             }
+            .padding(.horizontal, Theme.Spacing.md)
+            .frame(maxWidth: .infinity, minHeight: Theme.Layout.minimumTapTarget)
+            .background(
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
+                    .fill(Theme.Colors.surfaceRaised)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
+                    .strokeBorder(Theme.Colors.border.opacity(0.55), lineWidth: 1)
+            )
+            .contentShape(.rect)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(AppInteractionButtonStyle())
+        .accessibilityLabel("Location scope, \(locationLabel)")
+        .accessibilityHint("Filters every stat on this page to one gym")
         .sheet(isPresented: $showingLocationPicker) {
             GymSelectionSheet(
                 title: "Location Scope",

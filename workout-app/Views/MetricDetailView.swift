@@ -101,44 +101,19 @@ struct MetricDetailView: View {
     }
 
     private var detailBackground: some View {
-        ZStack {
-            AdaptiveBackground()
-
-            LinearGradient(
-                colors: [
-                    Theme.Colors.accent.opacity(0.11),
-                    Theme.Colors.accentSecondary.opacity(0.07),
-                    Theme.Colors.background
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
-
-            Circle()
-                .fill(Theme.Colors.accent.opacity(0.08))
-                .frame(width: 280, height: 280)
-                .offset(x: 180, y: -260)
-                .blur(radius: 4)
-
-            Circle()
-                .fill(Theme.Colors.accentSecondary.opacity(0.07))
-                .frame(width: 220, height: 220)
-                .offset(x: -170, y: -130)
-                .blur(radius: 3)
-        }
+        // The shared background already carries the brand glow; stacking a second set
+        // of gradients here muddied the cards on top.
+        AdaptiveBackground()
     }
 
     private var heroCard: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text(title.uppercased())
-                .font(Theme.Typography.metricLabel)
-                .foregroundColor(Theme.Colors.textTertiary)
-                .tracking(1.0)
+            BrandBandLabel(text: title, systemImage: "chart.bar.xaxis")
 
             Text(heroHeadline)
-                .font(Theme.Typography.metric)
-                .foregroundStyle(Theme.accentGradient)
+                .font(Theme.Typography.metricLarge)
+                .foregroundStyle(Theme.Colors.textPrimary)
+                .contentTransition(.numericText())
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                 .minimumScaleFactor(dynamicTypeSize.isAccessibilitySize ? 1 : 0.65)
                 .fixedSize(horizontal: false, vertical: true)
@@ -191,24 +166,17 @@ struct MetricDetailView: View {
             }
         }
         .padding(Theme.Spacing.lg)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            Theme.Colors.surface,
-                            Theme.Colors.surfaceRaised
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge)
-                .strokeBorder(Theme.Colors.border.opacity(0.5), lineWidth: 1)
-        )
-        .shadow(color: Theme.Colors.accent.opacity(0.08), radius: 18, x: 0, y: 8)
+        .background(alignment: .topTrailing) {
+            // A soft brand wash in the corner marks this as the page's headline card.
+            RadialGradient(
+                colors: [Theme.Colors.accent.opacity(0.14), Theme.Colors.accent.opacity(0)],
+                center: .topTrailing,
+                startRadius: 0,
+                endRadius: 260
+            )
+            .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge, style: .continuous))
+        }
+        .softCard(cornerRadius: Theme.CornerRadius.xlarge, elevation: 2)
     }
 
     private var sessionsSection: some View {
@@ -549,7 +517,7 @@ struct MetricDetailView: View {
                 }
                 .chartYAxis {
                     AxisMarks(position: .leading) { value in
-                        AxisGridLine(stroke: StrokeStyle(lineWidth: 1, dash: [3]))
+                        AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
                             .foregroundStyle(Theme.Colors.border.opacity(0.45))
                         AxisValueLabel {
                             if let count = value.as(Int.self) {
@@ -631,7 +599,7 @@ struct MetricDetailView: View {
                 }
                 .chartYAxis {
                     AxisMarks(position: .leading) { value in
-                        AxisGridLine(stroke: StrokeStyle(lineWidth: 1, dash: [3]))
+                        AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
                             .foregroundStyle(Theme.Colors.border.opacity(0.45))
                         AxisValueLabel {
                             if let axisValue = value.as(Double.self) {
@@ -1050,15 +1018,7 @@ struct MetricDetailView: View {
     }
 
     private func sectionHeader(title: String, subtitle: String) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(title)
-                .font(Theme.Typography.sectionHeader2)
-                .foregroundColor(Theme.Colors.textPrimary)
-                .tracking(0.8)
-            Text(subtitle)
-                .font(Theme.Typography.caption)
-                .foregroundColor(Theme.Colors.textSecondary)
-        }
+        SectionHeading(title: title, subtitle: subtitle)
     }
 
     private var title: String {
@@ -1826,14 +1786,8 @@ private struct HeroChip: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, Theme.Spacing.md)
         .padding(.vertical, Theme.Spacing.sm)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                .fill(tint.opacity(0.08))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                .strokeBorder(tint.opacity(0.2), lineWidth: 1)
-        )
+        .statChipChrome(tint: tint)
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -1962,14 +1916,8 @@ private struct SessionInsightTile: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, Theme.Spacing.md)
         .padding(.vertical, Theme.Spacing.sm)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                .fill(tint.opacity(0.08))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                .strokeBorder(tint.opacity(0.22), lineWidth: 1)
-        )
+        .statChipChrome(tint: tint)
+        .accessibilityElement(children: .combine)
     }
 }
 

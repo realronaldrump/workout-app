@@ -103,29 +103,17 @@ struct HealthDateRangeSection: View {
     @EnvironmentObject private var dateRangeContext: HealthDateRangeContext
 
     let earliestDate: Date?
-    var title: String = "Time Range"
+    var title: String = "Showing"
     var showsResolvedLabel: Bool = true
 
     @State private var showingCustomRange = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(title)
-                    .font(Theme.Typography.metricLabel)
-                    .foregroundStyle(Theme.Colors.textTertiary)
-                    .textCase(.uppercase)
-                    .tracking(0.8)
-
-                Spacer()
-
-                if showsResolvedLabel {
-                    Text(dateRangeContext.rangeLabel(earliest: earliestDate))
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                        .multilineTextAlignment(.trailing)
-                }
-            }
+            FilterRowLabel(
+                title: title,
+                detail: showsResolvedLabel ? dateRangeContext.rangeLabel(earliest: earliestDate) : nil
+            )
 
             TimeRangePillPicker(
                 options: HealthDateRangeContext.pickerOptions,

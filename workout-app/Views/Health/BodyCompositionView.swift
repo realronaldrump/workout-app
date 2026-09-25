@@ -134,16 +134,12 @@ struct BodyCompositionView: View {
 
     private var headerSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                Text("Body Composition")
-                    .font(Theme.Typography.screenTitle)
-                    .foregroundStyle(Theme.Colors.textPrimary)
-                    .tracking(1.5)
-
-                Text("\(rangeLabel) • \(model.sampleCountInDisplayRange) \(measurementNoun)")
-                    .font(Theme.Typography.body)
-                    .foregroundStyle(Theme.Colors.textSecondary)
-            }
+            StatsPageHeader(
+                eyebrow: "Body",
+                title: "Body Composition",
+                subtitle: "\(rangeLabel) · \(model.sampleCountInDisplayRange) \(measurementNoun)",
+                systemImage: "figure.stand"
+            )
 
             if let lastUpdated = model.lastUpdatedAt {
                 Text("Last updated \(lastUpdated.formatted(.relative(presentation: .named)))")

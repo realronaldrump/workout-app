@@ -61,10 +61,11 @@ struct WorkoutSimilarityCompareView: View {
 
     private func header(selectedWorkout: Workout, priorWorkout: Workout) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Compare Sessions")
-                .font(Theme.Typography.screenTitle)
-                .foregroundStyle(Theme.Colors.textPrimary)
-                .tracking(1.5)
+            StatsPageHeader(
+                eyebrow: "Workout match",
+                title: "Compare Sessions",
+                systemImage: "arrow.left.arrow.right"
+            )
 
             ViewThatFits(in: .horizontal) {
                 HStack(alignment: .top, spacing: Theme.Spacing.md) {

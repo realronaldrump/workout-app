@@ -61,16 +61,12 @@ struct WorkoutVariantReviewView: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text("Workout Variants")
-                .font(Theme.Typography.screenTitle)
-                .foregroundStyle(Theme.Colors.textPrimary)
-                .tracking(1.5)
-
-            Text("This shows what usually changes when you repeat a similar exercise mix in a different way.")
-                .font(Theme.Typography.microcopy)
-                .foregroundStyle(Theme.Colors.textSecondary)
-        }
+        StatsPageHeader(
+            eyebrow: "Variants",
+            title: "Workout Variants",
+            subtitle: "What usually changes when you repeat a similar exercise mix in a different way.",
+            systemImage: "square.3.layers.3d"
+        )
     }
 
     private func focusedWorkoutSection(_ review: WorkoutVariantWorkoutReview) -> some View {

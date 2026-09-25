@@ -6,25 +6,43 @@ struct TimeRangePillPicker<T: Hashable>: View {
     let options: [T]
     @Binding var selected: T
     let label: (T) -> String
-    var isSpecialOption: ((T) -> Bool)? = nil
-    var onCustomTap: (() -> Void)? = nil
+    var isSpecialOption: ((T) -> Bool)?
+    var onCustomTap: (() -> Void)?
+    var selectionHint = "Double-tap to change the time range"
+
+    @Namespace var selectionNamespace
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: Theme.Spacing.xs) {
+            // One track with a sliding selection reads as a single control rather
+            // than a row of unrelated buttons.
+            HStack(spacing: 2) {
                 ForEach(options, id: \.self) { option in
                     pillButton(for: option)
                 }
             }
+            .padding(2)
+            .background(
+                Capsule()
+                    .fill(Theme.Colors.surfaceRaised)
+            )
+            .overlay(
+                Capsule()
+                    .strokeBorder(Theme.Colors.border.opacity(0.55), lineWidth: 1)
+            )
+            .animation(reduceMotion ? nil : .snappy(duration: 0.28), value: selected)
         }
+        .scrollClipDisabled()
     }
 
     private func pillButton(for option: T) -> some View {
         let isSelected = selected == option
         let title = label(option)
+        let isSpecial = isSpecialOption?(option) == true
 
         return Button {
-            if isSpecialOption?(option) == true {
+            if isSpecial {
                 onCustomTap?()
                 if onCustomTap == nil {
                     selected = option
@@ -34,29 +52,34 @@ struct TimeRangePillPicker<T: Hashable>: View {
             }
             Haptics.toggle()
         } label: {
-            Text(title)
-                .font(Theme.Typography.captionBold)
-                .foregroundColor(isSelected ? .white : Theme.Colors.textSecondary)
-                .padding(.horizontal, Theme.Spacing.md)
-                .padding(.vertical, Theme.Spacing.sm)
-                .frame(minHeight: 44)
-                .background(
-                    RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge)
-                        .fill(isSelected ? Theme.Colors.accent : Color.clear)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge)
-                        .strokeBorder(
-                            isSelected ? Theme.Colors.accent : Theme.Colors.border,
-                            lineWidth: isSelected ? 0 : 1.5
-                        )
-                )
+            HStack(spacing: 4) {
+                if isSpecial {
+                    Image(systemName: "calendar")
+                        .font(Theme.Typography.caption2Bold)
+                        .accessibilityHidden(true)
+                }
+                Text(title)
+                    .font(Theme.Typography.captionBold)
+                    .lineLimit(1)
+            }
+            .foregroundColor(isSelected ? .white : Theme.Colors.textSecondary)
+            .padding(.horizontal, Theme.Spacing.md)
+            .frame(minHeight: 40)
+            .background {
+                if isSelected {
+                    Capsule()
+                        .fill(Theme.Colors.brandBand)
+                        .shadow(color: Theme.Colors.accent.opacity(0.25), radius: 4, x: 0, y: 2)
+                        .matchedGeometryEffect(id: "selected-range", in: selectionNamespace)
+                }
+            }
+            .contentShape(Capsule())
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(title)
         .accessibilityValue(isSelected ? "Selected" : "Not selected")
-        .accessibilityHint("Double-tap to change the time range")
+        .accessibilityHint(selectionHint)
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 }

@@ -15,15 +15,12 @@ struct WorkoutsInRangeView: View {
 
             ScrollView(showsIndicators: false) {
                 LazyVStack(alignment: .leading, spacing: Theme.Spacing.xl) {
-                    VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                        Text("Workouts")
-                            .font(Theme.Typography.screenTitle)
-                            .foregroundStyle(Theme.Colors.textPrimary)
-                            .tracking(1.5)
-                        Text("\(rangeLabel) • \(SharedFormatters.count(sortedWorkouts.count, "session"))")
-                            .font(Theme.Typography.body)
-                            .foregroundStyle(Theme.Colors.textSecondary)
-                    }
+                    StatsPageHeader(
+                        eyebrow: rangeLabel,
+                        title: "Workouts",
+                        subtitle: SharedFormatters.count(sortedWorkouts.count, "session"),
+                        systemImage: "calendar"
+                    )
 
                     if sortedWorkouts.isEmpty {
                         Text("No workouts in this range.")

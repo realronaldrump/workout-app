@@ -471,7 +471,7 @@ struct ExerciseRangeBreakdown: View {
             HStack(alignment: .top, spacing: Theme.Spacing.md) {
                 VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                     Text("Rep Ranges & Intensity")
-                        .font(Theme.Typography.title3)
+                        .font(Theme.Typography.sectionHeader2)
                         .foregroundStyle(Theme.Colors.textPrimary)
 
                     Text("A clearer picture of how this exercise is actually being trained.")
