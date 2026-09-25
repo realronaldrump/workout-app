@@ -298,6 +298,7 @@ struct WorkoutDetailView: View {
         .navigationDestination(item: $selectedSimilarityComparison) { selection in
             WorkoutSimilarityCompareView(selection: selection)
         }
+        .accessibilityIdentifier("workout-detail")
     }
 
     private func workoutHeader(_ workout: Workout) -> some View {

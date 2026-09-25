@@ -54,6 +54,7 @@ struct AnalysisTile<Content: View>: View {
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
             .frame(minHeight: Theme.Layout.minimumTapTarget)
+            .contentShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
         }
         .buttonStyle(AppInteractionButtonStyle())
         .softCard(cornerRadius: radius, elevation: 1)

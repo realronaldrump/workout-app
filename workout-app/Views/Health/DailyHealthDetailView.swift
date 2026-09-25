@@ -101,6 +101,7 @@ struct DailyHealthDetailView: View {
         }
         .navigationTitle("Daily Summary")
         .navigationBarTitleDisplayMode(.inline)
+        .accessibilityIdentifier("health-day-detail")
     }
 
     private var headerSection: some View {
