@@ -18,6 +18,8 @@ struct HomeView: View {
 
     @StateObject private var recoveryCoverageEngine = RecoveryCoverageEngine()
     @AppStorage("weightIncrement") private var weightIncrement: Double = 2.5
+    @AppStorage("sessionsPerWeekGoal") private var sessionsPerWeekGoal: Int = 4
+    @AppStorage("profileName") private var profileName = ""
 
     @State private var showingImportWizard = false
     @State private var showingQuickStart = false
@@ -66,7 +68,7 @@ struct HomeView: View {
             AdaptiveBackground()
 
             ScrollView(showsIndicators: false) {
-                LazyVStack(alignment: .leading, spacing: Theme.Spacing.lg) {
+                LazyVStack(alignment: .leading, spacing: Theme.Spacing.xl) {
                     headerSection
 
                     quickActionsSection
@@ -85,8 +87,17 @@ struct HomeView: View {
                         }
                         .padding(.horizontal, Theme.Spacing.lg)
                     } else if dataManager.workouts.isEmpty {
-                        HomeEmptyState()
+                        VStack(spacing: Theme.Spacing.md) {
+                            HomeEmptyState()
+
+                            // New users are the ones who need a path in; returning users
+                            // still have import in Settings.
+                            SecondaryChip(title: "Import workout history", icon: "arrow.down.to.line") {
+                                showingImportWizard = true
+                            }
+                        }
                         .padding(.horizontal, Theme.Spacing.lg)
+                        .animateOnAppear(delay: 0.15)
                     } else {
                         // Pre-workout briefing with recovery signals and muscle recency cues.
                         PreWorkoutBriefingCard(
@@ -103,14 +114,12 @@ struct HomeView: View {
                             }
                         )
                         .padding(.horizontal, Theme.Spacing.lg)
+                        .animateOnAppear(delay: 0.15)
 
                         if shouldShowUntaggedBanner {
                             untaggedExercisesBanner
                                 .padding(.horizontal, Theme.Spacing.lg)
                         }
-
-                        SectionDivider()
-                            .padding(.horizontal, Theme.Spacing.lg)
 
                         weeklySummarySection
                             .padding(.horizontal, Theme.Spacing.lg)
@@ -118,9 +127,6 @@ struct HomeView: View {
                         // Today surfaces one useful signal. Deeper analysis remains one tap
                         // away in Explore instead of turning the home screen into a report.
                         if !cachedHomeHighlights.isEmpty {
-                            SectionDivider()
-                                .padding(.horizontal, Theme.Spacing.lg)
-
                             HighlightsSectionView(
                                 title: "Latest insight",
                                 items: Array(cachedHomeHighlights.prefix(1))
@@ -128,27 +134,23 @@ struct HomeView: View {
                                 .padding(.horizontal, Theme.Spacing.lg)
                         }
 
-                        SectionDivider()
-                            .padding(.horizontal, Theme.Spacing.lg)
-
                         // Recent workouts with repeat capability
                         recentWorkoutsSection
-                            .padding(.horizontal, Theme.Spacing.lg)
-
-                        SectionDivider()
                             .padding(.horizontal, Theme.Spacing.lg)
 
                         exploreSection
                             .padding(.horizontal, Theme.Spacing.lg)
                     }
                 }
-                .padding(.vertical, Theme.Spacing.xl)
+                .padding(.top, Theme.Spacing.sm)
+                .padding(.bottom, Theme.Spacing.xxl)
                 .frame(maxWidth: maxContentWidth, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .center)
             }
         }
         .navigationTitle("Today")
-        .navigationBarTitleDisplayMode(.large)
+        // The custom greeting header carries the large-title role on this screen.
+        .navigationBarTitleDisplayMode(.inline)
         .analyticsScreen("Home")
         .navigationDestination(item: $selectedExercise) { selection in
             ExerciseDetailView(
@@ -258,46 +260,62 @@ struct HomeView: View {
     // MARK: - Header
 
     private var headerSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .center, spacing: Theme.Spacing.md) {
-                    Text(greetingText)
-                        .font(Theme.Typography.subheadline)
-                        .foregroundColor(Theme.Colors.textSecondary)
-
-                    Spacer(minLength: Theme.Spacing.md)
-
-                    healthStatusButton
-                }
-
-                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                    Text(greetingText)
-                        .font(Theme.Typography.subheadline)
-                        .foregroundColor(Theme.Colors.textSecondary)
-
-                    healthStatusButton
-                }
-            }
-
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             TimelineView(.periodic(from: .now, by: 60)) { context in
-                Text(context.date.formatted(date: .complete, time: .omitted))
-                    .font(Theme.Typography.caption)
-                    .foregroundColor(Theme.Colors.textMuted)
+                Text(context.date.formatted(.dateTime.weekday(.wide).month(.wide).day()).uppercased())
+                    .font(Theme.Typography.metricLabel)
+                    .tracking(1.2)
+                    .foregroundColor(Theme.Colors.textSecondary)
             }
 
-            Text(headerSubtitle)
-                .font(Theme.Typography.microcopy)
-                .foregroundColor(Theme.Colors.textMuted)
+            Text(greetingHeadline)
+                .font(Theme.Typography.displayHero)
+                .foregroundColor(Theme.Colors.textPrimary)
+                .lineLimit(2)
+                .minimumScaleFactor(0.8)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: Theme.Spacing.sm) {
+                    healthStatusButton
+                    Text(headerSubtitle)
+                        .font(Theme.Typography.caption)
+                        .foregroundColor(Theme.Colors.textSecondary)
+                        .lineLimit(1)
+                }
+
+                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                    healthStatusButton
+                    Text(headerSubtitle)
+                        .font(Theme.Typography.caption)
+                        .foregroundColor(Theme.Colors.textSecondary)
+                }
+            }
         }
         .padding(.horizontal, Theme.Spacing.lg)
         .animateOnAppear(delay: 0)
+    }
+
+    private var greetingHeadline: String {
+        let firstName = profileName
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .split(separator: " ")
+            .first
+            .map(String.init)
+        guard let firstName, !firstName.isEmpty else { return greetingText + "." }
+        return "\(greetingText), \(firstName)."
     }
 
     private var healthStatusButton: some View {
         Button {
             selectedTab = .health
         } label: {
-            SyncStatusPill(text: syncStatusText, isActive: isHealthFresh)
+            SyncStatusPill(
+                text: syncStatusText,
+                isActive: isHealthFresh,
+                isSyncing: healthManager.isAutoSyncing
+            )
         }
         .buttonStyle(.plain)
         .accessibilityHint("Opens Health")
@@ -335,12 +353,7 @@ struct HomeView: View {
 
     private var untaggedExercisesBanner: some View {
         HStack(spacing: Theme.Spacing.md) {
-            Image(systemName: "tag")
-                .font(Theme.Typography.footnoteBold)
-                .foregroundStyle(Theme.Colors.accent)
-                .frame(width: 32, height: 32)
-                .background(Theme.Colors.accent.opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
+            IconTile(systemImage: "tag.fill", tint: Theme.Colors.accentTertiary, size: 32)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("\(untaggedExerciseNames.count) exercise\(untaggedExerciseNames.count == 1 ? "" : "s") without muscle roles")
@@ -386,7 +399,7 @@ struct HomeView: View {
             .accessibilityLabel("Dismiss tagging reminder")
         }
         .padding(Theme.Spacing.md)
-        .glassBackground(opacity: 0.1, cornerRadius: Theme.CornerRadius.large, elevation: 1)
+        .softCard(elevation: 1)
         .transition(.asymmetric(
             insertion: .move(edge: .top).combined(with: .opacity),
             removal: .opacity
@@ -397,9 +410,14 @@ struct HomeView: View {
 
     private var quickActionsSection: some View {
         VStack(spacing: Theme.Spacing.md) {
-            // Primary CTA — gradient hero button
-            Button(
-                action: {
+            TodayHeroCard(
+                sessionsThisWeek: currentWeekBucket?.stats.totalWorkouts ?? 0,
+                weeklyGoal: min(max(sessionsPerWeekGoal, 1), 14),
+                streakWeeks: cachedCurrentWeekStreak,
+                weekStart: SharedFormatters.startOfWeekSunday(for: Date()),
+                trainedDays: currentWeekTrainedDays,
+                activeSession: sessionManager.activeSession,
+                onPrimaryAction: {
                     Haptics.selection()
                     if sessionManager.activeSession != nil {
                         sessionManager.isPresentingSessionUI = true
@@ -407,41 +425,12 @@ struct HomeView: View {
                         startQuickSession(exercise: nil)
                     }
                 },
-                label: {
-                    ViewThatFits(in: .horizontal) {
-                        HStack(spacing: Theme.Spacing.sm) {
-                            primarySessionActionLabel
-                            Spacer(minLength: Theme.Spacing.sm)
-                            Image(systemName: "arrow.right")
-                                .font(Theme.Typography.subheadlineBold)
-                                .foregroundStyle(Color.white.opacity(0.8))
-                        }
-
-                        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                            primarySessionActionLabel
-                            Image(systemName: "arrow.right")
-                                .font(Theme.Typography.subheadlineBold)
-                                .foregroundStyle(Color.white.opacity(0.8))
-                        }
-                    }
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, Theme.Spacing.xl)
-                    .padding(.vertical, Theme.Spacing.lg)
-                    .frame(minHeight: 60)
-                    .background(Theme.accentGradient)
-                    .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge))
-                    .shadow(
-                        color: Theme.Colors.accent.opacity(0.22),
-                        radius: 10,
-                        x: 0,
-                        y: 5
-                    )
+                onOpenWeek: {
+                    Haptics.selection()
+                    showingConsistencyDetail = true
                 }
             )
-            .buttonStyle(.plain)
             .padding(.horizontal, Theme.Spacing.lg)
-            .accessibilityLabel(primarySessionActionTitle)
-            .accessibilityHint(sessionManager.activeSession == nil ? "Begins a workout session" : "Returns to the active workout")
             .animateOnAppear(delay: 0.05)
 
             // Repeat last workout
@@ -453,100 +442,65 @@ struct HomeView: View {
                     },
                     label: {
                         HStack(spacing: Theme.Spacing.md) {
-                            Image(systemName: "arrow.counterclockwise")
-                                .font(Theme.Typography.footnoteBold)
-                                .foregroundStyle(Theme.Colors.accentSecondary)
-                                .frame(width: 32, height: 32)
-                                .background(Theme.Colors.accentSecondary.opacity(0.1))
-                                .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
+                            IconTile(
+                                systemImage: "arrow.counterclockwise",
+                                tint: Theme.Colors.accentSecondary,
+                                size: 40
+                            )
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("Repeat Last")
-                                    .font(Theme.Typography.metricLabel)
-                                    .foregroundStyle(Theme.Colors.textTertiary)
-                                    .textCase(.uppercase)
-                                    .tracking(0.6)
+                                Text("Repeat last workout")
+                                    .font(Theme.Typography.caption)
+                                    .foregroundStyle(Theme.Colors.textSecondary)
                                 Text(lastWorkout.name)
                                     .font(Theme.Typography.bodyBold)
                                     .foregroundStyle(Theme.Colors.textPrimary)
                                     .lineLimit(1)
                             }
-                            Spacer()
-                            Text(lastWorkout.date.formatted(date: .abbreviated, time: .omitted))
-                                .font(Theme.Typography.caption)
+                            Spacer(minLength: Theme.Spacing.sm)
+                            Text(lastWorkout.date.formatted(.relative(presentation: .named)))
+                                .font(Theme.Typography.captionStrong)
                                 .foregroundStyle(Theme.Colors.textTertiary)
+                                .lineLimit(1)
                             Image(systemName: "chevron.right")
                                 .font(Theme.Typography.caption2Bold)
                                 .foregroundStyle(Theme.Colors.textTertiary)
                         }
-                        .padding(.horizontal, Theme.Spacing.lg)
+                        .padding(.horizontal, Theme.Spacing.md)
                         .padding(.vertical, Theme.Spacing.md)
-                        .glassBackground(opacity: 0.1, cornerRadius: Theme.CornerRadius.xlarge, elevation: 1)
+                        .softCard(elevation: 1)
+                        .contentShape(.rect)
                     }
                 )
-                .buttonStyle(.plain)
+                .buttonStyle(PressableCardButtonStyle())
                 .padding(.horizontal, Theme.Spacing.lg)
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel("Repeat last workout: \(lastWorkout.name)")
                 .accessibilityHint("Double tap to start this workout again")
                 .animateOnAppear(delay: 0.1)
             }
-
-            // Health already has a persistent status entry in the header and its own tab.
-            // Keep this row focused on the only distinct secondary action.
-            SecondaryChip(title: "Import workout history", icon: "arrow.down.to.line") {
-                showingImportWizard = true
-            }
-            .padding(.horizontal, Theme.Spacing.lg)
-            .animateOnAppear(delay: 0.15)
         }
     }
 
-    private var primarySessionActionTitle: String {
-        if let activeSession = sessionManager.activeSession {
-            return "Resume \(activeSession.name)"
-        }
-        return "Start a Session"
+    private var currentWeekBucket: HomeWeekBucket? {
+        cachedWeekBuckets.first { $0.isCurrentWeek }
     }
 
-    private var primarySessionActionLabel: some View {
-        HStack(spacing: Theme.Spacing.sm) {
-            Image(systemName: sessionManager.activeSession == nil ? "bolt.fill" : "play.fill")
-                .font(Theme.Typography.title4Bold)
-            Text(primarySessionActionTitle)
-                .font(Theme.Typography.headline)
-                .lineLimit(2)
-        }
+    private var currentWeekTrainedDays: Set<Date> {
+        let calendar = Calendar.current
+        return Set((currentWeekBucket?.workouts ?? []).map { calendar.startOfDay(for: $0.date) })
     }
 
     // MARK: - Weekly Summary
 
     private var weeklySummarySection: some View {
-        let streak = cachedCurrentWeekStreak
         let buckets = cachedWeekBuckets
         let selectedBucket = selectedWeekBucket ?? buckets.first
 
-        return VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("Week View")
-                    .font(Theme.Typography.sectionHeader2)
-                    .foregroundColor(Theme.Colors.textPrimary)
-                Spacer()
-                if streak > 0 {
-                    HStack(spacing: 5) {
-                        Image(systemName: "flame.fill")
-                            .font(Theme.Typography.caption2Bold)
-                        Text("\(streak)w streak")
-                            .font(Theme.Typography.captionBold)
-                    }
-                    .foregroundStyle(Theme.Colors.accentSecondary)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(
-                        Capsule()
-                            .fill(Theme.Colors.accentSecondary.opacity(0.1))
-                    )
-                }
-            }
+        return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            SectionHeading(
+                title: "Week by Week",
+                subtitle: buckets.count > 1 ? "Swipe to look back" : nil
+            )
 
             if selectedBucket != nil {
                 ScrollView(.horizontal) {
@@ -575,6 +529,8 @@ struct HomeView: View {
                     value: selectedWeekBucketStart
                 )
                 .accessibilityLabel("Weekly summaries")
+                .padding(Theme.Spacing.lg)
+                .softCard(elevation: 2)
 
                 if buckets.count > 1 {
                     HStack(spacing: Theme.Spacing.sm) {
@@ -594,11 +550,10 @@ struct HomeView: View {
                         }
                     }
                     .frame(maxWidth: .infinity)
+                    .padding(.top, -Theme.Spacing.sm)
                 }
             }
         }
-        .padding(Theme.Spacing.lg)
-        .glassBackground(opacity: 0.1, cornerRadius: Theme.CornerRadius.large, elevation: 2)
         .animateOnAppear(delay: 0.15)
     }
 
@@ -669,12 +624,8 @@ struct HomeView: View {
     // MARK: - Recent Workouts
 
     private var recentWorkoutsSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("Recent Workouts")
-                    .font(Theme.Typography.sectionHeader2)
-                    .foregroundColor(Theme.Colors.textPrimary)
-                Spacer()
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            SectionHeading(title: "Recent Workouts") {
                 NavigationLink(destination: WorkoutHistoryView(workouts: dataManager.workouts, showsBackButton: true)) {
                     HStack(spacing: 4) {
                         Text("See All")
@@ -683,10 +634,16 @@ struct HomeView: View {
                             .font(Theme.Typography.microLabel)
                     }
                     .foregroundColor(Theme.Colors.accent)
+                    .padding(.horizontal, Theme.Spacing.md)
+                    .padding(.vertical, 7)
+                    .background(Capsule().fill(Theme.Colors.accentTint))
+                    .frame(minHeight: Theme.Layout.minimumTapTarget)
+                    .contentShape(.rect)
                 }
+                .buttonStyle(AppInteractionButtonStyle())
             }
 
-            VStack(spacing: Theme.Spacing.md) {
+            VStack(spacing: Theme.Spacing.sm) {
                 ForEach(Array(dataManager.workouts.prefix(3).enumerated()), id: \.element.id) { _, workout in
                     HomeWorkoutRow(
                         workout: workout,
@@ -702,10 +659,8 @@ struct HomeView: View {
     // MARK: - Explore
 
     private var exploreSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-            Text("Explore")
-                .font(Theme.Typography.sectionHeader2)
-                .foregroundColor(Theme.Colors.textPrimary)
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            SectionHeading(title: "Explore", subtitle: "Dig into trends, lifts, and recovery")
 
             LazyVGrid(
                 columns: [

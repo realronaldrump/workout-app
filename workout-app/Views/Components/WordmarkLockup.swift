@@ -27,18 +27,24 @@ struct WordmarkLockup: View {
                 .textCase(.uppercase)
                 .tracking(2.0)
 
-            VStack(spacing: 0) {
+            // Mirrors the app icon: BIG / BEAUTIFUL on a band / WORKOUT APP.
+            VStack(alignment: alignment, spacing: 4) {
                 ViewThatFits(in: .horizontal) {
-                    Text("BIG BEAUTIFUL")
+                    Text("BIG")
                         .font(Theme.Typography.wordmarkHuge)
 
-                    Text("BIG BEAUTIFUL")
+                    Text("BIG")
                         .font(Theme.Typography.wordmarkHugeCompact)
                 }
                 .tracking(1.5)
                 .foregroundStyle(primaryText)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
+
+                ViewThatFits(in: .horizontal) {
+                    bandWord(font: Theme.Typography.wordmarkHuge)
+                    bandWord(font: Theme.Typography.wordmarkHugeCompact)
+                }
 
                 ViewThatFits(in: .horizontal) {
                     Text("WORKOUT APP")
@@ -63,6 +69,21 @@ struct WordmarkLockup: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Davis's Big Beautiful Workout App. \(tagline)")
+    }
+
+    private func bandWord(font: Font) -> some View {
+        Text("BEAUTIFUL")
+            .font(font)
+            .tracking(1.5)
+            .foregroundStyle(isOnSplash ? Theme.Colors.onHeroAccent : Color.white)
+            .lineLimit(1)
+            .minimumScaleFactor(0.75)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 2)
+            .background(
+                Rectangle()
+                    .fill(isOnSplash ? Color.white : Theme.Colors.brandBand)
+            )
     }
 }
 

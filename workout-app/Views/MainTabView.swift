@@ -174,7 +174,7 @@ struct MainTabView: View {
                     )
                 }
                 .tabItem {
-                    Label("Today", systemImage: "chart.bar.fill")
+                    Label("Today", systemImage: "dumbbell.fill")
                 }
                 .tag(AppTab.today)
 
@@ -188,7 +188,7 @@ struct MainTabView: View {
                     HistoryTabView(dataManager: dataManager)
                 }
                 .tabItem {
-                    Label("History", systemImage: "clock.fill")
+                    Label("History", systemImage: "clock.arrow.circlepath")
                 }
                 .tag(AppTab.history)
 
@@ -200,7 +200,7 @@ struct MainTabView: View {
                     )
                 }
                 .tabItem {
-                    Label("More", systemImage: "ellipsis.circle.fill")
+                    Label("More", systemImage: "person.crop.circle.fill")
                 }
                 .tag(AppTab.more)
             }

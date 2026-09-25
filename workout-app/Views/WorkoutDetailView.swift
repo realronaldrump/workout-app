@@ -300,13 +300,43 @@ struct WorkoutDetailView: View {
     }
 
     private func workoutHeader(_ workout: Workout) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            HStack(spacing: Theme.Spacing.sm) {
+                BrandBandLabel(
+                    text: workout.date.formatted(.dateTime.weekday(.wide)),
+                    systemImage: "calendar"
+                )
+
+                if !personalRecordExerciseIDs.isEmpty {
+                    let count = personalRecordExerciseIDs.count
+                    HStack(spacing: 4) {
+                        Image(systemName: "trophy.fill")
+                            .font(Theme.Typography.microLabel)
+                        Text(count == 1 ? "1 PR" : "\(count) PRs")
+                            .font(Theme.Typography.bandLabel)
+                            .textCase(.uppercase)
+                            .tracking(1.1)
+                    }
+                    .foregroundStyle(Theme.Colors.gold)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(
+                        RoundedRectangle(cornerRadius: 3, style: .continuous)
+                            .fill(Theme.Colors.gold.opacity(Theme.Opacity.mediumFill))
+                    )
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel(count == 1 ? "1 personal record" : "\(count) personal records")
+                }
+            }
+
             Text(workout.name)
-                .font(Theme.Typography.screenTitle)
+                .font(Theme.Typography.displayHeroCompact)
                 .foregroundStyle(Theme.Colors.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
 
             Text(workoutDateTimeToolbarText(for: workout.date))
-                .font(Theme.Typography.microcopy)
+                .font(Theme.Typography.captionStrong)
                 .foregroundStyle(Theme.Colors.textSecondary)
         }
     }
@@ -362,15 +392,20 @@ struct WorkoutDetailView: View {
     private func summaryStat(title: String, value: String) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
             Text(title)
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Colors.textTertiary)
+                .sectionHeaderStyle()
             Text(value)
-                .font(Theme.Typography.title3)
+                .font(Theme.Typography.title2)
                 .foregroundStyle(Theme.Colors.textPrimary)
                 .lineLimit(2)
+                .minimumScaleFactor(0.8)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Theme.Spacing.md)
+        .background(
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
+                .fill(Theme.Colors.surfaceRaised)
+        )
     }
 
     @ViewBuilder

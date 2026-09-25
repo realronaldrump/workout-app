@@ -64,61 +64,49 @@ struct WorkoutSessionView: View {
                         LazyVStack(alignment: .leading, spacing: Theme.Spacing.xl) {
                             headerCard(session)
 
-                            // Rest timer
-                            RestTimerCard(
-                                timer: sessionManager.restTimer,
-                                onExtendThirtySeconds: {
-                                    sessionManager.extendRestTimer(by: 30)
-                                    Haptics.selection()
-                                },
-                                onShowSettings: {
-                                    showingRestSettings = true
-                                    Haptics.selection()
-                                },
-                                onCancel: {
-                                    sessionManager.cancelRestTimer()
-                                    Haptics.selection()
-                                }
-                            )
-
-                            if !cachedMuscleSuggestions.isEmpty {
-                                muscleSuggestionSection(cachedMuscleSuggestions)
-                            }
-
-                            addExerciseButton
-
                             VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-                                Text("Exercises")
-                                    .font(Theme.Typography.sectionHeader)
-                                    .foregroundColor(Theme.Colors.textPrimary)
-                                    .tracking(1.0)
+                                SectionHeading(
+                                    title: "Exercises",
+                                    subtitle: session.exercises.isEmpty ? nil : exercisesSubtitle(session)
+                                )
 
                                 if session.exercises.isEmpty {
                                     EmptyStateCard(
-                                        icon: "plus.circle",
+                                        icon: "dumbbell.fill",
                                         tint: Theme.Colors.accent,
-                                        title: "No Exercises Yet",
+                                        title: "Let's Get Moving",
                                         message: "Add your first exercise to start logging sets."
                                     )
-                                    .padding(.top, Theme.Spacing.sm)
                                 } else {
-                                    LazyVStack(spacing: Theme.Spacing.md) {
+                                    LazyVStack(spacing: Theme.Spacing.lg) {
                                         ForEach(session.exercises) { exercise in
                                             SessionExerciseCard(
                                                 exercise: exercise,
                                                 context: exerciseCardContexts[exercise.name],
                                                 weightUnit: weightUnit,
                                                 weightIncrement: resolvedWeightIncrement,
-                                                    dataManager: dataManager,
-                                                    annotationsManager: annotationsManager,
-                                                    gymProfilesManager: gymProfilesManager,
-                                                    sessionManager: sessionManager
+                                                dataManager: dataManager,
+                                                annotationsManager: annotationsManager,
+                                                gymProfilesManager: gymProfilesManager,
+                                                sessionManager: sessionManager
                                             )
+                                            .transition(.asymmetric(
+                                                insertion: .move(edge: .bottom).combined(with: .opacity),
+                                                removal: .opacity.combined(with: .scale(scale: 0.96))
+                                            ))
                                         }
                                     }
+                                    .animation(Theme.Animation.spring, value: session.exercises.map(\.id))
                                 }
                             }
 
+                            // Add sits after the list so the next exercise is added where the
+                            // lifter already is, instead of scrolling back to the top.
+                            addExerciseButton
+
+                            if !cachedMuscleSuggestions.isEmpty {
+                                muscleSuggestionSection(cachedMuscleSuggestions)
+                            }
                         }
                         .padding(Theme.Spacing.xl)
                         .contentColumn()
@@ -141,7 +129,29 @@ struct WorkoutSessionView: View {
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if sessionManager.activeSession != nil {
-                    finishBar
+                    VStack(spacing: 0) {
+                        // The rest timer rides above the finish bar so it stays visible no
+                        // matter how far down the exercise list the lifter has scrolled.
+                        RestTimerCard(
+                            timer: sessionManager.restTimer,
+                            onExtendThirtySeconds: {
+                                sessionManager.extendRestTimer(by: 30)
+                                Haptics.selection()
+                            },
+                            onShowSettings: {
+                                showingRestSettings = true
+                                Haptics.selection()
+                            },
+                            onCancel: {
+                                sessionManager.cancelRestTimer()
+                                Haptics.selection()
+                            }
+                        )
+                        .contentColumn(maxWidth: 640, alignment: .center)
+                        .padding(.horizontal, Theme.Spacing.lg)
+
+                        finishBar
+                    }
                 }
             }
             .sheet(isPresented: $showingExercisePicker) {
@@ -296,12 +306,20 @@ struct WorkoutSessionView: View {
             Spacer(minLength: Theme.Spacing.sm)
 
             if let session = sessionManager.activeSession {
-                Text(session.startedAt, style: .timer)
-                    .font(Theme.Typography.captionBold)
-                    .monospacedDigit()
-                    .foregroundStyle(Theme.Colors.textSecondary)
-                    .padding(.horizontal, Theme.Spacing.sm)
-                    .frame(minHeight: Theme.Layout.minimumTapTarget)
+                HStack(spacing: Theme.Spacing.xs) {
+                    LivePulseDot(color: Theme.Colors.success, size: 7)
+                        .frame(width: 14, height: 14)
+                    Text(session.startedAt, style: .timer)
+                        .font(Theme.Typography.headline)
+                        .monospacedDigit()
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                }
+                .padding(.horizontal, Theme.Spacing.md)
+                .frame(minHeight: 36)
+                .background(Capsule().fill(Theme.Colors.surfaceRaised))
+                .overlay(Capsule().strokeBorder(Theme.Colors.border.opacity(0.5), lineWidth: 1))
+                .frame(minHeight: Theme.Layout.minimumTapTarget)
+                .accessibilityElement(children: .combine)
                 .accessibilityLabel("Elapsed time")
             }
 
@@ -370,21 +388,45 @@ struct WorkoutSessionView: View {
             Haptics.selection()
         } label: {
             HStack(spacing: Theme.Spacing.md) {
-                Image(systemName: "plus.circle.fill")
-                    .font(Theme.Iconography.action)
-                    .foregroundStyle(Theme.Colors.accent)
-                Text("Add Exercise")
+                Image(systemName: "plus")
                     .font(Theme.Typography.headline)
-                    .foregroundColor(Theme.Colors.textPrimary)
+                    .foregroundStyle(.white)
+                    .frame(width: 36, height: 36)
+                    .background(Circle().fill(Theme.accentGradient))
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Add Exercise")
+                        .font(Theme.Typography.headline)
+                        .foregroundColor(Theme.Colors.textPrimary)
+                    Text("Search, pick a favorite, or create a new one")
+                        .font(Theme.Typography.caption)
+                        .foregroundColor(Theme.Colors.textSecondary)
+                }
                 Spacer()
-                Image(systemName: "chevron.right")
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textTertiary)
             }
             .padding(Theme.Spacing.lg)
-            .softCard(elevation: 1)
+            .background(
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
+                    .fill(Theme.Colors.accentTint.opacity(0.6))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
+                    .strokeBorder(
+                        Theme.Colors.accent.opacity(0.45),
+                        style: StrokeStyle(lineWidth: 1.5, dash: [6, 5])
+                    )
+            )
+            .contentShape(.rect)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableCardButtonStyle())
+    }
+
+    private func exercisesSubtitle(_ session: ActiveWorkoutSession) -> String {
+        let totalSets = session.exercises.reduce(0) { $0 + $1.sets.count }
+        let doneSets = session.exercises.reduce(0) { total, exercise in
+            total + exercise.sets.filter(\.isCompleted).count
+        }
+        return "\(doneSets) of \(SharedFormatters.count(totalSets, "set")) done"
     }
 
     // MARK: - Auto-Prefill Helper
@@ -412,7 +454,45 @@ struct WorkoutSessionView: View {
     }
 
     private func headerCard(_ session: ActiveWorkoutSession) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+        let totalSets = session.exercises.reduce(0) { $0 + $1.sets.count }
+        let doneSets = session.exercises.reduce(0) { total, exercise in
+            total + exercise.sets.filter(\.isCompleted).count
+        }
+        let fraction = totalSets > 0 ? Double(doneSets) / Double(totalSets) : 0
+
+        return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            HStack(alignment: .center, spacing: Theme.Spacing.sm) {
+                BrandBandLabel(text: "Live session", systemImage: "bolt.fill")
+
+                Spacer(minLength: Theme.Spacing.sm)
+
+                Button {
+                    showingGymPicker = true
+                    Haptics.selection()
+                } label: {
+                    HStack(spacing: Theme.Spacing.xs) {
+                        Image(systemName: "mappin.and.ellipse")
+                            .accessibilityHidden(true)
+                        Text(gymLabel(for: session.gymProfileId))
+                            .lineLimit(1)
+                        Image(systemName: "chevron.down")
+                            .font(Theme.Typography.microLabel)
+                            .accessibilityHidden(true)
+                    }
+                    .font(Theme.Typography.captionBold)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .padding(.horizontal, Theme.Spacing.sm + 2)
+                    .padding(.vertical, 6)
+                    .background(Capsule().fill(Theme.Colors.surfaceRaised))
+                    .overlay(Capsule().strokeBorder(Theme.Colors.border.opacity(0.6), lineWidth: 1))
+                    .frame(minHeight: Theme.Layout.minimumTapTarget)
+                    .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Gym, \(gymLabel(for: session.gymProfileId))")
+                .accessibilityHint("Changes the gym for this workout")
+            }
+
             Button {
                 renameText = session.name
                 showingRenameAlert = true
@@ -420,10 +500,11 @@ struct WorkoutSessionView: View {
             } label: {
                 HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.sm) {
                     Text(session.name)
-                        .font(Theme.Typography.title3)
+                        .font(Theme.Typography.displayHeroCompact)
                         .foregroundStyle(Theme.Colors.textPrimary)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
+                        .minimumScaleFactor(0.8)
                     Image(systemName: "pencil")
                         .font(Theme.Typography.captionBold)
                         .foregroundStyle(Theme.Colors.textTertiary)
@@ -436,40 +517,65 @@ struct WorkoutSessionView: View {
             .accessibilityLabel("Workout name, \(session.name)")
             .accessibilityHint("Renames this workout")
 
-            Button {
-                showingGymPicker = true
-                Haptics.selection()
-            } label: {
-                HStack(spacing: Theme.Spacing.xs) {
-                    Label(gymLabel(for: session.gymProfileId), systemImage: "mappin.and.ellipse")
-                    Image(systemName: "chevron.down")
-                        .font(Theme.Typography.caption2Bold)
-                        .accessibilityHidden(true)
-                }
-                .font(Theme.Typography.captionBold)
-                .foregroundStyle(Theme.Colors.textSecondary)
-                .frame(minHeight: Theme.Layout.minimumTapTarget)
-                .contentShape(.rect)
+            HStack(spacing: Theme.Spacing.sm) {
+                sessionStat(
+                    title: "Sets",
+                    value: totalSets > 0 ? "\(doneSets)/\(totalSets)" : "0",
+                    numeric: Double(doneSets)
+                )
+                sessionStat(
+                    title: "Volume",
+                    value: cachedSummary.strengthVolume > 0
+                        ? SharedFormatters.volumeCompact(cachedSummary.strengthVolume)
+                        : "0",
+                    numeric: cachedSummary.strengthVolume
+                )
+                sessionStat(
+                    title: "Exercises",
+                    value: "\(session.exercises.count)",
+                    numeric: Double(session.exercises.count)
+                )
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Gym, \(gymLabel(for: session.gymProfileId))")
-            .accessibilityHint("Changes the gym for this workout")
+
+            if totalSets > 0 {
+                SessionProgressBar(fraction: fraction)
+                    .accessibilityElement()
+                    .accessibilityLabel("Session progress")
+                    .accessibilityValue("\(doneSets) of \(totalSets) sets complete")
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, Theme.Spacing.lg)
-        .padding(.vertical, Theme.Spacing.md)
-        .softCard(elevation: 1)
+        .padding(Theme.Spacing.lg)
+        .softCard(elevation: 2)
+    }
+
+    private func sessionStat(title: String, value: String, numeric: Double) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(value)
+                .font(Theme.Typography.title2)
+                .foregroundStyle(Theme.Colors.textPrimary)
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .contentTransition(.numericText(value: numeric))
+                .animation(Theme.Animation.spring, value: numeric)
+            Text(title)
+                .sectionHeaderStyle()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, Theme.Spacing.md)
+        .padding(.vertical, Theme.Spacing.sm)
+        .background(
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
+                .fill(Theme.Colors.surfaceRaised)
+        )
+        .accessibilityElement(children: .combine)
     }
 
     private func muscleSuggestionSection(_ suggestions: [MuscleGroupSuggestion]) -> some View {
         return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             HStack {
-                Text("Suggestions")
-                    .font(Theme.Typography.sectionHeader)
-                    .foregroundColor(Theme.Colors.textPrimary)
-                    .tracking(1.0)
-
-                Spacer()
+                SectionHeading(title: "Up Next Ideas", subtitle: "Muscles you haven't hit lately")
 
                 Button("Dismiss all") {
                     for suggestion in suggestions {
@@ -777,89 +883,200 @@ private struct RestTimerCard: View {
     let onShowSettings: () -> Void
     let onCancel: () -> Void
 
-    var body: some View {
-        if timer.isActive {
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: Theme.Spacing.md) {
-                    timerSummary
-                    Spacer(minLength: Theme.Spacing.sm)
-                    timerControls
-                }
-
-                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                    timerSummary
-                    timerControls
-                        .frame(maxWidth: .infinity, alignment: .trailing)
-                }
-            }
-            .padding(Theme.Spacing.lg)
-            .softCard(elevation: 1)
-            .accessibilityElement(children: .contain)
-            .accessibilityLabel("Rest timer, \(restTimerFormatted(timer.secondsRemaining)) remaining")
-        }
+    private var isEnding: Bool {
+        timer.secondsRemaining <= 10
     }
 
-    private var timerSummary: some View {
-        HStack(spacing: Theme.Spacing.md) {
-            ZStack {
-                let remaining = timer.secondsRemaining
-                let progress = timer.currentTotal > 0 ? min(1, Double(remaining) / Double(timer.currentTotal)) : 0
+    private var tint: Color {
+        isEnding ? Theme.Colors.accentSecondary : Theme.Colors.accent
+    }
 
+    private var progress: Double {
+        guard timer.currentTotal > 0 else { return 0 }
+        return min(1, Double(timer.secondsRemaining) / Double(timer.currentTotal))
+    }
+
+    var body: some View {
+        ZStack {
+            if timer.isActive {
+                ViewThatFits(in: .horizontal) {
+                    dock(compact: false)
+                    dock(compact: true)
+                }
+                .padding(.bottom, Theme.Spacing.sm)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(reduceMotion ? nil : Theme.Animation.spring, value: timer.isActive)
+    }
+
+    private func dock(compact: Bool) -> some View {
+        HStack(spacing: compact ? Theme.Spacing.sm : Theme.Spacing.md) {
+            ZStack {
                 Circle()
-                    .stroke(Theme.Colors.border, lineWidth: 3)
+                    .stroke(tint.opacity(0.18), lineWidth: 4)
                 Circle()
                     .trim(from: 0, to: progress)
-                    .stroke(
-                        remaining <= 10 ? Theme.Colors.accentSecondary : Theme.Colors.accent,
-                        style: StrokeStyle(lineWidth: 3, lineCap: .round)
-                    )
+                    .stroke(tint, style: StrokeStyle(lineWidth: 4, lineCap: .round))
                     .rotationEffect(.degrees(-90))
-                    .animation(reduceMotion ? nil : .linear(duration: 1), value: remaining)
-                Text("\(remaining)")
-                    .font(Theme.Typography.monoMedium)
-                    .foregroundStyle(remaining <= 10 ? Theme.Colors.accentSecondary : Theme.Colors.accent)
+                    .animation(reduceMotion ? nil : .linear(duration: 1), value: timer.secondsRemaining)
+                Image(systemName: "timer")
+                    .font(Theme.Typography.subheadlineBold)
+                    .foregroundStyle(tint)
+                    .symbolEffect(.pulse, isActive: isEnding && !reduceMotion)
             }
-            .frame(width: 48, height: 48)
+            .frame(width: 44, height: 44)
             .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Rest")
-                    .font(Theme.Typography.captionBold)
-                    .foregroundStyle(Theme.Colors.textSecondary)
+            VStack(alignment: .leading, spacing: 0) {
+                if !compact {
+                    Text(isEnding ? "Almost up" : "Resting")
+                        .font(Theme.Typography.caption2Bold)
+                        .textCase(.uppercase)
+                        .tracking(0.8)
+                        .foregroundStyle(tint)
+                }
                 Text(restTimerFormatted(timer.secondsRemaining))
-                    .font(Theme.Typography.monoMedium)
+                    .font(Theme.Typography.title2)
+                    .monospacedDigit()
                     .foregroundStyle(Theme.Colors.textPrimary)
+                    .contentTransition(.numericText(countsDown: true))
+                    .animation(reduceMotion ? nil : .snappy, value: timer.secondsRemaining)
             }
-        }
-    }
+            .fixedSize()
 
-    private var timerControls: some View {
-        HStack(spacing: Theme.Spacing.xs) {
-            Button("Add 30 seconds", systemImage: "plus") {
-                onExtendThirtySeconds()
+            Spacer(minLength: 0)
+
+            Button(action: onExtendThirtySeconds) {
+                Text("+30s")
+                    .font(Theme.Typography.subheadlineBold)
+                    .foregroundStyle(Theme.Colors.accent)
+                    .padding(.horizontal, Theme.Spacing.md)
+                    .frame(minHeight: 36)
+                    .background(Capsule().fill(Theme.Colors.accentTint))
+                    .frame(minHeight: Theme.Layout.minimumTapTarget)
+                    .contentShape(.rect)
             }
-            .labelStyle(.titleAndIcon)
-            .font(Theme.Typography.captionBold)
-            .frame(minHeight: Theme.Layout.minimumTapTarget)
-            .buttonStyle(.bordered)
-            .buttonBorderShape(.capsule)
+            .buttonStyle(AppInteractionButtonStyle())
+            .accessibilityLabel("Add 30 seconds")
 
             Button(action: onShowSettings) {
-                Image(systemName: "gear")
-                    .frame(width: Theme.Layout.minimumTapTarget, height: Theme.Layout.minimumTapTarget)
+                Image(systemName: "gearshape.fill")
+                    .font(Theme.Typography.subheadlineBold)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .frame(width: compact ? 36 : Theme.Layout.minimumTapTarget, height: Theme.Layout.minimumTapTarget)
+                    .contentShape(.rect)
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(Theme.Colors.textSecondary)
+            .buttonStyle(AppInteractionButtonStyle())
             .accessibilityLabel("Rest timer settings")
 
             Button(action: onCancel) {
-                Image(systemName: "xmark")
-                    .frame(width: Theme.Layout.minimumTapTarget, height: Theme.Layout.minimumTapTarget)
+                Group {
+                    if compact {
+                        Image(systemName: "forward.end.fill")
+                    } else {
+                        Text("Skip")
+                    }
+                }
+                .font(Theme.Typography.subheadlineBold)
+                .foregroundStyle(Theme.Colors.textSecondary)
+                .padding(.horizontal, compact ? 0 : Theme.Spacing.xs)
+                .frame(minWidth: compact ? 36 : Theme.Layout.minimumTapTarget, minHeight: Theme.Layout.minimumTapTarget)
+                .contentShape(.rect)
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(Theme.Colors.textSecondary)
-            .accessibilityLabel("Cancel rest timer")
+            .buttonStyle(AppInteractionButtonStyle())
+            .accessibilityLabel("Skip rest")
         }
+        .padding(.leading, Theme.Spacing.sm)
+        .padding(.trailing, Theme.Spacing.xs)
+        .padding(.vertical, Theme.Spacing.xs)
+        .glassBackground(
+            opacity: 0.22,
+            cornerRadius: Theme.CornerRadius.xlarge,
+            elevation: 2,
+            interactive: true
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge, style: .continuous)
+                .strokeBorder(tint.opacity(isEnding ? 0.5 : 0.2), lineWidth: 1)
+        )
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Rest timer, \(restTimerFormatted(timer.secondsRemaining)) remaining")
+    }
+}
+
+/// Thin gradient bar that fills as sets are completed; turns green when all are done.
+private struct SessionProgressBar: View {
+    let fraction: Double
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var clamped: Double {
+        min(max(fraction.isFinite ? fraction : 0, 0), 1)
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(Theme.Colors.border.opacity(0.45))
+                Capsule()
+                    .fill(clamped >= 1 ? AnyShapeStyle(Theme.successGradient) : AnyShapeStyle(Theme.accentGradient))
+                    .frame(width: clamped > 0 ? max(proxy.size.width * CGFloat(clamped), 8) : 0)
+            }
+        }
+        .frame(height: 8)
+        .animation(reduceMotion ? nil : Theme.Animation.spring, value: clamped)
+    }
+}
+
+/// Set number that flips to a green check when the set is logged.
+private struct SetCompletionBadge: View {
+    let order: Int
+    let isCompleted: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private static let completedFill = LinearGradient(
+        colors: [
+            Color(uiColor: UIColor(hex: 0x22C55E)),
+            Color(uiColor: UIColor(hex: 0x15803D))
+        ],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(isCompleted ? AnyShapeStyle(Self.completedFill) : AnyShapeStyle(Color.clear))
+            if !isCompleted {
+                Circle()
+                    .strokeBorder(
+                        Theme.Colors.textTertiary.opacity(0.7),
+                        style: StrokeStyle(lineWidth: 2, dash: [3, 3])
+                    )
+            }
+            if isCompleted {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 15, weight: .heavy))
+                    .foregroundStyle(.white)
+                    .transition(.scale(scale: 0.4).combined(with: .opacity))
+            } else {
+                Text("\(order)")
+                    .font(Theme.Typography.subheadlineBold)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .transition(.opacity)
+            }
+        }
+        .frame(width: 36, height: 36)
+        .scaleEffect(isCompleted || reduceMotion ? 1 : 0.94)
+        .shadow(
+            color: isCompleted ? Color(uiColor: UIColor(hex: 0x16A34A)).opacity(0.35) : .clear,
+            radius: 6,
+            x: 0,
+            y: 3
+        )
+        .animation(reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.55), value: isCompleted)
+        .accessibilityHidden(true)
     }
 }
 
@@ -947,18 +1164,28 @@ private struct SessionExerciseCard: View {
         let isCardio = context?.isCardio ?? false
         let cardioConfig = context?.cardioConfig
 
+        let historicalBest = historicalBestWeight
+        let prSetID = personalRecordSetID(historicalBest: historicalBest)
+
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             HStack(alignment: .top, spacing: Theme.Spacing.md) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(exercise.name)
-                        .font(Theme.Typography.condensed)
-                        .tracking(-0.2)
-                        .foregroundColor(Theme.Colors.textPrimary)
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.sm) {
+                        Text(exercise.name)
+                            .font(Theme.Typography.title4Bold)
+                            .foregroundColor(Theme.Colors.textPrimary)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        if !exercise.sets.isEmpty {
+                            setProgressChip
+                        }
+                    }
 
                     if let rec {
-                        Text(recommendationLine(rec))
+                        Label(recommendationLine(rec), systemImage: "scope")
+                            .labelStyle(.titleAndIcon)
                             .font(Theme.Typography.captionBold)
-                            .foregroundColor(Theme.Colors.textSecondary)
+                            .foregroundColor(Theme.Colors.accent)
                     } else if isCardio {
                         Text("Cardio")
                             .font(Theme.Typography.captionBold)
@@ -972,14 +1199,18 @@ private struct SessionExerciseCard: View {
                     if let rec, !rec.warmup.isEmpty {
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: Theme.Spacing.xs) {
+                                Text("Warm-up")
+                                    .font(Theme.Typography.caption2Bold)
+                                    .foregroundColor(Theme.Colors.accentSecondary)
                                 ForEach(Array(rec.warmup.enumerated()), id: \.offset) { _, item in
                                     Text("\(formatWeight(item.weight)) × \(item.reps)")
-                                        .font(Theme.Typography.microcopy)
+                                        .font(Theme.Typography.caption2Bold)
+                                        .monospacedDigit()
                                         .foregroundColor(Theme.Colors.textSecondary)
                                         .padding(.horizontal, Theme.Spacing.sm)
-                                        .padding(.vertical, 6)
-                                        .background(Theme.Colors.surface.opacity(0.35))
-                                        .cornerRadius(Theme.CornerRadius.large)
+                                        .padding(.vertical, 4)
+                                        .background(Capsule().fill(Theme.Colors.accentSecondary.opacity(Theme.Opacity.subtleFill)))
+                                        .overlay(Capsule().strokeBorder(Theme.Colors.accentSecondary.opacity(0.2), lineWidth: 1))
                                 }
                             }
                         }
@@ -1048,8 +1279,14 @@ private struct SessionExerciseCard: View {
                             : nil,
                         weightUnit: weightUnit,
                         weightIncrement: weightIncrement,
-                        cardioConfig: cardioConfig
+                        cardioConfig: cardioConfig,
+                        isPersonalBest: prSetID == set.id,
+                        personalBestThreshold: personalBestThreshold(excluding: set.id, historicalBest: historicalBest)
                     )
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .top).combined(with: .opacity),
+                        removal: .opacity
+                    ))
                 }
             }
 
@@ -1075,17 +1312,25 @@ private struct SessionExerciseCard: View {
                 } label: {
                     Label("Add Set", systemImage: "plus")
                         .font(Theme.Typography.subheadlineStrong)
-                        .frame(minHeight: Theme.Layout.minimumTapTarget)
+                        .foregroundStyle(Theme.Colors.accent)
+                        .frame(maxWidth: .infinity, minHeight: Theme.Layout.minimumTapTarget)
+                        .background(
+                            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
+                                .fill(Theme.Colors.accentTint)
+                        )
+                        .contentShape(.rect)
                 }
-                .buttonStyle(.borderedProminent)
-                .buttonBorderShape(.roundedRectangle(radius: Theme.CornerRadius.large))
-                .tint(Theme.Colors.accentSecondary)
-
-                Spacer()
+                .buttonStyle(AppInteractionButtonStyle())
             }
         }
+        .animation(Theme.Animation.spring, value: exercise.sets.map(\.id))
         .padding(Theme.Spacing.lg)
         .softCard(elevation: 2)
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
+                .strokeBorder(Theme.Colors.success.opacity(isAllSetsDone ? 0.55 : 0), lineWidth: 1.5)
+        )
+        .animation(Theme.Animation.spring, value: isAllSetsDone)
         .navigationDestination(isPresented: $showingHistory) {
             ExerciseDetailView(
                 exerciseName: exercise.name,
@@ -1102,6 +1347,80 @@ private struct SessionExerciseCard: View {
         } message: {
             Text("This will remove \(exercise.name) and all of its sets from the current session.")
         }
+    }
+
+    private var completedSetCount: Int {
+        exercise.sets.filter(\.isCompleted).count
+    }
+
+    private var isAllSetsDone: Bool {
+        !exercise.sets.isEmpty && completedSetCount == exercise.sets.count
+    }
+
+    private var setProgressChip: some View {
+        HStack(spacing: 3) {
+            if isAllSetsDone {
+                Image(systemName: "checkmark")
+                    .font(Theme.Typography.microLabel)
+            }
+            Text("\(completedSetCount)/\(exercise.sets.count)")
+                .contentTransition(.numericText(value: Double(completedSetCount)))
+        }
+        .font(Theme.Typography.caption2Bold)
+        .monospacedDigit()
+        .foregroundStyle(isAllSetsDone ? Theme.Colors.success : Theme.Colors.textSecondary)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 3)
+        .background(
+            Capsule().fill(
+                isAllSetsDone
+                    ? Theme.Colors.success.opacity(Theme.Opacity.mediumFill)
+                    : Theme.Colors.border.opacity(0.4)
+            )
+        )
+        .animation(Theme.Animation.spring, value: completedSetCount)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(completedSetCount) of \(exercise.sets.count) sets complete")
+    }
+
+    /// Best tracked load from saved history. Nil for cardio or brand-new exercises,
+    /// so a first session never lights up every set as a record.
+    private var historicalBestWeight: Double? {
+        guard context?.isCardio == false, let history = context?.history else { return nil }
+        let weights = history
+            .flatMap(\.sets)
+            .map(\.weight)
+            .filter { ExerciseLoad.isTrackedWeight($0, exerciseName: exercise.name) }
+        return ExerciseLoad.bestWeight(in: weights, exerciseName: exercise.name)
+    }
+
+    private func completedTrackedWeight(_ set: ActiveSet) -> Double? {
+        guard set.isCompleted, (set.reps ?? 0) > 0, let weight = set.weight,
+              ExerciseLoad.isTrackedWeight(weight, exerciseName: exercise.name) else { return nil }
+        return weight
+    }
+
+    /// The single heaviest completed set that beats history (earliest wins ties).
+    private func personalRecordSetID(historicalBest: Double?) -> UUID? {
+        guard let historicalBest else { return nil }
+        var bestID: UUID?
+        var bestWeight = historicalBest
+        for set in exercise.sets.sorted(by: { $0.order < $1.order }) {
+            guard let weight = completedTrackedWeight(set),
+                  ExerciseLoad.isBetter(weight, than: bestWeight, exerciseName: exercise.name) else { continue }
+            bestWeight = weight
+            bestID = set.id
+        }
+        return bestID
+    }
+
+    /// What a set must beat to become the session's new record.
+    private func personalBestThreshold(excluding setID: UUID, historicalBest: Double?) -> Double? {
+        guard let historicalBest else { return nil }
+        let others = exercise.sets
+            .filter { $0.id != setID }
+            .compactMap { completedTrackedWeight($0) }
+        return ExerciseLoad.bestWeight(in: others + [historicalBest], exerciseName: exercise.name)
     }
 
     /// Sets from the most recent saved session of this exercise, in set order.
@@ -1165,8 +1484,11 @@ private struct SessionSetRow: View {
     let weightUnit: String
     let weightIncrement: Double
     let cardioConfig: ResolvedCardioMetricConfiguration?
+    let isPersonalBest: Bool
+    let personalBestThreshold: Double?
 
     @EnvironmentObject private var sessionManager: WorkoutSessionManager
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var weightText: String
     @State private var repsText: String
@@ -1192,8 +1514,12 @@ private struct SessionSetRow: View {
         lastSessionSet: WorkoutSet?,
         weightUnit: String,
         weightIncrement: Double,
-        cardioConfig: ResolvedCardioMetricConfiguration?
+        cardioConfig: ResolvedCardioMetricConfiguration?,
+        isPersonalBest: Bool = false,
+        personalBestThreshold: Double? = nil
     ) {
+        self.isPersonalBest = isPersonalBest
+        self.personalBestThreshold = personalBestThreshold
         self.exerciseId = exerciseId
         self.exerciseName = exerciseName
         self.set = set
@@ -1212,14 +1538,18 @@ private struct SessionSetRow: View {
         VStack(spacing: Theme.Spacing.sm) {
             HStack(spacing: Theme.Spacing.sm) {
                 Button(action: toggleCompletion) {
-                    HStack(spacing: Theme.Spacing.xs) {
-                        Image(systemName: set.isCompleted ? "checkmark.circle.fill" : "circle")
-                            .font(Theme.Typography.title4)
-                            .foregroundStyle(set.isCompleted ? Theme.Colors.success : Theme.Colors.textTertiary)
+                    HStack(spacing: Theme.Spacing.sm) {
+                        SetCompletionBadge(order: set.order, isCompleted: set.isCompleted)
 
-                        Text("Set \(set.order)")
-                            .font(Theme.Typography.captionBold)
-                            .foregroundStyle(Theme.Colors.textPrimary)
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text("Set \(set.order)")
+                                .font(Theme.Typography.captionBold)
+                                .foregroundStyle(Theme.Colors.textPrimary)
+                            Text(set.isCompleted ? "Logged" : "Tap to log")
+                                .font(Theme.Typography.caption2)
+                                .foregroundStyle(set.isCompleted ? Theme.Colors.success : Theme.Colors.textTertiary)
+                                .contentTransition(.opacity)
+                        }
                     }
                     .frame(minHeight: Theme.Layout.minimumTapTarget)
                     .contentShape(.rect)
@@ -1228,20 +1558,33 @@ private struct SessionSetRow: View {
                 .accessibilityLabel(set.isCompleted ? "Set \(set.order), completed" : "Set \(set.order), not completed")
                 .accessibilityHint(set.isCompleted ? "Marks this set incomplete" : "Validates and completes this set")
 
+                if isPersonalBest {
+                    PRMarkerView(date: Date())
+                        .transition(.scale(scale: 0.5).combined(with: .opacity))
+                        .accessibilityLabel("New personal record")
+                }
+
                 Spacer(minLength: Theme.Spacing.sm)
 
-                if let lastSessionSet, cardioConfig == nil, lastSessionSet.reps > 0 {
+                if let lastSessionSet, cardioConfig == nil, lastSessionSet.reps > 0, !set.isCompleted {
                     Button {
                         applyLastSession(lastSessionSet)
                     } label: {
-                        Text("Last: \(WorkoutValueFormatter.weightText(lastSessionSet.weight)) × \(lastSessionSet.reps)")
-                            .font(Theme.Typography.microcopy)
-                            .foregroundStyle(Theme.Colors.textSecondary)
-                            .monospacedDigit()
-                            .lineLimit(1)
-                            .padding(.horizontal, Theme.Spacing.sm)
-                            .frame(minHeight: Theme.Layout.minimumTapTarget)
-                            .contentShape(.rect)
+                        HStack(spacing: 4) {
+                            Image(systemName: "clock.arrow.circlepath")
+                                .font(Theme.Typography.microLabel)
+                                .accessibilityHidden(true)
+                            Text("\(WorkoutValueFormatter.weightText(lastSessionSet.weight)) × \(lastSessionSet.reps)")
+                                .font(Theme.Typography.caption2Bold)
+                                .monospacedDigit()
+                                .lineLimit(1)
+                        }
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                        .padding(.horizontal, Theme.Spacing.sm)
+                        .padding(.vertical, 5)
+                        .background(Capsule().fill(Theme.Colors.border.opacity(0.35)))
+                        .frame(minHeight: Theme.Layout.minimumTapTarget)
+                        .contentShape(.rect)
                     }
                     .buttonStyle(.plain)
                     .disabled(set.isCompleted)
@@ -1277,13 +1620,15 @@ private struct SessionSetRow: View {
         }
         .padding(Theme.Spacing.md)
         .background(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
-                .fill(set.isCompleted ? Theme.Colors.success.opacity(0.08) : Theme.Colors.surface.opacity(0.2))
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
+                .fill(rowFill)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
-                .strokeBorder(Theme.Colors.border.opacity(0.7), lineWidth: 1)
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
+                .strokeBorder(rowStroke, lineWidth: isPersonalBest ? 1.5 : 1)
         )
+        .animation(reduceMotion ? nil : Theme.Animation.spring, value: set.isCompleted)
+        .animation(reduceMotion ? nil : Theme.Animation.bouncy, value: isPersonalBest)
         .toolbar {
             // Only the row being edited contributes keyboard items; otherwise every visible
             // set row adds its own "Done" button to the shared keyboard toolbar.
@@ -1333,6 +1678,16 @@ private struct SessionSetRow: View {
         } message: {
             Text(completionValidationMessage ?? "")
         }
+    }
+
+    private var rowFill: Color {
+        if isPersonalBest { return Theme.Colors.gold.opacity(0.10) }
+        return set.isCompleted ? Theme.Colors.success.opacity(0.08) : Theme.Colors.surfaceRaised
+    }
+
+    private var rowStroke: Color {
+        if isPersonalBest { return Theme.Colors.gold.opacity(0.7) }
+        return set.isCompleted ? Theme.Colors.success.opacity(0.3) : Theme.Colors.border.opacity(0.6)
     }
 
     private enum MetricAxis: Equatable {
@@ -1434,7 +1789,14 @@ private struct SessionSetRow: View {
                 .foregroundStyle(Theme.Colors.accent)
                 .accessibilityLabel("Increase \(title) by \(stepDescription)")
             }
-            .background(Theme.Colors.surface.opacity(0.42), in: RoundedRectangle(cornerRadius: Theme.CornerRadius.medium))
+            .background(Theme.Colors.surface, in: RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
+                    .strokeBorder(
+                        focusedField == focus ? Theme.Colors.accent : Theme.Colors.border.opacity(0.6),
+                        lineWidth: focusedField == focus ? 1.5 : 1
+                    )
+            )
         }
         .frame(maxWidth: .infinity)
         .fixedSize(horizontal: false, vertical: true)
@@ -1452,7 +1814,14 @@ private struct SessionSetRow: View {
                 .foregroundStyle(Theme.Colors.textPrimary)
                 .padding(.horizontal, Theme.Spacing.md)
                 .frame(maxWidth: .infinity, minHeight: Theme.Layout.minimumTapTarget)
-                .background(Theme.Colors.surface.opacity(0.42), in: RoundedRectangle(cornerRadius: Theme.CornerRadius.medium))
+                .background(Theme.Colors.surface, in: RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
+                        .strokeBorder(
+                            focusedField == focus ? Theme.Colors.accent : Theme.Colors.border.opacity(0.6),
+                            lineWidth: focusedField == focus ? 1.5 : 1
+                        )
+                )
         }
         .frame(maxWidth: .infinity)
         .fixedSize(horizontal: false, vertical: true)
@@ -1478,10 +1847,15 @@ private struct SessionSetRow: View {
     private func toggleCompletion() {
         focusedField = nil
         commitImmediately()
+        let wouldSetRecord = !set.isCompleted && beatsPersonalBest()
         switch sessionManager.toggleSetComplete(exerciseId: exerciseId, setId: set.id) {
         case .toggled(let isCompleted):
             if isCompleted {
-                Haptics.setComplete()
+                if wouldSetRecord {
+                    Haptics.notify(.success)
+                } else {
+                    Haptics.setComplete()
+                }
             } else {
                 Haptics.selection()
             }
@@ -1491,6 +1865,16 @@ private struct SessionSetRow: View {
         case .missingSet:
             break
         }
+    }
+
+    /// Uses the field text rather than `set`, which can lag one commit behind.
+    private func beatsPersonalBest() -> Bool {
+        guard cardioConfig == nil,
+              let threshold = personalBestThreshold,
+              let weight = parseDouble(weightText),
+              (parseInt(repsText) ?? 0) > 0,
+              ExerciseLoad.isTrackedWeight(weight, exerciseName: exerciseName) else { return false }
+        return ExerciseLoad.isBetter(weight, than: threshold, exerciseName: exerciseName)
     }
 
     private func adjustWeight(by amount: Double) {

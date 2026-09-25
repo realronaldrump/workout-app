@@ -97,28 +97,52 @@ struct QuickStartView: View {
         let exerciseCount = active.exercises.count
         let setCount = active.exercises.reduce(0) { $0 + $1.sets.count }
 
-        return Section("Current Session") {
-            LabeledContent {
-                Text(active.startedAt, style: .timer)
-                    .monospacedDigit()
-            } label: {
-                Label(active.name, systemImage: "bolt.fill")
-                    .foregroundStyle(Theme.Colors.textPrimary)
-            }
+        return Section {
+            QuickStartHero(band: "In progress", bandIcon: "bolt.fill", title: active.name) {
+                HStack(spacing: Theme.Spacing.sm) {
+                    HStack(spacing: 6) {
+                        LivePulseDot(color: Theme.Colors.success, size: 6)
+                            .frame(width: 12, height: 12)
+                        Text(active.startedAt, style: .timer)
+                            .monospacedDigit()
+                    }
+                    .modifier(QuickStartHeroChip())
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("Elapsed time")
 
-            LabeledContent("Progress", value: "\(SharedFormatters.count(exerciseCount, "exercise")) · \(SharedFormatters.count(setCount, "set"))")
+                    Text("\(SharedFormatters.count(exerciseCount, "exercise")) · \(SharedFormatters.count(setCount, "set"))")
+                        .modifier(QuickStartHeroChip())
+                }
+            }
+            .quickStartHeroRow()
         }
     }
 
     private var readySection: some View {
-        Section("Ready to Go") {
-            LabeledContent("Workout", value: resolvedWorkoutName)
-
-            if let exerciseName, !exerciseName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                LabeledContent("First Exercise", value: exerciseName)
+        Section {
+            QuickStartHero(band: "Ready to go", bandIcon: "flame.fill", title: resolvedWorkoutName) {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: Theme.Spacing.sm) {
+                        readyChips
+                    }
+                    VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                        readyChips
+                    }
+                }
             }
+            .quickStartHeroRow()
+            .accessibilityElement(children: .combine)
+        }
+    }
 
-            LabeledContent("Gym", value: selectedGymLabel)
+    @ViewBuilder
+    private var readyChips: some View {
+        Label(selectedGymLabel, systemImage: "mappin.and.ellipse")
+            .modifier(QuickStartHeroChip())
+
+        if let exerciseName, !exerciseName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            Label("Starts with \(exerciseName)", systemImage: "dumbbell.fill")
+                .modifier(QuickStartHeroChip())
         }
     }
 
@@ -226,5 +250,58 @@ struct QuickStartView: View {
         case 17..<22: return "Evening Workout"
         default: return "Workout"
         }
+    }
+}
+
+/// Brand hero shown at the top of Quick Start.
+private struct QuickStartHero<Detail: View>: View {
+    let band: String
+    let bandIcon: String
+    let title: String
+    @ViewBuilder var detail: () -> Detail
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            BrandBandLabel(
+                text: band,
+                systemImage: bandIcon,
+                fill: .white,
+                textColor: Theme.Colors.onHeroAccent
+            )
+
+            Text(title)
+                .font(Theme.Typography.displayHeroCompact)
+                .foregroundStyle(.white)
+                .lineLimit(2)
+                .minimumScaleFactor(0.75)
+                .fixedSize(horizontal: false, vertical: true)
+
+            detail()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Theme.Spacing.lg)
+        .background(HeroCardBackground(watermark: "bolt.fill"))
+    }
+}
+
+private struct QuickStartHeroChip: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .font(Theme.Typography.captionBold)
+            .foregroundStyle(.white)
+            .lineLimit(1)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Capsule().fill(Color.black.opacity(0.22)))
+    }
+}
+
+private extension View {
+    /// Lets the hero sit edge-to-edge in the form instead of inside a grouped cell.
+    func quickStartHeroRow() -> some View {
+        self
+            .listRowInsets(EdgeInsets())
+            .listRowBackground(Color.clear)
+            .padding(.vertical, Theme.Spacing.xs)
     }
 }

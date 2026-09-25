@@ -86,10 +86,17 @@ struct ActiveSessionBar: View {
 
             Spacer(minLength: Theme.Spacing.sm)
 
-            Label("Resume", systemImage: "chevron.up")
-                .labelStyle(.titleAndIcon)
-                .font(Theme.Typography.subheadlineStrong)
-                .foregroundStyle(Theme.Colors.accentSecondary)
+            HStack(spacing: 4) {
+                Text("Resume")
+                Image(systemName: "chevron.up")
+                    .font(Theme.Typography.caption2Bold)
+            }
+            .font(Theme.Typography.subheadlineBold)
+            .foregroundStyle(.white)
+            .padding(.horizontal, Theme.Spacing.md)
+            .padding(.vertical, 8)
+            .background(Capsule().fill(Theme.accentGradient))
+            .shadow(color: Theme.Colors.accent.opacity(0.3), radius: 6, x: 0, y: 3)
         }
     }
 
@@ -120,7 +127,9 @@ struct ActiveSessionBar: View {
 
             Image(systemName: "chevron.up")
                 .font(Theme.Typography.captionBold)
-                .foregroundStyle(Theme.Colors.accentSecondary)
+                .foregroundStyle(.white)
+                .frame(width: 32, height: 32)
+                .background(Circle().fill(Theme.accentGradient))
                 .accessibilityHidden(true)
         }
     }
@@ -128,9 +137,14 @@ struct ActiveSessionBar: View {
     private var statusIcon: some View {
         Image(systemName: "bolt.fill")
             .font(Theme.Typography.captionBold)
-            .foregroundStyle(Theme.Colors.accentSecondary)
+            .foregroundStyle(Theme.Colors.accent)
             .frame(width: 36, height: 36)
-            .background(Theme.Colors.accentSecondary.opacity(0.14), in: Circle())
+            .background(Theme.Colors.accentTint, in: Circle())
+            .overlay(alignment: .topTrailing) {
+                // Live indicator so a minimized workout reads as "still running".
+                LivePulseDot(color: Theme.Colors.success, size: 7)
+                    .offset(x: 6, y: -6)
+            }
             .accessibilityHidden(true)
     }
 

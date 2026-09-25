@@ -46,11 +46,22 @@ struct EmptyStateCard: View {
                 VStack(spacing: Theme.Spacing.lg) {
                     ZStack {
                         Circle()
-                            .fill(tint.opacity(0.08))
-                            .frame(width: 56, height: 56)
+                            .fill(
+                                RadialGradient(
+                                    colors: [tint.opacity(0.16), tint.opacity(0.02)],
+                                    center: .center,
+                                    startRadius: 4,
+                                    endRadius: 46
+                                )
+                            )
+                            .frame(width: 88, height: 88)
+                        Circle()
+                            .strokeBorder(tint.opacity(0.18), lineWidth: 1)
+                            .frame(width: 64, height: 64)
                         Image(systemName: icon)
-                            .font(Theme.Iconography.title3Strong)
+                            .font(Theme.Iconography.title2Strong)
                             .foregroundStyle(tint)
+                            .symbolRenderingMode(.hierarchical)
                     }
                     .accessibilityHidden(true)
 

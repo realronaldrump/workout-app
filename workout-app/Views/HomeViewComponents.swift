@@ -2,31 +2,276 @@ import SwiftUI
 
 struct HomeEmptyState: View {
     var body: some View {
-        VStack(spacing: Theme.Spacing.lg) {
-            VStack(spacing: Theme.Spacing.md) {
-                ZStack {
-                    Circle()
-                        .fill(Theme.Colors.accent.opacity(0.08))
-                        .frame(width: 80, height: 80)
-                    Image(systemName: "figure.strengthtraining.traditional")
-                        .font(Theme.Iconography.hero)
-                        .foregroundColor(Theme.Colors.accent)
-                }
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            BrandBandLabel(text: "Day one", systemImage: "sparkles")
 
-                Text("You're Ready.")
-                    .font(Theme.Typography.sectionHeader)
-                    .foregroundColor(Theme.Colors.textPrimary)
-                    .tracking(0.8)
+            Text("Let's build something big.")
+                .font(Theme.Typography.displayHeroCompact)
+                .foregroundStyle(Theme.Colors.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
 
-                Text("Your first workout will appear here with a focused weekly summary and useful trends.")
-                    .font(Theme.Typography.body)
-                    .foregroundColor(Theme.Colors.textSecondary)
-                    .multilineTextAlignment(.center)
-                    .lineSpacing(2)
+            Text("Log your first session and this screen fills in with your week, streaks, recovery signals, and the trends that matter.")
+                .font(Theme.Typography.body)
+                .foregroundStyle(Theme.Colors.textSecondary)
+                .lineSpacing(2)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: Theme.Spacing.sm) {
+                emptyFeature(icon: "calendar", title: "Weekly goal", tint: Theme.Colors.accent)
+                emptyFeature(icon: "flame.fill", title: "Streaks", tint: Theme.Colors.accentSecondary)
+                emptyFeature(icon: "trophy.fill", title: "PRs", tint: Theme.Colors.gold)
             }
+            .padding(.top, Theme.Spacing.xs)
         }
         .padding(Theme.Spacing.xl)
-        .glassBackground(opacity: 0.1, cornerRadius: Theme.CornerRadius.large, elevation: 2)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .softCard(elevation: 2)
+    }
+
+    private func emptyFeature(icon: String, title: String, tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            IconTile(systemImage: icon, tint: tint, size: 30)
+            Text(title)
+                .font(Theme.Typography.captionBold)
+                .foregroundStyle(Theme.Colors.textPrimary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Theme.Spacing.md)
+        .background(
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
+                .fill(tint.opacity(Theme.Opacity.subtleFill))
+        )
+        .accessibilityElement(children: .combine)
+    }
+}
+
+// MARK: - Today Hero
+
+/// The one bold surface on Today: weekly goal ring, a 7-day strip, streak, and the
+/// primary start/resume action, all on the brand gradient.
+struct TodayHeroCard: View {
+    let sessionsThisWeek: Int
+    let weeklyGoal: Int
+    let streakWeeks: Int
+    let weekStart: Date
+    let trainedDays: Set<Date>
+    let activeSession: ActiveWorkoutSession?
+    let onPrimaryAction: () -> Void
+    let onOpenWeek: () -> Void
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    private var goal: Int { max(weeklyGoal, 1) }
+
+    private var progress: Double {
+        Double(sessionsThisWeek) / Double(goal)
+    }
+
+    private var headline: String {
+        if sessionsThisWeek == 0 { return "Fresh week" }
+        if sessionsThisWeek < goal {
+            let remaining = goal - sessionsThisWeek
+            return "\(remaining) to go"
+        }
+        if sessionsThisWeek == goal { return "Goal hit" }
+        return "Goal smashed"
+    }
+
+    private var message: String {
+        if sessionsThisWeek == 0 { return "Get the first one on the board." }
+        if sessionsThisWeek < goal {
+            return "\(SharedFormatters.count(sessionsThisWeek, "session")) down. Keep the rhythm going."
+        }
+        if sessionsThisWeek == goal { return "That's a big, beautiful week." }
+        return "+\(sessionsThisWeek - goal) past your goal. Nicely done."
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
+            Button(action: onOpenWeek) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
+                    topRow
+                    ringRow
+                    WeekDayStrip(weekStart: weekStart, trainedDays: trainedDays)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(.rect)
+            }
+            .buttonStyle(PressableCardButtonStyle())
+            .accessibilityLabel(accessibilitySummary)
+            .accessibilityHint("Opens consistency details")
+
+            primaryButton
+        }
+        .padding(Theme.Spacing.lg)
+        .background(HeroCardBackground(watermark: "figure.strengthtraining.traditional"))
+    }
+
+    private var topRow: some View {
+        HStack(alignment: .center, spacing: Theme.Spacing.sm) {
+            BrandBandLabel(text: "This week", fill: .white, textColor: Theme.Colors.onHeroAccent)
+
+            Spacer(minLength: Theme.Spacing.sm)
+
+            if streakWeeks > 0 {
+                HStack(spacing: 5) {
+                    Image(systemName: "flame.fill")
+                        .symbolRenderingMode(.multicolor)
+                    Text("\(streakWeeks)-week streak")
+                        .lineLimit(1)
+                }
+                .font(Theme.Typography.captionBold)
+                .foregroundStyle(.white)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(Capsule().fill(Color.black.opacity(0.22)))
+            }
+        }
+    }
+
+    private var ringRow: some View {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: Theme.Spacing.md))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: Theme.Spacing.lg))
+
+        return layout {
+            ZStack {
+                ProgressRing(
+                    progress: progress,
+                    lineWidth: 10,
+                    tint: .white,
+                    trackTint: Color.white.opacity(0.2)
+                )
+                VStack(spacing: 0) {
+                    Text("\(sessionsThisWeek)")
+                        .font(Theme.Typography.ringNumber)
+                        .contentTransition(.numericText(value: Double(sessionsThisWeek)))
+                        .animation(Theme.Animation.spring, value: sessionsThisWeek)
+                    Text("of \(goal)")
+                        .font(Theme.Typography.caption2Bold)
+                        .foregroundStyle(Color.white.opacity(0.85))
+                }
+                .foregroundStyle(.white)
+            }
+            .frame(width: 96, height: 96)
+
+            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                Text(headline)
+                    .font(Theme.Typography.title2)
+                    .foregroundStyle(.white)
+                Text(message)
+                    .font(Theme.Typography.subheadline)
+                    .foregroundStyle(Color.white.opacity(0.92))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private var primaryButton: some View {
+        Button(action: onPrimaryAction) {
+            HStack(spacing: Theme.Spacing.sm) {
+                if let activeSession {
+                    LivePulseDot(color: Theme.Colors.success, size: 7)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Resume \(activeSession.name)")
+                            .font(Theme.Typography.headline)
+                            .lineLimit(1)
+                        Text(activeSession.startedAt, style: .timer)
+                            .font(Theme.Typography.captionBold)
+                            .monospacedDigit()
+                            .opacity(0.75)
+                    }
+                } else {
+                    Image(systemName: "bolt.fill")
+                        .font(Theme.Typography.title4Bold)
+                    Text("Start a Session")
+                        .font(Theme.Typography.headline)
+                        .lineLimit(2)
+                }
+
+                Spacer(minLength: Theme.Spacing.sm)
+
+                Image(systemName: "arrow.right")
+                    .font(Theme.Typography.subheadlineBold)
+                    .accessibilityHidden(true)
+            }
+            .foregroundStyle(Theme.Colors.onHeroAccent)
+            .padding(.horizontal, Theme.Spacing.lg)
+            .padding(.vertical, Theme.Spacing.sm)
+            .frame(maxWidth: .infinity, minHeight: 56)
+            .background(
+                Color.white,
+                in: RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
+            )
+            .shadow(color: Color.black.opacity(0.18), radius: 8, x: 0, y: 4)
+            .contentShape(.rect)
+        }
+        .buttonStyle(PressableCardButtonStyle())
+        .accessibilityLabel(activeSession.map { "Resume \($0.name)" } ?? "Start a Session")
+        .accessibilityHint(activeSession == nil ? "Begins a workout session" : "Returns to the active workout")
+    }
+
+    private var accessibilitySummary: String {
+        var parts = ["This week, \(sessionsThisWeek) of \(goal) sessions", headline]
+        if streakWeeks > 0 {
+            parts.append("\(streakWeeks) week streak")
+        }
+        return parts.joined(separator: ". ")
+    }
+}
+
+/// Sunday-first strip of the current week. Trained days fill in white.
+struct WeekDayStrip: View {
+    let weekStart: Date
+    let trainedDays: Set<Date>
+    var referenceDate = Date()
+
+    private var days: [Date] {
+        (0..<7).compactMap { Calendar.current.date(byAdding: .day, value: $0, to: weekStart) }
+    }
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(days, id: \.self) { day in
+                dayCell(day)
+                    .frame(maxWidth: .infinity)
+            }
+        }
+        .accessibilityHidden(true)
+    }
+
+    private func dayCell(_ day: Date) -> some View {
+        let calendar = Calendar.current
+        let dayStart = calendar.startOfDay(for: day)
+        let isTrained = trainedDays.contains(dayStart)
+        let isToday = calendar.isDate(day, inSameDayAs: referenceDate)
+        let isFuture = dayStart > calendar.startOfDay(for: referenceDate)
+        let symbols = calendar.veryShortStandaloneWeekdaySymbols
+        let symbolIndex = calendar.component(.weekday, from: day) - 1
+        let letter = symbols.indices.contains(symbolIndex) ? symbols[symbolIndex] : ""
+
+        return VStack(spacing: 6) {
+            Text(letter)
+                .font(Theme.Typography.caption2Bold)
+                .foregroundStyle(Color.white.opacity(isFuture ? 0.55 : 0.9))
+
+            ZStack {
+                Circle()
+                    .fill(isTrained ? Color.white : Color.white.opacity(isFuture ? 0.08 : 0.16))
+                if isToday && !isTrained {
+                    Circle()
+                        .strokeBorder(Color.white, lineWidth: 2)
+                }
+                if isTrained {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 12, weight: .heavy))
+                        .foregroundStyle(Theme.Colors.onHeroAccent)
+                }
+            }
+            .frame(width: 28, height: 28)
+        }
     }
 }
 
@@ -35,30 +280,39 @@ struct HomeEmptyState: View {
 struct SyncStatusPill: View {
     let text: String
     let isActive: Bool
+    var isSyncing = false
 
     var body: some View {
         HStack(spacing: 6) {
-            Circle()
-                .fill(isActive ? Theme.Colors.success : Theme.Colors.textTertiary.opacity(0.5))
-                .frame(width: 6, height: 6)
+            if isSyncing {
+                LivePulseDot(color: Theme.Colors.accent, size: 6)
+                    .frame(width: 10, height: 10)
+            } else {
+                Circle()
+                    .fill(isActive ? Theme.Colors.success : Theme.Colors.textTertiary.opacity(0.5))
+                    .frame(width: 7, height: 7)
+                    .accessibilityHidden(true)
+            }
+            Image(systemName: "heart.fill")
+                .font(Theme.Typography.microLabel)
+                .foregroundStyle(Theme.Colors.error)
                 .accessibilityHidden(true)
             Text(text)
-                .font(Theme.Typography.metricLabel)
-                .textCase(.uppercase)
-                .tracking(0.6)
-                .foregroundStyle(isActive ? Theme.Colors.textSecondary : Theme.Colors.textTertiary)
+                .font(Theme.Typography.captionStrong)
+                .foregroundStyle(isActive ? Theme.Colors.textPrimary : Theme.Colors.textSecondary)
+                .lineLimit(1)
         }
-        .padding(.horizontal, 10)
+        .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .frame(minHeight: Theme.Layout.minimumTapTarget)
         .contentShape(Capsule())
         .background(
             Capsule()
-                .fill(Theme.Colors.surfaceRaised)
+                .fill(Theme.Colors.surface.opacity(0.85))
         )
         .overlay(
             Capsule()
-                .strokeBorder(Theme.Colors.border.opacity(0.4), lineWidth: 1)
+                .strokeBorder(Theme.Colors.border.opacity(0.6), lineWidth: 1)
         )
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Sync status: \(text)")
@@ -132,41 +386,38 @@ struct HomeWorkoutRow: View {
     @EnvironmentObject var healthManager: HealthKitManager
 
     var body: some View {
-        HStack(spacing: Theme.Spacing.md) {
+        HStack(alignment: .center, spacing: Theme.Spacing.md) {
             Button(action: { onTap() }, label: {
-                HStack(spacing: Theme.Spacing.md) {
-                    VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                HStack(alignment: .top, spacing: Theme.Spacing.md) {
+                    WorkoutDateBadge(date: workout.date)
+
+                    VStack(alignment: .leading, spacing: 6) {
                         Text(workout.name)
                             .font(Theme.Typography.bodyBold)
                             .foregroundColor(Theme.Colors.textPrimary)
-
-                        Text(workout.date.formatted(date: .abbreviated, time: .shortened))
-                            .font(Theme.Typography.caption)
-                            .foregroundColor(Theme.Colors.textTertiary)
+                            .lineLimit(2)
 
                         HStack(spacing: Theme.Spacing.md) {
                             Label(workout.duration, systemImage: "clock")
                             Label(
                                 SharedFormatters.count(exerciseCount, "exercise"),
-                                systemImage: "figure.strengthtraining.traditional"
+                                systemImage: "dumbbell.fill"
                             )
                         }
                         .font(Theme.Typography.caption)
                         .foregroundColor(Theme.Colors.textSecondary)
+                        .labelStyle(.titleAndIcon)
 
                         if let data = healthManager.getHealthData(for: workout.id) {
                             HealthDataSummaryView(healthData: data)
                         }
                     }
 
-                    Spacer()
-
-                    Image(systemName: "chevron.right")
-                        .font(Theme.Typography.caption2Bold)
-                        .foregroundColor(Theme.Colors.textTertiary)
+                    Spacer(minLength: 0)
                 }
+                .contentShape(.rect)
             })
-            .buttonStyle(PlainButtonStyle())
+            .buttonStyle(PressableCardButtonStyle())
             .accessibilityElement(children: .combine)
             .accessibilityLabel("\(workout.name), \(workout.date.formatted(date: .abbreviated, time: .shortened))")
             .accessibilityHint("Double tap for details")
@@ -176,17 +427,42 @@ struct HomeWorkoutRow: View {
                 onRepeat()
             } label: {
                 Image(systemName: "arrow.counterclockwise")
-                    .font(Theme.Typography.caption2Bold)
+                    .font(Theme.Typography.subheadlineBold)
                     .foregroundColor(Theme.Colors.accent)
                     .frame(width: 44, height: 44)
-                    .background(Theme.Colors.accent.opacity(0.08))
-                    .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
+                    .background(Circle().fill(Theme.Colors.accentTint))
+                    .overlay(Circle().strokeBorder(Theme.Colors.accent.opacity(0.18), lineWidth: 1))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(AppInteractionButtonStyle())
             .accessibilityLabel("Repeat \(workout.name)")
         }
-        .padding(Theme.Spacing.lg)
-        .glassBackground(opacity: 0.1, cornerRadius: Theme.CornerRadius.large, elevation: 1)
+        .padding(Theme.Spacing.md)
+        .softCard(elevation: 1)
+    }
+}
+
+/// Compact weekday + day number badge used by workout rows.
+struct WorkoutDateBadge: View {
+    let date: Date
+    var tint: Color = Theme.Colors.accent
+
+    var body: some View {
+        let isToday = Calendar.current.isDateInToday(date)
+        VStack(spacing: 0) {
+            Text(date.formatted(.dateTime.weekday(.abbreviated)).uppercased())
+                .font(Theme.Typography.microLabel)
+                .tracking(0.6)
+            Text(date.formatted(.dateTime.day()))
+                .font(Theme.Typography.title3)
+                .monospacedDigit()
+        }
+        .foregroundStyle(isToday ? Color.white : tint)
+        .frame(width: 46, height: 46)
+        .background(
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
+                .fill(isToday ? AnyShapeStyle(Theme.accentGradient) : AnyShapeStyle(Theme.Colors.accentTint))
+        )
+        .accessibilityHidden(true)
     }
 }
 
@@ -229,7 +505,7 @@ struct HomeWeekBucket: Identifiable {
     var title: String {
         switch weekOffset {
         case 0:
-            return "Week View"
+            return "This Week"
         case 1:
             return "Last Week"
         default:
@@ -325,18 +601,16 @@ struct WeeklySummaryCarouselCard: View {
 
                 Spacer(minLength: 0)
 
-                Text(bucket.statusLabel)
-                    .font(Theme.Typography.captionBold)
-                    .foregroundColor(bucket.stats.totalWorkouts == 0 ? Theme.Colors.textTertiary : Theme.Colors.accent)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(
-                        Capsule()
-                            .fill(
-                                (bucket.stats.totalWorkouts == 0 ? Theme.Colors.border : Theme.Colors.accent)
-                                    .opacity(0.12)
-                            )
-                    )
+                if bucket.stats.totalWorkouts > 0 {
+                    BrandBandLabel(text: bucket.statusLabel)
+                } else {
+                    Text(bucket.statusLabel)
+                        .font(Theme.Typography.captionBold)
+                        .foregroundColor(Theme.Colors.textSecondary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(Capsule().fill(Theme.Colors.border.opacity(0.35)))
+                }
             }
 
             LazyVGrid(
@@ -365,20 +639,30 @@ struct WeeklySummaryCarouselCard: View {
             }
 
             if bucket.workouts.isEmpty {
-                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                    Text(bucket.sessionHeader)
-                        .font(Theme.Typography.metricLabel)
-                        .foregroundColor(Theme.Colors.textTertiary)
-                        .textCase(.uppercase)
-                        .tracking(0.8)
-                    Text(bucket.emptyMessage)
-                        .font(Theme.Typography.body)
-                        .foregroundColor(Theme.Colors.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                HStack(alignment: .top, spacing: Theme.Spacing.md) {
+                    Image(systemName: bucket.isSavedBreakWeek ? "beach.umbrella.fill" : "calendar.badge.plus")
+                        .font(Theme.Iconography.title3)
+                        .foregroundStyle(bucket.isSavedBreakWeek ? Theme.Colors.accentTertiary : Theme.Colors.accent)
+                        .symbolRenderingMode(.hierarchical)
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                        Text(bucket.sessionHeader)
+                            .sectionHeaderStyle()
+                        Text(bucket.emptyMessage)
+                            .font(Theme.Typography.subheadline)
+                            .foregroundColor(Theme.Colors.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 .padding(Theme.Spacing.lg)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .softCard(elevation: 1)
+                .background(
+                    RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
+                        .strokeBorder(
+                            Theme.Colors.border,
+                            style: StrokeStyle(lineWidth: 1, dash: [5, 4])
+                        )
+                )
             } else {
                 VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                     Text(bucket.sessionHeader)
@@ -418,12 +702,14 @@ private struct WeeklySessionPreviewCard: View {
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: Theme.Spacing.md) {
+                WorkoutDateBadge(date: workout.date)
+
                 VStack(alignment: .leading, spacing: 4) {
                     Text(workout.name)
                         .font(Theme.Typography.bodyBold)
                         .foregroundColor(Theme.Colors.textPrimary)
                         .lineLimit(1)
-                    Text(workout.date.formatted(date: .abbreviated, time: .shortened))
+                    Text(workout.date.formatted(date: .omitted, time: .shortened))
                         .font(Theme.Typography.caption)
                         .foregroundColor(Theme.Colors.textSecondary)
                         .lineLimit(1)
@@ -445,11 +731,11 @@ private struct WeeklySessionPreviewCard: View {
                     .foregroundColor(Theme.Colors.textTertiary)
             }
             .padding(.horizontal, Theme.Spacing.md)
-            .padding(.vertical, Theme.Spacing.md)
+            .padding(.vertical, Theme.Spacing.sm)
             .frame(maxWidth: .infinity, alignment: .leading)
             .softCard(elevation: 1)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableCardButtonStyle())
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(workout.name), \(workout.date.formatted(date: .abbreviated, time: .shortened))")
         .accessibilityHint("Double tap for workout details")
@@ -470,24 +756,24 @@ struct SecondaryChip: View {
                 action()
             },
             label: {
-                HStack(spacing: Theme.Spacing.sm) {
-                    Image(systemName: icon)
-                        .font(Theme.Typography.subheadlineStrong)
-                        .foregroundStyle(Theme.Colors.accent)
+                HStack(spacing: Theme.Spacing.md) {
+                    IconTile(systemImage: icon, tint: Theme.Colors.accent, size: 32)
                     Text(title)
-                        .font(Theme.Typography.captionBold)
-                        .textCase(.uppercase)
-                        .tracking(0.6)
+                        .font(Theme.Typography.subheadlineStrong)
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                    Spacer(minLength: Theme.Spacing.sm)
+                    Image(systemName: "chevron.right")
+                        .font(Theme.Typography.caption2Bold)
+                        .foregroundStyle(Theme.Colors.textTertiary)
+                        .accessibilityHidden(true)
                 }
-                .foregroundStyle(Theme.Colors.textPrimary)
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal, Theme.Spacing.lg)
-                .padding(.vertical, Theme.Spacing.md)
-                .frame(minHeight: 48)
+                .padding(.horizontal, Theme.Spacing.md)
+                .padding(.vertical, Theme.Spacing.sm)
+                .frame(maxWidth: .infinity, minHeight: 56)
                 .softCard(elevation: 1)
             }
         )
-        .buttonStyle(.plain)
+        .buttonStyle(PressableCardButtonStyle())
     }
 }
 
@@ -507,28 +793,39 @@ struct SummaryPill: View {
     }
 
     private var content: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
             Text(title)
                 .font(Theme.Typography.metricLabel)
                 .foregroundColor(Theme.Colors.textTertiary)
                 .textCase(.uppercase)
                 .tracking(0.6)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
 
             Text(value)
-                .font(Theme.Typography.headline)
+                .font(Theme.Typography.title2)
                 .foregroundColor(Theme.Colors.textPrimary)
                 .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .contentTransition(.numericText())
         }
         .padding(.horizontal, Theme.Spacing.md)
         .padding(.vertical, Theme.Spacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                 .fill(Theme.Colors.surfaceRaised)
         )
+        .overlay(alignment: .leading) {
+            // Accent tick keeps the four tiles reading as one family.
+            Capsule()
+                .fill(Theme.Colors.accent.opacity(onTap == nil ? 0.25 : 0.8))
+                .frame(width: 3)
+                .padding(.vertical, Theme.Spacing.md)
+        }
         .overlay(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                .strokeBorder(Theme.Colors.border.opacity(0.3), lineWidth: 1)
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
+                .strokeBorder(Theme.Colors.border.opacity(0.35), lineWidth: 1)
         )
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(title): \(value)")
@@ -544,27 +841,41 @@ struct ExploreRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            ZStack {
-                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                    .fill(tint.opacity(0.08))
-                    .frame(width: 40, height: 40)
-                Image(systemName: icon)
-                    .font(Theme.Typography.bodyBold)
-                    .foregroundColor(tint)
+            HStack(alignment: .top) {
+                IconTile(systemImage: icon, tint: tint, size: 40)
+                Spacer(minLength: 0)
+                Image(systemName: "arrow.up.right")
+                    .font(Theme.Typography.caption2Bold)
+                    .foregroundColor(Theme.Colors.textTertiary)
+                    .accessibilityHidden(true)
             }
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
-                    .font(Theme.Typography.bodyBold)
+                    .font(Theme.Typography.cardHeader)
                     .foregroundColor(Theme.Colors.textPrimary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
                 Text(subtitle)
                     .font(Theme.Typography.caption)
                     .foregroundColor(Theme.Colors.textSecondary)
+                    .lineLimit(2)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Theme.Spacing.lg)
-        .glassBackground(opacity: 0.1, cornerRadius: Theme.CornerRadius.large, elevation: 1)
+        .background(
+            // A faint wash of the tile's color so the grid reads as distinct destinations.
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [tint.opacity(0.10), tint.opacity(0.0)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+        )
+        .softCard(elevation: 1)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(title), \(subtitle)")
         .accessibilityAddTraits(.isButton)

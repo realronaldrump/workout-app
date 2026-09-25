@@ -19,13 +19,43 @@ struct AppPrimaryButton: View {
                     .multilineTextAlignment(.center)
             }
             .font(Theme.Typography.headline)
-            .frame(maxWidth: .infinity, minHeight: Theme.Layout.minimumTapTarget)
+            .frame(maxWidth: .infinity, minHeight: 52)
         }
-        .buttonStyle(.borderedProminent)
-        .buttonBorderShape(.roundedRectangle(radius: Theme.CornerRadius.large))
-        .controlSize(.large)
-        .tint(Theme.Colors.accent)
+        .buttonStyle(BrandPrimaryButtonStyle())
         .disabled(!isEnabled)
+    }
+}
+
+/// Brand gradient fill with a soft colored glow that settles when pressed.
+struct BrandPrimaryButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func makeBody(configuration: Configuration) -> some View {
+        let shape = RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
+        let isPressed = configuration.isPressed && isEnabled
+        configuration.label
+            .foregroundStyle(isEnabled ? Color.white : Theme.Colors.textSecondary)
+            .padding(.horizontal, Theme.Spacing.lg)
+            .background {
+                if isEnabled {
+                    shape
+                        .fill(Theme.accentGradient)
+                        .overlay(shape.strokeBorder(Color.white.opacity(0.22), lineWidth: 1))
+                        .shadow(
+                            color: Theme.Colors.accent.opacity(isPressed ? 0.14 : 0.3),
+                            radius: isPressed ? 5 : 12,
+                            x: 0,
+                            y: isPressed ? 2 : 6
+                        )
+                } else {
+                    shape.fill(Theme.Colors.border.opacity(0.5))
+                }
+            }
+            .contentShape(shape)
+            .scaleEffect(isPressed && !reduceMotion ? 0.97 : 1)
+            .animation(reduceMotion ? nil : .spring(response: 0.25, dampingFraction: 0.7), value: isPressed)
+            .animation(reduceMotion ? nil : Theme.Animation.quick, value: isEnabled)
     }
 }
 

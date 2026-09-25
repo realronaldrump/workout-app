@@ -25,7 +25,7 @@ struct HighlightCardView: View {
                         content
                     }
                 )
-                .buttonStyle(PlainButtonStyle())
+                .buttonStyle(PressableCardButtonStyle())
             } else {
                 content
             }
@@ -35,12 +35,7 @@ struct HighlightCardView: View {
     private var content: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             HStack(spacing: Theme.Spacing.sm) {
-                Image(systemName: item.icon)
-                    .font(Theme.Typography.captionStrong)
-                    .foregroundColor(item.tint)
-                    .frame(width: 24, height: 24)
-                    .background(item.tint.opacity(0.12))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                IconTile(systemImage: item.icon, tint: item.tint, size: 26)
                 Text(item.title)
                     .font(Theme.Typography.metricLabel)
                     .foregroundColor(Theme.Colors.textSecondary)
@@ -50,7 +45,7 @@ struct HighlightCardView: View {
             }
 
             Text(item.value)
-                .font(Theme.Typography.headline)
+                .font(Theme.Typography.title4)
                 .foregroundColor(Theme.Colors.textPrimary)
                 .multilineTextAlignment(.leading)
                 .lineLimit(nil)
@@ -65,6 +60,15 @@ struct HighlightCardView: View {
         }
         .padding(Theme.Spacing.lg)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .background(alignment: .leading) {
+            // Tinted leading edge ties the card to the insight's color.
+            LinearGradient(
+                colors: [item.tint.opacity(0.10), item.tint.opacity(0)],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+            .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous))
+        }
         .softCard(elevation: 1)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(item.title): \(item.value)\(item.subtitle.map { ", \($0)" } ?? "")")

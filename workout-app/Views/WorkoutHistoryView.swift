@@ -432,7 +432,8 @@ struct WorkoutHistoryView: View {
             AdaptiveBackground()
 
             ScrollView(showsIndicators: false) {
-                LazyVStack(alignment: .leading, spacing: Theme.Spacing.xl) {
+                // Month headers pin while scrolling so a long history always shows where you are.
+                LazyVStack(alignment: .leading, spacing: Theme.Spacing.xl, pinnedViews: [.sectionHeaders]) {
                     header
 
                     if derivedState.isReady && derivedState.totalCount > 0 {
@@ -847,7 +848,17 @@ struct WorkoutHistoryView: View {
     }
 
     private func monthSection(_ section: HistoryMonthSection) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+        Section {
+            LazyVStack(spacing: Theme.Spacing.sm) {
+                ForEach(section.rows) { row in
+                    WorkoutHistoryRow(
+                        workout: row.workout,
+                        onDeleted: { loggedWorkoutDeleted($0) },
+                        precomputedMetrics: row.metrics
+                    )
+                }
+            }
+        } header: {
             ViewThatFits(in: .horizontal) {
                 HStack(alignment: .center, spacing: Theme.Spacing.sm) {
                     monthTitle(section)
@@ -860,16 +871,23 @@ struct WorkoutHistoryView: View {
                     monthMetadata(section)
                 }
             }
-
-            LazyVStack(spacing: Theme.Spacing.sm) {
-                ForEach(section.rows) { row in
-                    WorkoutHistoryRow(
-                        workout: row.workout,
-                        onDeleted: { loggedWorkoutDeleted($0) },
-                        precomputedMetrics: row.metrics
-                    )
-                }
+            .padding(.vertical, Theme.Spacing.sm)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                // Extends to the screen edges so rows slide cleanly beneath the pinned header.
+                Rectangle()
+                    .fill(Theme.Colors.background.opacity(0.94))
+                    .padding(.horizontal, -Theme.Spacing.lg)
+                    .overlay(alignment: .bottom) {
+                        Rectangle()
+                            .fill(Theme.Colors.border.opacity(0.5))
+                            .frame(height: 0.5)
+                            .padding(.horizontal, -Theme.Spacing.lg)
+                    }
             }
+            // Pull rows closer to their header than the stack's between-section spacing.
+            .padding(.bottom, -Theme.Spacing.md)
+            .accessibilityAddTraits(.isHeader)
         }
     }
 
@@ -884,6 +902,10 @@ struct WorkoutHistoryView: View {
             Text(monthSummary(section))
                 .font(Theme.Typography.captionStrong)
                 .foregroundStyle(Theme.Colors.textSecondary)
+                .padding(.horizontal, Theme.Spacing.sm)
+                .padding(.vertical, 4)
+                .background(Capsule().fill(Theme.Colors.surfaceRaised))
+                .overlay(Capsule().strokeBorder(Theme.Colors.border.opacity(0.5), lineWidth: 1))
 
             if let delta = section.delta {
                 DeltaTag(delta: delta)
@@ -892,7 +914,7 @@ struct WorkoutHistoryView: View {
     }
 
     private func monthSummary(_ section: HistoryMonthSection) -> String {
-        let count = "\(section.count)"
+        let count = SharedFormatters.count(section.count, "workout")
         guard section.volume > 0 else { return count }
         return "\(count) · \(SharedFormatters.volumeWithUnit(section.volume))"
     }
@@ -1143,7 +1165,7 @@ struct WorkoutHistoryRow: View {
     var body: some View {
         NavigationLink(destination: WorkoutDetailView(workout: workout)) {
             HStack(alignment: .top, spacing: Theme.Spacing.md) {
-                dateBlock
+                WorkoutDateBadge(date: workout.date)
 
                 VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                     Text(workout.name)
@@ -1187,9 +1209,19 @@ struct WorkoutHistoryRow: View {
             .accessibilityLabel(accessibilityLabel)
             .accessibilityHint(accessibilityHint)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableCardButtonStyle())
         .padding(Theme.Spacing.md)
         .softCard(elevation: 1)
+        .accessibilityAction(named: "Repeat workout") {
+            repeatThisWorkout()
+        }
+        .accessibilityActions {
+            if isLoggedWorkout {
+                Button("Delete workout") {
+                    showingDeleteAlert = true
+                }
+            }
+        }
         .contextMenu {
             Button {
                 Haptics.selection()
@@ -1206,25 +1238,6 @@ struct WorkoutHistoryRow: View {
                     Label("Delete Workout", systemImage: "trash")
                 }
             }
-        }
-        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            if isLoggedWorkout {
-                Button(role: .destructive) {
-                    Haptics.selection()
-                    showingDeleteAlert = true
-                } label: {
-                    Label("Delete", systemImage: "trash")
-                }
-                .tint(Theme.Colors.error)
-            }
-
-            Button {
-                Haptics.selection()
-                repeatThisWorkout()
-            } label: {
-                Label("Repeat", systemImage: "arrow.counterclockwise")
-            }
-            .tint(Theme.Colors.accent)
         }
         .alert("Delete Workout?", isPresented: $showingDeleteAlert) {
             Button("Delete", role: .destructive) { deleteLoggedWorkout() }
@@ -1263,22 +1276,6 @@ struct WorkoutHistoryRow: View {
         }
     }
 
-    private var dateBlock: some View {
-        VStack(spacing: 1) {
-            Text(workout.date.formatted(.dateTime.weekday(.abbreviated)).uppercased())
-                .font(Theme.Typography.microLabel)
-            Text(workout.date.formatted(.dateTime.day()))
-                .font(Theme.Typography.title3)
-        }
-        .foregroundStyle(Theme.Colors.accent)
-        .frame(width: 42, height: 42)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                .fill(Theme.Colors.accentTint)
-        )
-        .accessibilityHidden(true)
-    }
-
     private var metricsLine: String {
         var values = [
             workout.date.formatted(date: .omitted, time: .shortened),
@@ -1298,9 +1295,7 @@ struct WorkoutHistoryRow: View {
     }
 
     private var accessibilityHint: String {
-        isLoggedWorkout
-            ? "Double tap for details, swipe left for repeat or delete, long press for actions"
-            : "Double tap for details, swipe left to repeat, long press for actions"
+        "Double tap for details. Touch and hold for repeat and more actions."
     }
 
     private func repeatThisWorkout() {

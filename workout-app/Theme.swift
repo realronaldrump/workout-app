@@ -38,6 +38,7 @@ private enum ThemeDisplayWeight {
     case regular
     case semibold
     case bold
+    case extraBold
 
     var fontName: String {
         switch self {
@@ -47,6 +48,12 @@ private enum ThemeDisplayWeight {
             return "Sora-Regular_SemiBold"
         case .bold:
             return "Sora-Regular_Bold"
+        case .extraBold:
+            // The variable font ships an ExtraBold named instance. Fall back to Bold if the
+            // system does not expose it so poster moments never drop to the system face.
+            return UIFont(name: "Sora-Regular_ExtraBold", size: 12) != nil
+                ? "Sora-Regular_ExtraBold"
+                : "Sora-Regular_Bold"
         }
     }
 
@@ -58,12 +65,15 @@ private enum ThemeDisplayWeight {
             return .semibold
         case .bold:
             return .bold
+        case .extraBold:
+            return .heavy
         }
     }
 }
 
-/// Centralized theme system — Warm Precision.
-/// Calm, high-contrast surfaces, two-family typography, and restrained elevation.
+/// Centralized theme system: Big Beautiful.
+/// Poster-inspired brand moments (heavy display type on an electric-blue band, taken
+/// straight from the app icon) layered over calm, high-contrast working surfaces.
 enum Theme {
 
     // MARK: - Colors
@@ -98,8 +108,8 @@ enum Theme {
         /// Compatibility alias for existing call sites. Semantically this is muted text.
         static let textTertiary    = textMuted
 
-        // Accent colors — slightly lighter in dark for contrast
-        static let accent          = adaptive(light: 0x2563EB, dark: 0x3B82F6)
+        // Accent colors: the icon's electric brand blue, lifted in dark mode for contrast.
+        static let accent          = adaptive(light: 0x125BFF, dark: 0x4D8DFF)
         // Light variants are dark enough for both semantic text and white-on-fill controls.
         static let accentSecondary = adaptive(light: 0xC2410C, dark: 0xFB923C)
         static let accentTertiary  = adaptive(light: 0x8B5CF6, dark: 0xA78BFA)
@@ -129,10 +139,21 @@ enum Theme {
         static let cardio          = adaptive(light: 0x06B6D4, dark: 0x22D3EE)
 
         // Surface tints — pre-resolved adaptive fills
-        static let accentTint      = adaptive(light: 0xEEF2FC, dark: 0x141C30)
+        static let accentTint      = adaptive(light: 0xECF2FF, dark: 0x121B33)
         static let warmTint        = adaptive(light: 0xFFF8F0, dark: 0x251D14)
         static let successTint     = adaptive(light: 0xEFFBF3, dark: 0x122118)
         static let surfaceRaised   = adaptive(light: 0xFAF9F7, dark: 0x222224)
+
+        /// Top stop of the card fill. Matches the card in light mode and adds a faint
+        /// lit edge in dark mode so stacked cards read as layers instead of flat slabs.
+        static let cardSheen       = adaptive(light: 0xFFFFFF, dark: 0x252528)
+        /// Fill behind white "band" labels. Tuned so white text clears 4.5:1 in both modes.
+        static let brandBand       = adaptive(light: 0x125BFF, dark: 0x2A64F5)
+        /// Deep brand ink for hero cards (white content sits on top).
+        static let brandDeep       = adaptive(light: 0x0B3FC7, dark: 0x0A2E8F)
+        /// Fixed (non-adaptive) brand blue for content on white chips inside hero cards,
+        /// where the surface stays white in both light and dark mode.
+        static let onHeroAccent    = Color(uiColor: UIColor(hex: 0x125BFF))
 
         /// Lookup muscle group color by enum value.
         static func muscleGroupColor(for group: MuscleGroup) -> Color {
@@ -178,7 +199,7 @@ enum Theme {
         static let textSecondary   = adaptive(light: 0x5F5954, dark: 0xB0B0B5)
         static let textTertiary    = adaptive(light: 0x746E68, dark: 0x98989D)
 
-        static let accent          = adaptive(light: 0x2563EB, dark: 0x3B82F6)
+        static let accent          = adaptive(light: 0x125BFF, dark: 0x4D8DFF)
         static let accentSecondary = adaptive(light: 0xC2410C, dark: 0xFB923C)
     }
 
@@ -236,6 +257,14 @@ enum Theme {
         static let metricLabel = text(.semibold, size: 12, relativeTo: .caption)
         static let tabLabel = text(.medium, size: 11, relativeTo: .caption2)
         static let heroTitle = display(.bold, size: 30, relativeTo: .title)
+        /// Poster-weight display face for greetings and celebration moments.
+        static let displayHero = display(.extraBold, size: 34, relativeTo: .largeTitle)
+        static let displayHeroCompact = display(.extraBold, size: 28, relativeTo: .largeTitle)
+        /// Big tabular numerals for rings, timers, and hero stats.
+        static let heroNumber = display(.extraBold, size: 44, relativeTo: .largeTitle)
+        static let ringNumber = display(.extraBold, size: 26, relativeTo: .title2)
+        /// Tight uppercase label that sits on the brand band.
+        static let bandLabel = text(.bold, size: 11, relativeTo: .caption2)
 
         // Instrument Sans carries the app UI. Display grades stay reserved for
         // headings and brand moments to keep the hierarchy tight.
@@ -365,9 +394,30 @@ enum Theme {
 // MARK: - Adaptive Background
 
 struct AdaptiveBackground: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     var body: some View {
-        Theme.Colors.background
-            .ignoresSafeArea()
+        let isDark = colorScheme == .dark
+        ZStack {
+            Theme.Colors.background
+
+            // Two soft, static light sources anchored to the top edge give every
+            // screen depth behind the large title without competing with content.
+            RadialGradient(
+                colors: [Theme.Colors.accent.opacity(isDark ? 0.20 : 0.09), .clear],
+                center: UnitPoint(x: 0.1, y: 0),
+                startRadius: 0,
+                endRadius: 420
+            )
+            RadialGradient(
+                colors: [Theme.Colors.accentTertiary.opacity(isDark ? 0.12 : 0.06), .clear],
+                center: UnitPoint(x: 0.95, y: 0.02),
+                startRadius: 0,
+                endRadius: 300
+            )
+        }
+        .ignoresSafeArea()
+        .accessibilityHidden(true)
     }
 }
 
@@ -379,9 +429,9 @@ struct SplashBackground: View {
             // Rich gradient brand moment — deep royal blue shifting to lighter blue
             LinearGradient(
                 colors: [
-                    Color(uiColor: UIColor(hex: 0x1E40AF)),
-                    Theme.Colors.accent,
-                    Color(uiColor: UIColor(hex: 0x3B82F6))
+                    Color(uiColor: UIColor(hex: 0x0A3CC2)),
+                    Color(uiColor: UIColor(hex: 0x125BFF)),
+                    Color(uiColor: UIColor(hex: 0x4D8DFF))
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
@@ -400,23 +450,37 @@ struct SoftCardBackground: ViewModifier {
 
     func body(content: Content) -> some View {
         let isDark = colorScheme == .dark
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        let lift = Double(min(max(elevation, 0), 3))
+        let shadowOpacity: Double = lift > 0 ? (isDark ? 0.28 : 0.02 + 0.04 * min(lift, 2)) : 0
         content
             .background(
-                RoundedRectangle(cornerRadius: cornerRadius)
-                    .fill(Theme.Colors.cardBackground)
+                shape.fill(
+                    LinearGradient(
+                        colors: [Theme.Colors.cardSheen, Theme.Colors.cardBackground],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
             )
             .overlay(
-                RoundedRectangle(cornerRadius: cornerRadius)
-                    .strokeBorder(
-                        Theme.Colors.border.opacity(isDark ? 0.8 : 0.5),
-                        lineWidth: isDark ? 0.5 : 1
-                    )
+                // Lit top edge in dark mode, grounded bottom edge in light mode.
+                shape.strokeBorder(
+                    LinearGradient(
+                        colors: isDark
+                            ? [Color.white.opacity(0.13), Color.white.opacity(0.04)]
+                            : [Theme.Colors.border.opacity(0.35), Theme.Colors.border.opacity(0.8)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ),
+                    lineWidth: isDark ? 0.75 : 1
+                )
             )
             .shadow(
-                color: Color.black.opacity((isDark ? 0.12 : 0.055) * min(elevation, 2)),
-                radius: 5 * elevation,
+                color: Color.black.opacity(shadowOpacity),
+                radius: CGFloat(4 + 5 * lift),
                 x: 0,
-                y: 2 * elevation
+                y: CGFloat(1 + 2 * lift)
             )
     }
 }
@@ -522,9 +586,20 @@ extension Theme {
     /// Primary action gradient — hero buttons, CTAs
     static let accentGradient = LinearGradient(
         colors: [
-            Color(uiColor: UIColor(hex: 0x60A5FA)),
-            Color(uiColor: UIColor(hex: 0x2563EB)),
-            Color(uiColor: UIColor(hex: 0x1E40AF))
+            Color(uiColor: UIColor(hex: 0x4D8DFF)),
+            Color(uiColor: UIColor(hex: 0x125BFF)),
+            Color(uiColor: UIColor(hex: 0x0A3CC2))
+        ],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+
+    /// Deep brand gradient behind hero cards that carry white content.
+    static let heroGradient = LinearGradient(
+        colors: [
+            Color(uiColor: UIColor(hex: 0x2E6BFF)),
+            Color(uiColor: UIColor(hex: 0x125BFF)),
+            Color(uiColor: UIColor(hex: 0x0A2FA8))
         ],
         startPoint: .topLeading,
         endPoint: .bottomTrailing

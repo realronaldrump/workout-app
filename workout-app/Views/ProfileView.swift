@@ -16,7 +16,7 @@ struct ProfileView: View {
             AdaptiveBackground()
 
             ScrollView {
-                LazyVStack(spacing: Theme.Spacing.xxl) {
+                LazyVStack(spacing: Theme.Spacing.xl) {
                     headerSection
                     personalInfoSection
                     preferencesSection
@@ -38,87 +38,101 @@ struct ProfileView: View {
     }
 
     private var headerSection: some View {
-        VStack(spacing: Theme.Spacing.lg) {
-            // Avatar with gradient background
-            ZStack {
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                Theme.Colors.accent,
-                                Theme.Colors.accent.opacity(0.7)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 88, height: 88)
-                    .shadow(color: Theme.Colors.accent.opacity(0.25), radius: 16, x: 0, y: 8)
-
+        VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
+            HStack(alignment: .center, spacing: Theme.Spacing.md) {
                 Text(initials)
                     .font(Theme.Typography.avatarMonogram)
-                    .foregroundStyle(.white)
-            }
+                    .foregroundStyle(Theme.Colors.onHeroAccent)
+                    .frame(width: 68, height: 68)
+                    .background(Circle().fill(Color.white))
+                    .overlay(Circle().strokeBorder(Color.white.opacity(0.5), lineWidth: 3).padding(-4))
+                    .shadow(color: Color.black.opacity(0.2), radius: 8, x: 0, y: 4)
+                    .accessibilityHidden(true)
 
-            VStack(spacing: Theme.Spacing.xs) {
-                Text(displayName)
-                    .font(Theme.Typography.sectionHeader)
-                    .foregroundStyle(Theme.Colors.textPrimary)
-                    .tracking(0.8)
-
-                if !profileName.isEmpty {
-                    Text("Member")
-                        .font(Theme.Typography.metricLabel)
-                        .foregroundStyle(Theme.Colors.textTertiary)
-                        .textCase(.uppercase)
-                        .tracking(1.0)
+                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                    BrandBandLabel(text: memberBadge, fill: .white, textColor: Theme.Colors.onHeroAccent)
+                    Text(displayName)
+                        .font(Theme.Typography.displayHeroCompact)
+                        .foregroundStyle(.white)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.75)
                 }
+                .accessibilityElement(children: .combine)
             }
-            .accessibilityElement(children: .combine)
 
             ViewThatFits(in: .horizontal) {
-                HStack(spacing: Theme.Spacing.md) {
+                HStack(spacing: Theme.Spacing.sm) {
                     profileStats
                 }
 
-                VStack(spacing: Theme.Spacing.md) {
+                VStack(spacing: Theme.Spacing.sm) {
                     profileStats
                 }
             }
-            .padding(.horizontal, Theme.Spacing.md)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, Theme.Spacing.lg)
-        .softCard()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Theme.Spacing.lg)
+        .background(HeroCardBackground(watermark: "trophy.fill"))
+    }
+
+    private var memberBadge: String {
+        guard let firstDate = dataManager.workouts.last?.date else { return "New lifter" }
+        return "Lifting since \(firstDate.formatted(.dateTime.year()))"
     }
 
     @ViewBuilder
     private var profileStats: some View {
-                MetricTileButton(
-                    chevronPlacement: .bottomTrailing,
-                    action: {
-                        showingWorkoutHistory = true
-                    },
-                    content: {
-                        ProfileStat(title: "Workouts", value: "\(dataManager.workouts.count)", tint: Theme.Colors.accent)
-                    }
-                )
-                .frame(maxWidth: .infinity)
-                .accessibilityLabel(SharedFormatters.count(dataManager.workouts.count, "workout"))
-                .accessibilityHint("Double tap to view workout history")
+        heroStat(title: "Workouts", value: "\(dataManager.workouts.count)") {
+            showingWorkoutHistory = true
+        }
+        .accessibilityLabel(SharedFormatters.count(dataManager.workouts.count, "workout"))
+        .accessibilityHint("Double tap to view workout history")
 
-                MetricTileButton(
-                    chevronPlacement: .bottomTrailing,
-                    action: {
-                        showingExerciseList = true
-                    },
-                    content: {
-                        ProfileStat(title: "Exercises", value: "\(uniqueExercisesCount)", tint: Theme.Colors.accentSecondary)
-                    }
-                )
-                .frame(maxWidth: .infinity)
-                .accessibilityLabel(SharedFormatters.count(uniqueExercisesCount, "exercise"))
-                .accessibilityHint("Double tap to view exercise list")
+        heroStat(title: "Exercises", value: "\(uniqueExercisesCount)") {
+            showingExerciseList = true
+        }
+        .accessibilityLabel(SharedFormatters.count(uniqueExercisesCount, "exercise"))
+        .accessibilityHint("Double tap to view exercise list")
+    }
+
+    private func heroStat(title: String, value: String, action: @escaping () -> Void) -> some View {
+        Button {
+            Haptics.selection()
+            action()
+        } label: {
+            HStack(alignment: .bottom) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(value)
+                        .font(Theme.Typography.number)
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .contentTransition(.numericText())
+                    Text(title)
+                        .font(Theme.Typography.metricLabel)
+                        .textCase(.uppercase)
+                        .tracking(0.8)
+                        .foregroundStyle(Color.white.opacity(0.9))
+                }
+                Spacer(minLength: Theme.Spacing.xs)
+                Image(systemName: "arrow.up.right")
+                    .font(Theme.Typography.captionBold)
+                    .foregroundStyle(Color.white.opacity(0.85))
+                    .accessibilityHidden(true)
+            }
+            .padding(Theme.Spacing.md)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
+                    .fill(Color.black.opacity(0.18))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.18), lineWidth: 1)
+            )
+            .contentShape(.rect)
+        }
+        .buttonStyle(PressableCardButtonStyle())
     }
 
     private var personalInfoSection: some View {
@@ -150,9 +164,9 @@ struct ProfileView: View {
                         subtitle: "Learn how everything works"
                     )
                 }
-                .buttonStyle(PlainButtonStyle())
+                .buttonStyle(PressableCardButtonStyle())
 
-                Divider().padding(.leading, 62)
+                Divider().padding(.leading, 66)
 
                 NavigationLink(destination: ChangelogHistoryView()) {
                     ProfileLinkRow(
@@ -162,9 +176,9 @@ struct ProfileView: View {
                         subtitle: "Release notes and update history"
                     )
                 }
-                .buttonStyle(PlainButtonStyle())
+                .buttonStyle(PressableCardButtonStyle())
 
-                Divider().padding(.leading, 62)
+                Divider().padding(.leading, 66)
 
                 NavigationLink(
                     destination: SettingsView(
@@ -175,12 +189,12 @@ struct ProfileView: View {
                 ) {
                     ProfileLinkRow(
                         icon: "gearshape.fill",
-                        color: Theme.Colors.textTertiary,
+                        color: Color(uiColor: .systemGray),
                         title: "Settings",
                         subtitle: "Health, sync, units"
                     )
                 }
-                .buttonStyle(PlainButtonStyle())
+                .buttonStyle(PressableCardButtonStyle())
             }
             .softCard(elevation: 1)
         }
@@ -213,12 +227,7 @@ private struct ProfileFieldRow: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: Theme.Spacing.md) {
-            Image(systemName: icon)
-                .font(Theme.Typography.footnoteStrong)
-                .foregroundStyle(.white)
-                .frame(width: 32, height: 32)
-                .background(color)
-                .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
+            IconTile(systemImage: icon, tint: color, size: 32)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
@@ -251,12 +260,7 @@ private struct ProfileLinkRow: View {
 
     var body: some View {
         HStack(spacing: Theme.Spacing.md) {
-            Image(systemName: icon)
-                .font(Theme.Typography.footnoteStrong)
-                .foregroundStyle(.white)
-                .frame(width: 32, height: 32)
-                .background(color)
-                .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
+            IconTile(systemImage: icon, tint: color, size: 32)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
@@ -281,41 +285,6 @@ private struct ProfileLinkRow: View {
         }
         .padding(.horizontal, Theme.Spacing.lg)
         .padding(.vertical, Theme.Spacing.md)
-    }
-}
-
-private struct ProfileStat: View {
-    let title: String
-    let value: String
-    var tint: Color = Theme.Colors.accent
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text(title)
-                .font(Theme.Typography.metricLabel)
-                .foregroundStyle(Theme.Colors.textTertiary)
-                .textCase(.uppercase)
-                .tracking(0.6)
-                .lineLimit(1)
-            Text(value)
-                .font(Theme.Typography.number)
-                .foregroundStyle(Theme.Colors.textPrimary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.9)
-                .allowsTightening(true)
-        }
-        .padding(.horizontal, Theme.Spacing.lg)
-        .padding(.vertical, Theme.Spacing.md)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(minHeight: 80)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                .fill(tint.opacity(0.04))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                .strokeBorder(tint.opacity(0.12), lineWidth: 1)
-        )
     }
 }
 

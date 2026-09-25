@@ -11,17 +11,17 @@ struct PreWorkoutBriefingCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-            HStack(spacing: Theme.Spacing.sm) {
-                Image(systemName: "brain.head.profile")
-                    .font(Theme.Typography.footnoteBold)
-                    .foregroundColor(Theme.Colors.accent)
-                    .frame(width: 28, height: 28)
-                    .background(Theme.Colors.accentTint)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                Text("PRE-WORKOUT BRIEFING")
-                    .font(Theme.Typography.metricLabel)
-                    .foregroundColor(Theme.Colors.textTertiary)
-                    .tracking(1.2)
+            HStack(spacing: Theme.Spacing.md) {
+                IconTile(systemImage: "brain.head.profile", tint: Theme.Colors.accentTertiary, size: 36)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Before You Lift")
+                        .font(Theme.Typography.cardHeader)
+                        .foregroundColor(Theme.Colors.textPrimary)
+                        .accessibilityAddTraits(.isHeader)
+                    Text("Recovery and what's been waiting")
+                        .font(Theme.Typography.caption)
+                        .foregroundColor(Theme.Colors.textSecondary)
+                }
             }
 
             if !recoverySignals.isEmpty {
@@ -43,7 +43,7 @@ struct PreWorkoutBriefingCard: View {
             }
         }
         .padding(Theme.Spacing.lg)
-        .softCard(elevation: 1)
+        .softCard(elevation: 2)
     }
 
     private var isEmpty: Bool {
@@ -54,54 +54,83 @@ struct PreWorkoutBriefingCard: View {
 
     private var recoverySignalsRow: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text("Recovery Signals")
-                .font(Theme.Typography.headline)
-                .foregroundColor(Theme.Colors.textPrimary)
+            HStack(alignment: .firstTextBaseline) {
+                Text("Recovery Signals")
+                    .sectionHeaderStyle()
+                Spacer(minLength: Theme.Spacing.sm)
+                Text("7-day avg vs 30-day baseline")
+                    .font(Theme.Typography.caption2)
+                    .foregroundColor(Theme.Colors.textTertiary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+            }
 
-            Text("7-day average vs prior 30-day baseline")
-                .font(Theme.Typography.microcopy)
-                .foregroundColor(Theme.Colors.textTertiary)
-
-            // Signal breakdown
             LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: 88), spacing: Theme.Spacing.md)],
-                spacing: Theme.Spacing.md
+                columns: [GridItem(.adaptive(minimum: 96), spacing: Theme.Spacing.sm)],
+                spacing: Theme.Spacing.sm
             ) {
                 ForEach(recoverySignals) { signal in
-                    VStack(spacing: 2) {
-                        Image(systemName: signal.icon)
-                            .font(Theme.Iconography.small)
-                            .foregroundColor(Theme.Colors.accentSecondary)
-                        Text(signal.metric.title)
-                            .font(Theme.Typography.microcopy)
-                            .foregroundColor(Theme.Colors.textTertiary)
-                        Text(String(format: "%.1f", signal.currentValue))
-                            .font(Theme.Typography.monoSmall)
-                            .foregroundColor(Theme.Colors.textPrimary)
-                        Text(signal.unit)
-                            .font(Theme.Typography.microcopy)
-                            .foregroundColor(Theme.Colors.textTertiary)
-                        Text(String(format: "%+.1f%%", signal.percentChange))
-                            .font(Theme.Typography.microcopy)
-                            .foregroundColor(Theme.Colors.textSecondary)
-                    }
-                    .accessibilityElement(children: .combine)
-                    .accessibilityLabel(
-                        "\(signal.metric.title): \(String(format: "%.1f", signal.currentValue)) \(signal.unit), " +
-                        "\(String(format: "%+.1f", signal.percentChange)) percent vs baseline"
-                    )
+                    recoveryTile(signal)
                 }
             }
-            .frame(maxWidth: .infinity)
-            .padding(.top, Theme.Spacing.xs)
         }
-        .padding(Theme.Spacing.md)
-        .background(Theme.Colors.accent.opacity(0.06))
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                .strokeBorder(Theme.Colors.accent.opacity(0.2), lineWidth: 1)
+    }
+
+    private func recoveryTile(_ signal: RecoverySignal) -> some View {
+        let tint = signal.metric.accentColor
+        let delta = TrendDelta(
+            current: signal.currentValue,
+            previous: signal.baselineValue,
+            higherIsBetter: signal.metric != .restingHeartRate
         )
-        .cornerRadius(Theme.CornerRadius.medium)
+
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 5) {
+                Image(systemName: signal.icon)
+                    .font(Theme.Typography.caption2Bold)
+                    .foregroundColor(tint)
+                Text(signal.metric.title)
+                    .font(Theme.Typography.caption2Bold)
+                    .foregroundColor(Theme.Colors.textSecondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
+                Text(String(format: "%.1f", signal.currentValue))
+                    .font(Theme.Typography.title3)
+                    .foregroundColor(Theme.Colors.textPrimary)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                Text(signal.unit)
+                    .font(Theme.Typography.caption2)
+                    .foregroundColor(Theme.Colors.textTertiary)
+            }
+
+            if let delta {
+                DeltaTag(delta: delta)
+            } else {
+                Text(String(format: "%+.1f%%", signal.percentChange))
+                    .font(Theme.Typography.caption2Bold)
+                    .foregroundColor(Theme.Colors.textSecondary)
+            }
+        }
+        .padding(Theme.Spacing.sm + 2)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
+                .fill(tint.opacity(Theme.Opacity.subtleFill))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
+                .strokeBorder(tint.opacity(0.16), lineWidth: 1)
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+            "\(signal.metric.title): \(String(format: "%.1f", signal.currentValue)) \(signal.unit), " +
+            "\(String(format: "%+.1f", signal.percentChange)) percent vs baseline"
+        )
     }
 
     // MARK: - Muscle Suggestions
@@ -110,81 +139,101 @@ struct PreWorkoutBriefingCard: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             HStack {
                 Text("Consider Training")
-                    .font(Theme.Typography.captionBold)
-                    .foregroundColor(Theme.Colors.textSecondary)
-                    .textCase(.uppercase)
-                    .tracking(0.8)
+                    .sectionHeaderStyle()
 
                 Spacer()
 
-                Button("View all") {
+                Button {
                     onViewAllMuscleRecency()
+                } label: {
+                    HStack(spacing: 3) {
+                        Text("View all")
+                        Image(systemName: "chevron.right")
+                            .font(Theme.Typography.microLabel)
+                    }
+                    .font(Theme.Typography.captionBold)
+                    .foregroundStyle(Theme.Colors.accent)
+                    .frame(minHeight: Theme.Layout.minimumTapTarget)
+                    .contentShape(.rect)
                 }
-                .font(Theme.Typography.captionBold)
-                .foregroundStyle(Theme.Colors.accent)
-                .textCase(.uppercase)
-                .tracking(0.8)
                 .buttonStyle(.plain)
-                .frame(minHeight: Theme.Layout.minimumTapTarget)
             }
 
-            ForEach(muscleSuggestions) { suggestion in
-                HStack(spacing: Theme.Spacing.md) {
-                    Circle()
-                        .fill(Theme.Colors.muscleGroupColor(for: suggestion.group))
-                        .frame(width: 8, height: 8)
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        HStack(spacing: Theme.Spacing.sm) {
-                            Text(suggestion.group.displayName)
-                                .font(Theme.Typography.captionBold)
-                                .foregroundColor(Theme.Colors.textPrimary)
-                            Text("\(suggestion.daysSince)d ago")
-                                .font(Theme.Typography.microcopy)
-                                .foregroundColor(Theme.Colors.textTertiary)
-                        }
-
-                        if let topExercise = suggestion.options.first {
-                            Button {
-                                onExerciseTap(topExercise.name)
-                            } label: {
-                                Text(topExercise.name)
-                                    .font(Theme.Typography.microcopy)
-                                    .foregroundColor(Theme.Colors.accent)
-                                    .frame(minHeight: Theme.Layout.minimumTapTarget)
-                                    .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-
-                    Spacer()
-
-                    Button {
-                        // Start with a real exercise for this group; passing the muscle group
-                        // name would add a bogus "Chest"/"Back" exercise to the session.
-                        onStartSession(suggestion.options.first?.name)
-                    } label: {
-                        Image(systemName: "plus.circle")
-                            .font(Theme.Typography.bodyLarge)
-                            .foregroundColor(Theme.Colors.accent)
-                            .frame(width: Theme.Layout.minimumTapTarget, height: Theme.Layout.minimumTapTarget)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(
-                        suggestion.options.first.map { "Start session with \($0.name)" }
-                            ?? "Start \(suggestion.group.displayName) session"
-                    )
+            VStack(spacing: Theme.Spacing.xs) {
+                ForEach(muscleSuggestions) { suggestion in
+                    suggestionRow(suggestion)
                 }
             }
         }
-        .padding(Theme.Spacing.md)
-        .background(Theme.Colors.accent.opacity(0.04))
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                .strokeBorder(Theme.Colors.accent.opacity(0.15), lineWidth: 1)
+    }
+
+    private func suggestionRow(_ suggestion: MuscleGroupSuggestion) -> some View {
+        let tint = Theme.Colors.muscleGroupColor(for: suggestion.group)
+
+        return HStack(spacing: Theme.Spacing.md) {
+            Capsule()
+                .fill(tint)
+                .frame(width: 4, height: 34)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: Theme.Spacing.sm) {
+                    Text(suggestion.group.displayName)
+                        .font(Theme.Typography.subheadlineStrong)
+                        .foregroundColor(Theme.Colors.textPrimary)
+                    Text("\(suggestion.daysSince)d ago")
+                        .font(Theme.Typography.caption2Bold)
+                        .foregroundColor(tint)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Capsule().fill(tint.opacity(Theme.Opacity.mediumFill)))
+                }
+
+                if let topExercise = suggestion.options.first {
+                    Button {
+                        onExerciseTap(topExercise.name)
+                    } label: {
+                        HStack(spacing: 3) {
+                            Text(topExercise.name)
+                                .lineLimit(1)
+                            Image(systemName: "chevron.right")
+                                .font(Theme.Typography.microLabel)
+                        }
+                        .font(Theme.Typography.caption)
+                        .foregroundColor(Theme.Colors.accent)
+                        .frame(minHeight: 36)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            Spacer(minLength: Theme.Spacing.sm)
+
+            Button {
+                // Start with a real exercise for this group; passing the muscle group
+                // name would add a bogus "Chest"/"Back" exercise to the session.
+                onStartSession(suggestion.options.first?.name)
+            } label: {
+                Image(systemName: "plus")
+                    .font(Theme.Typography.subheadlineBold)
+                    .foregroundColor(.white)
+                    .frame(width: 34, height: 34)
+                    .background(Circle().fill(Theme.accentGradient))
+                    .frame(width: Theme.Layout.minimumTapTarget, height: Theme.Layout.minimumTapTarget)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(AppInteractionButtonStyle())
+            .accessibilityLabel(
+                suggestion.options.first.map { "Start session with \($0.name)" }
+                    ?? "Start \(suggestion.group.displayName) session"
+            )
+        }
+        .padding(.horizontal, Theme.Spacing.sm)
+        .padding(.vertical, Theme.Spacing.xs)
+        .background(
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
+                .fill(Theme.Colors.surfaceRaised)
         )
-        .cornerRadius(Theme.CornerRadius.medium)
     }
 }

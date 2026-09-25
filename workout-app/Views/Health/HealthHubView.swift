@@ -188,9 +188,7 @@ struct HealthHubView: View {
 
     private var summarySection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Overview")
-                .font(Theme.Typography.sectionHeader2)
-                .foregroundStyle(Theme.Colors.textPrimary)
+            SectionHeading(title: "Overview")
 
             if let headlineInsight {
                 Text(headlineInsight)
@@ -253,7 +251,7 @@ struct HealthHubView: View {
                         DailyTimelineRow(model: row)
                             .equatable()
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(PressableCardButtonStyle())
                 }
             }
 
@@ -310,9 +308,7 @@ struct HealthHubView: View {
 
     private var categorySection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Explore Health")
-                .font(Theme.Typography.sectionHeader2)
-                .foregroundStyle(Theme.Colors.textPrimary)
+            SectionHeading(title: "Explore Health")
 
             LazyVGrid(
                 columns: [
@@ -335,7 +331,7 @@ struct HealthHubView: View {
                     } label: {
                         HealthCategoryCard(category: category)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(PressableCardButtonStyle())
                     .accessibilityIdentifier("health-category-\(category.rawValue)")
                 }
             }
@@ -767,18 +763,11 @@ private struct HealthCategoryCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            HStack {
-                Image(systemName: category.icon)
-                    .font(Theme.Iconography.title3)
-                    .foregroundStyle(category.tint)
-                    .frame(width: 40, height: 40)
-                    .background(
-                        RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                            .fill(category.tint.opacity(Theme.Opacity.subtleFill))
-                    )
+            HStack(alignment: .top) {
+                IconTile(systemImage: category.icon, tint: category.tint, size: 40)
                 Spacer()
 
-                Image(systemName: "chevron.right")
+                Image(systemName: "arrow.up.right")
                     .font(Theme.Typography.caption2Bold)
                     .foregroundStyle(Theme.Colors.textTertiary)
             }
@@ -791,8 +780,18 @@ private struct HealthCategoryCard: View {
                 .font(Theme.Typography.caption)
                 .foregroundStyle(Theme.Colors.textSecondary)
         }
-        .padding(.horizontal, Theme.Spacing.md)
-        .padding(.vertical, Theme.Spacing.sm)
+        .padding(Theme.Spacing.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [category.tint.opacity(0.10), category.tint.opacity(0)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+        )
         .softCard(elevation: 1)
     }
 }
