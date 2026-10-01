@@ -11,8 +11,8 @@ class CSVParser {
         var setOrder = 4
         var weight = 5
         var reps = 6
-        var distance = 7
-        var seconds = 8
+        var distance: Int?
+        var seconds: Int?
 
         var requiredCount: Int {
             [date, workoutName, duration, exerciseName, setOrder, weight, reps].max().map { $0 + 1 } ?? 9
@@ -36,8 +36,8 @@ class CSVParser {
             if let value = index("set order") { setOrder = value }
             if let value = index("weight") { weight = value }
             if let value = index("reps") { reps = value }
-            if let value = index("distance") { distance = value }
-            if let value = index("seconds") { seconds = value }
+            distance = index("distance")
+            seconds = index("seconds")
         }
     }
 
@@ -116,7 +116,7 @@ class CSVParser {
 
     /// Strong uses `;` as the separator in locales where `,` is the decimal separator.
     private nonisolated static func detectDelimiter(in text: String) -> Character {
-        let headerLine = text.prefix { $0 != "\n" && $0 != "\r" }
+        let headerLine = text.prefix { !$0.isNewline }
         let commas = headerLine.filter { $0 == "," }.count
         let semicolons = headerLine.filter { $0 == ";" }.count
         return semicolons > commas ? ";" : ","
@@ -130,8 +130,9 @@ class CSVParser {
         return formatter
     }
 
-    private nonisolated static func value(at index: Int, in components: [String]) -> String? {
-        components.indices.contains(index) ? components[index] : nil
+    private nonisolated static func value(at index: Int?, in components: [String]) -> String? {
+        guard let index, components.indices.contains(index) else { return nil }
+        return components[index]
     }
 
     /// Parses numbers written with either `.` or `,` as the decimal separator.

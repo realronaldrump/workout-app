@@ -70,6 +70,8 @@ final class RestTimerState: ObservableObject {
 enum WorkoutSessionError: LocalizedError {
     case noActiveSession
     case noCompletedSets
+    case finishInProgress
+    case sessionChangedWhileSaving
     case completedSetMissingFields(exercise: String, setOrder: Int)
     case completedSetMissingCardioFields(exercise: String, setOrder: Int)
 
@@ -79,6 +81,10 @@ enum WorkoutSessionError: LocalizedError {
             return "No active session."
         case .noCompletedSets:
             return "Log at least one completed set before finishing."
+        case .finishInProgress:
+            return "Your workout is already being saved."
+        case .sessionChangedWhileSaving:
+            return "An earlier version was saved, but your session changed while saving. Your current draft is still here. Review it and finish again."
         case .completedSetMissingFields(let exercise, let setOrder):
             return "Set \(setOrder) in \(exercise) is marked complete but missing weight/reps."
         case .completedSetMissingCardioFields(let exercise, let setOrder):
@@ -111,17 +117,23 @@ struct SetPrefill: Sendable {
 final class WorkoutSessionManager: ObservableObject {
     @Published var activeSession: ActiveWorkoutSession?
     @Published var isPresentingSessionUI: Bool = false
+    @Published private(set) var isFinishing = false
 
     let restTimer = RestTimerState()
     var restTimerSecondsRemaining: Int { restTimer.secondsRemaining }
     var restTimerIsActive: Bool { restTimer.isActive }
     var restTimerDuration: Int { restTimer.duration }
 
-    private let fileName = "active_session_v1.json"
+    private let draftURL: URL
     private let draftStore = ActiveSessionDraftStore()
     private var persistTask: Task<Void, Never>?
     private var restTimerTask: Task<Void, Never>?
     private var restTimerEndTime: Date?
+
+    init(draftURL: URL? = nil) {
+        self.draftURL = draftURL ?? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("active_session_v1.json")
+    }
 
     nonisolated deinit {
         persistTask?.cancel()
@@ -463,11 +475,21 @@ final class WorkoutSessionManager: ObservableObject {
         restTimer.setDuration(seconds)
     }
 
-    /// Validates the active session and builds the workout to save, without ending the session.
-    /// Callers should persist the result and then call `completeFinish(_:)`, so the in-progress
-    /// draft is only deleted once the finished workout is safely stored.
-    func prepareFinishedWorkout() throws -> LoggedWorkout {
+    /// Persists one snapshot before clearing its draft. Edits or a replacement session that
+    /// arrive during persistence are preserved, and overlapping finish requests are rejected.
+    func finish(persist: @MainActor (LoggedWorkout) async throws -> Void) async throws -> LoggedWorkout {
+        guard !isFinishing else { throw WorkoutSessionError.finishInProgress }
         guard let session = activeSession else { throw WorkoutSessionError.noActiveSession }
+        let workout = try prepareFinishedWorkout(from: session)
+
+        isFinishing = true
+        defer { isFinishing = false }
+        try await persist(workout)
+        try await completeFinish(workout, matching: session)
+        return workout
+    }
+
+    private func prepareFinishedWorkout(from session: ActiveWorkoutSession) throws -> LoggedWorkout {
 
         var totalLoggedSets = 0
         var loggedExercises: [LoggedExercise] = []
@@ -535,13 +557,14 @@ final class WorkoutSessionManager: ObservableObject {
         )
     }
 
-    /// Ends the active session after its workout has been persisted.
-    func completeFinish(_ workout: LoggedWorkout) async {
-        cancelRestTimer()
-        if activeSession?.id == workout.id {
-            activeSession = nil
+    private func completeFinish(_ workout: LoggedWorkout, matching session: ActiveWorkoutSession) async throws {
+        guard activeSession == session else {
+            saveImmediately()
+            throw WorkoutSessionError.sessionChangedWhileSaving
         }
-        await deleteDraftFile()
+        cancelRestTimer()
+        activeSession = nil
+        await deleteDraftFile(matching: session.id)
         let completedSetCount = workout.exercises.reduce(0) { $0 + $1.sets.count }
         AppAnalytics.shared.track(
             AnalyticsSignal.sessionFinished,
@@ -551,12 +574,6 @@ final class WorkoutSessionManager: ObservableObject {
             ],
             floatValue: max(0, workout.endedAt.timeIntervalSince(workout.startedAt))
         )
-    }
-
-    func finish() async throws -> LoggedWorkout {
-        let workout = try prepareFinishedWorkout()
-        await completeFinish(workout)
-        return workout
     }
 
     func discardDraft() async {
@@ -627,17 +644,16 @@ final class WorkoutSessionManager: ObservableObject {
         }
     }
 
-    private func deleteDraftFile() async {
+    private func deleteDraftFile(matching sessionID: UUID? = nil) async {
         persistTask?.cancel()
         persistTask = nil
 
         let url = fileURL()
-        await draftStore.delete(at: url)
+        await draftStore.delete(at: url, matching: sessionID)
     }
 
     private func fileURL() -> URL {
-        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        return documents.appendingPathComponent(fileName)
+        draftURL
     }
 
     private func touch(_ session: inout ActiveWorkoutSession) {
@@ -786,6 +802,10 @@ private enum RestTimerNotifier {
 }
 
 private actor ActiveSessionDraftStore {
+    private nonisolated struct DraftIdentity: Decodable {
+        let id: UUID
+    }
+
     func write(_ data: Data, to url: URL) {
         do {
             try data.write(to: url, options: [.atomic, .completeFileProtection])
@@ -794,9 +814,13 @@ private actor ActiveSessionDraftStore {
         }
     }
 
-    func delete(at url: URL) {
+    func delete(at url: URL, matching sessionID: UUID?) {
         do {
             if FileManager.default.fileExists(atPath: url.path) {
+                if let sessionID {
+                    let stored = try JSONDecoder().decode(DraftIdentity.self, from: Data(contentsOf: url))
+                    guard stored.id == sessionID else { return }
+                }
                 try FileManager.default.removeItem(at: url)
             }
         } catch {

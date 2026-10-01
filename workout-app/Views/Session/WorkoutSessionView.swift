@@ -54,6 +54,10 @@ struct WorkoutSessionView: View {
 
     private let allowedWeightIncrements: [Double] = [1.25, 2.5, 5.0]
 
+    private var isFinishingSession: Bool {
+        isFinishing || sessionManager.isFinishing
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -122,6 +126,7 @@ struct WorkoutSessionView: View {
                     .padding(.horizontal, Theme.Spacing.xl)
                 }
             }
+            .disabled(isFinishingSession)
             .toolbar(.hidden, for: .navigationBar)
             .analyticsScreen("WorkoutSession")
             .safeAreaInset(edge: .top, spacing: 0) {
@@ -163,7 +168,7 @@ struct WorkoutSessionView: View {
             }
             .sheet(isPresented: $showingFinishSheet) {
                 FinishSessionSheet(
-                    isFinishing: isFinishing,
+                    isFinishing: isFinishingSession,
                     didSave: finishDidSave,
                     summary: finishedSummary ?? cachedSummary,
                     errorMessage: finishErrorMessage,
@@ -173,7 +178,7 @@ struct WorkoutSessionView: View {
                 )
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
-                .interactiveDismissDisabled(isFinishing || finishDidSave)
+                .interactiveDismissDisabled(isFinishingSession || finishDidSave)
             }
             .alert("Discard Session?", isPresented: $showingDiscardAlert) {
                 Button("Keep", role: .cancel) {}
@@ -278,6 +283,7 @@ struct WorkoutSessionView: View {
                 refreshDerivedSessionState()
             }
         }
+        .interactiveDismissDisabled(isFinishingSession)
     }
 
     private var sessionTopBar: some View {
@@ -343,9 +349,10 @@ struct WorkoutSessionView: View {
                     )
             }
             .buttonStyle(.plain)
-            .disabled(sessionManager.activeSession == nil || isFinishing)
+            .disabled(sessionManager.activeSession == nil || isFinishingSession)
             .accessibilityLabel("Discard session")
         }
+        .disabled(isFinishingSession)
         .contentColumn()
         .padding(.horizontal, Theme.Spacing.xl)
         .padding(.top, Theme.Spacing.xs)
@@ -356,9 +363,9 @@ struct WorkoutSessionView: View {
     private var finishBar: some View {
         VStack(spacing: Theme.Spacing.xs) {
             AppPrimaryButton(
-                title: isFinishing ? "Saving Workout…" : "Finish Workout",
+                title: isFinishingSession ? "Saving Workout…" : "Finish Workout",
                 systemImage: "checkmark.circle.fill",
-                isEnabled: !isFinishing && cachedCanFinishSession
+                isEnabled: !isFinishingSession && cachedCanFinishSession
             ) {
                 presentFinishFlow()
                 Haptics.selection()
@@ -609,7 +616,7 @@ struct WorkoutSessionView: View {
     }
 
     private func finishSession() {
-        guard !isFinishing else { return }
+        guard !isFinishingSession else { return }
         isFinishing = true
         finishErrorMessage = nil
 
@@ -617,25 +624,24 @@ struct WorkoutSessionView: View {
             defer { isFinishing = false }
 
             do {
-                // Save before ending the session so a failed write never loses the workout:
-                // the draft is only deleted once the finished workout is stored.
-                let logged = try sessionManager.prepareFinishedWorkout()
-                do {
-                    try await logStore.save(logged)
-                } catch {
-                    throw WorkoutFinishSaveError(underlying: error)
+                let summary = cachedSummary
+                let logged = try await sessionManager.finish { workout in
+                    do {
+                        try await logStore.save(workout)
+                    } catch {
+                        throw WorkoutFinishSaveError(underlying: error)
+                    }
                 }
                 finishedSummary = FinishSessionSummary(
                     startedAt: logged.startedAt,
                     exerciseCount: logged.exercises.count,
-                    completedSetCount: cachedSummary.completedSetCount,
-                    strengthVolume: cachedSummary.strengthVolume,
-                    cardioDistance: cachedSummary.cardioDistance,
-                    cardioSeconds: cachedSummary.cardioSeconds,
-                    cardioCount: cachedSummary.cardioCount,
+                    completedSetCount: logged.exercises.reduce(0) { $0 + $1.sets.count },
+                    strengthVolume: summary.strengthVolume,
+                    cardioDistance: summary.cardioDistance,
+                    cardioSeconds: summary.cardioSeconds,
+                    cardioCount: summary.cardioCount,
                     endedAt: logged.endedAt
                 )
-                await sessionManager.completeFinish(logged)
                 await dataManager.setLoggedWorkoutsOffMain(logStore.workouts)
 
                 annotationsManager.setGym(for: logged.id, gymProfileId: logged.gymProfileId)
@@ -656,6 +662,7 @@ struct WorkoutSessionView: View {
                 Haptics.workoutFinished()
                 finishDidSave = true
             } catch {
+                await dataManager.setLoggedWorkoutsOffMain(logStore.workouts)
                 finishErrorMessage = error.localizedDescription
                 AppAnalytics.shared.track(
                     AnalyticsSignal.sessionFinishFailed,

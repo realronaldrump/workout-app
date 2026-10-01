@@ -56,6 +56,79 @@ final class CSVParserTests: XCTestCase {
         XCTAssertEqual(sets[0].seconds, 0)
     }
 
+    func testDelimiterDetectionIgnoresQuotedNotesForEveryLineEnding() throws {
+        let notes = String(repeating: ";", count: 40)
+        for newline in ["\n", "\r", "\r\n"] {
+            let csv = header + newline
+                + "2026-01-05 07:30:00,Push Day,45m,Bench Press,1,135,8,0,0,\"\(notes)\",," + newline
+
+            let sets = try CSVParser.parseStrongWorkoutsCSV(from: Data(csv.utf8))
+
+            XCTAssertEqual(sets.count, 1, "Line ending: \(newline.debugDescription)")
+            XCTAssertEqual(sets.first?.exerciseName, "Bench Press")
+        }
+    }
+
+    func testSemicolonDelimiterIgnoresCommaHeavyNotesWithWindowsLineEndings() throws {
+        let notes = String(repeating: ",", count: 40)
+        let csv = header.replacingOccurrences(of: ",", with: ";") + "\r\n"
+            + "2026-01-05 07:30:00;Leg Day;50m;Leg Press;1;102,5;10;0;0;\"\(notes)\";;\r\n"
+
+        let sets = try CSVParser.parseStrongWorkoutsCSV(from: Data(csv.utf8))
+
+        XCTAssertEqual(sets.count, 1)
+        XCTAssertEqual(sets.first?.weight, 102.5)
+    }
+
+    func testSecondsColumnDoesNotBecomeDistanceWhenDistanceHeaderIsMissing() throws {
+        let csv = """
+        Date,Workout Name,Duration,Exercise Name,Set Order,Weight,Reps,Seconds
+        2026-01-05 07:30:00,Cardio,45m,Running,1,0,0,180
+        """
+
+        let set = try XCTUnwrap(CSVParser.parseStrongWorkoutsCSV(from: Data(csv.utf8)).first)
+
+        XCTAssertEqual(set.distance, 0)
+        XCTAssertEqual(set.seconds, 180)
+    }
+
+    func testDistanceColumnDoesNotBecomeSecondsWhenSecondsHeaderIsMissing() throws {
+        let csv = """
+        Date,Workout Name,Duration,Exercise Name,Set Order,Weight,Reps,RPE,Distance
+        2026-01-05 07:30:00,Cardio,45m,Running,1,0,0,8,2.5
+        """
+
+        let set = try XCTUnwrap(CSVParser.parseStrongWorkoutsCSV(from: Data(csv.utf8)).first)
+
+        XCTAssertEqual(set.distance, 2.5)
+        XCTAssertEqual(set.seconds, 0)
+    }
+
+    func testMissingMetricHeadersDoNotReadOtherNumericColumns() throws {
+        let csv = """
+        Date,Workout Name,Duration,Exercise Name,Set Order,Weight,Reps,RPE,Notes
+        2026-01-05 07:30:00,Push Day,45m,Bench Press,1,135,8,9,10
+        """
+
+        let set = try XCTUnwrap(CSVParser.parseStrongWorkoutsCSV(from: Data(csv.utf8)).first)
+
+        XCTAssertEqual(set.distance, 0)
+        XCTAssertEqual(set.seconds, 0)
+    }
+
+    func testReorderedMetricHeadersKeepTheirOwnValues() throws {
+        let csv = """
+        Exercise Name,Seconds,Workout Name,Reps,Date,Weight,Set Order,Duration,Distance
+        Running,180,Cardio,0,2026-01-05 07:30:00,0,1,45m,2.5
+        """
+
+        let set = try XCTUnwrap(CSVParser.parseStrongWorkoutsCSV(from: Data(csv.utf8)).first)
+
+        XCTAssertEqual(set.exerciseName, "Running")
+        XCTAssertEqual(set.distance, 2.5)
+        XCTAssertEqual(set.seconds, 180)
+    }
+
     func testHeaderOnlyFileThrowsEmptyFile() {
         XCTAssertThrowsError(try CSVParser.parseStrongWorkoutsCSV(from: Data("\(header)\n\n".utf8))) { error in
             guard case CSVParserError.emptyFile = error else {

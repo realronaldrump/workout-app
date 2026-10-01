@@ -125,6 +125,7 @@ struct FinishSessionSheet: View {
                     ) {
                         dismiss()
                     }
+                    .disabled(isFinishing)
                 }
 
                 statGrid
