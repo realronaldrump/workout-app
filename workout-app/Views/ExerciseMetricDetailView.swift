@@ -85,7 +85,7 @@ struct ExerciseMetricDetailView: View {
         }
         .sheet(isPresented: $showingCustomRange) {
             BrutalistDateRangeSheet(
-                title: "Analysis Range",
+                title: "Analysis range",
                 startDate: $customStartDate,
                 endDate: $customEndDate,
                 earliestSelectableDate: sessions.map(\.date).min(),
@@ -96,7 +96,7 @@ struct ExerciseMetricDetailView: View {
 
     private var hero: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text(selection.focus == .recordHistory ? "Personal Record" : metricTitle)
+            Text(selection.focus == .recordHistory ? "Personal record" : metricTitle)
                 .sectionHeaderStyle()
                 .foregroundStyle(metricInk)
 
@@ -138,8 +138,8 @@ struct ExerciseMetricDetailView: View {
 
     private var recordProgression: some View {
         chartCard(
-            title: "Record Progression",
-            subtitle: "Strict improvements only",
+            title: "Record progression",
+            help: "Shows each new personal best. Equal results do not count as new records.",
             points: visibleRecordPoints,
             presentation: ChartPresentation(
                 style: .step,
@@ -206,13 +206,14 @@ struct ExerciseMetricDetailView: View {
 
     private func chartCard(
         title: String,
-        subtitle: String,
+        subtitle: String? = nil,
+        help: String? = nil,
         points: [MetricObservation],
         presentation: ChartPresentation,
         selectedDate: Binding<Date?>
     ) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            sectionHeader(title, subtitle: subtitle)
+            sectionHeader(title, subtitle: subtitle, help: help)
 
                 if let selected = selectedObservation(
                     in: points,
@@ -230,11 +231,6 @@ struct ExerciseMetricDetailView: View {
                     selectedDate: selectedDate
                 )
 
-                if presentation.style == .line && points.map(\.value).min() ?? 0 > 0 {
-                    Text("Focused scale · exact values shown when selected")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textTertiary)
-                }
         }
         .padding(Theme.Spacing.lg)
         .softCard(elevation: 1)
@@ -282,7 +278,7 @@ struct ExerciseMetricDetailView: View {
 
     private var summarySection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            sectionHeader("At a Glance")
+            sectionHeader("Summary")
 
             LazyVGrid(
                 columns: [
@@ -326,7 +322,7 @@ struct ExerciseMetricDetailView: View {
         if !visibleRecordEvents.isEmpty {
             VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                 sectionHeader(
-                    "Record History",
+                    "Record history",
                     subtitle: evidenceCountSubtitle(
                         shown: displayedRecordEvents.count,
                         total: visibleRecordEvents.count,
@@ -391,7 +387,7 @@ struct ExerciseMetricDetailView: View {
     private var topAttempts: some View {
         if !visibleTopAttempts.isEmpty {
             VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                sectionHeader("Top Attempts", subtitle: selectedRange.menuTitle)
+                sectionHeader("Top attempts", subtitle: selectedRange.menuTitle)
 
                 ForEach(Array(displayedTopAttempts.enumerated()), id: \.element.id) { index, observation in
                     evidenceRow(
@@ -514,12 +510,14 @@ struct ExerciseMetricDetailView: View {
         .softCard(elevation: 1)
     }
 
-    private func sectionHeader(_ title: String, subtitle: String? = nil) -> some View {
+    private func sectionHeader(_ title: String, subtitle: String? = nil, help: String? = nil) -> some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(title)
-                .font(Theme.Typography.sectionHeader2)
-                .foregroundStyle(Theme.Colors.textPrimary)
-                .tracking(0.8)
+            HStack(spacing: Theme.Spacing.sm) {
+                Text(title)
+                    .font(Theme.Typography.sectionHeader2)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                if let help { AppHelpButton(title: title, message: help) }
+            }
 
             if let subtitle {
                 Text(subtitle)
@@ -531,9 +529,8 @@ struct ExerciseMetricDetailView: View {
     }
 
     private func eyebrow(_ text: String, tint: Color = Theme.Colors.textSecondary) -> some View {
-        Text(text.uppercased())
-            .font(Theme.Typography.metricLabel)
-            .tracking(0.8)
+        Text(text)
+            .font(Theme.Typography.subheadlineStrong)
             .foregroundStyle(tint)
     }
 
@@ -642,7 +639,7 @@ struct ExerciseMetricDetailView: View {
             let improvement = analysis.direction == .lowerIsBetter
                 ? first - best
                 : best - first
-            return "\(formatDelta(improvement)) beyond the first recorded best"
+            return "\(formatDelta(improvement)) since first record"
         }
         if let comparison = analysis.recentComparison,
            abs(comparison.improvement) > 0.000_001 {
@@ -662,18 +659,16 @@ struct ExerciseMetricDetailView: View {
 
     private var historyTitle: String {
         switch selection.metric {
-        case .sessions: return "Session History"
-        case .setCount: return "Sets per Session"
-        case .averageReps: return "Average Reps per Set"
-        case .sessionVolume: return "Volume per Session"
-        default: return "Every Session"
+        case .sessions: return "Session history"
+        case .setCount: return "Sets per session"
+        case .averageReps: return "Average reps per set"
+        case .sessionVolume: return "Volume per session"
+        default: return "Every session"
         }
     }
 
     private var historySubtitle: String {
-        selection.metric == .sessions
-            ? "Each point is one logged session"
-            : selectedRange.menuTitle
+        selectedRange.menuTitle
     }
 
     private var metricTitle: String {
@@ -681,10 +676,10 @@ struct ExerciseMetricDetailView: View {
         case .sessions: return "Sessions"
         case .setCount: return "Sets"
         case .maxLoad: return ExerciseLoad.weightMetricTitle(for: selection.scope.performanceTrackName)
-        case .averageReps: return "Average Reps"
-        case .maxReps: return "Most Reps"
-        case .sessionVolume: return "Session Volume"
-        case .setVolume: return "Set Volume"
+        case .averageReps: return "Average reps"
+        case .maxReps: return "Most reps"
+        case .sessionVolume: return "Session volume"
+        case .setVolume: return "Set volume"
         case .estimatedOneRepMax:
             return ExerciseLoad.oneRepMaxTitle(for: selection.scope.performanceTrackName)
         case .distance: return "Distance"
@@ -725,7 +720,7 @@ struct ExerciseMetricDetailView: View {
         case .unassigned: scope = "Unassigned"
         case .gym(let id): scope = gymProfilesManager.gymName(for: id) ?? "Deleted gym"
         }
-        return "\(selection.scope.performanceTrackName) · \(scope) · \(analysis.observations.count) recorded"
+        return "\(selection.scope.performanceTrackName), \(scope), \(analysis.observations.count) recorded"
     }
 
     private var showsTotalSummary: Bool {
@@ -827,7 +822,7 @@ struct ExerciseMetricDetailView: View {
             }
         }
         parts.append(observation.workoutName)
-        return parts.joined(separator: " · ")
+        return parts.joined(separator: ", ")
     }
 
     private func dateText(_ date: Date) -> String {

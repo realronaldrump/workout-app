@@ -13,6 +13,7 @@ class CSVParser {
         var reps = 6
         var distance: Int?
         var seconds: Int?
+        var weightMultiplier = 1.0
 
         var requiredCount: Int {
             [date, workoutName, duration, exerciseName, setOrder, weight, reps].max().map { $0 + 1 } ?? 9
@@ -34,7 +35,14 @@ class CSVParser {
             if let value = index("duration") { duration = value }
             if let value = index("exercise name") { exerciseName = value }
             if let value = index("set order") { setOrder = value }
-            if let value = index("weight") { weight = value }
+            if let value = index("weight") {
+                weight = value
+                let header = normalized[value]
+                if header.contains("kg") || header.contains("kilogram") {
+                    // The app's stored and displayed strength unit is pounds.
+                    weightMultiplier = 2.2046226218487757
+                }
+            }
             if let value = index("reps") { reps = value }
             distance = index("distance")
             seconds = index("seconds")
@@ -71,17 +79,25 @@ class CSVParser {
 
             let dateText = components[columns.date]
             guard let date = primaryFormatter.date(from: dateText) ?? fallbackFormatter.date(from: dateText),
-                  let setOrder = Int(components[columns.setOrder]),
-                  let weight = parseNumber(components[columns.weight]),
-                  let repsValue = parseNumber(components[columns.reps]),
-                  repsValue >= 0, repsValue < Double(Int32.max) else {
+                  let setOrder = Int(components[columns.setOrder]) else {
+                continue
+            }
+            // Strength-only cells can be blank for bodyweight and cardio exercises.
+            // Invalid nonempty numbers still reject the row instead of inventing data.
+            let weightText = components[columns.weight]
+            let repsText = components[columns.reps]
+            let distance = value(at: columns.distance, in: components).flatMap(parseNumber) ?? 0.0
+            let seconds = value(at: columns.seconds, in: components).flatMap(parseNumber) ?? 0.0
+            guard let weight = weightText.isEmpty ? 0 : parseNumber(weightText),
+                  let repsValue = repsText.isEmpty ? 0 : parseNumber(repsText),
+                  repsValue >= 0, repsValue < Double(Int32.max),
+                  !components[columns.exerciseName].isEmpty,
+                  (!repsText.isEmpty && !weightText.isEmpty) || repsValue > 0 || distance > 0 || seconds > 0 else {
                 continue
             }
             let reps = Int(repsValue.rounded())
-
-            // Distance and seconds are optional - default to 0 if missing, empty or invalid.
-            let distance = value(at: columns.distance, in: components).flatMap(parseNumber) ?? 0.0
-            let seconds = value(at: columns.seconds, in: components).flatMap(parseNumber) ?? 0.0
+            let normalizedWeight = weight * columns.weightMultiplier
+            guard normalizedWeight.isFinite else { continue }
 
             let workoutSet = WorkoutSet(
                 date: date,
@@ -89,7 +105,7 @@ class CSVParser {
                 duration: components[columns.duration],
                 exerciseName: components[columns.exerciseName],
                 setOrder: setOrder,
-                weight: weight,
+                weight: normalizedWeight,
                 reps: reps,
                 distance: distance,
                 seconds: seconds
@@ -98,6 +114,8 @@ class CSVParser {
             workoutSets.append(workoutSet)
         }
 
+        // An unsupported CSV must never become an empty replacement of saved history.
+        guard !workoutSets.isEmpty else { throw CSVParserError.noWorkoutSets }
         return workoutSets
     }
 
@@ -213,13 +231,17 @@ class CSVParser {
 enum CSVParserError: LocalizedError {
     case invalidData
     case emptyFile
+    case noWorkoutSets
 
     var errorDescription: String? {
         switch self {
         case .invalidData:
-            return "Unable to read CSV data"
+            return "Could not read the CSV data. Choose a Strong workout CSV."
         case .emptyFile:
-            return "CSV file is empty or invalid"
+            return "The CSV file is empty or not valid. Choose a Strong workout CSV."
+        case .noWorkoutSets:
+            return "No workout sets were found. Choose a Strong workout CSV, or a full backup to restore this app's workouts. "
+                + "Your saved workouts were not changed."
         }
     }
 }

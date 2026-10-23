@@ -1,15 +1,15 @@
 import Foundation
 import SwiftUI
 
-// MARK: - Brand Band
+// MARK: - Label Tag
 
-/// The app icon's signature move: tight uppercase type knocked out of an
-/// electric-blue band. Reserved for small, high-signal labels.
+/// A small stamped label for status and context ("Live session", "Workout saved").
+/// Sentence case, never tracked out.
 struct BrandBandLabel: View {
     let text: String
     var systemImage: String?
-    var fill: Color = Theme.Colors.brandBand
-    var textColor: Color = .white
+    var fill: Color = Theme.Colors.ink
+    var textColor: Color = Theme.Colors.onAccent
 
     var body: some View {
         HStack(spacing: 4) {
@@ -20,103 +20,56 @@ struct BrandBandLabel: View {
             }
             Text(text)
                 .font(Theme.Typography.bandLabel)
-                .textCase(.uppercase)
-                .tracking(1.1)
-                .lineLimit(1)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .foregroundStyle(textColor)
         .padding(.horizontal, 7)
         .padding(.vertical, 3)
-        .background(fill, in: RoundedRectangle(cornerRadius: 3, style: .continuous))
+        .background(fill, in: RoundedRectangle(cornerRadius: Theme.CornerRadius.tag, style: .continuous))
     }
 }
 
-// MARK: - Hero Card Background
+// MARK: - Hero Panel Background
 
-/// Deep brand gradient with a soft highlight and an optional oversized symbol
-/// watermark. White content sits on top.
+/// A flat ink panel for the rare surface that should read inverted. Content on top
+/// uses `Theme.Colors.onAccent`.
 struct HeroCardBackground: View {
     var cornerRadius: CGFloat = Theme.CornerRadius.xlarge
     var watermark: String?
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-        // Decorations live in overlays so they never influence layout, and a single
-        // clip keeps the oversized watermark inside the card's corners.
-        shape
-            .fill(Theme.heroGradient)
-            .overlay {
-                RadialGradient(
-                    colors: [Color.white.opacity(0.28), .clear],
-                    center: UnitPoint(x: 0.9, y: 0.05),
-                    startRadius: 0,
-                    endRadius: 220
-                )
-            }
-            .overlay(alignment: .bottomTrailing) {
-                if let watermark {
-                    Image(systemName: watermark)
-                        .font(.system(size: 150, weight: .black))
-                        .foregroundStyle(Color.white.opacity(0.07))
-                        .rotationEffect(.degrees(-12))
-                        .offset(x: 34, y: 34)
-                }
-            }
-            .clipShape(shape)
-            .overlay(
-                shape.strokeBorder(
-                    LinearGradient(
-                        colors: [Color.white.opacity(0.35), Color.white.opacity(0.05)],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    ),
-                    lineWidth: 1
-                )
-            )
-            .shadow(color: Theme.Colors.accent.opacity(0.28), radius: 18, x: 0, y: 10)
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .fill(Theme.Colors.ink)
             .accessibilityHidden(true)
     }
 }
 
-// MARK: - Icon Tile
+// MARK: - Icon Mark
 
-/// A gradient-filled rounded square carrying a white SF Symbol, in the spirit of
-/// Settings icons but with a little more light.
+/// A plain symbol in its meaning color. Tiles, gradients, and glows are gone; the
+/// frame keeps rows aligned where icons used to sit in squares.
 struct IconTile: View {
     let systemImage: String
     let tint: Color
     var size: CGFloat = 36
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
         Image(systemName: systemImage)
-            .font(.system(size: size * 0.44, weight: .semibold))
-            .foregroundStyle(.white)
+            .font(.system(size: size * 0.5, weight: .semibold))
+            .foregroundStyle(tint)
             .frame(width: size, height: size)
-            .background(
-                shape.fill(
-                    LinearGradient(
-                        colors: [tint.opacity(0.78), tint],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-            )
-            .overlay(shape.strokeBorder(Color.white.opacity(0.18), lineWidth: 0.5))
-            .shadow(color: tint.opacity(0.3), radius: 4, x: 0, y: 2)
             .accessibilityHidden(true)
     }
 }
 
 // MARK: - Progress Ring
 
-/// Animated circular progress with round caps. Progress above 1 stays full and
-/// picks up a glow so over-achievement reads as a win instead of a clamp.
+/// Circular progress with square caps, drawn in a single flat tone.
 struct ProgressRing: View {
     let progress: Double
     var lineWidth: CGFloat = 10
     var tint: Color = Theme.Colors.accent
-    var trackTint: Color = Theme.Colors.border.opacity(0.5)
+    var trackTint: Color = Theme.Colors.panelStrong
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var displayedProgress: Double = 0
@@ -132,17 +85,8 @@ struct ProgressRing: View {
 
             Circle()
                 .trim(from: 0, to: displayedProgress)
-                .stroke(
-                    AngularGradient(
-                        colors: [tint.opacity(0.65), tint],
-                        center: .center,
-                        startAngle: .degrees(0),
-                        endAngle: .degrees(360 * max(displayedProgress, 0.01))
-                    ),
-                    style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
-                )
+                .stroke(tint, style: StrokeStyle(lineWidth: lineWidth, lineCap: .butt))
                 .rotationEffect(.degrees(-90))
-                .shadow(color: progress >= 1 ? tint.opacity(0.55) : .clear, radius: lineWidth * 0.6)
         }
         .padding(lineWidth / 2)
         .accessibilityHidden(true)
@@ -150,7 +94,7 @@ struct ProgressRing: View {
             if reduceMotion {
                 displayedProgress = clamped
             } else {
-                withAnimation(Theme.Animation.chartAppear.delay(0.15)) {
+                withAnimation(Theme.Animation.chartAppear.delay(0.1)) {
                     displayedProgress = clamped
                 }
             }
@@ -206,7 +150,6 @@ private struct ConfettiParticle: Identifiable {
     let spin: Double
     let width: Double
     let height: Double
-    let isCircle: Bool
     let colorIndex: Int
     let delay: Double
 
@@ -214,32 +157,29 @@ private struct ConfettiParticle: Identifiable {
         // Launch in an upward cone, then let gravity bring everything back down.
         let angle = Double.random(in: (-155.0)...(-25.0)) * .pi / 180
         let speed = Double.random(in: 380...820)
-        let isCircle = Double.random(in: 0...1) < 0.3
-        let width = isCircle ? Double.random(in: 6...9) : Double.random(in: 6...10)
+        let width = Double.random(in: 4...6)
         return ConfettiParticle(
             velocityX: cos(angle) * speed,
             velocityY: sin(angle) * speed,
             spin: Double.random(in: -540...540),
             width: width,
-            height: isCircle ? width : Double.random(in: 10...16),
-            isCircle: isCircle,
+            height: Double.random(in: 12...18),
             colorIndex: Int.random(in: 0..<max(colorCount, 1)),
             delay: Double.random(in: 0...0.12)
         )
     }
 }
 
-/// A one-shot confetti burst drawn with a single Canvas. Increment `trigger`
-/// to fire. Does nothing under Reduce Motion and never intercepts touches.
+/// A one-shot burst of tiny bumper plates drawn with a single Canvas. Increment
+/// `trigger` to fire. Does nothing under Reduce Motion and never intercepts touches.
 struct ConfettiBurst: View {
     let trigger: Int
     var colors: [Color] = [
-        Theme.Colors.accent,
-        Theme.Colors.gold,
-        Theme.Colors.success,
-        Theme.Colors.accentSecondary,
-        Theme.Colors.accentTertiary,
-        Theme.Colors.triceps
+        Theme.Colors.plateRed,
+        Theme.Colors.plateBlue,
+        Theme.Colors.plateYellow,
+        Theme.Colors.plateGreen,
+        Theme.Colors.ink
     ]
     var particleCount: Int = 44
     var duration: Double = 2.2
@@ -286,9 +226,7 @@ struct ConfettiBurst: View {
                         width: particle.width,
                         height: particle.height
                     )
-                    let path = particle.isCircle
-                        ? Path(ellipseIn: rect)
-                        : Path(roundedRect: rect, cornerRadius: 1.5)
+                    let path = Path(roundedRect: rect, cornerRadius: 1.5)
                     particleContext.fill(path, with: .color(palette[particle.colorIndex % palette.count]))
                 }
             }
@@ -317,50 +255,58 @@ struct ConfettiBurst: View {
 
 // MARK: - Section Heading
 
-/// Consistent section title with an optional trailing accessory.
+/// A section title in the display face with an optional trailing accessory.
 struct SectionHeading<Accessory: View>: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let title: String
     var subtitle: String?
+    var help: String?
     @ViewBuilder var accessory: () -> Accessory
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.sm) {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: Theme.Spacing.sm))
+            : AnyLayout(HStackLayout(alignment: .lastTextBaseline, spacing: Theme.Spacing.sm))
+        layout {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(Theme.Typography.sectionHeader2)
                     .foregroundStyle(Theme.Colors.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
                     .accessibilityAddTraits(.isHeader)
                 if let subtitle {
                     Text(subtitle)
-                        .font(Theme.Typography.caption)
+                        .font(Theme.Typography.subheadline)
                         .foregroundStyle(Theme.Colors.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            Spacer(minLength: Theme.Spacing.sm)
+            if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: Theme.Spacing.sm) }
+            if let help { AppHelpButton(title: title, message: help) }
             accessory()
         }
     }
 }
 
 extension SectionHeading where Accessory == EmptyView {
-    init(title: String, subtitle: String? = nil) {
+    init(title: String, subtitle: String? = nil, help: String? = nil) {
         self.title = title
         self.subtitle = subtitle
+        self.help = help
         self.accessory = { EmptyView() }
     }
 }
 
-// MARK: - Pressable Card Style
+// MARK: - Pressable Style
 
-/// Press feedback for large tappable cards: a gentle squish and dim.
+/// Press feedback for large tappable surfaces: a quick dim and a small settle.
 struct PressableCardButtonStyle: ButtonStyle {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.975 : 1)
-            .brightness(configuration.isPressed ? -0.03 : 0)
-            .animation(reduceMotion ? nil : .spring(response: 0.25, dampingFraction: 0.7), value: configuration.isPressed)
+            .opacity(configuration.isPressed ? 0.72 : 1)
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.985 : 1)
+            .animation(reduceMotion ? nil : Theme.Animation.quick, value: configuration.isPressed)
     }
 }

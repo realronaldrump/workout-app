@@ -74,8 +74,7 @@ struct WorkoutSessionInsightsView: View {
                 }
             }
         }
-        .navigationTitle("Session")
-        .navigationBarTitleDisplayMode(.inline)
+        .collapsingTitle("Session")
         .navigationDestination(item: $selectedExercise) { selection in
             ExerciseDetailView(
                 exerciseName: selection.id,
@@ -97,7 +96,7 @@ struct WorkoutSessionInsightsView: View {
 
     private var volumeChartSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            SectionHeading(title: "Volume by Exercise", subtitle: "Tap a bar to open that lift")
+            SectionHeading(title: "Volume by exercise")
 
             if exerciseVolumes.isEmpty {
                 Text("No exercise volume data.")
@@ -117,7 +116,7 @@ struct WorkoutSessionInsightsView: View {
                         content: {
                             HStack(spacing: Theme.Spacing.sm) {
                                 VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                                    Text("Selected Exercise")
+                                    Text("Selected exercise")
                                         .sectionHeaderStyle()
                                     Text(selectedVolumeExercise.name)
                                         .font(Theme.Typography.bodyBold)
@@ -207,7 +206,7 @@ struct WorkoutSessionInsightsView: View {
                     action: { selectedFocus = .volume }
                 )
                 MetricStatPill(
-                    title: "Total Sets",
+                    title: "Total sets",
                     value: "\(ExerciseAggregation.totalSets(for: workout, resolver: ExerciseIdentityResolver.current))",
                     isSelected: selectedFocus == .exercises,
                     action: { selectedFocus = .exercises }
@@ -226,7 +225,7 @@ struct WorkoutSessionInsightsView: View {
 
     private var healthSnapshotSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Health Snapshot")
+            Text("Health snapshot")
                 .font(Theme.Typography.title3)
                 .foregroundStyle(Theme.Colors.textPrimary)
 
@@ -275,7 +274,7 @@ struct WorkoutSessionInsightsView: View {
 
     private var exerciseLinksSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Explore")
+            Text("Exercises")
                 .font(Theme.Typography.title3)
                 .foregroundStyle(Theme.Colors.textPrimary)
 
@@ -290,7 +289,7 @@ struct WorkoutSessionInsightsView: View {
             )
 
             if sorted.isEmpty {
-                EmptyStateCard(title: "No exercises", message: "This workout has no exercises.")
+                EmptyStateCard(title: "No exercises with volume", message: "Exercises without logged weight are not listed.")
             } else {
                 ForEach(sorted, id: \.name) { item in
                     NavigationLink(

@@ -53,19 +53,19 @@ nonisolated enum ExerciseLoad {
     }
 
     static func weightMetricTitle(for exerciseName: String) -> String {
-        isAssistedExercise(exerciseName) ? "Least Assistance" : "Max Weight"
+        isAssistedExercise(exerciseName) ? "Least assistance" : "Max weight"
     }
 
     static func weightRecordTitle(for exerciseName: String) -> String {
-        isAssistedExercise(exerciseName) ? "Lowest Assistance" : "Heaviest Weight"
+        isAssistedExercise(exerciseName) ? "Lowest assistance" : "Heaviest weight"
     }
 
     static func oneRepMaxTitle(for exerciseName: String) -> String {
-        isAssistedExercise(exerciseName) ? "Assistance Score" : "Est. 1RM"
+        isAssistedExercise(exerciseName) ? "Assistance score" : "Est. 1RM"
     }
 
     static func chartOneRepMaxTitle(for exerciseName: String) -> String {
-        isAssistedExercise(exerciseName) ? "Assistance Score" : "1RM"
+        isAssistedExercise(exerciseName) ? "Assistance score" : "1RM"
     }
 
     static func weightUnitLabel(for exerciseName: String) -> String {

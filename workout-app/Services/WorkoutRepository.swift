@@ -384,35 +384,7 @@ private extension WorkoutRepository {
     }
 
     nonisolated static func mapLoggedWorkoutToAnalyticsWorkout(_ logged: LoggedWorkout) -> Workout {
-        let duration = formatDuration(start: logged.startedAt, end: logged.endedAt)
-        let exercises: [Exercise] = logged.exercises.map { loggedExercise in
-            let sets: [WorkoutSet] = loggedExercise.sets.map { loggedSet in
-                WorkoutSet(
-                    date: logged.startedAt,
-                    workoutName: logged.name,
-                    duration: duration,
-                    exerciseName: loggedExercise.name,
-                    setOrder: loggedSet.order,
-                    weight: loggedSet.weight,
-                    reps: loggedSet.reps,
-                    distance: loggedSet.distance ?? 0,
-                    seconds: loggedSet.seconds ?? 0
-                )
-            }
-            return Exercise(id: loggedExercise.id, name: loggedExercise.name, sets: sets.sorted { $0.setOrder < $1.setOrder })
-        }
-        return Workout(id: logged.id, date: logged.startedAt, name: logged.name, duration: duration, exercises: exercises)
-    }
-
-    nonisolated static func formatDuration(start: Date, end: Date) -> String {
-        let seconds = max(0, end.timeIntervalSince(start))
-        let minutes = Int(ceil(seconds / 60.0))
-        if minutes >= 60 {
-            let hours = minutes / 60
-            let minutesRemainder = minutes % 60
-            return minutesRemainder == 0 ? "\(hours)h" : "\(hours)h \(minutesRemainder)m"
-        }
-        return "\(minutes)m"
+        logged.analyticsWorkout
     }
 
     nonisolated static func allExerciseNames(for workouts: [Workout]) -> [String] {

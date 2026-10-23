@@ -3,6 +3,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(\.openURL) private var openURL
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ObservedObject var dataManager: WorkoutDataManager
     @ObservedObject var iCloudManager: iCloudDocumentManager
     @Binding var selectedTab: AppTab
@@ -34,409 +35,25 @@ struct SettingsView: View {
             AdaptiveBackground()
 
             ScrollView {
-                LazyVStack(spacing: Theme.Spacing.xxl) {
+                LazyVStack(alignment: .leading, spacing: Theme.Spacing.section) {
+                    trainingSection
+                    healthSection
+                    dataSection
+                    appSection
+                    removalSection
 
-                // Appearance Section
-                VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-                    SettingsSectionLabel("APPEARANCE")
-
-                    HStack(spacing: Theme.Spacing.sm) {
-                        Image(systemName: appearanceIcon)
-                            .font(Theme.Typography.subheadlineStrong)
-                            .foregroundStyle(.white)
-                            .frame(width: 32, height: 32)
-                            .background(Theme.Colors.accent)
-                            .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
-
-                        Text("Theme")
-                            .font(Theme.Typography.body)
-
-                        Spacer()
-                    }
-                    .padding(.horizontal)
-
-                    Picker("Appearance", selection: $appearanceMode) {
-                        ForEach(AppearanceMode.allCases, id: \.rawValue) { mode in
-                            Text(mode.label).tag(mode.rawValue)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .padding(.horizontal)
-                }
-
-                // Data Management Section
-                VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-                    SettingsSectionLabel("DATA & SYNC")
-
-                    VStack(spacing: 1) {
-                        SettingsRow(
-                            icon: "square.and.arrow.down",
-                            color: Theme.Colors.accent,
-                            title: "Import Data",
-                            subtitle: "CSV or app backup"
-                        ) {
-                            showingImportWizard = true
-                        }
-
-                        Divider().padding(.leading, 50)
-
-                        NavigationLink(destination: ExportWorkoutsView(dataManager: dataManager, iCloudManager: iCloudManager)) {
-                            SettingsInlineRow(
-                                icon: "square.and.arrow.up",
-                                color: Theme.Colors.accentSecondary,
-                                title: "Export Data",
-                                subtitle: "Master backup & CSV"
-                            )
-                        }
-                        .buttonStyle(PlainButtonStyle())
-
-                        Divider().padding(.leading, 50)
-
-                        SettingsRow(
-                            icon: "heart.fill",
-                            color: Theme.Colors.error,
-                            title: "Apple Health",
-                            subtitle: healthManager.authorizationStatus == .authorized ? "Connected" : "Health off",
-                            value: healthManager.authorizationStatus == .authorized ? "On" : "Off"
-                        ) {
-                            if healthManager.authorizationStatus == .authorized {
-                                selectedTab = .health
-                            } else {
-                                showingHealthWizard = true
-                            }
-                        }
-
-                        if healthManager.authorizationStatus == .denied {
-                            Button {
-                                guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
-                                openURL(url)
-                            } label: {
-                                HStack(spacing: Theme.Spacing.sm) {
-                                    Image(systemName: "gear")
-                                        .font(Theme.Typography.caption)
-                                    Text("Open Settings to grant Health access")
-                                        .font(Theme.Typography.caption)
-                                }
-                                .foregroundStyle(Theme.Colors.accent)
-                                .padding(.horizontal, Theme.Spacing.xl)
-                                .padding(.vertical, Theme.Spacing.sm)
-                            }
-                            .buttonStyle(.plain)
-                        }
-
-                        Divider().padding(.leading, 50)
-
-                        NavigationLink(destination: HealthPermissionAuditView()) {
-                            SettingsInlineRow(
-                                icon: "checklist.checked",
-                                color: Theme.Colors.warning,
-                                title: "Health Permissions",
-                                subtitle: healthPermissionsSubtitle
-                            )
-                        }
-                        .buttonStyle(PlainButtonStyle())
-
-                        Divider().padding(.leading, 50)
-
-                        NavigationLink(destination: HealthDataSettingsView(workouts: dataManager.workouts)) {
-                            SettingsInlineRow(
-                                icon: "clock.arrow.trianglehead.counterclockwise.rotate.90",
-                                color: Theme.Colors.error,
-                                title: "Health Data",
-                                subtitle: healthDataSubtitle
-                            )
-                        }
-                        .buttonStyle(PlainButtonStyle())
-
-                        Divider().padding(.leading, 50)
-
-                        NavigationLink(destination: SleepSourceSettingsView(workouts: dataManager.workouts)) {
-                            SettingsInlineRow(
-                                icon: "moon.zzz.fill",
-                                color: Theme.Colors.accentSecondary,
-                                title: "Sleep Source",
-                                subtitle: sleepSourceSubtitle
-                            )
-                        }
-                        .buttonStyle(PlainButtonStyle())
-
-                        Divider().padding(.leading, 50)
-
-                        NavigationLink(destination: BackupFilesView(iCloudManager: iCloudManager)) {
-                            SettingsInlineRow(
-                                icon: "icloud.fill",
-                                color: Theme.Colors.cardio,
-                                title: "Backups",
-                                subtitle: "iCloud"
-                            )
-                        }
-                        .buttonStyle(PlainButtonStyle())
+                    VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                        Text("Davis's Big Beautiful Workout App")
+                            .font(Theme.Typography.title3)
+                            .foregroundStyle(Theme.Colors.textPrimary)
+                        Text(appVersionDisplay)
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Colors.textSecondary)
                     }
                 }
-
-                // Preferences Section
-                VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-                    SettingsSectionLabel("PREFERENCES")
-
-                    VStack(spacing: 1) {
-                        // Weight increment
-                        HStack(spacing: Theme.Spacing.sm) {
-                            Image(systemName: "ruler.fill")
-                                .font(Theme.Typography.subheadlineStrong)
-                                .foregroundStyle(.white)
-                                .frame(width: 32, height: 32)
-                                .background(Theme.Colors.accentSecondary)
-                                .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
-
-                            Text("Weight Increment")
-                                .font(Theme.Typography.body)
-
-                            Spacer()
-
-                            Picker("Weight increment", selection: $weightIncrement) {
-                                ForEach(incrementOptions, id: \.self) { option in
-                                    Text(incrementLabel(option)).tag(option)
-                                }
-                            }
-                            .labelsHidden()
-                            .pickerStyle(.menu)
-                        }
-                        .padding()
-                        .softCard(elevation: 1)
-
-                        Divider().padding(.leading, 50)
-
-                        // Default rest timer started after each completed set
-                        HStack(spacing: Theme.Spacing.sm) {
-                            Image(systemName: "timer")
-                                .font(Theme.Typography.subheadlineStrong)
-                                .foregroundStyle(.white)
-                                .frame(width: 32, height: 32)
-                                .background(Theme.Colors.accent)
-                                .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
-
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Rest Timer")
-                                    .font(Theme.Typography.body)
-                                Text("Starts automatically after each completed set")
-                                    .font(Theme.Typography.caption)
-                                    .foregroundStyle(Theme.Colors.textSecondary)
-                            }
-
-                            Spacer()
-
-                            Picker("Rest timer", selection: $restTimerDuration) {
-                                ForEach(restTimerOptions, id: \.self) { seconds in
-                                    Text(restTimerLabel(seconds)).tag(seconds)
-                                }
-                            }
-                            .labelsHidden()
-                            .pickerStyle(.menu)
-                        }
-                        .padding()
-                        .softCard(elevation: 1)
-
-                        Divider().padding(.leading, 50)
-
-                        // Intentional rest window (used for streak/consistency calculations)
-                        HStack(spacing: Theme.Spacing.sm) {
-                            Image(systemName: "bed.double.fill")
-                                .font(Theme.Typography.subheadlineStrong)
-                                .foregroundStyle(.white)
-                                .frame(width: 32, height: 32)
-                                .background(Theme.Colors.accent)
-                                .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
-
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Intentional Rest")
-                                    .font(Theme.Typography.body)
-                                Text("Allow up to \(intentionalRestDays) day\(intentionalRestDays == 1 ? "" : "s") off without breaking streaks")
-                                    .font(Theme.Typography.caption)
-                                    .foregroundStyle(Theme.Colors.textSecondary)
-                            }
-
-                            Spacer()
-
-                            Picker("Intentional rest days", selection: $intentionalRestDays) {
-                                ForEach(0...30, id: \.self) { days in
-                                    Text("\(days) day\(days == 1 ? "" : "s")").tag(days)
-                                }
-                            }
-                            .labelsHidden()
-                            .pickerStyle(.menu)
-                        }
-                        .padding()
-                        .softCard(elevation: 1)
-
-                        Divider().padding(.leading, 50)
-
-                        NavigationLink(destination: IntentionalBreaksView(dataManager: dataManager)) {
-                            SettingsInlineRow(
-                                icon: "calendar.badge.plus",
-                                color: Theme.Colors.warning,
-                                title: "Intentional Break Dates",
-                                subtitle: intentionalBreaksSubtitle
-                            )
-                        }
-                        .buttonStyle(PlainButtonStyle())
-
-                        Divider().padding(.leading, 50)
-
-                        // Sessions per week goal (used by consistency visualization)
-                        HStack(spacing: Theme.Spacing.sm) {
-                            Image(systemName: "target")
-                                .font(Theme.Typography.subheadlineStrong)
-                                .foregroundStyle(.white)
-                                .frame(width: 32, height: 32)
-                                .background(Theme.Colors.success)
-                                .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
-
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Sessions / Week Goal")
-                                    .font(Theme.Typography.body)
-                                Text("Used by consistency goal markers")
-                                    .font(Theme.Typography.caption)
-                                    .foregroundStyle(Theme.Colors.textSecondary)
-                            }
-
-                            Spacer()
-
-                            Picker("Sessions per week goal", selection: $sessionsPerWeekGoal) {
-                                ForEach(1...14, id: \.self) { sessions in
-                                    Text("\(sessions)/wk").tag(sessions)
-                                }
-                            }
-                            .labelsHidden()
-                            .pickerStyle(.menu)
-                        }
-                        .padding()
-                        .softCard(elevation: 1)
-
-                        Divider().padding(.leading, 50)
-
-                        NavigationLink(destination: GymProfilesView()) {
-                            SettingsInlineRow(
-                                icon: "mappin.and.ellipse",
-                                color: Theme.Colors.accent,
-                                title: "Gym Profiles",
-                                subtitle: "Tag workouts by location"
-                            )
-                        }
-                        .buttonStyle(PlainButtonStyle())
-
-                        Divider().padding(.leading, 50)
-
-                        NavigationLink(destination: ExerciseTaggingView(dataManager: dataManager)) {
-                            SettingsInlineRow(
-                                icon: "tag.fill",
-                                color: Theme.Colors.accentTertiary,
-                                title: "Exercise Muscle Roles",
-                                subtitle: "Choose primary and secondary muscles"
-                            )
-                        }
-                        .buttonStyle(PlainButtonStyle())
-
-                        Divider().padding(.leading, 50)
-
-                        Toggle(isOn: $hapticsEnabled) {
-                            HStack(spacing: Theme.Spacing.sm) {
-                                Image(systemName: "hand.tap.fill")
-                                    .font(Theme.Typography.subheadlineStrong)
-                                    .foregroundStyle(.white)
-                                    .frame(width: 32, height: 32)
-                                    .background(Theme.Colors.accent)
-                                    .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
-
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("Haptic Feedback")
-                                        .font(Theme.Typography.body)
-                                    Text("Tactile feedback for sets and key actions")
-                                        .font(Theme.Typography.caption)
-                                        .foregroundStyle(Theme.Colors.textSecondary)
-                                }
-                            }
-                        }
-                        .tint(Theme.Colors.accent)
-                        .padding()
-                        .softCard(elevation: 1)
-
-                        Divider().padding(.leading, 50)
-
-                        Toggle(isOn: $analyticsCollectionEnabled) {
-                            HStack(spacing: Theme.Spacing.sm) {
-                                Image(systemName: "chart.line.uptrend.xyaxis")
-                                    .font(Theme.Typography.subheadlineStrong)
-                                    .foregroundStyle(.white)
-                                    .frame(width: 32, height: 32)
-                                    .background(Theme.Colors.accentSecondary)
-                                    .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
-
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("Anonymous Analytics")
-                                        .font(Theme.Typography.body)
-                                    Text(analyticsSubtitle)
-                                        .font(Theme.Typography.caption)
-                                        .foregroundStyle(Theme.Colors.textSecondary)
-                                }
-                            }
-                        }
-                        .tint(Theme.Colors.accent)
-                        .padding()
-                        .softCard(elevation: 1)
-                    }
-                }
-
-                // Danger Zone
-                VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-                    SettingsSectionLabel("DANGER ZONE")
-
-                    Button(
-                        action: { dataClearSheet = DataClearSheetRoute() },
-                        label: {
-                            HStack(spacing: Theme.Spacing.sm) {
-                                Image(systemName: "trash.fill")
-                                    .font(Theme.Typography.subheadlineStrong)
-                                    .foregroundStyle(.white)
-                                    .frame(width: 32, height: 32)
-                                    .background(Theme.Colors.error)
-                                    .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
-
-                                Text("Clear App Data")
-                                    .font(Theme.Typography.bodyBold)
-                                    .foregroundStyle(Theme.Colors.error)
-
-                                Spacer()
-
-                                Image(systemName: "chevron.right")
-                                    .font(Theme.Typography.captionBold)
-                                    .foregroundStyle(Theme.Colors.error.opacity(0.5))
-                            }
-                            .padding()
-                            .background(
-                                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                                    .fill(Theme.Colors.error.opacity(0.06))
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                                    .strokeBorder(Theme.Colors.error.opacity(0.15), lineWidth: 1)
-                            )
-                        }
-                    )
-                    .buttonStyle(AppInteractionButtonStyle())
-                }
-
-                VStack(spacing: Theme.Spacing.xs) {
-                    Text("Davis's Big Beautiful Workout App")
-                        .font(Theme.Typography.captionBold)
-                        .foregroundStyle(Theme.Colors.textTertiary)
-
-                    Text(appVersionDisplay)
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textTertiary)
-                }
-                .padding(.top, Theme.Spacing.md)
-                }
-                .padding()
+                .padding(.horizontal, Theme.Layout.screenGutter)
+                .padding(.top, Theme.Spacing.sm)
+                .padding(.bottom, Theme.Spacing.xxl)
                 .contentColumn()
             }
             .scrollDismissesKeyboard(.interactively)
@@ -493,6 +110,177 @@ struct SettingsView: View {
         .analyticsScreen("Settings")
     }
 
+
+    // MARK: - Sections
+
+    private var trainingSection: some View {
+        SettingsGroup(title: "Training") {
+            SettingsPickerRow(title: "Weekly goal", subtitle: "Sessions that fill the bar each week", showsRule: false) {
+                Picker("Sessions per week goal", selection: $sessionsPerWeekGoal) {
+                    ForEach(1...14, id: \.self) { sessions in
+                        Text("\(sessions) per week").tag(sessions)
+                    }
+                }
+            }
+
+            SettingsPickerRow(title: "Weight increment", subtitle: "Step size when you adjust a weight") {
+                Picker("Weight increment", selection: $weightIncrement) {
+                    ForEach(incrementOptions, id: \.self) { option in
+                        Text(incrementLabel(option)).tag(option)
+                    }
+                }
+            }
+
+            SettingsPickerRow(title: "Rest timer", subtitle: "Starts after each completed set") {
+                Picker("Rest timer", selection: $restTimerDuration) {
+                    ForEach(restTimerOptions, id: \.self) { seconds in
+                        Text(restTimerLabel(seconds)).tag(seconds)
+                    }
+                }
+            }
+
+            SettingsPickerRow(
+                title: "Rest days",
+                subtitle: "Days off allowed before a streak breaks"
+            ) {
+                Picker("Rest days", selection: $intentionalRestDays) {
+                    ForEach(0...30, id: \.self) { days in
+                        Text("\(days) day\(days == 1 ? "" : "s")").tag(days)
+                    }
+                }
+            }
+
+            NavigationLink(destination: IntentionalBreaksView(dataManager: dataManager)) {
+                SettingsLinkRow(title: "Planned breaks", subtitle: intentionalBreaksSubtitle)
+            }
+            .buttonStyle(PressableCardButtonStyle())
+
+            NavigationLink(destination: GymProfilesView()) {
+                SettingsLinkRow(title: "Gyms", subtitle: "Tag workouts by location")
+            }
+            .buttonStyle(PressableCardButtonStyle())
+
+            NavigationLink(destination: ExerciseTaggingView(dataManager: dataManager)) {
+                SettingsLinkRow(title: "Muscle roles", subtitle: "Primary and secondary muscles for each exercise")
+            }
+            .buttonStyle(PressableCardButtonStyle())
+        }
+    }
+
+    private var healthSection: some View {
+        SettingsGroup(title: "Apple Health") {
+            Button {
+                if healthManager.authorizationStatus == .authorized {
+                    selectedTab = .health
+                } else {
+                    showingHealthWizard = true
+                }
+            } label: {
+                SettingsLinkRow(
+                    title: "Apple Health",
+                    subtitle: healthManager.authorizationStatus == .authorized ? "Connected" : "Not connected",
+                    value: healthManager.authorizationStatus == .authorized ? "On" : "Off",
+                    showsRule: false
+                )
+            }
+            .buttonStyle(PressableCardButtonStyle())
+
+            if healthManager.authorizationStatus == .denied {
+                Button {
+                    guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+                    openURL(url)
+                } label: {
+                    TextLinkLabel(title: "Open Settings to grant Health access")
+                        .ledgerRow()
+                }
+                .buttonStyle(.plain)
+            }
+
+            NavigationLink(destination: HealthPermissionAuditView()) {
+                SettingsLinkRow(title: "Permissions", subtitle: healthPermissionsSubtitle)
+            }
+            .buttonStyle(PressableCardButtonStyle())
+
+            NavigationLink(destination: HealthDataSettingsView(workouts: dataManager.workouts)) {
+                SettingsLinkRow(title: "Health data", subtitle: healthDataSubtitle)
+            }
+            .buttonStyle(PressableCardButtonStyle())
+
+            NavigationLink(destination: SleepSourceSettingsView(workouts: dataManager.workouts)) {
+                SettingsLinkRow(title: "Sleep source", subtitle: sleepSourceSubtitle)
+            }
+            .buttonStyle(PressableCardButtonStyle())
+        }
+    }
+
+    private var dataSection: some View {
+        SettingsGroup(title: "Data") {
+            Button {
+                showingImportWizard = true
+            } label: {
+                SettingsLinkRow(title: "Import", subtitle: "Strong CSV or an app backup", showsRule: false)
+            }
+            .buttonStyle(PressableCardButtonStyle())
+
+            NavigationLink(destination: ExportWorkoutsView(dataManager: dataManager, iCloudManager: iCloudManager)) {
+                SettingsLinkRow(title: "Export", subtitle: "Backups, CSV, and PDF reports")
+            }
+            .buttonStyle(PressableCardButtonStyle())
+
+            NavigationLink(destination: BackupFilesView(iCloudManager: iCloudManager)) {
+                SettingsLinkRow(title: "Backups", subtitle: "Saved backups and exports")
+            }
+            .buttonStyle(PressableCardButtonStyle())
+        }
+    }
+
+    private var appSection: some View {
+        SettingsGroup(title: "App") {
+            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                Text("Appearance")
+                    .font(Theme.Typography.headline)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                AppSegmentedPicker(
+                    title: "Appearance",
+                    selection: $appearanceMode,
+                    options: AppearanceMode.allCases.map { (label: $0.label, value: $0.rawValue) }
+                )
+            }
+            .ledgerRow(showsRule: false)
+
+            SettingsToggleRow(title: "Haptic feedback", subtitle: "Taps and clicks as you log", isOn: $hapticsEnabled)
+
+            SettingsToggleRow(title: "Anonymous analytics", subtitle: analyticsSubtitle, isOn: $analyticsCollectionEnabled)
+        }
+    }
+
+    private var removalSection: some View {
+        SettingsGroup(title: "Remove data") {
+            Button {
+                dataClearSheet = DataClearSheetRoute()
+            } label: {
+                HStack(spacing: Theme.Spacing.md) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Clear app data")
+                            .font(Theme.Typography.headline)
+                            .foregroundStyle(Theme.Colors.error)
+                        Text("Choose what to delete and review it first")
+                            .font(Theme.Typography.subheadline)
+                            .foregroundStyle(Theme.Colors.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: Theme.Spacing.sm)
+                    Image(systemName: "chevron.right")
+                        .font(Theme.Typography.captionBold)
+                        .foregroundStyle(Theme.Colors.error)
+                        .accessibilityHidden(true)
+                }
+                .ledgerRow(showsRule: false)
+            }
+            .buttonStyle(PressableCardButtonStyle())
+        }
+    }
+
     private var incrementOptions: [Double] {
         [1.25, 2.5, 5.0]
     }
@@ -531,14 +319,6 @@ struct SettingsView: View {
         }
     }
 
-    private var appearanceIcon: String {
-        switch AppearanceMode(rawValue: appearanceMode) ?? .system {
-        case .system: return "circle.lefthalf.filled"
-        case .light:  return "sun.max.fill"
-        case .dark:   return "moon.fill"
-        }
-    }
-
     private var intentionalBreaksSubtitle: String {
         cachedIntentionalBreaksSubtitle
     }
@@ -557,15 +337,15 @@ struct SettingsView: View {
         case (0, _):
             cachedIntentionalBreaksSubtitle = "\(suggestionCount) suggested gap\(suggestionCount == 1 ? "" : "s")"
         default:
-            cachedIntentionalBreaksSubtitle = "\(savedCount) saved · \(suggestionCount) suggested"
+            cachedIntentionalBreaksSubtitle = "\(savedCount) saved, \(suggestionCount) suggested"
         }
     }
 
     private var sleepSourceSubtitle: String {
         if preferredSleepSourceName.isEmpty {
-            return "Auto-select the strongest sleep source"
+            return "Automatic"
         }
-        return "\(preferredSleepSourceName) preferred, fallback enabled"
+        return "\(preferredSleepSourceName) preferred"
     }
 
     private var analyticsSubtitle: String {
@@ -577,18 +357,18 @@ struct SettingsView: View {
         let dailyCount = healthManager.dailyHealthStore.count
 
         guard healthManager.authorizationStatus == .authorized else {
-            return "Connect Health to sync & manage data"
+            return "Connect Health to sync and manage data"
         }
 
         guard workoutCount > 0 || dailyCount > 0 else {
-            return "Sync history & manage cached data"
+            return "Sync history and manage cached data"
         }
 
         if let earliest = healthManager.dailyHealthStore.keys.min() {
-            return "\(workoutCount) workout · \(dailyCount) daily · from \(SettingsDateFormatters.mediumDate.string(from: earliest))"
+            return "\(SharedFormatters.count(dailyCount, "day")) and \(SharedFormatters.count(workoutCount, "workout")) since \(SettingsDateFormatters.mediumDate.string(from: earliest))"
         }
 
-        return "\(workoutCount) workout · \(dailyCount) daily cached"
+        return "\(SharedFormatters.count(dailyCount, "day")) and \(SharedFormatters.count(workoutCount, "workout")) saved"
     }
 
     private var healthPermissionsSubtitle: String {
@@ -596,7 +376,7 @@ struct SettingsView: View {
         case .unavailable:
             return "Health unavailable on this device"
         case .authorized:
-            return "Review requested access by type"
+            return "Access by data type"
         case .denied:
             return "Check missing or changed Health access"
         case .notDetermined:
@@ -612,96 +392,111 @@ struct SettingsView: View {
     }
 }
 
-private struct SettingsSectionLabel: View {
-    let text: String
-    init(_ text: String) { self.text = text }
+/// A titled group of settings rows.
+private struct SettingsGroup<Content: View>: View {
+    let title: String
+    @ViewBuilder let content: () -> Content
+
     var body: some View {
-        Text(text)
-            .font(Theme.Typography.metricLabel)
-            .foregroundStyle(Theme.Colors.textTertiary)
-            .tracking(1.2)
-            .padding(.horizontal)
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            SectionHeading(title: title)
+            VStack(spacing: 0) {
+                content()
+            }
+        }
     }
 }
 
-private struct SettingsInlineRow: View {
-    let icon: String
-    let color: Color
+private struct SettingsPickerRow<Control: View>: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let title: String
     let subtitle: String
+    var showsRule = true
+    @ViewBuilder let control: () -> Control
 
     var body: some View {
-        HStack(spacing: Theme.Spacing.sm) {
-            Image(systemName: icon)
-                .font(Theme.Typography.subheadlineStrong)
-                .foregroundStyle(.white)
-                .frame(width: 32, height: 32)
-                .background(color)
-                .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
-
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: Theme.Spacing.sm))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: Theme.Spacing.md))
+        layout {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(Theme.Typography.body)
+                    .font(Theme.Typography.headline)
                     .foregroundStyle(Theme.Colors.textPrimary)
                 Text(subtitle)
-                    .font(Theme.Typography.caption)
+                    .font(Theme.Typography.subheadline)
                     .foregroundStyle(Theme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            control()
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .tint(Theme.Colors.textPrimary)
+                .fixedSize(horizontal: true, vertical: false)
+                .frame(minHeight: Theme.Layout.minimumTapTarget)
+        }
+        .ledgerRow(showsRule: showsRule)
+    }
+}
+
+private struct SettingsToggleRow: View {
+    let title: String
+    let subtitle: String
+    @Binding var isOn: Bool
+    var showsRule = true
+
+    var body: some View {
+        Toggle(isOn: $isOn) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(Theme.Typography.headline)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                Text(subtitle)
+                    .font(Theme.Typography.subheadline)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .tint(Theme.Colors.success)
+        .ledgerRow(showsRule: showsRule)
+    }
+}
+
+private struct SettingsLinkRow: View {
+    let title: String
+    let subtitle: String
+    var value: String?
+    var showsRule = true
+
+    var body: some View {
+        HStack(spacing: Theme.Spacing.md) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(Theme.Typography.headline)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                Text(subtitle)
+                    .font(Theme.Typography.subheadline)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
-            Spacer()
+            Spacer(minLength: Theme.Spacing.sm)
+
+            if let value {
+                Text(value)
+                    .font(Theme.Typography.subheadlineStrong)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+            }
 
             Image(systemName: "chevron.right")
                 .font(Theme.Typography.captionBold)
                 .foregroundStyle(Theme.Colors.textTertiary)
+                .accessibilityHidden(true)
         }
-        .padding()
-        .softCard(elevation: 1)
-    }
-}
-
-struct SettingsRow: View {
-    let icon: String
-    let color: Color
-    let title: String
-    let subtitle: String
-    var value: String?
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: Theme.Spacing.sm) {
-                Image(systemName: icon)
-                    .font(Theme.Typography.subheadlineStrong)
-                    .foregroundStyle(.white)
-                    .frame(width: 32, height: 32)
-                    .background(color)
-                    .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(Theme.Typography.body)
-                        .foregroundStyle(Theme.Colors.textPrimary)
-                    Text(subtitle)
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                }
-
-                Spacer()
-
-                if let value = value {
-                    Text(value)
-                        .font(Theme.Typography.captionBold)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                }
-
-                Image(systemName: "chevron.right")
-                    .font(Theme.Typography.captionBold)
-                    .foregroundStyle(Theme.Colors.textTertiary)
-            }
-            .padding()
-            .softCard(elevation: 1)
-        }
-        .buttonStyle(.plain)
+        .ledgerRow(showsRule: showsRule)
+        .accessibilityElement(children: .combine)
     }
 }
 

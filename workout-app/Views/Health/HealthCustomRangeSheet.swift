@@ -44,7 +44,7 @@ struct HealthCustomRangeSheet: View {
                     .contentColumn(maxWidth: 640)
                 }
             }
-            .navigationTitle("Custom Range")
+            .navigationTitle("Custom range")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 AppToolbarItem(placement: .cancellationAction) {
@@ -77,8 +77,6 @@ struct HealthCustomRangeSheet: View {
             Text(title)
                 .font(Theme.Typography.metricLabel)
                 .foregroundStyle(Theme.Colors.textTertiary)
-                .textCase(.uppercase)
-                .tracking(0.8)
 
             DatePicker(
                 title,

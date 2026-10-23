@@ -58,7 +58,7 @@ struct MetricMiniChart: View {
                     )
                     .foregroundStyle(
                         LinearGradient(
-                            colors: [metric.accentColor.opacity(0.22), metric.accentColor.opacity(0.01)],
+                            colors: [metric.accentColor.opacity(0.1), metric.accentColor.opacity(0.1)],
                             startPoint: .top,
                             endPoint: .bottom
                         )

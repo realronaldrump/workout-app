@@ -45,7 +45,7 @@ final class ImportPersistenceTests: XCTestCase {
         XCTAssertEqual(selected?.lastPathComponent, localImport.lastPathComponent)
     }
 
-    func testLatestWorkoutFileUsesNewestExportAcrossAllDirectoriesWhenNoStrongImportExists() throws {
+    func testLatestWorkoutFileNeverTreatsGeneratedExportsAsImportSources() throws {
         let primaryDirectory = try makeTemporaryDirectory()
         let fallbackDirectory = try makeTemporaryDirectory()
         defer {
@@ -70,7 +70,7 @@ final class ImportPersistenceTests: XCTestCase {
             in: [primaryDirectory, fallbackDirectory]
         )
 
-        XCTAssertEqual(selected?.standardizedFileURL, newerFallbackExport.standardizedFileURL)
+        XCTAssertNil(selected)
     }
 
     func testMigrateWorkoutFilesCopiesOnlyMissingCSVs() throws {

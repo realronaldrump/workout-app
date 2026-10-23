@@ -55,27 +55,26 @@ struct WorkoutSimilarityCompareView: View {
                 .frame(maxWidth: .infinity, alignment: .center)
             }
         }
-        .navigationTitle("Workout Match")
-        .navigationBarTitleDisplayMode(.inline)
+        .collapsingTitle("Workout match")
     }
 
     private func header(selectedWorkout: Workout, priorWorkout: Workout) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             StatsPageHeader(
                 eyebrow: "Workout match",
-                title: "Compare Sessions",
+                title: "Compare sessions",
                 systemImage: "arrow.left.arrow.right"
             )
 
             ViewThatFits(in: .horizontal) {
                 HStack(alignment: .top, spacing: Theme.Spacing.md) {
                     workoutHeaderCard(title: "Selected", workout: selectedWorkout)
-                    workoutHeaderCard(title: "Prior Match", workout: priorWorkout)
+                    workoutHeaderCard(title: "Prior match", workout: priorWorkout)
                 }
 
                 VStack(spacing: Theme.Spacing.md) {
                     workoutHeaderCard(title: "Selected", workout: selectedWorkout)
-                    workoutHeaderCard(title: "Prior Match", workout: priorWorkout)
+                    workoutHeaderCard(title: "Prior match", workout: priorWorkout)
                 }
             }
         }
@@ -86,8 +85,6 @@ struct WorkoutSimilarityCompareView: View {
             Text(title)
                 .font(Theme.Typography.captionBold)
                 .foregroundStyle(Theme.Colors.textSecondary)
-                .textCase(.uppercase)
-                .tracking(0.8)
 
             Text(workout.name)
                 .font(Theme.Typography.title3)
@@ -112,14 +109,14 @@ struct WorkoutSimilarityCompareView: View {
                 HStack(spacing: Theme.Spacing.md) {
                     summaryPill(title: "Match", value: comparison.kind.title)
                     summaryPill(title: "Shared", value: "\(comparison.sharedExerciseCount)")
-                    summaryPill(title: "Same Position", value: "\(comparison.samePositionCount)")
+                    summaryPill(title: "Same position", value: "\(comparison.samePositionCount)")
                 }
 
                 VStack(spacing: Theme.Spacing.sm) {
                     summaryPill(title: "Match", value: comparison.kind.title)
                     HStack(spacing: Theme.Spacing.md) {
                         summaryPill(title: "Shared", value: "\(comparison.sharedExerciseCount)")
-                        summaryPill(title: "Same Position", value: "\(comparison.samePositionCount)")
+                        summaryPill(title: "Same position", value: "\(comparison.samePositionCount)")
                     }
                 }
             }
@@ -143,7 +140,7 @@ struct WorkoutSimilarityCompareView: View {
 
     private func comparisonRowsSection(rows: [WorkoutSimilarityComparisonRow]) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Exercise Order")
+            Text("Exercise order")
                 .font(Theme.Typography.title3)
                 .foregroundStyle(Theme.Colors.textPrimary)
 

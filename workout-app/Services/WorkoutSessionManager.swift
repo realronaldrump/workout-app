@@ -7,6 +7,7 @@ import UserNotifications
 @MainActor
 final class RestTimerState: ObservableObject {
     static let durationPreferenceKey = "restTimerDurationSeconds"
+    static let automaticStartPreferenceKey = "restTimerAutomaticStartEnabled"
     static let defaultDuration = 90
 
     @Published private(set) var secondsRemaining: Int = 0
@@ -16,11 +17,13 @@ final class RestTimerState: ObservableObject {
     /// Length of the countdown currently running (default duration plus any extensions).
     /// Drives the progress ring so extending a rest does not change the saved default.
     @Published private(set) var currentTotal: Int
+    @Published private(set) var automaticStartEnabled: Bool
 
     private let defaults: UserDefaults
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        self.automaticStartEnabled = (defaults.object(forKey: Self.automaticStartPreferenceKey) as? Bool) ?? true
         let stored = defaults.integer(forKey: Self.durationPreferenceKey)
         let initial = stored > 0 ? Self.clamp(stored) : Self.defaultDuration
         self.duration = initial
@@ -28,6 +31,11 @@ final class RestTimerState: ObservableObject {
     }
 
     nonisolated deinit {}
+
+    func setAutomaticStartEnabled(_ enabled: Bool) {
+        automaticStartEnabled = enabled
+        defaults.set(enabled, forKey: Self.automaticStartPreferenceKey)
+    }
 
     func setDuration(_ seconds: Int) {
         let clamped = Self.clamp(seconds)
@@ -48,6 +56,7 @@ final class RestTimerState: ObservableObject {
 
     /// Picks up a default changed elsewhere (e.g. Settings) while the app was running.
     func syncDurationFromDefaults() {
+        automaticStartEnabled = (defaults.object(forKey: Self.automaticStartPreferenceKey) as? Bool) ?? true
         let stored = defaults.integer(forKey: Self.durationPreferenceKey)
         guard stored > 0 else { return }
         let clamped = Self.clamp(stored)
@@ -72,6 +81,7 @@ enum WorkoutSessionError: LocalizedError {
     case noCompletedSets
     case finishInProgress
     case sessionChangedWhileSaving
+    case savedWorkoutDraftCleanupFailed
     case completedSetMissingFields(exercise: String, setOrder: Int)
     case completedSetMissingCardioFields(exercise: String, setOrder: Int)
 
@@ -85,10 +95,13 @@ enum WorkoutSessionError: LocalizedError {
             return "Your workout is already being saved."
         case .sessionChangedWhileSaving:
             return "An earlier version was saved, but your session changed while saving. Your current draft is still here. Review it and finish again."
+        case .savedWorkoutDraftCleanupFailed:
+            return "Your workout was saved, but its active draft could not be cleared. "
+                + "Try finishing again; this will update the saved workout without making a duplicate."
         case .completedSetMissingFields(let exercise, let setOrder):
-            return "Set \(setOrder) in \(exercise) is marked complete but missing weight/reps."
+            return "Set \(setOrder) in \(exercise) is marked complete but missing valid weight/reps."
         case .completedSetMissingCardioFields(let exercise, let setOrder):
-            return "Set \(setOrder) in \(exercise) is marked complete but missing cardio metrics."
+            return "Set \(setOrder) in \(exercise) is marked complete but missing valid cardio metrics."
         }
     }
 }
@@ -113,26 +126,42 @@ struct SetPrefill: Sendable {
     }
 }
 
+enum DraftSaveState: Equatable {
+    case idle
+    case saving
+    case saved(Date)
+    case failed(String)
+}
+
 @MainActor
 final class WorkoutSessionManager: ObservableObject {
     @Published var activeSession: ActiveWorkoutSession?
     @Published var isPresentingSessionUI: Bool = false
     @Published private(set) var isFinishing = false
+    @Published private(set) var draftSaveState: DraftSaveState = .idle
+    @Published private(set) var draftRecoveryMessage: String?
+    @Published private(set) var recoveredDraftURL: URL?
 
-    let restTimer = RestTimerState()
+    let restTimer: RestTimerState
     var restTimerSecondsRemaining: Int { restTimer.secondsRemaining }
     var restTimerIsActive: Bool { restTimer.isActive }
     var restTimerDuration: Int { restTimer.duration }
 
     private let draftURL: URL
-    private let draftStore = ActiveSessionDraftStore()
+    private let persistenceDelayNanoseconds: UInt64
+    private var unreadableDraftNeedsPreservation = false
     private var persistTask: Task<Void, Never>?
     private var restTimerTask: Task<Void, Never>?
     private var restTimerEndTime: Date?
 
-    init(draftURL: URL? = nil) {
+    init(draftURL: URL? = nil, persistenceDelayNanoseconds: UInt64 = 250_000_000, defaults: UserDefaults = .standard) {
+        self.restTimer = RestTimerState(defaults: defaults)
+        self.persistenceDelayNanoseconds = persistenceDelayNanoseconds
         self.draftURL = draftURL ?? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("active_session_v1.json")
+        // Resolve recovery before any caller can decide to start or repeat a workout.
+        // Launch-time Health/iCloud loads must never leave an existing draft invisible.
+        restoreDraftSynchronously()
     }
 
     nonisolated deinit {
@@ -141,6 +170,12 @@ final class WorkoutSessionManager: ObservableObject {
     }
 
     func restoreDraft() async {
+        restoreDraftSynchronously()
+    }
+
+    private func restoreDraftSynchronously() {
+        // A retry must never replace a workout the user already started.
+        guard activeSession == nil else { return }
         let url = fileURL()
         guard FileManager.default.fileExists(atPath: url.path) else { return }
 
@@ -150,8 +185,46 @@ final class WorkoutSessionManager: ObservableObject {
             decoder.dateDecodingStrategy = .iso8601
             let decoded = try decoder.decode(ActiveWorkoutSession.self, from: data)
             activeSession = decoded
+            draftRecoveryMessage = nil
+            unreadableDraftNeedsPreservation = false
+            draftSaveState = .saved(decoded.lastModifiedAt)
+            restoreRestTimer(from: decoded)
         } catch {
-            print("Failed to restore active session draft: \(error)")
+            unreadableDraftNeedsPreservation = true
+            draftRecoveryMessage = "Your previous workout draft could not be opened. It has been kept for recovery. "
+                + "You can retry opening it or start a new workout."
+            draftSaveState = .failed("The previous workout draft could not be opened.")
+            // Keep the original bytes before a later workout can use the draft path.
+            // If preservation itself fails, subsequent writes remain blocked.
+            preserveUnreadableDraftIfNeeded()
+        }
+    }
+
+    func dismissDraftRecoveryMessage() {
+        draftRecoveryMessage = nil
+    }
+
+    func retryDraftSave() {
+        saveImmediately()
+    }
+
+    private func preserveUnreadableDraftIfNeeded() {
+        guard unreadableDraftNeedsPreservation else { return }
+        if let recoveredDraftURL,
+           let original = try? Data(contentsOf: draftURL),
+           let preserved = try? Data(contentsOf: recoveredDraftURL),
+           original == preserved {
+            unreadableDraftNeedsPreservation = false
+            return
+        }
+        do {
+            let recoveryURL = draftURL.deletingPathExtension()
+                .appendingPathExtension("recovery-\(UUID().uuidString).json")
+            try FileManager.default.copyItem(at: draftURL, to: recoveryURL)
+            recoveredDraftURL = recoveryURL
+            unreadableDraftNeedsPreservation = false
+        } catch {
+            draftSaveState = .failed("Your previous draft could not be backed up. Free up storage and tap Retry. Your current workout is still open.")
         }
     }
 
@@ -191,7 +264,7 @@ final class WorkoutSessionManager: ObservableObject {
         }
 
         activeSession = session
-        schedulePersistDraft()
+        saveImmediately()
         AppAnalytics.shared.track(
             AnalyticsSignal.sessionStarted,
             payload: [
@@ -253,6 +326,11 @@ final class WorkoutSessionManager: ObservableObject {
 
     func removeExercise(id: UUID) {
         guard var session = activeSession else { return }
+        let removedSetIDs = Set(session.exercises.first(where: { $0.id == id })?.sets.map(\.id) ?? [])
+        if let source = session.restTimerSourceSetId, removedSetIDs.contains(source) {
+            clearRestTimerMetadata(in: &session)
+            stopRestTimer()
+        }
         session.exercises.removeAll { $0.id == id }
         touch(&session)
         activeSession = session
@@ -283,7 +361,7 @@ final class WorkoutSessionManager: ObservableObject {
         AppAnalytics.shared.track(AnalyticsSignal.sessionSetAdded)
     }
 
-    func updateSet(exerciseId: UUID, setId: UUID, prefill: SetPrefill) {
+    func updateSet(exerciseId: UUID, setId: UUID, prefill: SetPrefill, inputDraft: SetInputDraft? = nil) {
         guard var session = activeSession else { return }
         guard let exerciseIndex = session.exercises.firstIndex(where: { $0.id == exerciseId }) else { return }
         guard let setIndex = session.exercises[exerciseIndex].sets.firstIndex(where: { $0.id == setId }) else { return }
@@ -292,7 +370,8 @@ final class WorkoutSessionManager: ObservableObject {
         if currentSet.weight == prefill.weight,
            currentSet.reps == prefill.reps,
            currentSet.distance == prefill.distance,
-           currentSet.seconds == prefill.seconds {
+           currentSet.seconds == prefill.seconds,
+           currentSet.inputDraft == inputDraft {
             return
         }
 
@@ -300,6 +379,17 @@ final class WorkoutSessionManager: ObservableObject {
         session.exercises[exerciseIndex].sets[setIndex].reps = prefill.reps
         session.exercises[exerciseIndex].sets[setIndex].distance = prefill.distance
         session.exercises[exerciseIndex].sets[setIndex].seconds = prefill.seconds
+        session.exercises[exerciseIndex].sets[setIndex].inputDraft = inputDraft
+        let updatedSet = session.exercises[exerciseIndex].sets[setIndex]
+        if updatedSet.isCompleted,
+           !hasEnteredData(updatedSet, isCardio: isCardioExercise(session.exercises[exerciseIndex].name)) {
+            session.exercises[exerciseIndex].sets[setIndex].isCompleted = false
+            session.exercises[exerciseIndex].sets[setIndex].completedAt = nil
+            if session.restTimerSourceSetId == setId {
+                clearRestTimerMetadata(in: &session)
+                stopRestTimer()
+            }
+        }
 
         touch(&session)
         activeSession = session
@@ -309,6 +399,10 @@ final class WorkoutSessionManager: ObservableObject {
     func deleteSet(exerciseId: UUID, setId: UUID) {
         guard var session = activeSession else { return }
         guard let exerciseIndex = session.exercises.firstIndex(where: { $0.id == exerciseId }) else { return }
+        if session.restTimerSourceSetId == setId {
+            clearRestTimerMetadata(in: &session)
+            stopRestTimer()
+        }
         session.exercises[exerciseIndex].sets.removeAll { $0.id == setId }
         renumberSets(&session.exercises[exerciseIndex])
         touch(&session)
@@ -335,16 +429,20 @@ final class WorkoutSessionManager: ObservableObject {
 
         set.isCompleted.toggle()
         set.completedAt = set.isCompleted ? Date() : nil
+        if set.isCompleted { set.inputDraft = nil }
         session.exercises[exerciseIndex].sets[setIndex] = set
 
-        // Auto-start rest timer when completing a set
-        if set.isCompleted {
-            startRestTimer()
+        if !set.isCompleted, session.restTimerSourceSetId == setId {
+            clearRestTimerMetadata(in: &session)
+            stopRestTimer()
         }
-
         touch(&session)
         activeSession = session
-        schedulePersistDraft()
+        restTimer.syncDurationFromDefaults()
+        if set.isCompleted, !isCardio, restTimer.automaticStartEnabled {
+            startRestTimer(sourceSetId: setId)
+        }
+        saveImmediately()
         if set.isCompleted {
             AppAnalytics.shared.track(
                 AnalyticsSignal.sessionSetCompleted,
@@ -382,22 +480,23 @@ final class WorkoutSessionManager: ObservableObject {
 
     // MARK: - Rest Timer
 
-    func startRestTimer() {
+    func startRestTimer(sourceSetId: UUID? = nil) {
         restTimer.syncDurationFromDefaults()
         restTimer.setCurrentTotal(restTimerDuration)
-        beginRestTimer(until: Date().addingTimeInterval(TimeInterval(restTimerDuration)))
+        beginRestTimer(until: Date().addingTimeInterval(TimeInterval(restTimerDuration)), sourceSetId: sourceSetId)
     }
 
     /// Adds time to the running rest (or starts a short rest if none is running)
     /// without changing the saved default duration.
     func extendRestTimer(by seconds: Int) {
-        let clampedSeconds = max(0, seconds)
+        let clampedSeconds = min(3_600, max(0, seconds))
         guard clampedSeconds > 0 else { return }
 
         let now = Date()
         if let endTime = restTimerEndTime, endTime > now, restTimerIsActive {
-            restTimer.setCurrentTotal(restTimer.currentTotal + clampedSeconds)
-            beginRestTimer(until: endTime.addingTimeInterval(TimeInterval(clampedSeconds)))
+            let extendedEnd = min(endTime.addingTimeInterval(TimeInterval(clampedSeconds)), now.addingTimeInterval(3_600))
+            restTimer.setCurrentTotal(min(3_600, restTimer.currentTotal + clampedSeconds))
+            beginRestTimer(until: extendedEnd, sourceSetId: activeSession?.restTimerSourceSetId)
         } else {
             restTimer.setCurrentTotal(clampedSeconds)
             beginRestTimer(until: now.addingTimeInterval(TimeInterval(clampedSeconds)))
@@ -439,7 +538,7 @@ final class WorkoutSessionManager: ObservableObject {
         return markedCount
     }
 
-    private func beginRestTimer(until endTime: Date) {
+    private func beginRestTimer(until endTime: Date, sourceSetId: UUID? = nil, persist: Bool = true) {
         restTimerEndTime = endTime
         restTimerTask?.cancel()
         if !Self.isRunningTests {
@@ -447,21 +546,35 @@ final class WorkoutSessionManager: ObservableObject {
         }
 
         updateRestTimerState(notifyOnCompletion: false)
+        if persist, var session = activeSession {
+            session.restTimerEndsAt = endTime
+            session.restTimerTotalSeconds = restTimer.currentTotal
+            session.restTimerSourceSetId = sourceSetId
+            activeSession = session
+            schedulePersistDraft()
+        }
         restTimerTask = Task { [weak self] in
-            guard let self else { return }
-
             while !Task.isCancelled {
-                guard self.restTimerIsActive, let endTime = self.restTimerEndTime else { return }
-                let sleepNanoseconds = self.sleepNanosecondsUntilNextRestTimerTick(endTime: endTime)
+                guard self?.restTimerIsActive == true, let endTime = self?.restTimerEndTime,
+                      let sleepNanoseconds = self?.sleepNanosecondsUntilNextRestTimerTick(endTime: endTime) else { return }
                 do {
                     try await Task.sleep(nanoseconds: sleepNanoseconds)
                 } catch { return }
-                self.updateRestTimerState(notifyOnCompletion: true)
+                self?.updateRestTimerState(notifyOnCompletion: true)
             }
         }
     }
 
     func cancelRestTimer() {
+        stopRestTimer()
+        if var session = activeSession, session.restTimerEndsAt != nil {
+            clearRestTimerMetadata(in: &session)
+            activeSession = session
+            saveImmediately()
+        }
+    }
+
+    private func stopRestTimer() {
         restTimerTask?.cancel()
         restTimerTask = nil
         restTimerEndTime = nil
@@ -475,6 +588,16 @@ final class WorkoutSessionManager: ObservableObject {
         restTimer.setDuration(seconds)
     }
 
+    func setRestTimerAutomaticStartEnabled(_ enabled: Bool) {
+        restTimer.setAutomaticStartEnabled(enabled)
+    }
+
+    func setCompletionValidationMessage(exerciseId: UUID, setId: UUID) -> String? {
+        guard let exercise = activeSession?.exercises.first(where: { $0.id == exerciseId }),
+              let set = exercise.sets.first(where: { $0.id == setId }) else { return nil }
+        return validationMessageForSetCompletion(set, isCardio: isCardioExercise(exercise.name))
+    }
+
     /// Persists one snapshot before clearing its draft. Edits or a replacement session that
     /// arrive during persistence are preserved, and overlapping finish requests are rejected.
     func finish(persist: @MainActor (LoggedWorkout) async throws -> Void) async throws -> LoggedWorkout {
@@ -484,6 +607,7 @@ final class WorkoutSessionManager: ObservableObject {
 
         isFinishing = true
         defer { isFinishing = false }
+        saveImmediately()
         try await persist(workout)
         try await completeFinish(workout, matching: session)
         return workout
@@ -505,6 +629,12 @@ final class WorkoutSessionManager: ObservableObject {
 
             // Validate + map completed sets.
             for set in completedSets {
+                guard hasEnteredData(set, isCardio: isCardio) else {
+                    if isCardio {
+                        throw WorkoutSessionError.completedSetMissingCardioFields(exercise: exercise.name, setOrder: set.order)
+                    }
+                    throw WorkoutSessionError.completedSetMissingFields(exercise: exercise.name, setOrder: set.order)
+                }
                 if isCardio {
                     let reps = max(set.reps ?? 0, 0)
                     let distance = max(set.distance ?? 0, 0)
@@ -518,6 +648,7 @@ final class WorkoutSessionManager: ObservableObject {
                     let weight = max(set.weight ?? 0, 0)
                     loggedSets.append(
                         LoggedSet(
+                            id: set.id,
                             order: set.order,
                             weight: weight,
                             reps: reps,
@@ -532,13 +663,13 @@ final class WorkoutSessionManager: ObservableObject {
                           reps > 0 else {
                         throw WorkoutSessionError.completedSetMissingFields(exercise: exercise.name, setOrder: set.order)
                     }
-                    loggedSets.append(LoggedSet(order: set.order, weight: weight, reps: reps))
+                    loggedSets.append(LoggedSet(id: set.id, order: set.order, weight: weight, reps: reps))
                 }
             }
 
             if !loggedSets.isEmpty {
                 totalLoggedSets += loggedSets.count
-                loggedExercises.append(LoggedExercise(name: exercise.name, sets: loggedSets))
+                loggedExercises.append(LoggedExercise(id: exercise.id, name: exercise.name, sets: loggedSets))
             }
         }
 
@@ -558,13 +689,19 @@ final class WorkoutSessionManager: ObservableObject {
     }
 
     private func completeFinish(_ workout: LoggedWorkout, matching session: ActiveWorkoutSession) async throws {
-        guard activeSession == session else {
+        guard sessionMatchesWorkoutContent(session) else {
             saveImmediately()
             throw WorkoutSessionError.sessionChangedWhileSaving
         }
-        cancelRestTimer()
+        do {
+            try deleteDraftFile(matching: session.id)
+        } catch {
+            draftSaveState = .failed("Workout saved. The active draft could not be cleared; try finishing again.")
+            throw WorkoutSessionError.savedWorkoutDraftCleanupFailed
+        }
+        stopRestTimer()
         activeSession = nil
-        await deleteDraftFile(matching: session.id)
+        draftSaveState = .idle
         let completedSetCount = workout.exercises.reduce(0) { $0 + $1.sets.count }
         AppAnalytics.shared.track(
             AnalyticsSignal.sessionFinished,
@@ -576,80 +713,112 @@ final class WorkoutSessionManager: ObservableObject {
         )
     }
 
-    func discardDraft() async {
+    @discardableResult
+    func discardDraft() async -> Bool {
         let didHaveActiveSession = activeSession != nil
-        cancelRestTimer()
+        do {
+            try deleteDraftFile(matching: activeSession?.id)
+        } catch {
+            draftSaveState = .failed("The workout draft could not be discarded. Try again; your workout is still open.")
+            return false
+        }
+        stopRestTimer()
         activeSession = nil
+        draftSaveState = .idle
         isPresentingSessionUI = false
-        await deleteDraftFile()
         if didHaveActiveSession {
             AppAnalytics.shared.track(AnalyticsSignal.sessionDiscarded)
         }
+        return true
     }
 
-    /// Forces an immediate draft write for lifecycle edges (e.g. app moving to background).
-    /// This avoids data loss if the process is suspended before the debounce delay elapses.
-    func saveImmediately() {
+    /// Lifecycle flushes and debounced writes use the same main-actor writer. A cancelled
+    /// async writer can never overwrite this newer snapshot after the app backgrounds.
+    @discardableResult
+    func saveImmediately() -> Bool {
         persistTask?.cancel()
         persistTask = nil
-        persistDraftSynchronously()
+        guard let session = activeSession else { return true }
+        preserveUnreadableDraftIfNeeded()
+        guard !unreadableDraftNeedsPreservation else { return false }
+        draftSaveState = .saving
+        do {
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601
+            let data = try encoder.encode(session)
+            try FileManager.default.createDirectory(at: draftURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            // Resting with the phone locked must not make a lifecycle save fail.
+            try data.write(to: draftURL, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+            draftSaveState = .saved(Date())
+            return true
+        } catch {
+            draftSaveState = .failed("Could not save this workout on your device. Your workout is still open. Check available storage, then tap Retry.")
+            return false
+        }
     }
 
     // MARK: - Draft Persistence
 
     private func schedulePersistDraft() {
-        guard !Self.isRunningTests else { return }
+        guard activeSession != nil else { return }
         persistTask?.cancel()
+        draftSaveState = .saving
         persistTask = Task { [weak self] in
+            guard let delay = self?.persistenceDelayNanoseconds else { return }
             do {
-                try await Task.sleep(nanoseconds: 450_000_000)
-            } catch {
-                // Cancelled (or otherwise interrupted) debounced persist.
-                return
-            }
-            guard let self else { return }
+                try await Task.sleep(nanoseconds: delay)
+            } catch { return }
             guard !Task.isCancelled else { return }
-            await self.persistDraft()
+            self?.saveImmediately()
         }
     }
 
-    private func persistDraft() async {
-        guard let data = encodedDraftData() else { return }
-        let url = fileURL()
-        await draftStore.write(data, to: url)
-    }
-
-    private func persistDraftSynchronously() {
-        guard let data = encodedDraftData() else { return }
-        let url = fileURL()
-
-        do {
-            try data.write(to: url, options: [.atomic, .completeFileProtection])
-        } catch {
-            print("Failed to persist active session draft immediately: \(error)")
-        }
-    }
-
-    private func encodedDraftData() -> Data? {
-        guard let session = activeSession else { return nil }
-
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-
-        do {
-            return try encoder.encode(session)
-        } catch {
-            print("Failed to encode active session draft: \(error)")
-            return nil
-        }
-    }
-
-    private func deleteDraftFile(matching sessionID: UUID? = nil) async {
+    private func deleteDraftFile(matching sessionID: UUID? = nil) throws {
         persistTask?.cancel()
         persistTask = nil
+        guard FileManager.default.fileExists(atPath: draftURL.path) else { return }
+        if let sessionID {
+            let stored = try JSONDecoder().decode(DraftIdentity.self, from: Data(contentsOf: draftURL))
+            guard stored.id == sessionID else { return }
+        }
+        try FileManager.default.removeItem(at: draftURL)
+    }
 
-        let url = fileURL()
-        await draftStore.delete(at: url, matching: sessionID)
+    private struct DraftIdentity: Decodable {
+        let id: UUID
+    }
+
+    private func sessionMatchesWorkoutContent(_ snapshot: ActiveWorkoutSession) -> Bool {
+        guard var current = activeSession else { return false }
+        // Timer expiration/extension is not an edit to the workout being saved.
+        current.restTimerEndsAt = snapshot.restTimerEndsAt
+        current.restTimerTotalSeconds = snapshot.restTimerTotalSeconds
+        current.restTimerSourceSetId = snapshot.restTimerSourceSetId
+        return current == snapshot
+    }
+
+    private func restoreRestTimer(from session: ActiveWorkoutSession) {
+        guard let endTime = session.restTimerEndsAt else { return }
+        let remaining = endTime.timeIntervalSinceNow
+        guard remaining > 0, remaining <= 3_600 else {
+            clearStoredRestTimer()
+            return
+        }
+        restTimer.setCurrentTotal(min(3_600, max(Int(ceil(remaining)), session.restTimerTotalSeconds ?? restTimerDuration)))
+        beginRestTimer(until: endTime, sourceSetId: session.restTimerSourceSetId, persist: false)
+    }
+
+    private func clearRestTimerMetadata(in session: inout ActiveWorkoutSession) {
+        session.restTimerEndsAt = nil
+        session.restTimerTotalSeconds = nil
+        session.restTimerSourceSetId = nil
+    }
+
+    private func clearStoredRestTimer() {
+        guard var session = activeSession, session.restTimerEndsAt != nil else { return }
+        clearRestTimerMetadata(in: &session)
+        activeSession = session
+        saveImmediately()
     }
 
     private func fileURL() -> URL {
@@ -677,17 +846,31 @@ final class WorkoutSessionManager: ObservableObject {
         if isCardio {
             return hasEnteredData(set, isCardio: true)
                 ? nil
-                : "Enter at least one cardio metric before marking this set complete."
+                : "Enter a positive distance, time, or rep count. Metrics cannot be negative."
         }
 
         guard hasEnteredData(set, isCardio: false) else {
-            return "Enter weight and reps before marking this set complete."
+            return "Enter a weight of 0 or more and at least 1 rep. Use 0 for bodyweight."
         }
 
         return nil
     }
 
     private func hasEnteredData(_ set: ActiveSet, isCardio: Bool) -> Bool {
+        if let draft = set.inputDraft {
+            let rawMetrics: [(String, Double?)] = [
+                (draft.weight, WorkoutValueFormatter.parseDecimal(draft.weight)),
+                (draft.reps, WorkoutValueFormatter.parseWholeNumber(draft.reps).map(Double.init)),
+                (draft.distance, WorkoutValueFormatter.parseDecimal(draft.distance)),
+                (draft.duration, WorkoutValueFormatter.parseDurationSeconds(draft.duration))
+            ]
+            for (text, value) in rawMetrics where !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                guard let value, value.isFinite, value >= 0 else { return false }
+            }
+        }
+        let numericValues = [set.weight, set.distance, set.seconds].compactMap { $0 }
+        guard numericValues.allSatisfy({ $0.isFinite && $0 >= 0 }), (set.reps ?? 0) >= 0,
+              ((set.weight ?? 0) * Double(set.reps ?? 0)).isFinite else { return false }
         if isCardio {
             let reps = max(set.reps ?? 0, 0)
             let distance = max(set.distance ?? 0, 0)
@@ -715,6 +898,7 @@ final class WorkoutSessionManager: ObservableObject {
             restTimerTask = nil
             restTimerEndTime = nil
             restTimer.update(isActive: false, secondsRemaining: 0)
+            clearStoredRestTimer()
             if notifyOnCompletion {
                 Haptics.notify(.success)
             }
@@ -798,33 +982,5 @@ private enum RestTimerNotifier {
         let center = UNUserNotificationCenter.current()
         center.removePendingNotificationRequests(withIdentifiers: [identifier])
         center.removeDeliveredNotifications(withIdentifiers: [identifier])
-    }
-}
-
-private actor ActiveSessionDraftStore {
-    private nonisolated struct DraftIdentity: Decodable {
-        let id: UUID
-    }
-
-    func write(_ data: Data, to url: URL) {
-        do {
-            try data.write(to: url, options: [.atomic, .completeFileProtection])
-        } catch {
-            print("Failed to persist active session draft: \(error)")
-        }
-    }
-
-    func delete(at url: URL, matching sessionID: UUID?) {
-        do {
-            if FileManager.default.fileExists(atPath: url.path) {
-                if let sessionID {
-                    let stored = try JSONDecoder().decode(DraftIdentity.self, from: Data(contentsOf: url))
-                    guard stored.id == sessionID else { return }
-                }
-                try FileManager.default.removeItem(at: url)
-            }
-        } catch {
-            print("Failed to delete active session draft: \(error)")
-        }
     }
 }

@@ -51,7 +51,7 @@ struct StrongImportWizard: View {
                         .animation(reduceMotion ? nil : Theme.Animation.spring, value: step)
                 }
             }
-            .navigationTitle("Import Data")
+            .navigationTitle("Import data")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 AppToolbarItem(placement: .cancellationAction) {
@@ -65,10 +65,10 @@ struct StrongImportWizard: View {
                 isPresented: $showingCloseConfirmation,
                 titleVisibility: .visible
             ) {
-                Button("Continue in Background") {
+                Button("Continue in background") {
                     isPresented = false
                 }
-                Button("Keep Open", role: .cancel) {}
+                Button("Keep open", role: .cancel) {}
             } message: {
                 Text("The selected file will keep importing if you close this screen.")
             }
@@ -151,11 +151,11 @@ struct StrongImportWizard: View {
                                 .frame(width: 160, height: 160)
                         )
 
-                    Text("Import Data")
+                    Text("Import data")
                         .font(Theme.Typography.title)
                         .foregroundStyle(Theme.Colors.textPrimary)
 
-                    Text("Strong CSV or Big Beautiful Workout backup")
+                    Text("A Strong CSV export, or a backup from this app.")
                         .font(Theme.Typography.body)
                         .foregroundStyle(Theme.Colors.textSecondary)
                         .multilineTextAlignment(.center)
@@ -164,7 +164,7 @@ struct StrongImportWizard: View {
                 .padding(Theme.Spacing.xl)
             }
 
-            primaryActionButton(title: "Next", fill: Theme.Colors.accent) {
+            primaryActionButton(title: "Next") {
                 withAnimation(reduceMotion ? nil : Theme.Animation.spring) { step = 1 }
             }
             .padding(.horizontal, Theme.Spacing.xl)
@@ -202,7 +202,7 @@ struct StrongImportWizard: View {
                                 VStack(spacing: Theme.Spacing.md) {
                                     Image(systemName: "doc.text.fill")
                                         .font(Theme.Iconography.largeTitle)
-                                    Text("Select Import File")
+                                    Text("Select import file")
                                         .font(Theme.Typography.headline)
                                 }
                                 .foregroundStyle(Theme.Colors.accent)
@@ -241,7 +241,7 @@ struct StrongImportWizard: View {
 
                 if let stats = importStats {
                     VStack(spacing: Theme.Spacing.md) {
-                        Text(stats.insertedItems > 0 ? "Import Complete" : "No New Data")
+                        Text(stats.insertedItems > 0 ? "Import complete" : "No new data")
                             .font(Theme.Typography.title)
 
                         LazyVGrid(
@@ -255,7 +255,7 @@ struct StrongImportWizard: View {
                                 Text("\(stats.workouts)")
                                     .font(Theme.Typography.title2)
                                     .foregroundStyle(Theme.Colors.accent)
-                                Text("Workouts Imported")
+                                Text("Workouts imported")
                                     .font(Theme.Typography.caption)
                                     .foregroundStyle(Theme.Colors.textSecondary)
                             }
@@ -265,7 +265,7 @@ struct StrongImportWizard: View {
                                 Text("\(stats.exercises)")
                                     .font(Theme.Typography.title2)
                                     .foregroundStyle(Theme.Colors.accent)
-                                Text("Unique Exercises")
+                                Text("Unique exercises")
                                     .font(Theme.Typography.caption)
                                     .foregroundStyle(Theme.Colors.textSecondary)
                             }
@@ -276,7 +276,7 @@ struct StrongImportWizard: View {
                                     Text("\(stats.sideLinks)")
                                         .font(Theme.Typography.title2)
                                         .foregroundStyle(Theme.Colors.accent)
-                                    Text("Side Links")
+                                    Text("Side links")
                                         .font(Theme.Typography.caption)
                                         .foregroundStyle(Theme.Colors.textSecondary)
                                 }
@@ -288,7 +288,7 @@ struct StrongImportWizard: View {
                                     Text("\(stats.additionalItems)")
                                         .font(Theme.Typography.title2)
                                         .foregroundStyle(Theme.Colors.accentSecondary)
-                                    Text("Other Items")
+                                    Text("Other items")
                                         .font(Theme.Typography.caption)
                                         .foregroundStyle(Theme.Colors.textSecondary)
                                 }
@@ -300,7 +300,7 @@ struct StrongImportWizard: View {
                                     Text("\(stats.skippedItems)")
                                         .font(Theme.Typography.title2)
                                         .foregroundStyle(Theme.Colors.textTertiary)
-                                    Text("Already Present")
+                                    Text("Already present")
                                         .font(Theme.Typography.caption)
                                         .foregroundStyle(Theme.Colors.textSecondary)
                                 }
@@ -316,7 +316,7 @@ struct StrongImportWizard: View {
                 healthSyncStatusCard
                 autoGymTagStatusCard
 
-                primaryActionButton(title: "Done", fill: Theme.Colors.success) {
+                primaryActionButton(title: "Done") {
                     isPresented = false
                 }
 
@@ -337,7 +337,7 @@ struct StrongImportWizard: View {
             HStack(spacing: Theme.Spacing.sm) {
                 Image(systemName: "doc.text.fill")
                     .foregroundStyle(Theme.Colors.accent)
-                Text("Import Details")
+                Text("Import details")
                     .font(Theme.Typography.headline)
             }
 
@@ -356,7 +356,7 @@ struct StrongImportWizard: View {
             HStack(spacing: Theme.Spacing.sm) {
                 Image(systemName: "mappin.and.ellipse")
                     .foregroundStyle(Theme.Colors.accent)
-                Text("Gym Tags")
+                Text("Gym tags")
                     .font(Theme.Typography.headline)
             }
 
@@ -378,11 +378,11 @@ struct StrongImportWizard: View {
             }
 
             if autoGymTagNeedsReviewCount > 0 {
-                statusRow(title: "Needs Review", value: "\(autoGymTagNeedsReviewCount)", valueColor: Theme.Colors.warning)
+                statusRow(title: "Needs review", value: "\(autoGymTagNeedsReviewCount)", valueColor: Theme.Colors.warning)
             }
 
             if autoGymTagRoutePermissionUnavailable {
-                Text("Workout route location permission was unavailable, so any misses were left for manual review.")
+                Text("Workout location access is unavailable. Review unmatched gyms manually.")
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Colors.warning)
                     .fixedSize(horizontal: false, vertical: true)
@@ -398,7 +398,7 @@ struct StrongImportWizard: View {
             if shouldShowAutoGymTagActions {
                 HStack(spacing: Theme.Spacing.md) {
                     if let report = autoGymTagReport, !report.items.isEmpty {
-                        Button("View Results") {
+                        Button("View results") {
                             showingAutoGymTagReport = true
                         }
                         .font(Theme.Typography.captionBold)
@@ -430,7 +430,7 @@ struct StrongImportWizard: View {
             HStack(spacing: Theme.Spacing.sm) {
                 Image(systemName: "heart.fill")
                     .foregroundStyle(Theme.Colors.error)
-                Text("Apple Health Sync")
+                Text("Apple Health sync")
                     .font(Theme.Typography.headline)
             }
 
@@ -466,7 +466,7 @@ struct StrongImportWizard: View {
             }
 
             if let lastSync = healthManager.lastSyncDate {
-                statusRow(title: "Last Sync", value: formatDate(lastSync))
+                statusRow(title: "Last sync", value: formatDate(lastSync))
             }
         }
         .padding(Theme.Spacing.lg)
@@ -531,7 +531,7 @@ struct StrongImportWizard: View {
         case .unavailable:
             return "Unavailable"
         case .needsAuthorization:
-            return "Authorization Needed"
+            return "Health access needed"
         case .syncing:
             return "Syncing"
         case .synced:
@@ -547,14 +547,14 @@ struct StrongImportWizard: View {
         }
         switch healthSyncState {
         case .idle:
-            return "Waiting to start automatic recent sync."
+            return "Waiting to sync recent workouts."
         case .unavailable:
             return "Apple Health is unavailable on this device."
         case .needsAuthorization:
             if healthManager.authorizationStatus == .denied {
                 return "Apple Health access is denied. Enable access in Settings."
             }
-            return "Authorization is required to sync health data."
+            return "Allow Health access to sync workout data."
         case .syncing:
             return "Syncing recent workout health data."
         case .synced(let date):
@@ -624,13 +624,13 @@ struct StrongImportWizard: View {
 
     private var gymReviewLinkTitle: String {
         if autoGymTagNeedsReviewCount > 0 {
-            return "Review Misses"
+            return "Review unmatched"
         }
         switch autoGymTagState {
         case .failed, .needsAuthorization, .unavailable:
-            return "Open Gym Review"
+            return "Open gym review"
         default:
-            return "Review Gym Tags"
+            return "Review gym tags"
         }
     }
 
@@ -641,7 +641,7 @@ struct StrongImportWizard: View {
         case .unavailable:
             return "Unavailable"
         case .needsAuthorization:
-            return "Authorization Needed"
+            return "Health access needed"
         case .tagging:
             return "Detecting"
         case .complete:
@@ -656,12 +656,12 @@ struct StrongImportWizard: View {
         case .idle:
             return "Imported workouts will be checked for matching gym tags."
         case .unavailable:
-            return "Apple Health is unavailable on this device, so gym auto-detect can’t run."
+            return "Apple Health is unavailable on this device."
         case .needsAuthorization:
             if healthManager.authorizationStatus == .denied {
                 return "Apple Health access is denied. Enable access in Settings to auto-detect gyms."
             }
-            return "Health access is required to match imported workouts to Apple workouts."
+            return "Allow Health access to match imported workouts to Apple workouts."
         case .tagging:
             return "Auto-detecting gym tags for imported workouts."
         case .complete:
@@ -699,18 +699,8 @@ struct StrongImportWizard: View {
         date.formatted(date: .abbreviated, time: .shortened)
     }
 
-    private func primaryActionButton(title: String, fill: Color, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title)
-                .font(Theme.Typography.headline)
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity, minHeight: Theme.Layout.minimumTapTarget)
-                .surfaceButtonChrome(
-                    fill: fill,
-                    cornerRadius: Theme.CornerRadius.large
-                )
-        }
-        .buttonStyle(.plain)
+    private func primaryActionButton(title: String, action: @escaping () -> Void) -> some View {
+        AppPrimaryButton(title: title, action: action)
     }
 
     // MARK: - Logic
@@ -820,7 +810,7 @@ struct StrongImportWizard: View {
                         } catch {
                             await MainActor.run {
                                 storageStatusMessage = nil
-                                importError = "Import failed to save: \(error.localizedDescription)"
+                                importError = "Import failed: \(error.localizedDescription)"
                                 isImporting = false
                                 importPhase = .idle
                                 AppAnalytics.shared.track(
@@ -948,7 +938,7 @@ struct StrongImportWizard: View {
         )
 
         healthSyncState = .synced(Date())
-        healthSyncNote = "Cached health data restored from backup. No Apple Health write was attempted."
+        healthSyncNote = "Health data restored from backup. Nothing was written to Apple Health."
         autoGymTagState = .complete
         autoGymTagReport = AutoGymTaggingReport(
             attempted: 0,
@@ -1025,7 +1015,7 @@ struct StrongImportWizard: View {
             healthSyncState = .synced(Date())
             healthSyncNote =
                 "Skipped \(missing.count) older unsynced workout\(missing.count == 1 ? "" : "s") " +
-                "to keep import fast. Use Health Cache later to backfill them."
+                "to keep import fast. Sync them later from Settings > Health data."
             return
         }
 

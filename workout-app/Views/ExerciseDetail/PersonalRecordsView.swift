@@ -4,7 +4,7 @@ struct PersonalRecordsView: View {
     let exerciseName: String
     let sessions: [ExerciseHistorySession]
     let scope: ExerciseAnalysisScope
-    var title: String = "Personal Records"
+    var title: String = "Records"
 
     @EnvironmentObject private var dataManager: WorkoutDataManager
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -55,17 +55,15 @@ struct PersonalRecordsView: View {
             if !hasLoadedRecords {
                 HStack(spacing: Theme.Spacing.xs) {
                     ProgressView()
-                    Text("Building personal records")
+                    Text("Loading records…")
                         .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.Colors.textSecondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             } else if records.isEmpty {
                 EmptyStateCard(
-                    icon: "trophy",
-                    tint: Theme.Colors.gold,
-                    title: "No personal records yet",
-                    message: "This scope has no qualifying sets for a personal record."
+                    title: "No records yet",
+                    message: "Records appear once this exercise has a qualifying set at this location."
                 )
             } else {
                 if !title.isEmpty {
@@ -74,7 +72,7 @@ struct PersonalRecordsView: View {
                         .foregroundColor(Theme.Colors.textPrimary)
                 }
 
-                LazyVStack(spacing: Theme.Spacing.md) {
+                LazyVStack(spacing: Theme.Spacing.sm) {
                     ForEach(records) { record in
                         recordTile(record)
                     }
@@ -98,8 +96,7 @@ struct PersonalRecordsView: View {
         AnalysisTile(
             role: .navigate,
             destination: "\(record.title) analysis",
-            accessibilityLabel: "\(record.title), \(record.value), \(record.date.formatted(date: .abbreviated, time: .omitted))",
-            tint: Theme.Colors.gold,
+            accessibilityLabel: "\(record.title), \(record.value), \(record.context), \(record.date.formatted(date: .abbreviated, time: .omitted))",
             action: {
                 selectedMetric = ExerciseMetricSelection(
                     scope: scope,
@@ -110,18 +107,11 @@ struct PersonalRecordsView: View {
             content: {
                 if dynamicTypeSize.isAccessibilitySize {
                     VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                        Image(systemName: "trophy.fill")
-                            .font(Theme.Iconography.medium)
-                            .foregroundStyle(Theme.Colors.gold)
-                            .accessibilityHidden(true)
-                        Text(record.title)
-                            .sectionHeaderStyle()
-                            .foregroundStyle(Theme.Colors.gold)
+                        recordLabel(record.title)
                         Text(record.value)
-                            .font(Theme.Typography.headline)
+                            .font(Theme.Typography.title3)
                             .foregroundStyle(Theme.Colors.textPrimary)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.7)
+                            .fixedSize(horizontal: false, vertical: true)
                             .monospacedDigit()
                         Text(record.context)
                             .font(Theme.Typography.caption)
@@ -133,23 +123,16 @@ struct PersonalRecordsView: View {
                     }
                 } else {
                     HStack(alignment: .top, spacing: Theme.Spacing.sm) {
-                        Image(systemName: "trophy.fill")
-                            .font(Theme.Iconography.medium)
-                            .foregroundStyle(Theme.Colors.gold)
-                            .accessibilityHidden(true)
-
-                        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                            Text(record.title)
-                                .sectionHeaderStyle()
-                                .foregroundStyle(Theme.Colors.gold)
+                        VStack(alignment: .leading, spacing: 2) {
+                            recordLabel(record.title)
                             Text(record.value)
-                                .font(Theme.Typography.headline)
+                                .font(Theme.Typography.title3)
                                 .foregroundStyle(Theme.Colors.textPrimary)
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.7)
                                 .monospacedDigit()
                             Text(record.context)
-                                .font(Theme.Typography.caption)
+                                .font(Theme.Typography.subheadline)
                                 .foregroundStyle(Theme.Colors.textSecondary)
                         }
 
@@ -157,12 +140,25 @@ struct PersonalRecordsView: View {
 
                         Text(record.date.formatted(date: .abbreviated, time: .omitted))
                             .font(Theme.Typography.caption)
-                            .foregroundColor(Theme.Colors.textTertiary)
+                            .foregroundColor(Theme.Colors.textSecondary)
                     }
                 }
             }
         )
         .accessibilityIdentifier("personal-record-\(record.metric.rawValue)")
+    }
+
+    /// The record's name beside a yellow 15 kg plate mark, the app's sign for a PR.
+    private func recordLabel(_ title: String) -> some View {
+        HStack(spacing: 6) {
+            RoundedRectangle(cornerRadius: 1, style: .continuous)
+                .fill(Theme.Colors.plateYellow)
+                .frame(width: 4, height: 13)
+                .accessibilityHidden(true)
+            Text(title)
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.Colors.textSecondary)
+        }
     }
 
     private func refreshRecords() async {
@@ -226,11 +222,11 @@ struct PersonalRecordsView: View {
     ) -> String {
         switch metric {
         case .maxLoad: return ExerciseLoad.weightRecordTitle(for: exerciseName)
-        case .setVolume: return "Best Set Volume"
-        case .maxReps: return "Most Reps"
+        case .setVolume: return "Best set volume"
+        case .maxReps: return "Most reps"
         case .estimatedOneRepMax: return ExerciseLoad.oneRepMaxTitle(for: exerciseName)
-        case .distance: return "Longest Distance"
-        case .duration: return "Longest Duration"
+        case .distance: return "Longest distance"
+        case .duration: return "Longest duration"
         case .count: return "Most \(countLabel)"
         case .sessions, .setCount, .averageReps, .sessionVolume:
             return metric.rawValue
@@ -268,8 +264,9 @@ struct PersonalRecordsView: View {
         exerciseName: String,
         countLabel: String
     ) -> String {
+        let observedOn = observation.date.formatted(.dateTime.month(.abbreviated).day().year())
         if let weight = observation.weight, let reps = observation.reps {
-            return "\(ExerciseLoad.formatWeight(weight, exerciseName: exerciseName)) × \(reps) · \(observation.workoutName)"
+            return "\(ExerciseLoad.formatWeight(weight, exerciseName: exerciseName)) × \(reps), \(observedOn)"
         }
         var parts: [String] = []
         if let distance = observation.distance {
@@ -281,7 +278,7 @@ struct PersonalRecordsView: View {
         if let reps = observation.reps {
             parts.append("\(reps) \(countLabel)")
         }
-        parts.append(observation.workoutName)
-        return parts.joined(separator: " · ")
+        parts.append(observedOn)
+        return parts.joined(separator: ", ")
     }
 }

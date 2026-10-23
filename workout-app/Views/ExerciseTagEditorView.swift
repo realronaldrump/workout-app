@@ -79,31 +79,14 @@ struct ExerciseTagEditorView: View {
                 Text("Selected")
                     .font(Theme.Typography.title3)
                     .foregroundStyle(Theme.Colors.textPrimary)
+                AppHelpButton(title: "Muscle roles", message: selectionFootnote)
 
                 Spacer()
 
                 if isOverridden {
-                    Text("CUSTOM")
-                        .font(Theme.Typography.metricLabel)
-                        .foregroundStyle(Theme.Colors.accentSecondary)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .background(Theme.Colors.accentSecondary.opacity(0.12))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                                .strokeBorder(Theme.Colors.accentSecondary.opacity(0.7), lineWidth: 2)
-                        )
+                    TagLabel(text: "Custom", tint: Theme.Colors.textPrimary)
                 } else if hasDefaultTags {
-                    Text("DEFAULT")
-                        .font(Theme.Typography.metricLabel)
-                        .foregroundStyle(Theme.Colors.textTertiary)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .background(Theme.Colors.textTertiary.opacity(0.10))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                                .strokeBorder(Theme.Colors.textTertiary.opacity(0.4), lineWidth: 2)
-                        )
+                    TagLabel(text: "Default")
                 }
             }
 
@@ -124,16 +107,13 @@ struct ExerciseTagEditorView: View {
                 }
             }
 
-            if hasDefaultTags, !defaultAssignments.isEmpty {
+            if isOverridden, hasDefaultTags, !defaultAssignments.isEmpty {
                 Text("Defaults: \(MuscleContributionPolicy.exportDescription(defaultAssignments))")
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Colors.textSecondary)
                     .lineLimit(3)
             }
 
-            Text(selectionFootnote)
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Colors.textTertiary)
         }
         .padding(Theme.Spacing.lg)
         .softCard(elevation: 2)
@@ -154,9 +134,9 @@ struct ExerciseTagEditorView: View {
         assignments: [ExerciseMuscleAssignment]
     ) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            Text(title.uppercased())
-                .font(Theme.Typography.metricLabel)
-                .foregroundStyle(Theme.Colors.textTertiary)
+            Text(title)
+                .font(Theme.Typography.subheadlineStrong)
+                .foregroundStyle(Theme.Colors.textSecondary)
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: Theme.Spacing.sm) {
@@ -171,11 +151,11 @@ struct ExerciseTagEditorView: View {
 
     private var builtInTagsSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Muscle Groups")
+            Text("Muscle groups")
                 .font(Theme.Typography.title3)
                 .foregroundStyle(Theme.Colors.textPrimary)
 
-            Text("Choose at least one primary muscle. Add secondary muscles for meaningful assistance work.")
+            Text("Choose at least one primary muscle.")
                 .font(Theme.Typography.caption)
                 .foregroundStyle(Theme.Colors.textSecondary)
 
@@ -199,16 +179,14 @@ struct ExerciseTagEditorView: View {
 
     private var customTagsSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Custom Groups")
+            Text("Custom groups")
                 .font(Theme.Typography.title3)
                 .foregroundStyle(Theme.Colors.textPrimary)
 
             HStack(alignment: .top, spacing: Theme.Spacing.md) {
                 Image(systemName: "plus")
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Theme.Colors.accentSecondary)
                     .frame(width: 30, height: 30)
-                    .background(Theme.Colors.accentSecondary)
-                    .cornerRadius(Theme.CornerRadius.large)
 
                 VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                     Text("Add a custom label")
@@ -269,26 +247,27 @@ struct ExerciseTagEditorView: View {
 
     private var cardioTrackingSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Cardio Tracking")
-                .font(Theme.Typography.title3)
-                .foregroundStyle(Theme.Colors.textPrimary)
+            HStack {
+                Text("Cardio tracking")
+                    .font(Theme.Typography.title3)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                Spacer()
+                AppHelpButton(
+                    title: "Cardio tracking",
+                    message: "Auto selects a metric from your existing sets. You can choose another metric or rename count-based cardio, such as floors."
+                )
+            }
 
             VStack(spacing: Theme.Spacing.sm) {
                 HStack(spacing: Theme.Spacing.md) {
                     Image(systemName: "figure.run")
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Theme.Colors.cardio)
                         .frame(width: 30, height: 30)
-                        .background(Theme.Colors.cardio)
-                        .cornerRadius(Theme.CornerRadius.large)
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Primary metric")
                             .font(Theme.Typography.body)
                             .foregroundStyle(Theme.Colors.textPrimary)
-                        Text("Used for summaries and defaults. Auto will infer from your existing sets.")
-                            .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.Colors.textSecondary)
-                            .lineLimit(2)
                     }
 
                     Spacer(minLength: 0)
@@ -312,19 +291,13 @@ struct ExerciseTagEditorView: View {
 
                 HStack(alignment: .top, spacing: Theme.Spacing.md) {
                     Image(systemName: "textformat")
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Theme.Colors.accentSecondary)
                         .frame(width: 30, height: 30)
-                        .background(Theme.Colors.accentSecondary)
-                        .cornerRadius(Theme.CornerRadius.large)
 
                     VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                         Text("Count label")
                             .font(Theme.Typography.body)
                             .foregroundStyle(Theme.Colors.textPrimary)
-                        Text("If you track cardio using a count (stored in reps), rename it. Example: floors.")
-                            .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.Colors.textSecondary)
-                            .lineLimit(2)
 
                         TextField("e.g., floors", text: $cardioCountLabelDraft)
                             .textInputAutocapitalization(.never)
@@ -360,8 +333,8 @@ struct ExerciseTagEditorView: View {
                         ActionRow(
                             icon: "arrow.counterclockwise",
                             tint: Theme.Colors.accent,
-                            title: "Reset to Defaults",
-                            subtitle: "Remove your override and use defaults again."
+                            title: "Reset to defaults",
+                            subtitle: "Discard your changes and use the default roles."
                         )
                     }
                     .buttonStyle(.plain)
@@ -374,7 +347,7 @@ struct ExerciseTagEditorView: View {
                     ActionRow(
                         icon: "trash",
                         tint: Theme.Colors.error,
-                        title: "Clear Muscle Roles",
+                        title: "Clear muscle roles",
                         subtitle: "Mark this exercise as untagged."
                     )
                 }
@@ -410,10 +383,8 @@ private struct MuscleRoleSelectionRow: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             HStack(spacing: Theme.Spacing.md) {
                 Image(systemName: icon)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(tint)
                     .frame(width: 30, height: 30)
-                    .background(tint)
-                    .cornerRadius(Theme.CornerRadius.large)
 
                 Text(title)
                     .font(Theme.Typography.body)
@@ -422,7 +393,7 @@ private struct MuscleRoleSelectionRow: View {
                 Spacer(minLength: 0)
 
                 if let selectedRole {
-                    Text(selectedRole.displayName.uppercased())
+                    Text(selectedRole.displayName)
                         .font(Theme.Typography.metricLabel)
                         .foregroundStyle(tint)
                 }
@@ -454,10 +425,8 @@ private struct ActionRow: View {
     var body: some View {
         HStack(spacing: Theme.Spacing.md) {
             Image(systemName: icon)
-                .foregroundStyle(.white)
+                .foregroundStyle(tint)
                 .frame(width: 30, height: 30)
-                .background(tint)
-                .cornerRadius(Theme.CornerRadius.large)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)

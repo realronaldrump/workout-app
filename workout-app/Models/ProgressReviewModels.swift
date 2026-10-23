@@ -11,10 +11,10 @@ enum ExerciseRepLane: String, CaseIterable, Codable, Hashable, Identifiable {
 
     var label: String {
         switch self {
-        case .oneToThree: return "1-3"
-        case .fourToSix: return "4-6"
-        case .sevenToTen: return "7-10"
-        case .elevenToFifteen: return "11-15"
+        case .oneToThree: return "1–3"
+        case .fourToSix: return "4–6"
+        case .sevenToTen: return "7–10"
+        case .elevenToFifteen: return "11–15"
         case .sixteenPlus: return "16+"
         }
     }
@@ -58,7 +58,7 @@ enum ExerciseOrderBand: String, Codable, Hashable {
     var label: String {
         switch self {
         case .first: return "1st"
-        case .secondToThird: return "2nd-3rd"
+        case .secondToThird: return "2nd–3rd"
         case .fourthPlus: return "4th+"
         }
     }
@@ -73,9 +73,9 @@ enum ExerciseBlockOutcomeStatus: String, Codable, Hashable {
     var title: String {
         switch self {
         case .improved: return "Improved"
-        case .flat: return "Held Flat"
+        case .flat: return "Held flat"
         case .regressed: return "Regressed"
-        case .notComparable: return "Not Directly Comparable"
+        case .notComparable: return "Not comparable"
         }
     }
 }

@@ -5,6 +5,7 @@ import SwiftUI
 
 struct ExportWorkoutsView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ObservedObject var dataManager: WorkoutDataManager
     @ObservedObject var iCloudManager: iCloudDocumentManager
     @ObservedObject private var exerciseMetadataManager = ExerciseMetadataManager.shared
@@ -74,7 +75,7 @@ struct ExportWorkoutsView: View {
                     heroHeader
                     categoryPicker
 
-                    if dataManager.workouts.isEmpty && selectedCategory != .backup {
+                    if dataManager.workouts.isEmpty && selectedCategory == .workouts {
                         emptyState
                     } else {
                         categoryPanel
@@ -98,7 +99,7 @@ struct ExportWorkoutsView: View {
         .sheet(item: $shareItem) { item in
             ShareSheet(items: [item.url])
         }
-        .alert("Export Failed", isPresented: Binding(
+        .alert("Export failed", isPresented: Binding(
             get: { exportErrorMessage != nil },
             set: { newValue in
                 if !newValue { exportErrorMessage = nil }
@@ -106,7 +107,7 @@ struct ExportWorkoutsView: View {
         )) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text(exportErrorMessage ?? "Unknown error")
+            Text(exportErrorMessage ?? "Something went wrong. Try exporting again.")
         }
         .onAppear {
             initializeDefaultRangesIfNeeded()
@@ -162,79 +163,31 @@ struct ExportWorkoutsView: View {
 
 private extension ExportWorkoutsView {
     var heroHeader: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            HStack(alignment: .center, spacing: Theme.Spacing.md) {
-                Image(systemName: "tray.and.arrow.up.fill")
-                    .font(Theme.Iconography.feature)
-                    .foregroundStyle(.white)
-                    .frame(width: 64, height: 64)
-                    .background(
-                        RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge, style: .continuous)
-                            .fill(Theme.warmGradient)
-                    )
-                    .shadow(color: Theme.Colors.accentSecondary.opacity(0.30), radius: 14, y: 6)
-                    .shadow(color: Theme.Colors.accentSecondary.opacity(0.10), radius: 24, y: 12)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Export & Backup")
-                        .font(Theme.Typography.screenTitle)
-                        .foregroundStyle(Theme.Colors.textPrimary)
-                        .tracking(0.5)
-
-                    Text("Save your data your way — workouts, health, or a complete backup.")
-                        .font(Theme.Typography.subheadline)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Spacer(minLength: 0)
-            }
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            Text("Export and backup")
+                .font(Theme.Typography.screenTitle)
+                .foregroundStyle(Theme.Colors.textPrimary)
+                .accessibilityAddTraits(.isHeader)
+            Text("Save workouts, Apple Health data, or a full backup as files.")
+                .font(Theme.Typography.subheadline)
+                .foregroundStyle(Theme.Colors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     var categoryPicker: some View {
-        HStack(spacing: Theme.Spacing.xs) {
-            ForEach(ExportCategory.allCases) { category in
-                let isSelected = selectedCategory == category
-
-                Button {
-                    guard !isSelected else { return }
-                    selectedCategory = category
+        AppSegmentedPicker(
+            title: "Export",
+            selection: Binding(
+                get: { selectedCategory },
+                set: { newValue in
+                    guard newValue != selectedCategory else { return }
+                    selectedCategory = newValue
                     Haptics.toggle()
-                } label: {
-                    HStack(spacing: Theme.Spacing.sm) {
-                        Image(systemName: category.systemImage)
-                            .font(Theme.Typography.subheadlineStrong)
-                        Text(category.title)
-                            .font(Theme.Typography.captionBold)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.75)
-                    }
-                    .foregroundStyle(isSelected ? .white : Theme.Colors.textSecondary)
-                    .frame(maxWidth: .infinity)
-                    .frame(minHeight: Theme.Layout.minimumTapTarget)
-                    .background(
-                        RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
-                            .fill(isSelected ? category.tint : Color.clear)
-                            .shadow(color: isSelected ? category.tint.opacity(0.3) : .clear, radius: 6, y: 2)
-                    )
-                    .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(category.title)
-                .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
-                .animation(reduceMotion ? nil : Theme.Animation.gentleSpring, value: isSelected)
-            }
-        }
-        .padding(Theme.Spacing.xs)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge, style: .continuous)
-                .fill(Theme.Colors.surfaceRaised)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge, style: .continuous)
-                .strokeBorder(Theme.Colors.border.opacity(0.5), lineWidth: 1)
+            ),
+            options: ExportCategory.allCases.map { (label: $0.title, value: $0) }
         )
     }
 
@@ -242,8 +195,8 @@ private extension ExportWorkoutsView {
         EmptyStateCard(
             icon: "square.and.arrow.up",
             tint: Theme.Colors.accent,
-            title: "No Workouts Yet",
-            message: "Once you have workouts logged or imported, they'll be available to export here."
+            title: "No workouts yet",
+            message: "Log or import a workout to export it."
         )
         .frame(maxWidth: .infinity)
         .padding(.top, Theme.Spacing.lg)
@@ -275,7 +228,7 @@ private extension ExportWorkoutsView {
 
     var workoutsScopeCard: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-            cardEyebrow(text: "Step 1", title: "Time Range", systemImage: "calendar.badge.clock", tint: ExportCategory.workouts.tint)
+            cardEyebrow(text: "Step 1", title: "Time range", systemImage: "calendar.badge.clock", tint: ExportCategory.workouts.tint)
             timeRangePills
             scopeStats
         }
@@ -296,7 +249,7 @@ private extension ExportWorkoutsView {
         return VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             cardEyebrow(
                 text: "Step 2",
-                title: "Workout Export",
+                title: "Workout export",
                 systemImage: workoutExportFormat.systemImage,
                 tint: ExportCategory.workouts.tint
             )
@@ -309,7 +262,7 @@ private extension ExportWorkoutsView {
                 )
             }
 
-            ExportFieldGroup(label: "Format") {
+            ExportFieldGroup(label: "Format", help: workoutExportFormat.subtitle) {
                 Picker("Format", selection: $workoutExportFormat) {
                     ForEach(WorkoutExportFormat.allCases) { format in
                         Text(format.title).tag(format)
@@ -318,20 +271,24 @@ private extension ExportWorkoutsView {
                 .pickerStyle(.segmented)
                 .accessibilityIdentifier("workoutExportFormat")
 
-                Text(workoutExportFormat.subtitle)
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
             }
+
+            Button {
+                selectedCategory = .backup
+            } label: {
+                Label("Create a full backup", systemImage: "archivebox")
+                    .font(Theme.Typography.caption)
+                    .multilineTextAlignment(.leading)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Theme.Colors.accent)
+            .accessibilityIdentifier("workoutExportBackupShortcut")
 
             if workoutExportFormat == .pdf {
                 Toggle(isOn: $includePDFJournal) {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("Include workout journal")
+                        Text("Include all selected sets")
                             .font(Theme.Typography.captionBold)
-                        Text("Adds every selected set after the visual overview.")
-                            .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.Colors.textSecondary)
                     }
                 }
                 .tint(ExportCategory.workouts.tint)
@@ -359,7 +316,6 @@ private extension ExportWorkoutsView {
                     title: "Export \(workoutExportFormat.title)",
                     isRunning: isExportingWorkouts,
                     isEnabled: workoutExportButtonEnabled,
-                    tint: ExportCategory.workouts.tint,
                     action: startWorkoutExport
                 )
 
@@ -450,7 +406,7 @@ private extension ExportWorkoutsView {
                 RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
                     .strokeBorder(Theme.Colors.border.opacity(0.4), lineWidth: 1)
             )
-            .accessibilityHint("Adds saved break ranges that overlap the export range as context in the export")
+            .accessibilityHint("Adds saved break ranges that overlap the export range")
         }
     }
 
@@ -458,15 +414,11 @@ private extension ExportWorkoutsView {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             cardEyebrow(
                 text: "Companion",
-                title: "Exercise List",
+                title: "Exercise list",
                 systemImage: "list.bullet.rectangle.portrait",
-                tint: ExportCategory.workouts.tint.opacity(0.85)
+                tint: ExportCategory.workouts.tint.opacity(0.85),
+                help: "Exports each exercise in this range once. You can include its muscle roles."
             )
-
-            Text("A simple, deduplicated list of exercises used in this range. Useful for keeping a master library or sharing your routine.")
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Colors.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
 
             Toggle(isOn: $includeExerciseTags) {
                 Text("Include muscle roles")
@@ -476,10 +428,9 @@ private extension ExportWorkoutsView {
             .tint(ExportCategory.workouts.tint)
 
             ExportPrimaryButton(
-                title: "Export Exercise List",
+                title: "Export exercise list",
                 isRunning: isExportingExercises,
                 isEnabled: exerciseExportButtonEnabled,
-                tint: ExportCategory.workouts.tint,
                 action: startExerciseExport
             )
 
@@ -496,23 +447,23 @@ private extension ExportWorkoutsView {
 
     var workoutExportDisabledReason: String {
         if selectedWorkoutColumns.isEmpty {
-            return "Select at least one field to enable export."
+            return "Select at least one field."
         }
         switch workoutMode {
         case .allWorkouts:
-            return "There are no workouts in the selected time range."
+            return "No workouts in this time range."
         case .byExercise:
             return availableExerciseNames.isEmpty
-                ? "No exercises are available in this range."
-                : "Choose at least one exercise to include."
+                ? "No exercises in this range."
+                : "Choose at least one exercise."
         case .byMuscle:
             return availableMuscleTags.isEmpty
-                ? "No muscle groups are available in this range."
-                : "Choose at least one muscle group to include."
+                ? "No muscle groups in this range."
+                : "Choose at least one muscle group."
         case .byDate:
             return workoutDateOptions.isEmpty
-                ? "No workout dates are available in this range."
-                : "Choose at least one date to include."
+                ? "No workout dates in this range."
+                : "Choose at least one date."
         }
     }
 }
@@ -536,9 +487,19 @@ private extension ExportWorkoutsView {
 
     var healthScopeCard: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-            cardEyebrow(text: "Step 1", title: "Time Range", systemImage: "calendar.badge.clock", tint: ExportCategory.health.tint)
+            cardEyebrow(text: "Step 1", title: "Time range", systemImage: "calendar.badge.clock", tint: ExportCategory.health.tint)
             timeRangePills
-            scopeStats
+            let range = effectiveDayRange
+            let cachedDays = healthManager.dailyHealthStore.keys.filter {
+                $0 >= range.start && Calendar.current.startOfDay(for: $0) <= range.endInclusive
+            }.count
+            let layout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(spacing: Theme.Spacing.sm))
+                : AnyLayout(HStackLayout(spacing: Theme.Spacing.sm))
+            layout {
+                scopeStatTile(label: "Daily records", value: "\(cachedDays)")
+                scopeStatTile(label: "Workouts", value: "\(workoutsInSelection.count)")
+            }
         }
         .padding(Theme.Spacing.lg)
         .softCard(elevation: 2)
@@ -559,7 +520,8 @@ private extension ExportWorkoutsView {
                 text: "Step 2",
                 title: "Apple Health CSV",
                 systemImage: "heart.text.square.fill",
-                tint: ExportCategory.health.tint
+                tint: ExportCategory.health.tint,
+                help: healthExportMode.footnote
             )
 
             ExportFieldGroup(label: "Export type") {
@@ -577,7 +539,6 @@ private extension ExportWorkoutsView {
                     title: healthExportMode.exportButtonTitle,
                     isRunning: isExportingHealth,
                     isEnabled: healthExportButtonEnabled,
-                    tint: ExportCategory.health.tint,
                     action: startHealthExport
                 )
 
@@ -597,10 +558,6 @@ private extension ExportWorkoutsView {
                 onShare: presentShare
             )
 
-            Text(healthExportMode.footnote)
-                .font(Theme.Typography.microcopy)
-                .foregroundStyle(Theme.Colors.textTertiary)
-                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(Theme.Spacing.lg)
         .softCard(elevation: 2)
@@ -670,7 +627,7 @@ private extension ExportWorkoutsView {
                 : ""
         case .workoutSummary:
             return workoutsInSelection.isEmpty
-                ? "There are no workouts in the selected time range."
+                ? "No workouts in this time range."
                 : ""
         case .metricSamples:
             return selectedHealthSampleMetrics.isEmpty
@@ -690,20 +647,16 @@ private extension ExportWorkoutsView {
                     .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Apple Health Unavailable")
+                    Text("Apple Health unavailable")
                         .font(Theme.Typography.headline)
                         .foregroundStyle(Theme.Colors.textPrimary)
-                    Text("Health exports require HealthKit access on a supported device.")
+                    Text("Health exports need Apple Health on a supported device.")
                         .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.Colors.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
 
-            Text("Daily summaries, raw metric samples, and workout-linked health exports will appear here when Apple Health is available.")
-                .font(Theme.Typography.microcopy)
-                .foregroundStyle(Theme.Colors.textTertiary)
-                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(Theme.Spacing.lg)
         .softCard(elevation: 2)
@@ -712,18 +665,11 @@ private extension ExportWorkoutsView {
     var healthAccessCard: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             HStack(alignment: .top, spacing: Theme.Spacing.md) {
-                Image(systemName: "heart.text.square.fill")
-                    .font(Theme.Typography.title3)
-                    .foregroundStyle(ExportCategory.health.tint)
-                    .frame(width: 38, height: 38)
-                    .background(ExportCategory.health.tint.opacity(0.12))
-                    .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous))
-
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Connect Apple Health")
                         .font(Theme.Typography.headline)
                         .foregroundStyle(Theme.Colors.textPrimary)
-                    Text("Grant read access to export daily summaries, raw metric samples, or workout-linked health data.")
+                    Text("Allow read access to export your Health data.")
                         .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.Colors.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -731,17 +677,16 @@ private extension ExportWorkoutsView {
             }
 
             if healthManager.authorizationStatus == .denied {
-                Text("Health access is currently denied. Re-enable it in the system Health permissions, then come back here to export.")
+                Text("Health access is denied. Allow it in Settings to export.")
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Colors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
             ExportPrimaryButton(
-                title: healthManager.authorizationStatus == .denied ? "Try Health Authorization Again" : "Connect Apple Health",
+                title: healthManager.authorizationStatus == .denied ? "Try Health access again" : "Connect Apple Health",
                 isRunning: false,
                 isEnabled: true,
-                tint: ExportCategory.health.tint,
                 action: requestHealthAuthorization
             )
         }
@@ -763,21 +708,11 @@ private extension ExportWorkoutsView {
     var backupHeroCard: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             HStack(alignment: .top, spacing: Theme.Spacing.md) {
-                Image(systemName: "archivebox.fill")
-                    .font(Theme.Iconography.feature)
-                    .foregroundStyle(.white)
-                    .frame(width: 56, height: 56)
-                    .background(
-                        RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
-                            .fill(Theme.warmGradient)
-                    )
-                    .shadow(color: Theme.Colors.accentSecondary.opacity(0.30), radius: 10, y: 4)
-
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Master Backup")
+                    Text("Full backup")
                         .font(Theme.Typography.title3)
                         .foregroundStyle(Theme.Colors.textPrimary)
-                    Text("One native backup file you can restore on any device. Includes everything below.")
+                    Text("Everything listed below, in one file. Restore it from Settings > Import.")
                         .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.Colors.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -785,10 +720,9 @@ private extension ExportWorkoutsView {
             }
 
             ExportPrimaryButton(
-                title: "Export Master Backup",
+                title: "Export full backup",
                 isRunning: isExportingFullBackup,
                 isEnabled: !isExportingFullBackup,
-                tint: ExportCategory.backup.tint,
                 action: startFullBackupExport
             )
 
@@ -799,7 +733,7 @@ private extension ExportWorkoutsView {
                 onShare: presentShare
             )
 
-            Text("Creates a Big Beautiful Workout backup. It does not include previous export files or unfinished workout drafts.")
+            Text("Excludes previous export files and unfinished workout drafts.")
                 .font(Theme.Typography.microcopy)
                 .foregroundStyle(Theme.Colors.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -903,7 +837,10 @@ private extension ExportWorkoutsView {
             workouts.flatMap { ExerciseAggregation.aggregateExercises(in: $0, resolver: resolver).map(\.name) }
         ).count
 
-        return HStack(spacing: Theme.Spacing.md) {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(spacing: Theme.Spacing.sm))
+            : AnyLayout(HStackLayout(spacing: Theme.Spacing.md))
+        return layout {
             scopeStatTile(label: "Workouts", value: "\(workouts.count)")
             scopeStatTile(label: "Exercises", value: "\(totalExercises)")
             scopeStatTile(label: "Sets", value: "\(totalSets)")
@@ -919,8 +856,6 @@ private extension ExportWorkoutsView {
             Text(label)
                 .font(Theme.Typography.caption)
                 .foregroundStyle(Theme.Colors.textSecondary)
-                .textCase(.uppercase)
-                .tracking(0.6)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, Theme.Spacing.md)
@@ -942,27 +877,26 @@ private extension ExportWorkoutsView {
         return "\(formatDay(range.start)) → \(formatDay(range.endInclusive))"
     }
 
-    func cardEyebrow(text: String, title: String, systemImage: String, tint: Color) -> some View {
-        HStack(alignment: .top, spacing: Theme.Spacing.md) {
-            Image(systemName: systemImage)
-                .font(Theme.Typography.title4)
-                .foregroundStyle(tint)
-                .frame(width: 36, height: 36)
-                .background(tint.opacity(0.12))
-                .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous))
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(text)
-                    .font(Theme.Typography.metricLabel)
-                    .foregroundStyle(tint)
-                    .textCase(.uppercase)
-                    .tracking(1.0)
-                Text(title)
-                    .font(Theme.Typography.title3)
-                    .foregroundStyle(Theme.Colors.textPrimary)
+    /// A card heading. Steps in the export flow lead with their number; other cards
+    /// lead with the title alone.
+    func cardEyebrow(text: String, title: String, systemImage: String, tint: Color, help: String? = nil) -> some View {
+        let stepNumber = text.hasPrefix("Step ") ? String(text.dropFirst(5)) : nil
+        return HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.sm) {
+            if let stepNumber {
+                Text(stepNumber)
+                    .font(Theme.Typography.cardHeader)
+                    .foregroundStyle(Theme.Colors.textTertiary)
+                    .accessibilityLabel(text)
             }
+            Text(title)
+                .font(Theme.Typography.title3)
+                .foregroundStyle(Theme.Colors.textPrimary)
+                .accessibilityAddTraits(.isHeader)
 
             Spacer(minLength: 0)
+            if let help {
+                AppHelpButton(title: title, message: help)
+            }
         }
     }
 }
@@ -1006,13 +940,13 @@ private extension ExportWorkoutsView {
             )
         case .healthDailyMetrics:
             ExportHealthMetricSelectionSheet(
-                title: "Daily Health Metrics",
+                title: "Daily health metrics",
                 selectedMetrics: $selectedHealthSummaryMetrics,
                 availableMetrics: availableHealthSummaryMetrics
             )
         case .healthSampleMetrics:
             ExportHealthMetricSelectionSheet(
-                title: "Raw Sample Metrics",
+                title: "Raw sample metrics",
                 selectedMetrics: $selectedHealthSampleMetrics,
                 availableMetrics: availableHealthSampleMetrics
             )
@@ -1245,13 +1179,17 @@ private extension ExportWorkoutsView {
     var effectiveDayRange: (start: Date, endInclusive: Date) {
         let calendar = Calendar.current
         let fallbackDay = calendar.startOfDay(for: Date())
-        let earliest = dataManager.workouts.map(\.date).min().map { calendar.startOfDay(for: $0) }
-        let latest = dataManager.workouts.map(\.date).max().map { calendar.startOfDay(for: $0) }
+        let workoutDates = dataManager.workouts.map(\.date)
+        let healthStart = selectedCategory == .health ? healthManager.allTimeDailyHealthStartDate : nil
+        let earliest = (workoutDates + [healthStart].compactMap { $0 }).min()
+            .map { calendar.startOfDay(for: $0) }
+        let latestWorkoutDay = workoutDates.max().map { calendar.startOfDay(for: $0) }
+        let latest = selectedCategory == .health ? max(latestWorkoutDay ?? fallbackDay, fallbackDay) : latestWorkoutDay
         let referenceDay = latest ?? fallbackDay
 
         switch selectedRange {
         case .lastWorkout:
-            let day = latest ?? fallbackDay
+            let day = latestWorkoutDay ?? fallbackDay
             return (day, day)
         case .week:
             let start = calendar.date(byAdding: .day, value: -6, to: referenceDay) ?? referenceDay
@@ -1278,7 +1216,9 @@ private extension ExportWorkoutsView {
     }
 
     var earliestSelectableDate: Date? {
-        dataManager.workouts.map(\.date).min().map { Calendar.current.startOfDay(for: $0) }
+        let healthStart = selectedCategory == .health ? healthManager.allTimeDailyHealthStartDate : nil
+        return (dataManager.workouts.map(\.date) + [healthStart].compactMap { $0 }).min()
+            .map { Calendar.current.startOfDay(for: $0) }
     }
 
     var latestSelectableDate: Date {
@@ -2381,13 +2321,8 @@ private enum ExportCategory: String, CaseIterable, Hashable, Identifiable {
         }
     }
 
-    var tint: Color {
-        switch self {
-        case .workouts: return Theme.Colors.accent
-        case .health: return Theme.Colors.error
-        case .backup: return Theme.Colors.accentSecondary
-        }
-    }
+    /// Every export category shares the ink accent; color isn't carrying meaning here.
+    var tint: Color { Theme.Colors.accent }
 }
 
 private enum WorkoutExportMode: String, CaseIterable, Hashable, Identifiable {
@@ -2410,14 +2345,14 @@ private enum WorkoutExportMode: String, CaseIterable, Hashable, Identifiable {
     func subtitle(workoutCount: Int) -> String {
         switch self {
         case .allWorkouts:
-            if workoutCount == 1 { return "Every set from 1 workout in range." }
-            return "Every set from \(workoutCount) workouts in range."
+            if workoutCount == 1 { return "1 workout" }
+            return "\(workoutCount) workouts"
         case .byExercise:
-            return "Only the exercises you choose."
+            return "Selected exercises"
         case .byMuscle:
-            return "Only exercises tagged to chosen muscle groups."
+            return "Selected muscle groups"
         case .byDate:
-            return "Only sessions on chosen dates."
+            return "Selected dates"
         }
     }
 
@@ -2464,20 +2399,20 @@ private enum HealthExportMode: String, CaseIterable, Hashable, Identifiable {
 
     var exportButtonTitle: String {
         switch self {
-        case .dailySummary: return "Export Daily Summary"
-        case .workoutSummary: return "Export Workout Snapshot"
-        case .metricSamples: return "Export Raw Samples"
+        case .dailySummary: return "Export daily summary"
+        case .workoutSummary: return "Export workout snapshot"
+        case .metricSamples: return "Export raw samples"
         }
     }
 
     var footnote: String {
         switch self {
         case .dailySummary:
-            return "Refreshes the selected range from Apple Health before exporting. Choose which daily metrics to include, including sleep."
+            return "Refreshes the selected range from Apple Health, then exports one row per day for your chosen metrics."
         case .workoutSummary:
-            return "Exports the workout-linked Apple Health snapshot for workouts in the current range. Missing entries are synced first when possible."
+            return "Exports Health data linked to workouts in this range. Missing entries are synced first when available."
         case .metricSamples:
-            return "Exports raw Health samples in timestamp order. Only metrics that support sample-level export are available."
+            return "Exports raw Health samples in time order. Only metrics with sample data are listed."
         }
     }
 }
@@ -2582,12 +2517,12 @@ private struct ExportCustomRangeSheet: View {
                         )
 
                         Button(action: applyRange) {
-                            Text("Apply Range")
+                            Text("Apply range")
                                 .font(Theme.Typography.headline)
-                                .foregroundStyle(.white)
+                                .foregroundStyle(Theme.Colors.onAccent)
                                 .frame(maxWidth: .infinity)
                                 .padding(Theme.Spacing.md)
-                                .background(Theme.Colors.accent)
+                                .background(Theme.Colors.brandBand)
                                 .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous))
                         }
                         .buttonStyle(.plain)
@@ -2595,7 +2530,7 @@ private struct ExportCustomRangeSheet: View {
                     .padding(Theme.Spacing.xl)
                 }
             }
-            .navigationTitle("Custom Range")
+            .navigationTitle("Custom range")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 AppToolbarItem(placement: .cancellationAction) {
@@ -2616,8 +2551,6 @@ private struct ExportCustomRangeSheet: View {
             Text(title)
                 .font(Theme.Typography.metricLabel)
                 .foregroundStyle(Theme.Colors.textTertiary)
-                .textCase(.uppercase)
-                .tracking(0.8)
 
             DatePicker(
                 title,

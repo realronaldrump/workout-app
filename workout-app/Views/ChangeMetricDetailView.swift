@@ -109,16 +109,16 @@ struct ChangeMetricDetailView: View {
 
     private var currentWindowTitle: String {
         if window.label.localizedCaseInsensitiveContains("week") {
-            return "This Week"
+            return "This week"
         }
-        return "Current Window"
+        return "This period"
     }
 
     private var previousWindowTitle: String {
         if window.label.localizedCaseInsensitiveContains("week") {
-            return "Last Week"
+            return "Last week"
         }
-        return "Previous Window"
+        return "Previous period"
     }
 
     private var currentWorkouts: [SessionWorkoutPresentation] { presentation.currentWorkouts }
@@ -156,7 +156,7 @@ struct ChangeMetricDetailView: View {
             AdaptiveBackground()
 
             ScrollView(showsIndicators: false) {
-                LazyVStack(alignment: .leading, spacing: Theme.Spacing.xxl) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.xxl) {
                     if metric.title == "Sessions" {
                         sessionsDetailContent
                     } else {
@@ -218,7 +218,6 @@ struct ChangeMetricDetailView: View {
                     Text(sessionsHeroHeadline)
                         .font(Theme.Typography.sectionHeader)
                         .foregroundStyle(Theme.Colors.textPrimary)
-                        .tracking(0.8)
 
                     Text("\(previousSessionSummary.rangeLabel) vs \(currentSessionSummary.rangeLabel)")
                         .font(Theme.Typography.caption)
@@ -240,11 +239,6 @@ struct ChangeMetricDetailView: View {
                     .foregroundStyle(Theme.Colors.textSecondary)
             }
 
-            Text(sessionsHeroNarrative)
-                .font(Theme.Typography.body)
-                .foregroundStyle(Theme.Colors.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: Theme.Spacing.md) {
                     SessionWindowSummaryCard(summary: previousSessionSummary, tint: Theme.Colors.textTertiary)
@@ -258,31 +252,19 @@ struct ChangeMetricDetailView: View {
             }
         }
         .padding(Theme.Spacing.lg)
-        .background(alignment: .topTrailing) {
-            RadialGradient(
-                colors: [Theme.Colors.accent.opacity(0.14), Theme.Colors.accent.opacity(0)],
-                center: .topTrailing,
-                startRadius: 0,
-                endRadius: 260
-            )
-            .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge, style: .continuous))
-        }
         .softCard(cornerRadius: Theme.CornerRadius.xlarge, elevation: 2)
     }
 
     private var sessionsMetricGridSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            sectionHeader(
-                title: "Window Breakdown",
-                subtitle: "A better read on how those sessions actually changed, beyond the raw count."
-            )
+            sectionHeader(title: "Workout comparison")
 
             LazyVGrid(
                 columns: [GridItem(.adaptive(minimum: 150, maximum: 220), spacing: Theme.Spacing.md)],
                 spacing: Theme.Spacing.md
             ) {
                 SessionMetricTile(
-                    title: "Active Days",
+                    title: "Active days",
                     value: "\(currentSessionSummary.activeDays)",
                     footnote: countDeltaFootnote(
                         current: currentSessionSummary.activeDays,
@@ -293,7 +275,7 @@ struct ChangeMetricDetailView: View {
                     tint: Theme.Colors.accent
                 )
                 SessionMetricTile(
-                    title: "Avg Duration",
+                    title: "Avg duration",
                     value: durationLabel(minutes: currentSessionSummary.averageDurationMinutes),
                     footnote: formattedDeltaFootnote(
                         current: currentSessionSummary.averageDurationMinutes,
@@ -304,7 +286,7 @@ struct ChangeMetricDetailView: View {
                     tint: Theme.Colors.success
                 )
                 SessionMetricTile(
-                    title: "Exercises / Session",
+                    title: "Exercises / session",
                     value: decimalText(currentSessionSummary.averageExercisesPerSession),
                     footnote: formattedDeltaFootnote(
                         current: currentSessionSummary.averageExercisesPerSession,
@@ -315,7 +297,7 @@ struct ChangeMetricDetailView: View {
                     tint: Theme.Colors.accentSecondary
                 )
                 SessionMetricTile(
-                    title: "Sets / Session",
+                    title: "Sets / session",
                     value: decimalText(currentSessionSummary.averageSetsPerSession),
                     footnote: formattedDeltaFootnote(
                         current: currentSessionSummary.averageSetsPerSession,
@@ -326,7 +308,7 @@ struct ChangeMetricDetailView: View {
                     tint: Theme.Colors.accentTertiary
                 )
                 SessionMetricTile(
-                    title: "Volume / Session",
+                    title: "Volume / session",
                     value: SharedFormatters.volumeCompact(currentSessionSummary.averageVolumePerSession),
                     footnote: formattedDeltaFootnote(
                         current: currentSessionSummary.averageVolumePerSession,
@@ -343,8 +325,7 @@ struct ChangeMetricDetailView: View {
     private var sessionsRhythmSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             sectionHeader(
-                title: "Training Rhythm",
-                subtitle: "Day-by-day alignment shows where this week gained, lost, or redistributed sessions."
+                title: "By day"
             )
 
             LazyVStack(alignment: .leading, spacing: Theme.Spacing.md) {
@@ -372,8 +353,7 @@ struct ChangeMetricDetailView: View {
     private var sessionsMixSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             sectionHeader(
-                title: "Workout Mix",
-                subtitle: "Which session types actually filled the window, and whether they showed up more or less than last week."
+                title: "Workout mix"
             )
 
             VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
@@ -393,8 +373,7 @@ struct ChangeMetricDetailView: View {
     private var sessionsFeedSection: some View {
         LazyVStack(alignment: .leading, spacing: Theme.Spacing.md) {
             sectionHeader(
-                title: "Session Feed",
-                subtitle: "Each workout gets enough context to be useful: timing, duration, density, volume, and location."
+                title: "Session feed"
             )
 
             LazyVStack(alignment: .leading, spacing: Theme.Spacing.md) {
@@ -447,7 +426,7 @@ struct ChangeMetricDetailView: View {
             }
 
             if workouts.isEmpty {
-                EmptyStateTile(message: "No sessions recorded in this window.")
+                EmptyStateTile(message: "No sessions in this period.")
             } else {
                 ForEach(workouts) { item in
                     NavigationLink(destination: WorkoutDetailView(workout: item.workout)) {
@@ -510,15 +489,6 @@ struct ChangeMetricDetailView: View {
             }
         }
         .padding(Theme.Spacing.lg)
-        .background(alignment: .topTrailing) {
-            RadialGradient(
-                colors: [Theme.Colors.accent.opacity(0.14), Theme.Colors.accent.opacity(0)],
-                center: .topTrailing,
-                startRadius: 0,
-                endRadius: 260
-            )
-            .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge, style: .continuous))
-        }
         .softCard(cornerRadius: Theme.CornerRadius.xlarge, elevation: 2)
     }
 
@@ -571,7 +541,7 @@ struct ChangeMetricDetailView: View {
                                 y: .value("Value", point.value)
                             )
                             .foregroundStyle(Theme.Colors.textTertiary)
-                            .interpolationMethod(.catmullRom)
+                            .interpolationMethod(.monotone)
 
                             PointMark(
                                 x: .value("Date", point.date),
@@ -586,7 +556,7 @@ struct ChangeMetricDetailView: View {
                                 y: .value("Value", point.value)
                             )
                             .foregroundStyle(Theme.Colors.accent)
-                            .interpolationMethod(.catmullRom)
+                            .interpolationMethod(.monotone)
 
                             PointMark(
                                 x: .value("Date", point.date),
@@ -630,7 +600,7 @@ struct ChangeMetricDetailView: View {
 
     private var supportingSection: some View {
         LazyVStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-            Text("Supporting")
+            Text("Workouts")
                 .font(Theme.Typography.title3)
                 .foregroundStyle(Theme.Colors.textPrimary)
 
@@ -640,7 +610,7 @@ struct ChangeMetricDetailView: View {
             case "Total Volume":
                 volumeSupporting
             default:
-                Text("No supporting view for this metric.")
+                Text("No workouts to show.")
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Colors.textSecondary)
                     .padding(Theme.Spacing.lg)
@@ -652,7 +622,7 @@ struct ChangeMetricDetailView: View {
     private var sessionsSupporting: some View {
         LazyVStack(alignment: .leading, spacing: Theme.Spacing.md) {
             if currentWorkouts.isEmpty {
-                Text("No sessions in this window.")
+                Text("No sessions in this period.")
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Colors.textSecondary)
                     .padding(Theme.Spacing.lg)
@@ -688,13 +658,13 @@ struct ChangeMetricDetailView: View {
             let topWorkouts = topVolumeWorkouts
 
             if topWorkouts.isEmpty {
-                Text("No volume data in this window.")
+                Text("No volume data in this period.")
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Colors.textSecondary)
                     .padding(Theme.Spacing.lg)
                     .softCard(elevation: 1)
             } else {
-                Text("Top Workouts")
+                Text("Top workouts")
                     .font(Theme.Typography.headline)
                     .foregroundStyle(Theme.Colors.textPrimary)
 
@@ -721,7 +691,7 @@ struct ChangeMetricDetailView: View {
                 }
 
                 if !topExerciseTotals.isEmpty {
-                    Text("Top Exercises")
+                    Text("Top exercises")
                         .font(Theme.Typography.headline)
                         .foregroundStyle(Theme.Colors.textPrimary)
                         .padding(.top, Theme.Spacing.sm)
@@ -1005,7 +975,7 @@ struct ChangeMetricDetailView: View {
             totalVolume: totalVolume,
             averageVolumePerSession: totalVolume / Double(workoutCount),
             topWorkoutName: topWorkout,
-            busiestDayLabel: busiestDay.map { "\($0.key.formatted(.dateTime.weekday(.abbreviated))) • \($0.value.count)" }
+            busiestDayLabel: busiestDay.map { "\($0.key.formatted(.dateTime.weekday(.abbreviated))), \($0.value.count)" }
         )
     }
 
@@ -1127,9 +1097,9 @@ struct ChangeMetricDetailView: View {
     }
 
     private static func heroHeadline(for metric: ChangeMetric) -> String {
-        if metric.delta > 0 { return "Session load is up." }
-        if metric.delta < 0 { return "This week is lighter." }
-        return "Same count, different shape."
+        if metric.delta > 0 { return "More workouts." }
+        if metric.delta < 0 { return "Fewer workouts." }
+        return "Same workout count."
     }
 
     private static func heroNarrative(
@@ -1139,29 +1109,29 @@ struct ChangeMetricDetailView: View {
     ) -> String {
         let activeDayLabel = "day\(current.activeDays == 1 ? "" : "s")"
         if current.sessionCount == 0 && previous.sessionCount == 0 {
-            return "There are no sessions in either comparison window yet, so this screen will populate as soon as you log a workout."
+            return "No workouts in either period."
         }
         if metric.delta > 0 {
             let delta = Int(metric.delta)
             let sessionLabel = "session\(delta == 1 ? "" : "s")"
-            return "You trained on \(current.activeDays) \(activeDayLabel) and logged \(delta) more \(sessionLabel) than the previous window."
+            return "\(current.activeDays) active \(activeDayLabel), \(delta) more \(sessionLabel) than the previous period."
         }
         if metric.delta < 0 {
             let decrease = abs(Int(metric.delta))
             let sessionLabel = "session\(decrease == 1 ? "" : "s")"
-            return "You trained on \(current.activeDays) \(activeDayLabel), which is \(decrease) fewer \(sessionLabel) than the previous window."
+            return "\(current.activeDays) active \(activeDayLabel), \(decrease) fewer \(sessionLabel) than the previous period."
         }
         if current.activeDays != previous.activeDays {
-            return "The session count held steady, but the training days shifted from \(previous.activeDays) to \(current.activeDays), so the rhythm changed."
+            return "Same workout count, \(previous.activeDays) → \(current.activeDays) active days"
         }
-        return "Session count and active days stayed even, so the differences below come from timing, session mix, and per-session density."
+        return "Same workout count and active days."
     }
 
     private static func windowTitle(for window: ChangeMetricWindow, isCurrent: Bool) -> String {
         if window.label.localizedCaseInsensitiveContains("week") {
-            return isCurrent ? "This Week" : "Last Week"
+            return isCurrent ? "This week" : "Last week"
         }
-        return isCurrent ? "Current Window" : "Previous Window"
+        return isCurrent ? "This period" : "Previous period"
     }
 
     private static func dayCount(for interval: DateInterval, calendar: Calendar) -> Int {
@@ -1228,7 +1198,7 @@ struct ChangeMetricDetailView: View {
         guard !names.isEmpty else { return "No exercises logged" }
         let visible = Array(names.prefix(3))
         let suffix = names.count > visible.count ? " +\(names.count - visible.count)" : ""
-        return visible.joined(separator: " • ") + suffix
+        return visible.joined(separator: ", ") + suffix
     }
 
     private func gymLabel(for workout: Workout) -> String? {
@@ -1267,7 +1237,7 @@ struct ChangeMetricDetailView: View {
         )
     }
 
-    private func sectionHeader(title: String, subtitle: String) -> some View {
+    private func sectionHeader(title: String, subtitle: String? = nil) -> some View {
         SectionHeading(title: title, subtitle: subtitle)
     }
 }
@@ -1282,7 +1252,7 @@ private struct SessionDeltaBadge: View {
     }
 
     private var title: String {
-        if delta == 0 { return "No Change" }
+        if delta == 0 { return "No change" }
         return delta > 0 ? "+\(delta)" : "\(delta)"
     }
 
@@ -1294,7 +1264,6 @@ private struct SessionDeltaBadge: View {
             Text(delta == 0 ? "vs last week" : "sessions")
                 .font(Theme.Typography.metricLabel)
                 .foregroundStyle(Theme.Colors.textSecondary)
-                .tracking(0.7)
         }
         .padding(.horizontal, Theme.Spacing.md)
         .padding(.vertical, Theme.Spacing.sm)
@@ -1360,7 +1329,6 @@ private struct SessionWindowSummaryCard: View {
             Text(label)
                 .font(Theme.Typography.metricLabel)
                 .foregroundStyle(Theme.Colors.textTertiary)
-                .tracking(0.6)
             Text(value)
                 .font(Theme.Typography.captionBold)
                 .foregroundStyle(Theme.Colors.textPrimary)
@@ -1393,8 +1361,6 @@ private struct SessionMetricTile: View {
             Text(title)
                 .font(Theme.Typography.metricLabel)
                 .foregroundStyle(Theme.Colors.textSecondary)
-                .textCase(.uppercase)
-                .tracking(0.8)
 
             Text(footnote)
                 .font(Theme.Typography.caption)

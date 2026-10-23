@@ -2,27 +2,36 @@ import SwiftUI
 
 // MARK: - Page Header
 
-/// Poster-style header for analytics screens: a brand band eyebrow, a heavy
-/// title, and one line of context. Gives every stats page the same entry point.
+/// Header for analytics screens: the title in the display face and one line of
+/// context. `eyebrow` and `systemImage` are kept for call sites but no longer drawn;
+/// the navigation bar already says where you are.
 struct StatsPageHeader<Trailing: View>: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let eyebrow: String
     let title: String
     var subtitle: String?
     var systemImage: String?
+    var help: String?
     @ViewBuilder var trailing: () -> Trailing
 
     var body: some View {
-        HStack(alignment: .top, spacing: Theme.Spacing.md) {
-            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                BrandBandLabel(text: eyebrow, systemImage: systemImage)
-
-                Text(title)
-                    .font(Theme.Typography.displayHeroCompact)
-                    .foregroundStyle(Theme.Colors.textPrimary)
-                    .lineLimit(3)
-                    .minimumScaleFactor(0.8)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityAddTraits(.isHeader)
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: Theme.Spacing.md))
+            : AnyLayout(HStackLayout(alignment: .top, spacing: Theme.Spacing.md))
+        layout {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.sm) {
+                    Text(title)
+                        .font(Theme.Typography.displayHeroCompact)
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityAddTraits(.isHeader)
+                        .pageTitleAnchor()
+                    if let help {
+                        Spacer(minLength: Theme.Spacing.sm)
+                        AppHelpButton(title: title, message: help)
+                    }
+                }
 
                 if let subtitle, !subtitle.isEmpty {
                     Text(subtitle)
@@ -39,20 +48,61 @@ struct StatsPageHeader<Trailing: View>: View {
 }
 
 extension StatsPageHeader where Trailing == EmptyView {
-    init(eyebrow: String, title: String, subtitle: String? = nil, systemImage: String? = nil) {
+    init(eyebrow: String, title: String, subtitle: String? = nil, systemImage: String? = nil, help: String? = nil) {
         self.eyebrow = eyebrow
         self.title = title
         self.subtitle = subtitle
         self.systemImage = systemImage
+        self.help = help
         self.trailing = { EmptyView() }
+    }
+}
+
+// MARK: - Collapsing Title
+
+extension EnvironmentValues {
+    /// Set by `collapsingTitle(_:)` so the page's display title can report when it scrolls away.
+    @Entry var pageTitleVisibilityChanged: ((Bool) -> Void)?
+}
+
+extension View {
+    /// Shows `title` in the navigation bar only once the page's own display title
+    /// (marked with `pageTitleAnchor()`) has scrolled away, so the name never shows twice.
+    func collapsingTitle(_ title: String) -> some View {
+        modifier(CollapsingTitleModifier(title: title))
+    }
+
+    /// Marks the page's display title for `collapsingTitle(_:)`.
+    func pageTitleAnchor() -> some View {
+        modifier(PageTitleAnchorModifier())
+    }
+}
+
+private struct CollapsingTitleModifier: ViewModifier {
+    let title: String
+    @State private var pageTitleIsVisible = true
+
+    func body(content: Content) -> some View {
+        content
+            .environment(\.pageTitleVisibilityChanged, { pageTitleIsVisible = $0 })
+            .navigationTitle(pageTitleIsVisible ? "" : title)
+            .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct PageTitleAnchorModifier: ViewModifier {
+    @Environment(\.pageTitleVisibilityChanged) private var visibilityChanged
+
+    func body(content: Content) -> some View {
+        content.onScrollVisibilityChange(threshold: 0.5) { visibilityChanged?($0) }
     }
 }
 
 // MARK: - Stat Chip Chrome
 
-/// Shared chrome for the small number chips on analytics screens: a neutral raised
-/// surface with a short leading tick carrying the identity color. Rows of numbers
-/// read as one calm set instead of a rainbow of tinted boxes.
+/// Shared chrome for the small number chips on analytics screens: a flat inset
+/// surface with a short leading mark carrying the identity color, like a plate seen
+/// edge-on. Rows of numbers read as one calm set instead of a rainbow of boxes.
 struct StatChipChrome: ViewModifier {
     let tint: Color
     var isSelected = false
@@ -61,20 +111,19 @@ struct StatChipChrome: ViewModifier {
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         content
-            .background(shape.fill(isSelected ? Theme.Colors.accentTint : Theme.Colors.surfaceRaised))
+            .background(shape.fill(Theme.Colors.surfaceRaised))
             .overlay(alignment: .leading) {
-                Capsule()
+                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
                     .fill(tint)
-                    .frame(width: 3)
+                    .frame(width: 4)
                     .padding(.vertical, Theme.Spacing.sm)
                     .accessibilityHidden(true)
             }
-            .overlay(
-                shape.strokeBorder(
-                    isSelected ? Theme.Colors.accent.opacity(0.6) : Theme.Colors.border.opacity(0.45),
-                    lineWidth: isSelected ? 1.5 : 1
-                )
-            )
+            .overlay {
+                if isSelected {
+                    shape.strokeBorder(Theme.Colors.ink, lineWidth: 2)
+                }
+            }
     }
 }
 
@@ -124,8 +173,7 @@ struct SectionJumpBar: View {
                 }
             }
         }
-        .background(Capsule().fill(.regularMaterial))
-        .overlay(Capsule().strokeBorder(Theme.Colors.border.opacity(0.5), lineWidth: 1))
+        .background(Capsule().fill(Theme.Colors.panel))
         .clipShape(Capsule())
         .animation(reduceMotion ? nil : .snappy, value: activeID)
         .accessibilityElement(children: .contain)
@@ -140,14 +188,15 @@ struct SectionJumpBar: View {
         } label: {
             Text(section.title)
                 .font(Theme.Typography.captionBold)
-                .foregroundStyle(isActive ? Color.white : Theme.Colors.textSecondary)
+                .foregroundStyle(isActive ? Theme.Colors.onAccent : Theme.Colors.textSecondary)
                 .lineLimit(1)
                 .padding(.horizontal, Theme.Spacing.md)
-                .frame(minHeight: 40)
+                .padding(.vertical, Theme.Spacing.xs)
+                .frame(minWidth: Theme.Layout.minimumTapTarget, minHeight: Theme.Layout.minimumTapTarget)
                 .background {
                     if isActive {
                         Capsule()
-                            .fill(Theme.Colors.brandBand)
+                            .fill(Theme.Colors.accent)
                             .matchedGeometryEffect(id: "active-section", in: namespace)
                     }
                 }
@@ -192,20 +241,24 @@ extension View {
 /// Compact label for a page-level filter row ("Showing", "Location"), so filters
 /// read as scoping everything beneath them rather than one card.
 struct FilterRowLabel: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let title: String
     var detail: String?
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.sm) {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: Theme.Spacing.xs))
+            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: Theme.Spacing.sm))
+        layout {
             Text(title)
                 .sectionHeaderStyle()
-            Spacer(minLength: Theme.Spacing.sm)
+            if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: Theme.Spacing.sm) }
             if let detail, !detail.isEmpty {
                 Text(detail)
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Colors.textSecondary)
-                    .multilineTextAlignment(.trailing)
-                    .lineLimit(2)
+                    .multilineTextAlignment(dynamicTypeSize.isAccessibilitySize ? .leading : .trailing)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }

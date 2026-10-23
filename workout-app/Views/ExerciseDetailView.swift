@@ -2,6 +2,7 @@ import Combine
 import SwiftUI
 
 struct ExerciseDetailView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let exerciseName: String
     @ObservedObject var dataManager: WorkoutDataManager
     @ObservedObject var annotationsManager: WorkoutAnnotationsManager
@@ -15,6 +16,7 @@ struct ExerciseDetailView: View {
     @State private var selectedChart = ChartType.weight
     @State private var selectedGymScope: GymScope = .all
     @State private var showingLocationPicker = false
+    @State private var showingQuickStart = false
     @State private var selectedProgressRange: ProgressRange = .allTime
     @State private var customProgressStartDate = Date()
     @State private var customProgressEndDate = Date()
@@ -37,7 +39,7 @@ struct ExerciseDetailView: View {
     @State private var sectionTracker = StatsSectionTracker()
 
     enum ChartType: String, CaseIterable, Hashable {
-        case weight = "Max Weight"
+        case weight = "Max weight"
         case volume = "Volume"
         case oneRepMax = "1RM"
         case reps = "Reps"
@@ -186,7 +188,7 @@ struct ExerciseDetailView: View {
             id: latest.id,
             type: .baseline,
             title: "Logged at \(gyms.count) gyms",
-            message: gyms.joined(separator: " · ")
+            message: gyms.joined(separator: ", ")
                 + ". Machine loads rarely match between gyms, so compare within one location.",
             exerciseName: latest.exerciseName,
             date: latest.date,
@@ -391,8 +393,6 @@ struct ExerciseDetailView: View {
                 } label: {
                     Text("Show all time")
                         .font(Theme.Typography.captionBold)
-                        .textCase(.uppercase)
-                        .tracking(0.8)
                         .foregroundStyle(Theme.Colors.accent)
                         .padding(.horizontal, Theme.Spacing.md)
                         .padding(.vertical, Theme.Spacing.sm)
@@ -611,7 +611,8 @@ struct ExerciseDetailView: View {
             return [(exerciseName, displayIdentity.sideLabel ?? "Variant")]
         }
 
-        var tracks: [(name: String, label: String)] = [(exerciseName, "Bilateral")]
+        // A base track can contain alternating or single-limb sets without a recorded side.
+        var tracks: [(name: String, label: String)] = [(exerciseName, "Base exercise")]
         tracks += childRelationships.map { relationship in
             (relationship.exerciseName, relationship.laterality.displayName)
         }
@@ -680,29 +681,23 @@ struct ExerciseDetailView: View {
 
     private var variantRelationshipCard: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Variant")
-                        .font(Theme.Typography.title3)
-                        .foregroundColor(Theme.Colors.textPrimary)
-                    Text(displayIdentity.aggregateName)
-                        .font(Theme.Typography.caption)
-                        .foregroundColor(Theme.Colors.textSecondary)
+            HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.sm) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Side of \(displayIdentity.aggregateName)")
+                        .font(Theme.Typography.headline)
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("Records here count toward both this side and the combined lift.")
+                        .font(Theme.Typography.subheadline)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-
-                Spacer()
-
-                Text(displayIdentity.sideLabel ?? "Variant")
-                    .font(Theme.Typography.captionBold)
-                    .foregroundStyle(Theme.Colors.accent)
-                    .padding(.horizontal, Theme.Spacing.sm)
-                    .padding(.vertical, Theme.Spacing.xs)
-                    .background(Theme.Colors.accent.opacity(0.12))
-                    .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small, style: .continuous))
+                Spacer(minLength: Theme.Spacing.sm)
+                TagLabel(text: displayIdentity.sideLabel ?? "Variant", tint: Theme.Colors.textPrimary)
             }
 
             HStack(spacing: Theme.Spacing.sm) {
-                AppPillButton(title: "Edit", systemImage: "slider.horizontal.3", variant: .neutral) {
+                AppPillButton(title: "Edit link", systemImage: "slider.horizontal.3", variant: .neutral) {
                     relationshipEditorRequest = ExerciseRelationshipEditorRequest(
                         exerciseName: exerciseName,
                         parentName: displayIdentity.aggregateName,
@@ -711,7 +706,7 @@ struct ExerciseDetailView: View {
                     )
                 }
 
-                AppPillButton(title: "Remove", systemImage: "xmark", variant: .danger) {
+                AppPillButton(title: "Unlink", systemImage: "xmark", variant: .danger) {
                     relationshipManager.removeRelationship(for: exerciseName)
                     dataManager.refreshExerciseIdentityDerivedState()
                     refreshScopedHistory()
@@ -719,92 +714,41 @@ struct ExerciseDetailView: View {
                 }
             }
         }
-        .padding(Theme.Spacing.lg)
-        .softCard(elevation: 1)
+        .ledgerRow()
     }
 
     private var parentBreakdownCard: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            HStack {
-                Text("Side Breakdown")
-                    .font(Theme.Typography.title3)
-                    .foregroundColor(Theme.Colors.textPrimary)
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            SectionHeading(title: "Side breakdown", subtitle: sideBalanceSummary)
 
-                Spacer()
-
-                HStack(spacing: Theme.Spacing.sm) {
-                    if canSplitIntoStandardSides {
-                        AppPillButton(title: "Split L/R", systemImage: "arrow.left.and.right", variant: .accent) {
-                            splitIntoStandardSides()
-                        }
-                    }
-
-                    AppPillButton(title: "Add Side", systemImage: "plus", variant: .neutral) {
-                        relationshipEditorRequest = addSideEditorRequest(parentName: exerciseName)
-                    }
-                }
-            }
-
-            VStack(spacing: Theme.Spacing.sm) {
-                ForEach(sideBreakdowns) { breakdown in
-                    HStack {
+            VStack(spacing: 0) {
+                ForEach(Array(sideBreakdowns.enumerated()), id: \.element.id) { index, breakdown in
+                    HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.md) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(breakdown.label)
-                                .font(Theme.Typography.bodyBold)
-                                .foregroundColor(Theme.Colors.textPrimary)
+                                .font(Theme.Typography.headline)
+                                .foregroundStyle(Theme.Colors.textPrimary)
                             Text(breakdown.name)
-                                .font(Theme.Typography.caption)
-                                .foregroundColor(Theme.Colors.textSecondary)
+                                .font(Theme.Typography.subheadline)
+                                .foregroundStyle(Theme.Colors.textSecondary)
                                 .lineLimit(1)
                         }
 
-                        Spacer()
+                        Spacer(minLength: Theme.Spacing.sm)
 
                         VStack(alignment: .trailing, spacing: 2) {
-                            Text(SharedFormatters.volumeCompact(breakdown.volume))
-                                .font(Theme.Typography.captionBold)
-                                .foregroundColor(Theme.Colors.textPrimary)
+                            Text(SharedFormatters.volumeWithUnit(breakdown.volume))
+                                .font(Theme.Typography.numberSmall)
+                                .foregroundStyle(Theme.Colors.textPrimary)
                             Text(SharedFormatters.count(breakdown.sets, "set"))
                                 .font(Theme.Typography.caption)
-                                .foregroundColor(Theme.Colors.textTertiary)
+                                .foregroundStyle(Theme.Colors.textSecondary)
                         }
                     }
-                    .padding(Theme.Spacing.md)
-                    .background(Theme.Colors.surfaceRaised)
-                    .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous))
+                    .ledgerRow(showsRule: index < sideBreakdowns.count - 1)
+                    .accessibilityElement(children: .combine)
                 }
             }
-
-            if let sideBalanceSummary {
-                Text(sideBalanceSummary)
-                    .font(Theme.Typography.caption)
-                    .foregroundColor(Theme.Colors.textSecondary)
-            }
-        }
-        .padding(Theme.Spacing.lg)
-        .softCard(elevation: 1)
-    }
-
-    private var createVariantCard: some View {
-        let suggestion = inferredRelationshipSuggestion
-        return HStack(spacing: Theme.Spacing.md) {
-            Image(systemName: "arrow.left.and.right")
-                .font(Theme.Typography.title4)
-                .foregroundColor(Theme.Colors.accent)
-                .frame(width: 36, height: 36)
-                .background(Theme.Colors.accent.opacity(0.12))
-                .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous))
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(suggestion == nil ? "Side Variants" : "Suggested Variant")
-                    .font(Theme.Typography.headline)
-                    .foregroundColor(Theme.Colors.textPrimary)
-                Text(suggestion?.parentName ?? "Create left, right, or unilateral tracks.")
-                    .font(Theme.Typography.caption)
-                    .foregroundColor(Theme.Colors.textSecondary)
-            }
-
-            Spacer()
 
             HStack(spacing: Theme.Spacing.sm) {
                 if canSplitIntoStandardSides {
@@ -812,8 +756,41 @@ struct ExerciseDetailView: View {
                         splitIntoStandardSides()
                     }
                 }
+                AppPillButton(title: "Add a side", systemImage: "plus", variant: .neutral) {
+                    relationshipEditorRequest = addSideEditorRequest(parentName: exerciseName)
+                }
+            }
+        }
+    }
 
-                AppToolbarIconButton(systemImage: "plus", accessibilityLabel: "Add side variant", variant: .subtle) {
+    private var createVariantCard: some View {
+        let suggestion = inferredRelationshipSuggestion
+        return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(suggestion.map { "Looks like a side of \($0.parentName)" } ?? "Left and right")
+                    .font(Theme.Typography.headline)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(suggestion == nil
+                     ? "Track each side of this lift on its own, then see them together."
+                     : "Link it to keep its records with the combined lift.")
+                    .font(Theme.Typography.subheadline)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            HStack(spacing: Theme.Spacing.sm) {
+                if canSplitIntoStandardSides, suggestion == nil {
+                    AppPillButton(title: "Split L/R", systemImage: "arrow.left.and.right", variant: .accent) {
+                        splitIntoStandardSides()
+                    }
+                }
+
+                AppPillButton(
+                    title: suggestion == nil ? "Add a side" : "Link it",
+                    systemImage: suggestion == nil ? "plus" : "link",
+                    variant: suggestion == nil ? .neutral : .accent
+                ) {
                     if let suggestion {
                         relationshipEditorRequest = ExerciseRelationshipEditorRequest(
                             exerciseName: suggestion.exerciseName,
@@ -827,15 +804,14 @@ struct ExerciseDetailView: View {
                 }
             }
         }
-        .padding(Theme.Spacing.lg)
-        .softCard(elevation: 1)
+        .ledgerRow()
     }
 
     @ViewBuilder
     private var personalRecordsSection: some View {
         if showsAggregateBreakdown && !performanceTracks.isEmpty {
             VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-                Text("Personal Records")
+                Text("Personal records")
                     .font(Theme.Typography.title2)
                     .foregroundColor(Theme.Colors.textPrimary)
 
@@ -844,8 +820,6 @@ struct ExerciseDetailView: View {
                         Text(track.label)
                             .font(Theme.Typography.captionBold)
                             .foregroundColor(Theme.Colors.textSecondary)
-                            .textCase(.uppercase)
-                            .tracking(0.8)
                         PersonalRecordsView(
                             exerciseName: track.name,
                             sessions: track.sessions,
@@ -969,86 +943,92 @@ struct ExerciseDetailView: View {
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                         } else if let exerciseDetailError, scopedHistory.isEmpty {
-                            Text("Unable to load exercise history: \(exerciseDetailError)")
-                                .font(Theme.Typography.caption)
-                                .foregroundColor(Theme.Colors.warning)
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                            ErrorCard(message: "Couldn't load exercise history. \(exerciseDetailError)") {
+                                scheduleExerciseDetailRefresh()
+                            }
+                        } else if scopedHistory.isEmpty {
+                            emptyHistoryState
+                            relationshipPanel
                         }
 
-                        ExerciseStatsCards(
-                            exerciseName: exerciseName,
-                            sessions: scopedHistorySessions,
-                            scope: analysisScope(for: exerciseName),
-                            showsPerformanceStats: !showsAggregateBreakdown
-                        )
-                        .statsSection(ExerciseDetailSection.overview.rawValue, tracker: $sectionTracker)
-
-                        personalRecordsSection
-                            .statsSection(ExerciseDetailSection.records.rawValue, tracker: $sectionTracker)
-
-                        relationshipPanel
-
-                        progressSection
-                            .statsSection(ExerciseDetailSection.progress.rawValue, tracker: $sectionTracker)
-
-                        if !isCardio && !showsAggregateBreakdown {
-                            ExerciseRangeBreakdown(
+                        if !scopedHistory.isEmpty {
+                            ExerciseStatsCards(
                                 exerciseName: exerciseName,
                                 sessions: scopedHistorySessions,
-                                scope: analysisScope(for: exerciseName)
+                                scope: analysisScope(for: exerciseName),
+                                showsPerformanceStats: !showsAggregateBreakdown
                             )
-                            .statsSection(ExerciseDetailSection.ranges.rawValue, tracker: $sectionTracker)
-                        }
+                            .statsSection(ExerciseDetailSection.overview.rawValue, tracker: $sectionTracker)
 
-                        if !exerciseInsights.isEmpty || !exerciseContextPatterns.isEmpty {
-                            insightsSection
-                                .statsSection(ExerciseDetailSection.insights.rawValue, tracker: $sectionTracker)
-                        }
+                            personalRecordsSection
+                                .statsSection(ExerciseDetailSection.records.rawValue, tracker: $sectionTracker)
 
-                        if !isCardio && !showsAggregateBreakdown {
-                            progressReviewContent
-                                .statsSection(ExerciseDetailSection.review.rawValue, tracker: $sectionTracker)
-                        }
+                            relationshipPanel
 
-                        RecentSetsView(
-                            exerciseName: exerciseName,
-                            sessions: scopedHistorySessions
-                        )
-                        .statsSection(ExerciseDetailSection.sets.rawValue, tracker: $sectionTracker)
+                            progressSection
+                                .statsSection(ExerciseDetailSection.progress.rawValue, tracker: $sectionTracker)
+
+                            if !isCardio && !showsAggregateBreakdown {
+                                ExerciseRangeBreakdown(
+                                    exerciseName: exerciseName,
+                                    sessions: scopedHistorySessions,
+                                    scope: analysisScope(for: exerciseName)
+                                )
+                                .statsSection(ExerciseDetailSection.ranges.rawValue, tracker: $sectionTracker)
+                            }
+
+                            if !exerciseInsights.isEmpty || !exerciseContextPatterns.isEmpty {
+                                insightsSection
+                                    .statsSection(ExerciseDetailSection.insights.rawValue, tracker: $sectionTracker)
+                            }
+
+                            if !isCardio && !showsAggregateBreakdown {
+                                progressReviewContent
+                                    .statsSection(ExerciseDetailSection.review.rawValue, tracker: $sectionTracker)
+                            }
+
+                            RecentSetsView(
+                                exerciseName: exerciseName,
+                                sessions: scopedHistorySessions
+                            )
+                            .statsSection(ExerciseDetailSection.sets.rawValue, tracker: $sectionTracker)
+                        }
                     }
-                    .padding(.horizontal, Theme.Spacing.xl)
+                    .padding(.horizontal, Theme.Layout.screenGutter)
                     .padding(.top, Theme.Spacing.md)
-                    .padding(.bottom, Theme.Spacing.xl)
+                    .padding(.bottom, Theme.Spacing.xxl)
                     .contentColumn()
                 }
-                .safeAreaInset(edge: .top, spacing: 0) {
+                // A safe-area bar so the scroll edge effect runs under the jump bar too.
+                .safeAreaBar(edge: .top, spacing: 0) {
                     if jumpSections.count >= 3 {
                         SectionJumpBar(
                             sections: jumpSections,
                             activeID: sectionTracker.activeID(in: jumpSections),
                             onSelect: { id in
-                                withAnimation(Theme.Animation.smooth) {
+                                withAnimation(reduceMotion ? nil : Theme.Animation.smooth) {
                                     proxy.scrollTo(id, anchor: .top)
                                 }
                             }
                         )
                         .contentColumn()
-                        .padding(.horizontal, Theme.Spacing.lg)
+                        .padding(.horizontal, Theme.Layout.screenGutter)
                         .padding(.vertical, Theme.Spacing.xs)
                     }
                 }
             }
         }
-        .navigationTitle(exerciseName)
-        // The poster header carries the name; the bar keeps a compact title for context.
-        .navigationBarTitleDisplayMode(.inline)
+        .collapsingTitle(exerciseName)
         .accessibilityIdentifier("exercise-detail-\(exerciseName)")
         .navigationDestination(item: $selectedVariantWorkout) { workout in
             WorkoutDetailView(workout: workout)
         }
+        .sheet(isPresented: $showingQuickStart) {
+            QuickStartView(exerciseName: exerciseName)
+        }
         .sheet(isPresented: $showingCustomProgressRangePicker) {
             BrutalistDateRangeSheet(
-                title: "Chart Range",
+                title: "Chart range",
                 startDate: $customProgressStartDate,
                 endDate: $customProgressEndDate,
                 earliestSelectableDate: earliestScopedWorkoutDate.map { Calendar.current.startOfDay(for: $0) },
@@ -1148,8 +1128,8 @@ struct ExerciseDetailView: View {
             case .overview: return "Overview"
             case .records: return "Records"
             case .progress: return "Progress"
-            case .ranges: return "Rep Ranges"
-            case .insights: return "Insights"
+            case .ranges: return "Rep ranges"
+            case .insights: return "Highlights"
             case .review: return "Review"
             case .sets: return "Sessions"
             }
@@ -1185,14 +1165,39 @@ struct ExerciseDetailView: View {
     private var headerSubtitle: String? {
         let dates = scopedHistory.map(\.date)
         guard let latest = dates.max(), let earliest = dates.min() else {
-            return isLoadingExerciseDetail ? nil : "No sessions logged in this scope yet."
+            return isLoadingExerciseDetail ? nil : "No sessions logged"
         }
-        var parts = [SharedFormatters.count(dates.count, "session")]
-        parts.append("last \(latest.formatted(.relative(presentation: .named)))")
+        var sentence = SharedFormatters.count(dates.count, "session")
         if dates.count > 1 {
-            parts.append("since \(earliest.formatted(.dateTime.month(.abbreviated).year()))")
+            sentence += " since \(earliest.formatted(.dateTime.month(.wide).year()))"
         }
-        return parts.joined(separator: " · ")
+        return sentence + ". Last trained \(latest.formatted(.relative(presentation: .named)))."
+    }
+
+    private var emptyHistoryState: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            Text(selectedGymScope == .all ? "No sessions yet" : "No sessions at this gym")
+                .font(Theme.Typography.sectionHeader2)
+                .foregroundStyle(Theme.Colors.textPrimary)
+            Text(selectedGymScope == .all
+                 ? "Log this exercise once and its records, progress, and sets start here."
+                 : "Switch to all gyms to see every session.")
+                .font(Theme.Typography.body)
+                .foregroundStyle(Theme.Colors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if selectedGymScope != .all {
+                AppPillButton(title: "Show all gyms", variant: .neutral) {
+                    selectedGymScope = .all
+                    Haptics.selection()
+                }
+            }
+            AppPrimaryButton(title: "Start a workout with this") {
+                showingQuickStart = true
+            }
+        }
+        .padding(Theme.Spacing.lg)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .softCard()
     }
 
     private var exerciseHeader: some View {
@@ -1238,7 +1243,9 @@ struct ExerciseDetailView: View {
                     options: availableChartTypes,
                     selected: $selectedChart,
                     label: { $0.displayName(for: exerciseName) },
-                    selectionHint: "Double-tap to chart this measure"
+                    selectionHint: "Charts this measure",
+                    controlTitle: "Chart measure",
+                    controlIcon: "chart.xyaxis.line"
                 )
                 .accessibilityElement(children: .contain)
                 .accessibilityLabel("Chart measure")
@@ -1263,7 +1270,7 @@ struct ExerciseDetailView: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
             if !exerciseInsights.isEmpty {
                 VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-                    SectionHeading(title: "Insights")
+                    SectionHeading(title: "Highlights")
 
                     LazyVStack(spacing: Theme.Spacing.md) {
                         ForEach(exerciseInsights) { insight in
@@ -1276,8 +1283,8 @@ struct ExerciseDetailView: View {
             if !exerciseContextPatterns.isEmpty {
                 VStack(alignment: .leading, spacing: Theme.Spacing.md) {
                     SectionHeading(
-                        title: "Context Patterns",
-                        subtitle: "Where this lift tends to change when the surrounding workout changes."
+                        title: "Across similar workouts",
+                        help: "Compares this exercise across similar workouts with different exercise orders, durations, times, or gyms."
                     )
 
                     ForEach(exerciseContextPatterns) { pattern in
@@ -1304,17 +1311,17 @@ struct ExerciseDetailView: View {
             )
         } else if isLoadingProgressReview {
             VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-                SectionHeading(title: "Progress Review")
+                SectionHeading(title: "Progress review")
 
                 HStack(spacing: Theme.Spacing.sm) {
                     ProgressView()
-                    Text("Comparing the last two blocks for this lift.")
+                    Text("Loading review…")
                         .font(Theme.Typography.caption)
                         .foregroundColor(Theme.Colors.textSecondary)
                 }
                 .padding(Theme.Spacing.lg)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .softCard(elevation: 1)
+                .softCard()
             }
         }
     }
@@ -1324,39 +1331,30 @@ struct ExerciseDetailView: View {
             showingLocationPicker = true
             Haptics.selection()
         } label: {
-            HStack(spacing: Theme.Spacing.sm) {
-                Image(systemName: "mappin.and.ellipse")
-                    .font(Theme.Typography.captionBold)
-                    .foregroundColor(Theme.Colors.accent)
-                    .accessibilityHidden(true)
-                Text("Showing")
-                    .font(Theme.Typography.caption)
+            HStack(spacing: Theme.Spacing.xs) {
+                Text("At")
+                    .font(Theme.Typography.subheadline)
                     .foregroundColor(Theme.Colors.textSecondary)
-                GymBadge(text: locationLabel, style: locationBadgeStyle)
-                Spacer(minLength: Theme.Spacing.sm)
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(Theme.Typography.caption2Bold)
-                    .foregroundColor(Theme.Colors.textTertiary)
+                Text(locationLabel)
+                    .font(Theme.Typography.subheadlineStrong)
+                    .foregroundColor(isDeletedScope ? Theme.Colors.warning : Theme.Colors.textPrimary)
+                Image(systemName: "chevron.down")
+                    .font(Theme.Typography.microLabel)
+                    .foregroundColor(Theme.Colors.textPrimary)
                     .accessibilityHidden(true)
             }
             .padding(.horizontal, Theme.Spacing.md)
-            .frame(maxWidth: .infinity, minHeight: Theme.Layout.minimumTapTarget)
-            .background(
-                RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
-                    .fill(Theme.Colors.surfaceRaised)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
-                    .strokeBorder(Theme.Colors.border.opacity(0.55), lineWidth: 1)
-            )
+            .frame(minHeight: 40)
+            .overlay(Capsule(style: .continuous).strokeBorder(Theme.Colors.rule, lineWidth: 1.5))
+            .frame(minHeight: Theme.Layout.minimumTapTarget)
             .contentShape(.rect)
         }
         .buttonStyle(AppInteractionButtonStyle())
-        .accessibilityLabel("Location scope, \(locationLabel)")
+        .accessibilityLabel("Location, \(locationLabel)")
         .accessibilityHint("Filters every stat on this page to one gym")
         .sheet(isPresented: $showingLocationPicker) {
             GymSelectionSheet(
-                title: "Location Scope",
+                title: "Location",
                 gyms: gymProfilesManager.sortedGyms,
                 selected: currentScopeSelection,
                 showAllGyms: true,
@@ -1547,7 +1545,7 @@ private struct ExerciseRelationshipEditorSheet: View {
 
                 ScrollView(showsIndicators: false) {
                     VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-                        fieldCard(title: "Variant Name") {
+                        fieldCard(title: "Variant name") {
                             VStack(alignment: .leading, spacing: Theme.Spacing.md) {
                                 TextField("Exercise name", text: $draftExerciseName)
                                     .textInputAutocapitalization(.words)
@@ -1569,11 +1567,9 @@ private struct ExerciseRelationshipEditorSheet: View {
 
                                 if !exerciseSearchResults.isEmpty {
                                     VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                                        Text(exerciseSearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Suggested Matches" : "Existing Exercises")
+                                        Text(exerciseSearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Suggested matches" : "Existing exercises")
                                             .font(Theme.Typography.metricLabel)
                                             .foregroundStyle(Theme.Colors.textTertiary)
-                                            .textCase(.uppercase)
-                                            .tracking(0.8)
 
                                         ForEach(exerciseSearchResults, id: \.self) { name in
                                             Button {
@@ -1605,8 +1601,8 @@ private struct ExerciseRelationshipEditorSheet: View {
                             }
                         }
 
-                        fieldCard(title: "Parent Exercise") {
-                            Picker("Parent Exercise", selection: $draftParentName) {
+                        fieldCard(title: "Parent exercise") {
+                            Picker("Parent exercise", selection: $draftParentName) {
                                 ForEach(parentCandidates, id: \.self) { name in
                                     Text(name).tag(name)
                                 }
@@ -1629,23 +1625,13 @@ private struct ExerciseRelationshipEditorSheet: View {
                                 .foregroundStyle(Theme.Colors.error)
                         }
 
-                        Button(action: save) {
-                            Text("Save Relationship")
-                                .font(Theme.Typography.headline)
-                                .foregroundStyle(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding(Theme.Spacing.md)
-                                .background(canSave ? Theme.Colors.accent : Theme.Colors.textTertiary)
-                                .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous))
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(!canSave)
+                        AppPrimaryButton(title: "Save variant", isEnabled: canSave, action: save)
                     }
                     .padding(Theme.Spacing.xl)
                     .contentColumn(maxWidth: 640)
                 }
             }
-            .navigationTitle("Exercise Variant")
+            .navigationTitle("Exercise variant")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 AppToolbarItem(placement: .cancellationAction) {
@@ -1684,8 +1670,6 @@ private struct ExerciseRelationshipEditorSheet: View {
             Text(title)
                 .font(Theme.Typography.metricLabel)
                 .foregroundStyle(Theme.Colors.textTertiary)
-                .textCase(.uppercase)
-                .tracking(0.8)
             content()
         }
         .padding(Theme.Spacing.lg)
@@ -1701,7 +1685,7 @@ private struct ExerciseRelationshipEditorSheet: View {
             draftLaterality
         )
         guard didSave else {
-            saveError = "Could not save this relationship. This side may already be linked to another exercise."
+            saveError = "Couldn't save this variant. This side may already be linked to another exercise."
             return
         }
         Haptics.selection()

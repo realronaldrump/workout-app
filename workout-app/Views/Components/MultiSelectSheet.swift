@@ -33,7 +33,7 @@ struct MultiSelectSheet<Item: Hashable & Identifiable>: View {
 
                 VStack(spacing: 0) {
                     HStack {
-                        Button("Select All") {
+                        Button("Select all") {
                             localSelection = Set(items)
                         }
                         .foregroundStyle(Theme.Colors.accent)
@@ -41,7 +41,7 @@ struct MultiSelectSheet<Item: Hashable & Identifiable>: View {
 
                         Spacer()
 
-                        Button("Deselect All") {
+                        Button("Deselect all") {
                             localSelection.removeAll()
                         }
                         .foregroundStyle(Theme.Colors.accent)

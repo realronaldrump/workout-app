@@ -52,30 +52,30 @@ struct GymProfilesView: View {
 
             ScrollView {
                 VStack(spacing: Theme.Spacing.xl) {
-                    VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                        Text("Keep Progress Clean")
-                            .font(Theme.Typography.headline)
-                            .foregroundColor(Theme.Colors.textPrimary)
-                        Text("Tag workouts by gym to avoid misleading trends caused by different equipment.")
-                            .font(Theme.Typography.caption)
-                            .foregroundColor(Theme.Colors.textSecondary)
+                    HStack {
+                        Text("Saved gyms")
+                            .font(Theme.Typography.title3)
+                            .foregroundStyle(Theme.Colors.textPrimary)
+                        Spacer()
+                        AppHelpButton(
+                            title: "Gym profiles",
+                            message: "Assign workouts to a gym to filter your history and compare workouts on the same equipment."
+                        )
                     }
-                    .padding(Theme.Spacing.lg)
-                    .softCard(elevation: 1)
 
                     NavigationLink(destination: GymBulkAssignView()) {
                         HStack {
                             Image(systemName: "square.stack.3d.up.fill")
-                                .foregroundStyle(.white)
+                                .foregroundStyle(Theme.Colors.onAccent)
                                 .frame(width: 30, height: 30)
-                                .background(Theme.Colors.accent)
+                                .background(Theme.Colors.brandBand)
                                 .cornerRadius(6)
 
                             VStack(alignment: .leading) {
-                                Text("Bulk Assign Gyms")
+                                Text("Bulk assign gyms")
                                     .font(Theme.Typography.body)
                                     .foregroundStyle(Theme.Colors.textPrimary)
-                                Text("Tag historical workouts")
+                                Text("Tag past workouts")
                                     .font(Theme.Typography.caption)
                                     .foregroundStyle(Theme.Colors.textSecondary)
                             }
@@ -96,8 +96,8 @@ struct GymProfilesView: View {
                         EmptyStateCard(
                             icon: "mappin.and.ellipse",
                             tint: Theme.Colors.accentSecondary,
-                            title: "No Gyms Yet",
-                            message: "Add your first gym profile to track where you train."
+                            title: "No gyms yet",
+                            message: "Add a gym with + to tag where you train."
                         )
                         .padding(.top, Theme.Spacing.xl)
                     } else {
@@ -112,7 +112,7 @@ struct GymProfilesView: View {
                 .contentColumn()
             }
         }
-        .navigationTitle("Gym Profiles")
+        .navigationTitle("Gym profiles")
         .navigationBarTitleDisplayMode(.inline)
         .onDisappear {
             discoveryTask?.cancel()
@@ -147,7 +147,7 @@ struct GymProfilesView: View {
                 )
             }
         }
-        .alert("Delete Gym?", isPresented: $showingDeleteAlert) {
+        .alert("Delete gym?", isPresented: $showingDeleteAlert) {
             Button("Delete", role: .destructive) {
                 if let gym = gymToDelete {
                     gymProfilesManager.deleteGym(gym)
@@ -158,16 +158,20 @@ struct GymProfilesView: View {
                 gymToDelete = nil
             }
         } message: {
-            Text("Deleting this gym will unassign workouts currently tagged with it.")
+            Text("Workouts tagged with this gym will become unassigned.")
         }
     }
 
     private var discoverySection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             HStack(alignment: .firstTextBaseline) {
-                Text("Auto Detect From Workouts")
+                Text("Find gyms")
                     .font(Theme.Typography.title3)
                     .foregroundStyle(Theme.Colors.textPrimary)
+                AppHelpButton(
+                    title: "Find gyms",
+                    message: "Scan Apple Health workout locations for gym suggestions. Nothing is added until you choose a result."
+                )
 
                 Spacer()
 
@@ -181,16 +185,10 @@ struct GymProfilesView: View {
                     }
                     .font(Theme.Typography.captionBold)
                     .foregroundStyle(Theme.Colors.accent)
-                    .textCase(.uppercase)
-                    .tracking(0.8)
                     .buttonStyle(.plain)
                     .frame(minHeight: Theme.Layout.minimumTapTarget)
                 }
             }
-
-            Text("Scans Apple Health workout start locations and suggests new gym profiles.")
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Colors.textSecondary)
 
             if let candidateGymError, !candidateGymError.isEmpty {
                 Text(candidateGymError)
@@ -198,11 +196,11 @@ struct GymProfilesView: View {
                     .foregroundStyle(Theme.Colors.warning)
             }
 
-            if candidateGyms.isEmpty {
+            if candidateGyms.isEmpty && candidateGymError == nil && (isDetectingCandidateGyms || hasRunGymDiscovery) {
                 Text(discoveryStatusText)
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Colors.textTertiary)
-            } else {
+            } else if !candidateGyms.isEmpty {
                 VStack(spacing: Theme.Spacing.sm) {
                     ForEach(candidateGyms.prefix(5)) { candidate in
                         candidateGymRow(for: candidate)
@@ -218,14 +216,12 @@ struct GymProfilesView: View {
                 Button {
                     addAllDetectedGyms()
                 } label: {
-                    Text("Add All Detected Gyms")
+                    Text("Add all detected gyms")
                         .font(Theme.Typography.captionBold)
-                        .textCase(.uppercase)
-                        .tracking(0.8)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, Theme.Spacing.sm)
-                        .background(Theme.Colors.accent)
-                        .foregroundStyle(.white)
+                        .background(Theme.Colors.brandBand)
+                        .foregroundStyle(Theme.Colors.onAccent)
                         .cornerRadius(Theme.CornerRadius.large)
                 }
                 .buttonStyle(.plain)
@@ -262,8 +258,6 @@ struct GymProfilesView: View {
             }
             .font(Theme.Typography.captionBold)
             .foregroundStyle(Theme.Colors.accent)
-            .textCase(.uppercase)
-            .tracking(0.8)
             .buttonStyle(.plain)
             .frame(minWidth: Theme.Layout.minimumTapTarget, minHeight: Theme.Layout.minimumTapTarget)
         }
@@ -312,9 +306,9 @@ struct GymProfilesView: View {
             await MainActor.run {
                 candidateGyms = candidates
                 if candidateGyms.isEmpty && candidateGymError == nil && healthSnapshot.isEmpty {
-                    candidateGymError = "No synced Health workouts found yet. Run Health Sync first."
+                    candidateGymError = "No synced Health workouts yet. Sync Apple Health in Settings first."
                 } else if candidateGyms.isEmpty && candidateGymError == nil && finalLocationCount == 0 {
-                    candidateGymError = "No workout locations were available from Apple Health for these workouts."
+                    candidateGymError = "Apple Health has no locations for these workouts."
                 }
                 isDetectingCandidateGyms = false
                 discoveryTask = nil
@@ -327,9 +321,9 @@ struct GymProfilesView: View {
             return "Scanning recent Apple Health workout locations…"
         }
         if hasRunGymDiscovery {
-            return "No new gym locations detected. You can scan again after syncing more workouts."
+            return "No new gyms found in synced workouts."
         }
-        return "Scanning is optional and starts only when you tap Scan."
+        return ""
     }
 
     private func discoverGymCandidates(
@@ -423,7 +417,7 @@ struct GymProfilesView: View {
             coordinate: cluster.center,
             visitCount: cluster.count,
             latestWorkoutDate: cluster.latestWorkoutDate,
-            suggestedName: suggestion?.name ?? "Detected Gym \(index + 1)",
+            suggestedName: suggestion?.name ?? "Detected gym \(index + 1)",
             suggestedAddress: suggestion?.address
         )
         return (index, candidate)
@@ -547,8 +541,8 @@ private struct GymProfileEditorView: View {
 
         var title: String {
             switch self {
-            case .create: return "New Gym"
-            case .edit: return "Edit Gym"
+            case .create: return "New gym"
+            case .edit: return "Edit gym"
             }
         }
     }
@@ -597,9 +591,7 @@ private struct GymProfileEditorView: View {
                         } label: {
                             HStack(spacing: Theme.Spacing.sm) {
                                 Image(systemName: "magnifyingglass")
-                                Text("Search Gym on Map")
-                                    .textCase(.uppercase)
-                                    .tracking(0.8)
+                                Text("Search gym on map")
                                 Spacer()
                                 Image(systemName: "map")
                             }
@@ -618,7 +610,7 @@ private struct GymProfileEditorView: View {
                             .font(Theme.Typography.caption)
                             .foregroundStyle(Theme.Colors.textTertiary)
                         } else {
-                            Text("No location selected yet")
+                            Text("No location selected")
                                 .font(Theme.Typography.caption)
                                 .foregroundStyle(Theme.Colors.textTertiary)
                         }
@@ -634,8 +626,8 @@ private struct GymProfileEditorView: View {
                             .font(Theme.Typography.headline)
                             .frame(maxWidth: .infinity)
                             .padding()
-                            .background(Theme.Colors.accent)
-                            .foregroundColor(.white)
+                            .background(Theme.Colors.brandBand)
+                            .foregroundColor(Theme.Colors.onAccent)
                             .cornerRadius(Theme.CornerRadius.large)
                     }
                     .buttonStyle(.plain)
@@ -657,7 +649,7 @@ private struct GymProfileEditorView: View {
         }
         .sheet(isPresented: $showingMapPicker) {
             GymMapSearchSheet(
-                title: "Find Gym",
+                title: "Find gym",
                 initialQuery: name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                     ? "Gym"
                     : "\(name) gym",

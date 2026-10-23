@@ -271,7 +271,7 @@ struct GymMapSearchSheet: View {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(Theme.Colors.textTertiary)
 
-                TextField("Find nearby gyms", text: $query)
+                TextField("Gym name or city", text: $query)
                     .textInputAutocapitalization(.words)
                     .autocorrectionDisabled(true)
                     .font(Theme.Typography.body)
@@ -289,8 +289,6 @@ struct GymMapSearchSheet: View {
                         Text("Search")
                             .font(Theme.Typography.captionBold)
                             .foregroundStyle(Theme.Colors.accent)
-                            .textCase(.uppercase)
-                            .tracking(0.8)
                     }
                 }
                 .buttonStyle(.plain)
@@ -305,11 +303,7 @@ struct GymMapSearchSheet: View {
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Colors.warning)
             } else if !shouldAutoRunInitialSearch {
-                Text("No workout location was available. Search by city, neighborhood, or exact gym name.")
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textTertiary)
-            } else if startLocation == nil {
-                Text("Tip: If this opens far away, search by city/neighborhood first.")
+                Text("No workout location. Search by gym name or city.")
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Colors.textTertiary)
             }
@@ -334,7 +328,7 @@ struct GymMapSearchSheet: View {
                                     .frame(width: 22, height: 22)
                                 Image(systemName: "figure.strengthtraining.traditional")
                                     .font(Theme.Typography.microLabel)
-                                    .foregroundStyle(.white)
+                                    .foregroundStyle(Theme.Colors.onAccent)
                             }
                         }
                     }
@@ -347,7 +341,7 @@ struct GymMapSearchSheet: View {
                                     .frame(width: 22, height: 22)
                                 Image(systemName: "mappin")
                                     .font(Theme.Typography.caption2Bold)
-                                    .foregroundStyle(.white)
+                                    .foregroundStyle(Theme.Colors.onAccent)
                             }
                         }
                     }
@@ -367,7 +361,7 @@ struct GymMapSearchSheet: View {
                 Button {
                     selectManualCoordinate(visibleRegion.center)
                 } label: {
-                    Label("Use Map Center", systemImage: "scope")
+                    Label("Use map center", systemImage: "scope")
                         .font(Theme.Typography.captionBold)
                         .frame(maxWidth: .infinity, minHeight: Theme.Layout.minimumTapTarget)
                 }
@@ -398,7 +392,7 @@ struct GymMapSearchSheet: View {
                         .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.Colors.textTertiary)
                 } else {
-                    Text("No matches yet. Move the map or refine search.")
+                    Text("No matches. Move the map or change the search.")
                         .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.Colors.textTertiary)
                 }
@@ -417,8 +411,6 @@ struct GymMapSearchSheet: View {
                             Text(isShowingAllResults ? "Show less" : "Show \(hiddenResultsCount) more")
                                 .font(Theme.Typography.captionBold)
                                 .foregroundStyle(Theme.Colors.accent)
-                                .textCase(.uppercase)
-                                .tracking(0.8)
                         }
                         .buttonStyle(.plain)
                         .padding(.top, Theme.Spacing.xs)
@@ -442,12 +434,12 @@ struct GymMapSearchSheet: View {
             onSelect(selectedPlace)
             dismiss()
         } label: {
-            Text("Use Selected Gym")
+            Text("Use selected gym")
                 .font(Theme.Typography.headline)
                 .frame(maxWidth: .infinity)
                 .padding()
                 .background(selectedPlace == nil ? Theme.Colors.border : Theme.Colors.accent)
-                .foregroundStyle(.white)
+                .foregroundStyle(Theme.Colors.onAccent)
                 .cornerRadius(Theme.CornerRadius.large)
         }
         .buttonStyle(.plain)
@@ -474,7 +466,7 @@ struct GymMapSearchSheet: View {
                         .font(Theme.Typography.headline)
                         .foregroundStyle(Theme.Colors.textPrimary)
                     if place.isSavedGym {
-                        Text(place.usageCount > 0 ? "Saved gym • \(place.usageCount) workouts" : "Saved gym")
+                        Text(place.usageCount > 0 ? "Saved gym, \(SharedFormatters.count(place.usageCount, "workout"))" : "Saved gym")
                             .font(Theme.Typography.caption)
                             .foregroundStyle(Theme.Colors.accent)
                     }
@@ -574,7 +566,7 @@ struct GymMapSearchSheet: View {
         let manualSelectionId = manualSelectionIdentifier(for: coordinate)
         manualSelection = GymMapPlace(
             id: manualSelectionId,
-            name: "Custom Location",
+            name: "Custom location",
             address: formattedCoordinateLabel(for: coordinate),
             coordinate: coordinate
         )

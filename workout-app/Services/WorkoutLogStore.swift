@@ -4,28 +4,39 @@ import Foundation
 @MainActor
 final class WorkoutLogStore: ObservableObject {
     @Published private(set) var workouts: [LoggedWorkout] = []
+    @Published private(set) var persistenceError: String?
+
+    private var mutationRevision = 0
+    private var workoutRevisions: [UUID: Int] = [:]
 
     private let database: AppDatabase
-    private let fileName = "logged_workouts_v1.json"
+    private let legacyFileURL: URL
     private var persistenceTask: Task<Void, Error>?
 
-    init(database: AppDatabase = .shared) {
+    init(database: AppDatabase = .shared, legacyFileURL: URL? = nil) {
         self.database = database
+        self.legacyFileURL = legacyFileURL ?? Self.staticFileURL(fileName: "logged_workouts_v1.json")
     }
 
     func load() async {
         if let persistenceTask {
             _ = try? await persistenceTask.value
         }
+        let revision = mutationRevision
         do {
             let loaded = try await Task.detached(priority: .userInitiated) { [database] in
                 try database.loadLoggedWorkouts()
             }.value
-            workouts = loaded.sorted { $0.startedAt > $1.startedAt }
+            // A save may have started while the database read was suspended.
+            // Never replace newer in-memory edits with an older snapshot.
+            if revision == mutationRevision {
+                workouts = loaded.sorted { $0.startedAt > $1.startedAt }
+                persistenceError = nil
+            }
             removeLegacyFile()
         } catch {
+            persistenceError = error.localizedDescription
             print("Failed to load logged workouts: \(error)")
-            workouts = []
         }
     }
 
@@ -38,19 +49,11 @@ final class WorkoutLogStore: ObservableObject {
     }
 
     func upsert(_ workout: LoggedWorkout) async {
-        var copy = workout
-        copy.updatedAt = Date()
-
-        if let index = workouts.firstIndex(where: { $0.id == workout.id }) {
-            workouts[index] = copy
-        } else {
-            workouts.append(copy)
+        do {
+            try await save(workout)
+        } catch {
+            // `save` retains the previous version and publishes the error.
         }
-        workouts.sort { $0.startedAt > $1.startedAt }
-        let persistedWorkout = copy
-        _ = try? await enqueuePersistence { database in
-            try database.saveLoggedWorkout(persistedWorkout)
-        }.value
     }
 
     /// Like `upsert(_:)`, but waits for the write to reach the database and throws if it
@@ -61,6 +64,7 @@ final class WorkoutLogStore: ObservableObject {
         copy.updatedAt = Date()
 
         let previous = workouts.first { $0.id == workout.id }
+        let revision = recordMutation(id: workout.id)
         if let index = workouts.firstIndex(where: { $0.id == workout.id }) {
             workouts[index] = copy
         } else {
@@ -73,28 +77,54 @@ final class WorkoutLogStore: ObservableObject {
             try await enqueuePersistence { database in
                 try database.saveLoggedWorkout(persistedWorkout)
             }.value
+            if workoutRevisions[workout.id] == revision { persistenceError = nil }
         } catch {
-            if let previous, let index = workouts.firstIndex(where: { $0.id == previous.id }) {
-                workouts[index] = previous
-            } else {
+            persistenceError = error.localizedDescription
+            // A failed older write must not roll back a newer edit of the same workout.
+            if workoutRevisions[workout.id] == revision {
                 workouts.removeAll { $0.id == workout.id }
+                if let previous { workouts.append(previous) }
+                workouts.sort { $0.startedAt > $1.startedAt }
             }
             throw error
         }
     }
 
     func delete(id: UUID) async {
+        let previous = workouts.first { $0.id == id }
+        let revision = recordMutation(id: id)
         workouts.removeAll { $0.id == id }
-        _ = try? await enqueuePersistence { database in
-            try database.deleteLoggedWorkout(id: id)
-        }.value
+        do {
+            try await enqueuePersistence { database in
+                try database.deleteLoggedWorkout(id: id)
+            }.value
+            if workoutRevisions[id] == revision { persistenceError = nil }
+        } catch {
+            persistenceError = error.localizedDescription
+            if workoutRevisions[id] == revision, let previous {
+                workouts.append(previous)
+                workouts.sort { $0.startedAt > $1.startedAt }
+            }
+        }
     }
 
     func clearAll() async throws {
+        let previous = workouts
+        mutationRevision &+= 1
+        let revision = mutationRevision
+        for workout in previous { workoutRevisions[workout.id] = revision }
         workouts.removeAll()
-        try await enqueuePersistence { database in
-            try database.clearLoggedWorkouts()
-        }.value
+        do {
+            try await enqueuePersistence { database in
+                try database.clearLoggedWorkouts()
+            }.value
+            persistenceError = nil
+        } catch {
+            persistenceError = error.localizedDescription
+            if mutationRevision == revision { workouts = previous }
+            throw error
+        }
+        // A legacy cleanup failure must not restore entries the database already deleted.
         try removeLegacyFileIfPresent()
     }
 
@@ -102,7 +132,13 @@ final class WorkoutLogStore: ObservableObject {
     /// most recent persistence failure to callers that require durable state.
     func waitForPendingPersistence() async throws {
         if let persistenceTask {
-            try await persistenceTask.value
+            do {
+                try await persistenceTask.value
+                persistenceError = nil
+            } catch {
+                persistenceError = error.localizedDescription
+                throw error
+            }
         }
     }
 
@@ -119,21 +155,31 @@ final class WorkoutLogStore: ObservableObject {
                 continue
             }
 
+            recordMutation(id: workout.id)
             workouts.append(workout)
             existingIds.insert(workout.id)
             inserted += 1
         }
 
-        if inserted > 0 {
+        if inserted > 0 || persistenceError != nil {
             workouts.sort { $0.startedAt > $1.startedAt }
+            // Retrying a failed restore must retry its write, even when the same IDs
+            // are already present in memory from the first attempt.
             persistReplacement()
         }
 
         return (inserted, skipped)
     }
 
+    @discardableResult
+    private func recordMutation(id: UUID) -> Int {
+        mutationRevision &+= 1
+        workoutRevisions[id] = mutationRevision
+        return mutationRevision
+    }
+
     private func fileURL() -> URL {
-        Self.staticFileURL(fileName: fileName)
+        legacyFileURL
     }
 
     private nonisolated static func staticFileURL(fileName: String) -> URL {

@@ -9,6 +9,9 @@ struct ActiveWorkoutSession: Codable, Identifiable, Hashable, Sendable {
     var dismissedMuscleGroupSuggestions: [String]
     var lastModifiedAt: Date
     var schemaVersion: Int
+    var restTimerEndsAt: Date?
+    var restTimerTotalSeconds: Int?
+    var restTimerSourceSetId: UUID?
 
     init(
         id: UUID = UUID(),
@@ -18,7 +21,10 @@ struct ActiveWorkoutSession: Codable, Identifiable, Hashable, Sendable {
         exercises: [ActiveExercise] = [],
         dismissedMuscleGroupSuggestions: [String] = [],
         lastModifiedAt: Date = Date(),
-        schemaVersion: Int = 4
+        schemaVersion: Int = 5,
+        restTimerEndsAt: Date? = nil,
+        restTimerTotalSeconds: Int? = nil,
+        restTimerSourceSetId: UUID? = nil
     ) {
         self.id = id
         self.startedAt = startedAt
@@ -28,6 +34,9 @@ struct ActiveWorkoutSession: Codable, Identifiable, Hashable, Sendable {
         self.dismissedMuscleGroupSuggestions = dismissedMuscleGroupSuggestions
         self.lastModifiedAt = lastModifiedAt
         self.schemaVersion = schemaVersion
+        self.restTimerEndsAt = restTimerEndsAt
+        self.restTimerTotalSeconds = restTimerTotalSeconds
+        self.restTimerSourceSetId = restTimerSourceSetId
     }
 }
 
@@ -43,6 +52,13 @@ struct ActiveExercise: Codable, Identifiable, Hashable, Sendable {
     }
 }
 
+struct SetInputDraft: Codable, Hashable, Sendable {
+    var weight: String = ""
+    var reps: String = ""
+    var distance: String = ""
+    var duration: String = ""
+}
+
 struct ActiveSet: Codable, Identifiable, Hashable, Sendable {
     var id: UUID
     var order: Int
@@ -52,6 +68,7 @@ struct ActiveSet: Codable, Identifiable, Hashable, Sendable {
     var seconds: Double?
     var isCompleted: Bool
     var completedAt: Date?
+    var inputDraft: SetInputDraft?
 
     init(
         id: UUID = UUID(),
@@ -61,7 +78,8 @@ struct ActiveSet: Codable, Identifiable, Hashable, Sendable {
         distance: Double? = nil,
         seconds: Double? = nil,
         isCompleted: Bool = false,
-        completedAt: Date? = nil
+        completedAt: Date? = nil,
+        inputDraft: SetInputDraft? = nil
     ) {
         self.id = id
         self.order = order
@@ -71,6 +89,7 @@ struct ActiveSet: Codable, Identifiable, Hashable, Sendable {
         self.seconds = seconds
         self.isCompleted = isCompleted
         self.completedAt = completedAt
+        self.inputDraft = inputDraft
     }
 }
 
@@ -80,6 +99,7 @@ extension ActiveWorkoutSession {
     private enum CodingKeys: String, CodingKey {
         case id, startedAt, name, gymProfileId, exercises
         case dismissedMuscleGroupSuggestions, lastModifiedAt, schemaVersion
+        case restTimerEndsAt, restTimerTotalSeconds, restTimerSourceSetId
     }
 
     init(from decoder: Decoder) throws {
@@ -96,14 +116,17 @@ extension ActiveWorkoutSession {
                 forKey: .dismissedMuscleGroupSuggestions
             ) ?? [],
             lastModifiedAt: try container.decodeIfPresent(Date.self, forKey: .lastModifiedAt) ?? startedAt,
-            schemaVersion: try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 4
+            schemaVersion: try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 4,
+            restTimerEndsAt: try container.decodeIfPresent(Date.self, forKey: .restTimerEndsAt),
+            restTimerTotalSeconds: try container.decodeIfPresent(Int.self, forKey: .restTimerTotalSeconds),
+            restTimerSourceSetId: try container.decodeIfPresent(UUID.self, forKey: .restTimerSourceSetId)
         )
     }
 }
 
 extension ActiveSet {
     private enum CodingKeys: String, CodingKey {
-        case id, order, weight, reps, distance, seconds, isCompleted, completedAt
+        case id, order, weight, reps, distance, seconds, isCompleted, completedAt, inputDraft
     }
 
     init(from decoder: Decoder) throws {
@@ -116,7 +139,8 @@ extension ActiveSet {
             distance: try container.decodeIfPresent(Double.self, forKey: .distance),
             seconds: try container.decodeIfPresent(Double.self, forKey: .seconds),
             isCompleted: try container.decodeIfPresent(Bool.self, forKey: .isCompleted) ?? false,
-            completedAt: try container.decodeIfPresent(Date.self, forKey: .completedAt)
+            completedAt: try container.decodeIfPresent(Date.self, forKey: .completedAt),
+            inputDraft: try container.decodeIfPresent(SetInputDraft.self, forKey: .inputDraft)
         )
     }
 }

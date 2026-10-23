@@ -129,6 +129,57 @@ final class CSVParserTests: XCTestCase {
         XCTAssertEqual(set.seconds, 180)
     }
 
+    func testExplicitKilogramWeightsConvertToTheAppsPoundUnit() throws {
+        let csv = """
+        Date,Workout Name,Duration,Exercise Name,Set Order,Weight (kg),Reps,Distance,Seconds
+        2026-01-05 07:30:00,Pull,45m,Row,1,50,8,0,0
+        2026-01-05 07:30:00,Pull,45m,Assisted Pull Up,1,-20,8,0,0
+        """
+        let sets = try CSVParser.parseStrongWorkoutsCSV(from: Data(csv.utf8))
+        XCTAssertEqual(sets[0].weight, 110.2311310924, accuracy: 0.000001)
+        XCTAssertEqual(sets[1].weight, -44.0924524369, accuracy: 0.000001)
+    }
+
+    func testBodyweightAndCardioRowsKeepBlankStrengthCells() throws {
+        let csv = """
+        Date,Workout Name,Duration,Exercise Name,Set Order,Weight,Reps,Distance,Seconds
+        2026-01-05 07:30:00,Mixed,45m,Pull Up,1,,12,,
+        2026-01-05 07:30:00,Mixed,45m,Running,1,,,2.5,900
+        2026-01-05 07:30:00,Mixed,45m,Plank,1,,,,60
+        """
+
+        let sets = try CSVParser.parseStrongWorkoutsCSV(from: Data(csv.utf8))
+
+        XCTAssertEqual(sets.count, 3)
+        XCTAssertEqual(sets[0].weight, 0)
+        XCTAssertEqual(sets[0].reps, 12)
+        XCTAssertEqual(sets[1].distance, 2.5)
+        XCTAssertEqual(sets[1].seconds, 900)
+        XCTAssertEqual(sets[2].seconds, 60)
+    }
+
+    func testUnsupportedExportCannotBecomeAnEmptyHistoryReplacement() {
+        let csv = """
+        Record Type,Workout Start,Workout Name,Exercise,Weight (lbs),Reps,Workout ID
+        set,2026-01-05T07:30:00.000-07:00,Mixed,Pull Up,0,12,\(UUID())
+        """
+
+        XCTAssertThrowsError(try CSVParser.parseStrongWorkoutsCSV(from: Data(csv.utf8))) { error in
+            guard case CSVParserError.noWorkoutSets = error else {
+                return XCTFail("Expected noWorkoutSets, got \(error)")
+            }
+        }
+    }
+
+    func testInvalidNonemptyStrengthValuesAreNotInventedAsZero() {
+        let csv = """
+        Date,Workout Name,Duration,Exercise Name,Set Order,Weight,Reps,Distance,Seconds
+        2026-01-05 07:30:00,Mixed,45m,Running,1,invalid,,2.5,900
+        """
+
+        XCTAssertThrowsError(try CSVParser.parseStrongWorkoutsCSV(from: Data(csv.utf8)))
+    }
+
     func testHeaderOnlyFileThrowsEmptyFile() {
         XCTAssertThrowsError(try CSVParser.parseStrongWorkoutsCSV(from: Data("\(header)\n\n".utf8))) { error in
             guard case CSVParserError.emptyFile = error else {

@@ -20,8 +20,6 @@ struct BrutalistDateRangePickerRow: View {
                     Text(title)
                         .font(Theme.Typography.metricLabel)
                         .foregroundStyle(Theme.Colors.textTertiary)
-                        .textCase(.uppercase)
-                        .tracking(0.8)
 
                     Text(rangeLabel)
                         .font(Theme.Typography.callout)
@@ -112,8 +110,6 @@ struct BrutalistDateRangeSheet: View {
                             Text("Start")
                                 .font(Theme.Typography.metricLabel)
                                 .foregroundStyle(Theme.Colors.textTertiary)
-                                .textCase(.uppercase)
-                                .tracking(0.8)
 
                             DatePicker(
                                 "Start",
@@ -132,8 +128,6 @@ struct BrutalistDateRangeSheet: View {
                             Text("End")
                                 .font(Theme.Typography.metricLabel)
                                 .foregroundStyle(Theme.Colors.textTertiary)
-                                .textCase(.uppercase)
-                                .tracking(0.8)
 
                             DatePicker(
                                 "End",
@@ -155,7 +149,7 @@ struct BrutalistDateRangeSheet: View {
                             Haptics.selection()
                             dismiss()
                         } label: {
-                            Text("Apply Range")
+                            Text("Apply range")
                                 .font(Theme.Typography.headline)
                                 .foregroundStyle(Theme.Colors.textPrimary)
                                 .frame(maxWidth: .infinity)

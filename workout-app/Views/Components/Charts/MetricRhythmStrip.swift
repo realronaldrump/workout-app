@@ -63,12 +63,6 @@ struct MetricRhythmStrip: View {
             }
             .frame(height: 132)
 
-            if !usesZeroBaseline {
-                Text("Axis starts at \(metric.formatWithUnit(scale.lowerBound)) — differences are small by nature for this metric.")
-                    .font(Theme.Typography.caption2)
-                    .foregroundStyle(Theme.Colors.textTertiary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
         }
         .onAppear {
             guard !hasAppeared else { return }
@@ -82,17 +76,14 @@ struct MetricRhythmStrip: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            Text("Weekly Rhythm")
-                .font(Theme.Typography.sectionHeader2)
-                .foregroundStyle(Theme.Colors.textPrimary)
+            SectionHeading(
+                title: "By weekday",
+                help: usesZeroBaseline
+                    ? "Average for each weekday in the selected range. Bars start at zero."
+                    : "Average for each weekday in the selected range. The scale starts at \(metric.formatWithUnit(scale.lowerBound)); "
+                        + "compare the displayed values rather than the marker heights as proportions."
+            )
 
-            if let strongest, let weakest, strongest.weekday != weakest.weekday {
-                Text("\(fullName(strongest.weekday))s average \(metric.formatWithUnit(strongest.average)); "
-                     + "\(fullName(weakest.weekday))s average \(metric.formatWithUnit(weakest.average)).")
-                    .font(Theme.Typography.footnote)
-                    .foregroundStyle(Theme.Colors.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
         }
     }
 

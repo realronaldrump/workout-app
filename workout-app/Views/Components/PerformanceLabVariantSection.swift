@@ -7,10 +7,14 @@ struct PerformanceLabVariantSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             HStack {
-                Text("Workout Variants")
+                Text("Workout variants")
                     .font(Theme.Typography.title2)
                     .foregroundColor(Theme.Colors.textPrimary)
 
+                AppHelpButton(
+                    title: "Workout variants",
+                    message: "Compares sessions with similar exercises, grouped by exercise order, duration, time, and gym. Differences do not establish cause."
+                )
                 Spacer()
 
                 NavigationLink {
@@ -19,18 +23,12 @@ struct PerformanceLabVariantSection: View {
                     Text("More")
                         .font(Theme.Typography.captionBold)
                         .foregroundColor(Theme.Colors.accent)
-                        .textCase(.uppercase)
-                        .tracking(0.8)
                 }
                 .buttonStyle(.plain)
             }
 
-            Text("Compare how swapping exercises in a similar routine affects your results.")
-                .font(Theme.Typography.caption)
-                .foregroundColor(Theme.Colors.textSecondary)
-
             if patterns.isEmpty {
-                Text("Try mixing up your exercises across workouts and the app will compare the variants here.")
+                Text("Variants need at least 4 workouts with the same exercises.")
                     .font(Theme.Typography.body)
                     .foregroundColor(Theme.Colors.textSecondary)
                     .padding(Theme.Spacing.lg)

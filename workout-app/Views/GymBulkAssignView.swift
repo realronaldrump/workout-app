@@ -88,7 +88,7 @@ struct GymBulkAssignView: View {
                         EmptyStateCard(
                             icon: "magnifyingglass",
                             tint: Theme.Colors.textTertiary,
-                            title: "No Workouts",
+                            title: "No workouts",
                             message: "Adjust filters or date range."
                         )
                         .padding(.top, Theme.Spacing.xl)
@@ -102,7 +102,7 @@ struct GymBulkAssignView: View {
                 .contentColumn()
             }
         }
-        .navigationTitle("Bulk Assign Gyms")
+        .navigationTitle("Bulk assign gyms")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             initializeDateRangeIfNeeded()
@@ -117,7 +117,7 @@ struct GymBulkAssignView: View {
         }
         .sheet(item: $mapFallbackTarget) { candidate in
             GymMapSearchSheet(
-                title: "Select Gym",
+                title: "Select gym",
                 initialQuery: "Gym",
                 initialCenter: candidate.startCoordinate ?? fallbackMapCenter,
                 startLocation: candidate.startCoordinate
@@ -125,7 +125,7 @@ struct GymBulkAssignView: View {
                 handleMapFallbackSelection(place, for: candidate)
             }
         }
-        .alert("Auto Tag Failed", isPresented: Binding(
+        .alert("Auto tag failed", isPresented: Binding(
             get: { autoTagErrorMessage != nil },
             set: { newValue in
                 if !newValue { autoTagErrorMessage = nil }
@@ -133,7 +133,7 @@ struct GymBulkAssignView: View {
         )) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text(autoTagErrorMessage ?? "Unknown error")
+            Text(autoTagErrorMessage ?? "The workouts could not be tagged. Try again.")
         }
     }
 
@@ -146,7 +146,7 @@ struct GymBulkAssignView: View {
             searchField
 
             BrutalistDateRangePickerRow(
-                title: "Date Range",
+                title: "Date range",
                 startDate: $startDate,
                 endDate: $endDate,
                 earliestSelectableDate: earliestWorkoutDate.map { Calendar.current.startOfDay(for: $0) },
@@ -158,7 +158,7 @@ struct GymBulkAssignView: View {
             }
             .toggleStyle(AppToggleStyle())
 
-            Text("Matches \(matchingCount) workouts")
+            Text("\(SharedFormatters.count(matchingCount, "matching workout"))")
                 .font(Theme.Typography.caption)
                 .foregroundColor(Theme.Colors.textTertiary)
         }
@@ -206,23 +206,19 @@ struct GymBulkAssignView: View {
 
             Spacer()
 
-            Button("Select All") {
+            Button("Select all") {
                 selectedWorkouts = Set(visibleWorkouts.map(\.id))
             }
             .font(Theme.Typography.captionBold)
             .foregroundStyle(Theme.Colors.accent)
-            .textCase(.uppercase)
-            .tracking(0.8)
             .buttonStyle(.plain)
             .frame(minHeight: Theme.Layout.minimumTapTarget)
 
-            Button("Clear") {
+            Button("Deselect all") {
                 selectedWorkouts.removeAll()
             }
             .font(Theme.Typography.captionBold)
             .foregroundStyle(Theme.Colors.textSecondary)
-            .textCase(.uppercase)
-            .tracking(0.8)
             .buttonStyle(.plain)
             .frame(minHeight: Theme.Layout.minimumTapTarget)
 
@@ -231,8 +227,6 @@ struct GymBulkAssignView: View {
             } label: {
                 Label("Assign", systemImage: "mappin.and.ellipse")
                     .font(Theme.Typography.captionBold)
-                    .textCase(.uppercase)
-                    .tracking(0.8)
             }
             .disabled(selectedWorkouts.isEmpty)
             .foregroundStyle(selectedWorkouts.isEmpty ? Theme.Colors.textTertiary : Theme.Colors.accent)
@@ -243,7 +237,7 @@ struct GymBulkAssignView: View {
         .softCard(elevation: 1)
         .sheet(isPresented: $showingAssignPicker) {
             GymSelectionSheet(
-                title: "Assign Gym",
+                title: "Assign gym",
                 gyms: gymProfilesManager.sortedGyms,
                 selected: .unassigned,
                 showAllGyms: false,
@@ -263,9 +257,13 @@ struct GymBulkAssignView: View {
 
         return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             HStack(alignment: .firstTextBaseline) {
-                Text("Auto Tag")
+                Text("Auto tag")
                     .font(Theme.Typography.title3)
                     .foregroundColor(Theme.Colors.textPrimary)
+                AppHelpButton(
+                    title: "Auto tag",
+                    message: "Match unassigned workouts to gyms using Apple Health locations. Review unmatched workouts on the map."
+                )
 
                 Spacer()
 
@@ -276,18 +274,11 @@ struct GymBulkAssignView: View {
                 }
             }
 
-            Text(
-                "Tries to detect gyms from Apple Health workout location data first. " +
-                "If a workout can’t be matched, you can resolve it with searchable map selection."
-            )
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Colors.textSecondary)
-
             if isAutoTagging {
                 ProgressView(value: autoTagProgress)
                     .tint(Theme.Colors.accent)
             } else {
-                Text("Will attempt \(targets.count) workouts (scope: \(candidates.count)).")
+                Text("\(SharedFormatters.count(targets.count, "unassigned workout"))")
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Colors.textTertiary)
             }
@@ -300,16 +291,14 @@ struct GymBulkAssignView: View {
                         ProgressView()
                             .scaleEffect(0.9)
                     } else {
-                        Image(systemName: "sparkles")
+                        Image(systemName: "mappin.and.ellipse")
                     }
-                    Text(isAutoTagging ? "Tagging..." : "Auto Tag From Watch")
+                    Text(isAutoTagging ? "Tagging…" : "Auto tag from Watch")
                         .font(Theme.Typography.subheadline)
-                        .textCase(.uppercase)
-                        .tracking(0.8)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, Theme.Spacing.md)
-                .foregroundStyle(.white)
+                .foregroundStyle(Theme.Colors.onAccent)
                 .surfaceButtonChrome(
                     fill: isAutoTagging ? Theme.Colors.border : Theme.Colors.accent,
                     cornerRadius: Theme.CornerRadius.large
@@ -320,17 +309,17 @@ struct GymBulkAssignView: View {
             .opacity((isAutoTagging || targets.isEmpty || !healthManager.isHealthKitAvailable()) ? 0.6 : 1)
 
             if !healthManager.isHealthKitAvailable() {
-                Text("HealthKit isn’t available on this device.")
+                Text("Apple Health is unavailable on this device.")
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Colors.textTertiary)
             } else if gymProfilesManager.gyms.isEmpty {
-                Text("No gym profiles yet. Auto detection will still gather location-based fallbacks that you can map-select.")
+                Text("No saved gyms. Choose locations on the map after scanning.")
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Colors.textTertiary)
             }
 
             if routePermissionUnavailable {
-                Text("Workout route location permission was unavailable. Map fallback is enabled for unresolved workouts.")
+                Text("Workout location access is unavailable. Choose unmatched gyms on the map.")
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Colors.warning)
             }
@@ -340,7 +329,7 @@ struct GymBulkAssignView: View {
                     .overlay(Theme.Colors.border)
                     .padding(.vertical, Theme.Spacing.xs)
 
-                Text("\(mapFallbackCandidates.count) workouts need map confirmation")
+                Text("\(mapFallbackCandidates.count) workout\(mapFallbackCandidates.count == 1 ? " needs" : "s need") map confirmation")
                     .font(Theme.Typography.captionBold)
                     .foregroundStyle(Theme.Colors.textSecondary)
 
@@ -351,7 +340,7 @@ struct GymBulkAssignView: View {
                 }
 
                 if mapFallbackCandidates.count > 6 {
-                    Text("Showing 6 most recent. Resolve some to reveal the rest.")
+                    Text("Showing 6 of \(mapFallbackCandidates.count).")
                         .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.Colors.textTertiary)
                 }
@@ -382,10 +371,8 @@ struct GymBulkAssignView: View {
 
                 Spacer()
 
-                Label("Pick on Map", systemImage: "map")
+                Label("Pick on map", systemImage: "map")
                     .font(Theme.Typography.captionBold)
-                    .textCase(.uppercase)
-                    .tracking(0.8)
                     .foregroundStyle(Theme.Colors.accent)
             }
             .padding(Theme.Spacing.md)
@@ -492,7 +479,7 @@ struct GymBulkAssignView: View {
         guard !targets.isEmpty else { return }
 
         guard healthManager.isHealthKitAvailable() else {
-            autoTagErrorMessage = "HealthKit isn’t available on this device."
+            autoTagErrorMessage = "Apple Health is unavailable on this device."
             return
         }
 

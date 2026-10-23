@@ -18,15 +18,17 @@ struct ExportSelectionButton: View {
                         Text(summary)
                             .font(Theme.Typography.captionBold)
                             .foregroundStyle(Theme.Colors.textPrimary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
 
-                    Spacer()
+                    Spacer(minLength: Theme.Spacing.xs)
 
                     Image(systemName: "chevron.right")
                         .font(Theme.Typography.captionStrong)
                         .foregroundStyle(Theme.Colors.textTertiary)
                 }
                 .padding(Theme.Spacing.md)
+                .frame(minHeight: Theme.Layout.minimumTapTarget)
                 .background(Theme.Colors.elevated)
                 .overlay(
                     RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
@@ -51,33 +53,50 @@ struct ExportSelectionButton: View {
 }
 
 struct ExportSelectionToolbar: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let selectedCount: Int
     let totalCount: Int
     let onSelectAll: () -> Void
     let onClear: () -> Void
 
     var body: some View {
-        HStack(spacing: Theme.Spacing.md) {
-            Text("\(selectedCount) selected")
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: Theme.Spacing.xs))
+            : AnyLayout(HStackLayout(spacing: Theme.Spacing.sm))
+
+        layout {
+            Text("\(selectedCount) of \(totalCount) selected")
                 .font(Theme.Typography.captionBold)
                 .foregroundStyle(Theme.Colors.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
 
-            Spacer()
+            let actionsLayout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 0))
+                : AnyLayout(HStackLayout(spacing: Theme.Spacing.md))
+            actionsLayout {
+                Button(action: onSelectAll) {
+                    Text("Select all")
+                        .frame(minWidth: Theme.Layout.minimumTapTarget, minHeight: Theme.Layout.minimumTapTarget)
+                        .contentShape(Rectangle())
+                }
+                .foregroundStyle(Theme.Colors.accent)
+                .disabled(totalCount == 0 || selectedCount == totalCount)
 
-            Button("Select All", action: onSelectAll)
-                .font(Theme.Typography.captionBold)
-                .foregroundStyle(totalCount == 0 ? Theme.Colors.textTertiary : Theme.Colors.accent)
-                .disabled(totalCount == 0)
-                .buttonStyle(.plain)
-
-            Button("Clear", action: onClear)
-                .font(Theme.Typography.captionBold)
-                .foregroundStyle(selectedCount == 0 ? Theme.Colors.textTertiary : Theme.Colors.textSecondary)
+                Button(action: onClear) {
+                    Text("Deselect all")
+                        .frame(minWidth: Theme.Layout.minimumTapTarget, minHeight: Theme.Layout.minimumTapTarget)
+                        .contentShape(Rectangle())
+                }
+                .foregroundStyle(Theme.Colors.textSecondary)
                 .disabled(selectedCount == 0)
-                .buttonStyle(.plain)
+            }
+            .font(Theme.Typography.captionBold)
+            .buttonStyle(.plain)
+            .fixedSize(horizontal: !dynamicTypeSize.isAccessibilitySize, vertical: false)
         }
         .padding(.horizontal, Theme.Spacing.md)
-        .padding(.vertical, Theme.Spacing.sm)
+        .padding(.vertical, Theme.Spacing.xs)
         .softCard(elevation: 1)
     }
 }
@@ -113,10 +132,11 @@ struct ExportSelectableRow<Content: View>: View {
             }
             .padding(.horizontal, Theme.Spacing.md)
             .padding(.vertical, Theme.Spacing.sm)
-            .background(Theme.Colors.surface)
+            .frame(minHeight: Theme.Layout.minimumTapTarget)
+            .background(isSelected ? Theme.Colors.accent.opacity(0.07) : Theme.Colors.surface)
             .overlay(
                 RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
-                    .strokeBorder(Theme.Colors.border.opacity(0.4), lineWidth: 1)
+                    .strokeBorder(isSelected ? Theme.Colors.accent.opacity(0.4) : Theme.Colors.border.opacity(0.4), lineWidth: 1)
             )
             .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large))
         }
@@ -124,7 +144,7 @@ struct ExportSelectableRow<Content: View>: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityValue(isSelected ? "Selected" : "Not selected")
-        .accessibilityHint("Double-tap to toggle selection")
+        .accessibilityHint("Toggles selection")
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 }
@@ -133,7 +153,6 @@ struct ExportPrimaryButton: View {
     let title: String
     let isRunning: Bool
     let isEnabled: Bool
-    var tint: Color = Theme.Colors.accent
     let action: () -> Void
 
     var body: some View {
@@ -141,22 +160,22 @@ struct ExportPrimaryButton: View {
             HStack(spacing: Theme.Spacing.sm) {
                 if isRunning {
                     ProgressView()
-                        .tint(.white)
+                        .tint(Theme.Colors.onAccent)
                 } else {
                     Image(systemName: "arrow.up.doc.fill")
                 }
 
                 Text(isRunning ? "Exporting…" : title)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .font(Theme.Typography.headline)
-            .frame(maxWidth: .infinity)
-            .padding()
-            .background(isEnabled ? tint : Theme.Colors.surface)
-            .foregroundStyle(isEnabled ? Color.white : Theme.Colors.textTertiary)
-            .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large))
+            .padding(.vertical, Theme.Spacing.sm)
+            .frame(maxWidth: .infinity, minHeight: Theme.Layout.primaryControlHeight)
         }
-        .buttonStyle(.plain)
-        .disabled(!isEnabled)
+        .buttonStyle(BrandPrimaryButtonStyle())
+        .disabled(!isEnabled || isRunning)
+        .accessibilityLabel(isRunning ? "Exporting" : title)
     }
 }
 
@@ -177,15 +196,15 @@ struct ExportModeChipPicker<Value: Hashable>: View {
     var tint: Color = Theme.Colors.accent
 
     var body: some View {
-        VStack(spacing: Theme.Spacing.sm) {
-            ForEach(options) { option in
-                row(for: option)
+        VStack(spacing: 0) {
+            ForEach(Array(options.enumerated()), id: \.element.id) { index, option in
+                row(for: option, showsRule: index > 0)
             }
         }
     }
 
     @ViewBuilder
-    private func row(for option: ExportModeOption<Value>) -> some View {
+    private func row(for option: ExportModeOption<Value>, showsRule: Bool) -> some View {
         let isSelected = selection == option.value
 
         Button {
@@ -194,44 +213,25 @@ struct ExportModeChipPicker<Value: Hashable>: View {
                 Haptics.toggle()
             }
         } label: {
-            HStack(spacing: Theme.Spacing.md) {
-                Image(systemName: option.systemImage)
-                    .font(Theme.Typography.headline)
-                    .foregroundStyle(isSelected ? tint : Theme.Colors.textTertiary)
-                    .frame(width: 30, height: 30)
-                    .background(
-                        Circle()
-                            .fill((isSelected ? tint : Theme.Colors.textTertiary).opacity(0.12))
-                    )
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(option.title)
-                        .font(Theme.Typography.bodyBold)
-                        .foregroundStyle(Theme.Colors.textPrimary)
-                    Text(option.subtitle)
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                        .multilineTextAlignment(.leading)
-                }
-
-                Spacer(minLength: 0)
-
+            HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.md) {
                 Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
                     .font(Theme.Typography.title4)
                     .foregroundStyle(isSelected ? tint : Theme.Colors.textTertiary)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(option.title)
+                        .font(isSelected ? Theme.Typography.headline : Theme.Typography.body)
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                    Text(option.subtitle)
+                        .font(Theme.Typography.subheadline)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
             }
-            .padding(Theme.Spacing.md)
-            .background(
-                RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
-                    .fill(isSelected ? tint.opacity(0.08) : Theme.Colors.surfaceRaised)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
-                    .strokeBorder(
-                        isSelected ? tint.opacity(0.4) : Theme.Colors.border.opacity(0.4),
-                        lineWidth: isSelected ? 1.5 : 1
-                    )
-            )
+            .ledgerRow(showsRule: showsRule, verticalPadding: Theme.Spacing.sm)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -246,11 +246,13 @@ struct ExportModeChipPicker<Value: Hashable>: View {
 struct ExportFieldGroup<Content: View>: View {
     let label: String
     var trailing: String?
+    var help: String?
     let content: Content
 
-    init(label: String, trailing: String? = nil, @ViewBuilder content: () -> Content) {
+    init(label: String, trailing: String? = nil, help: String? = nil, @ViewBuilder content: () -> Content) {
         self.label = label
         self.trailing = trailing
+        self.help = help
         self.content = content()
     }
 
@@ -259,6 +261,9 @@ struct ExportFieldGroup<Content: View>: View {
             HStack(alignment: .firstTextBaseline) {
                 Text(label)
                     .sectionHeaderStyle()
+                if let help {
+                    AppHelpButton(title: label, message: help)
+                }
 
                 Spacer()
 
@@ -277,6 +282,7 @@ struct ExportFieldGroup<Content: View>: View {
 // MARK: - Last Export Footer
 
 struct ExportLastFileFooter: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let fileName: String?
     let statusMessage: String?
     let url: URL?
@@ -285,7 +291,10 @@ struct ExportLastFileFooter: View {
     var body: some View {
         if let fileName, let url {
             VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                HStack(spacing: Theme.Spacing.sm) {
+                let layout = dynamicTypeSize.isAccessibilitySize
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: Theme.Spacing.sm))
+                    : AnyLayout(HStackLayout(spacing: Theme.Spacing.sm))
+                layout {
                     Image(systemName: "checkmark.seal.fill")
                         .font(Theme.Typography.subheadlineStrong)
                         .foregroundStyle(Theme.Colors.success)
@@ -294,16 +303,14 @@ struct ExportLastFileFooter: View {
                         Text("Last export")
                             .font(Theme.Typography.caption)
                             .foregroundStyle(Theme.Colors.textTertiary)
-                            .textCase(.uppercase)
-                            .tracking(0.8)
                         Text(fileName)
                             .font(Theme.Typography.captionBold)
                             .foregroundStyle(Theme.Colors.textPrimary)
-                            .lineLimit(1)
+                            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                             .truncationMode(.middle)
                     }
 
-                    Spacer(minLength: 0)
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
                     Button {
                         onShare(url)
@@ -316,6 +323,7 @@ struct ExportLastFileFooter: View {
                         .foregroundStyle(Theme.Colors.accent)
                         .padding(.horizontal, Theme.Spacing.md)
                         .padding(.vertical, Theme.Spacing.sm)
+                        .frame(minHeight: Theme.Layout.minimumTapTarget)
                         .background(
                             Capsule()
                                 .fill(Theme.Colors.accent.opacity(0.12))
@@ -375,5 +383,6 @@ struct ExportInventoryRow: View {
                 .monospacedDigit()
         }
         .padding(.vertical, 6)
+        .accessibilityElement(children: .combine)
     }
 }

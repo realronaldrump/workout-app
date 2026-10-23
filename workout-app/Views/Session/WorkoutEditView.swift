@@ -26,7 +26,7 @@ struct WorkoutEditView: View {
                     ScrollView(showsIndicators: false) {
                         LazyVStack(alignment: .leading, spacing: Theme.Spacing.xl) {
                             VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-                                Text("Workout Name")
+                                Text("Workout name")
                                     .font(Theme.Typography.caption)
                                     .foregroundColor(Theme.Colors.textTertiary)
 
@@ -49,7 +49,6 @@ struct WorkoutEditView: View {
                                 Text("Exercises")
                                     .font(Theme.Typography.sectionHeader)
                                     .foregroundColor(Theme.Colors.textPrimary)
-                                    .tracking(1.0)
 
                                 LazyVStack(spacing: Theme.Spacing.md) {
                                     ForEach(draft.exercises) { exercise in
@@ -90,7 +89,7 @@ struct WorkoutEditView: View {
                             } label: {
                                 HStack {
                                     Spacer()
-                                    Text("Delete Workout")
+                                    Text("Delete workout")
                                         .font(Theme.Typography.bodyBold)
                                     Spacer()
                                 }
@@ -108,13 +107,13 @@ struct WorkoutEditView: View {
                     EmptyStateCard(
                         icon: "exclamationmark.triangle.fill",
                         tint: Theme.Colors.error,
-                        title: "Workout Not Found",
+                        title: "Workout not found",
                         message: "This workout may have been deleted."
                     )
                     .padding(.horizontal, Theme.Spacing.xl)
                 }
             }
-            .navigationTitle("Edit Workout")
+            .navigationTitle("Edit workout")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 AppToolbarItem(placement: .cancellationAction) {
@@ -130,7 +129,7 @@ struct WorkoutEditView: View {
             .safeAreaInset(edge: .bottom) {
                 if draft != nil {
                     AppPrimaryButton(
-                        title: isSaving ? "Saving…" : "Save Changes",
+                        title: isSaving ? "Saving…" : "Save changes",
                         systemImage: "checkmark",
                         isEnabled: !isSaving && hasUnsavedChanges
                     ) {
@@ -142,20 +141,20 @@ struct WorkoutEditView: View {
                     .background(.bar)
                 }
             }
-            .alert("Delete Workout?", isPresented: $showingDeleteAlert) {
+            .alert("Delete workout?", isPresented: $showingDeleteAlert) {
                 Button("Delete", role: .destructive) { deleteWorkout() }
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text("This permanently deletes the logged workout.")
             }
-            .alert("Discard Changes?", isPresented: $showingDiscardChangesAlert) {
-                Button("Keep Editing", role: .cancel) {}
+            .alert("Discard changes?", isPresented: $showingDiscardChangesAlert) {
+                Button("Keep editing", role: .cancel) {}
                 Button("Discard", role: .destructive) { dismiss() }
             } message: {
                 Text("Your edits to this workout haven't been saved.")
             }
             .alert(
-                "Remove Exercise?",
+                "Remove exercise?",
                 isPresented: Binding(
                     get: { exercisePendingRemoval != nil },
                     set: { if !$0 { exercisePendingRemoval = nil } }
@@ -261,7 +260,7 @@ struct WorkoutEditView: View {
 
         let setCount = workout.exercises.flatMap(\.sets).count
         if setCount == 0 {
-            errorMessage = "Workout must contain at least one set. To remove it entirely, use Delete Workout."
+            errorMessage = "Add at least one set, or delete the workout."
             return
         }
 
@@ -372,7 +371,7 @@ private struct LoggedExerciseEditorCard: View {
                     onAddSet()
                     Haptics.selection()
                 } label: {
-                    Label("Add Set", systemImage: "plus")
+                    Label("Add set", systemImage: "plus")
                         .font(Theme.Typography.captionBold)
                         .frame(minHeight: Theme.Layout.minimumTapTarget)
                 }

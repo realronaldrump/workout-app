@@ -10,7 +10,8 @@ struct AppToggleStyle: ToggleStyle {
                 .foregroundStyle(Theme.Colors.textPrimary)
         }
         .toggleStyle(.switch)
-        .tint(Theme.Colors.accent)
+        // Green reads as "on" in both appearances; ink would turn chalk-white in dark mode.
+        .tint(Theme.Colors.success)
         .padding(.horizontal, Theme.Spacing.lg)
         .padding(.vertical, Theme.Spacing.md)
         .softCard(elevation: 0)

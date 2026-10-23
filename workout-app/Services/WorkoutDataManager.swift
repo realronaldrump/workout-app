@@ -22,11 +22,18 @@ class WorkoutDataManager: ObservableObject {
     @Published var workouts: [Workout] = [] {
         didSet { datasetRevision &+= 1 }
     }
-    @Published private(set) var importedWorkouts: [Workout] = []
-    @Published private(set) var loggedWorkouts: [Workout] = []
+    @Published private(set) var importedWorkouts: [Workout] = [] {
+        didSet { importedRevision &+= 1 }
+    }
+    @Published private(set) var loggedWorkouts: [Workout] = [] {
+        didSet { loggedRevision &+= 1 }
+    }
     @Published private(set) var loggedWorkoutIds: Set<UUID> = []
     @Published var isLoading = false
     @Published var error: String?
+    /// True once the saved import has been read this launch. The in-app log loads first,
+    /// so screens wait on this rather than briefly showing a partial history.
+    @Published private(set) var hasLoadedImportedHistory = false
     private(set) var datasetRevision: UInt64 = 0
 
     private static let intentionalRestDaysKey = "intentionalRestDays"
@@ -43,6 +50,10 @@ class WorkoutDataManager: ObservableObject {
     private var allExerciseNamesCache: [String] = []
     private var recentExerciseNamesCache: [String] = []
     private var importedWorkoutRequestID: UInt64 = 0
+    /// Bumped whenever either source is replaced, so an off-main rebuild can tell the
+    /// other source moved while it ran.
+    private var importedRevision: UInt64 = 0
+    private var loggedRevision: UInt64 = 0
 
     nonisolated deinit {}
 
@@ -84,6 +95,7 @@ class WorkoutDataManager: ObservableObject {
 
         let autoLinkResult = await applyImportedWorkouts(processedWorkouts, repairSideRelationships: true)
         isLoading = false
+        hasLoadedImportedHistory = true
         identityStore.merge(newIdentityEntries)
 
         do {
@@ -108,19 +120,39 @@ class WorkoutDataManager: ObservableObject {
     }
 
     func setLoggedWorkoutsOffMain(_ logged: [LoggedWorkout]) async {
-        let importedSnapshot = importedWorkouts
         let loggedIds = Set(logged.map(\.id))
-        let resolver = ExerciseRelationshipManager.shared.resolverSnapshot()
-        let state = await Task.detached(priority: .userInitiated) {
-            let mapped = logged.map(Self.mapLoggedWorkoutToAnalyticsWorkout)
-            return Self.makeDerivedWorkoutState(
-                importedWorkouts: importedSnapshot,
-                loggedWorkouts: mapped,
-                resolver: resolver
-            )
+        let mapped = await Task.detached(priority: .userInitiated) {
+            logged.map(Self.mapLoggedWorkoutToAnalyticsWorkout)
         }.value
+        let state = await buildDerivedState(imported: nil, logged: mapped)
         loggedWorkoutIds = loggedIds
         applyDerivedState(state)
+    }
+
+    /// Builds derived state off the main actor from the given source, taking the other
+    /// source as it stands. If that other source is replaced while the build runs, the
+    /// build starts over, so a slow build never writes back a stale copy of it (which
+    /// briefly left screens with only in-app workouts after launch).
+    private func buildDerivedState(imported: [Workout]?, logged: [Workout]?) async -> DerivedWorkoutState {
+        while true {
+            let importedRevisionAtStart = importedRevision
+            let loggedRevisionAtStart = loggedRevision
+            let importedSnapshot = imported ?? importedWorkouts
+            let loggedSnapshot = logged ?? loggedWorkouts
+            let resolver = ExerciseRelationshipManager.shared.resolverSnapshot()
+            let state = await Task.detached(priority: .userInitiated) {
+                Self.makeDerivedWorkoutState(
+                    importedWorkouts: importedSnapshot,
+                    loggedWorkouts: loggedSnapshot,
+                    resolver: resolver
+                )
+            }.value
+            let importedMoved = imported == nil && importedRevision != importedRevisionAtStart
+            let loggedMoved = logged == nil && loggedRevision != loggedRevisionAtStart
+            if !importedMoved && !loggedMoved {
+                return state
+            }
+        }
     }
 
     /// Centralized method for loading workout data from iCloud storage.
@@ -131,6 +163,13 @@ class WorkoutDataManager: ObservableObject {
         healthIdentitySnapshot: [WorkoutHealthIdentitySnapshot]
     ) async {
         let requestID = beginImportedWorkoutRequest()
+        // Any exit of the newest request leaves the history as complete as it will get.
+        // A superseded request returns early and must not end the wait.
+        defer {
+            if isCurrentImportedWorkoutRequest(requestID) {
+                hasLoadedImportedHistory = true
+            }
+        }
         let searchDirectories = await iCloudManager.storageSearchDirectories()
         isLoading = true
         error = nil
@@ -167,6 +206,11 @@ class WorkoutDataManager: ObservableObject {
                 isLoading = false
                 return
             }
+
+            // Keep the last durable history visible while validating a newer import.
+            // An unreadable replacement file must not leave the screen empty.
+            guard isCurrentImportedWorkoutRequest(requestID) else { return }
+            _ = await applyImportedWorkouts(persistedWorkouts, repairSideRelationships: true)
         } catch {
             print("Failed to load cached imported workouts: \(error)")
         }
@@ -188,14 +232,9 @@ class WorkoutDataManager: ObservableObject {
         case .success(let sets):
             guard !sets.isEmpty else {
                 guard isCurrentImportedWorkoutRequest(requestID) else { return }
-                _ = await applyImportedWorkouts([], repairSideRelationships: false)
+                // Missing or unsupported source files are not a request to delete history.
+                // Keep the persisted copy until a valid import succeeds or the user clears it.
                 isLoading = false
-                clearImportSourceSignature()
-                do {
-                    try database.clearImportedWorkouts()
-                } catch {
-                    print("Failed to clear imported workouts: \(error)")
-                }
                 return
             }
             _ = await processImportedWorkoutSets(
@@ -236,14 +275,9 @@ class WorkoutDataManager: ObservableObject {
         let strongImports = directories.flatMap {
             iCloudDocumentManager.listStrongImportFiles(in: $0)
         }
-        if let latestStrongImport = listNewestFirst(strongImports).first {
-            return latestStrongImport
-        }
-
-        let workoutFiles = directories.flatMap {
-            iCloudDocumentManager.listWorkoutFiles(in: $0)
-        }
-        return listNewestFirst(workoutFiles).first
+        // Import files use this prefix when accepted by the import wizard.
+        // Generated CSV reports share the folder, but must never become import sources.
+        return listNewestFirst(strongImports).first
     }
 
     nonisolated static func importSourceSignature(for fileURL: URL?) -> String? {
@@ -296,15 +330,11 @@ class WorkoutDataManager: ObservableObject {
                 observedExerciseNames: Self.exerciseNames(in: imported + loggedSnapshot)
             )
             : .empty
-        let resolver = ExerciseRelationshipManager.shared.resolverSnapshot()
-        let state = await Task.detached(priority: .userInitiated) {
-            Self.makeDerivedWorkoutState(
-                importedWorkouts: imported,
-                loggedWorkouts: loggedSnapshot,
-                resolver: resolver
-            )
-        }.value
+        let state = await buildDerivedState(imported: imported, logged: nil)
         applyDerivedState(state)
+        if !imported.isEmpty {
+            hasLoadedImportedHistory = true
+        }
         return autoLinkResult
     }
 
@@ -1005,43 +1035,7 @@ extension WorkoutDataManager {
 
 private extension WorkoutDataManager {
     nonisolated static func mapLoggedWorkoutToAnalyticsWorkout(_ logged: LoggedWorkout) -> Workout {
-        let duration = formatDuration(start: logged.startedAt, end: logged.endedAt)
-
-        let exercises: [Exercise] = logged.exercises.map { loggedExercise in
-            let sets: [WorkoutSet] = loggedExercise.sets.map { loggedSet in
-                WorkoutSet(
-                    date: logged.startedAt,
-                    workoutName: logged.name,
-                    duration: duration,
-                    exerciseName: loggedExercise.name,
-                    setOrder: loggedSet.order,
-                    weight: loggedSet.weight,
-                    reps: loggedSet.reps,
-                    distance: loggedSet.distance ?? 0,
-                    seconds: loggedSet.seconds ?? 0
-                )
-            }
-            return Exercise(id: loggedExercise.id, name: loggedExercise.name, sets: sets.sorted { $0.setOrder < $1.setOrder })
-        }
-
-        return Workout(
-            id: logged.id,
-            date: logged.startedAt,
-            name: logged.name,
-            duration: duration,
-            exercises: exercises
-        )
-    }
-
-    nonisolated static func formatDuration(start: Date, end: Date) -> String {
-        let seconds = max(0, end.timeIntervalSince(start))
-        let minutes = Int(ceil(seconds / 60.0))
-        if minutes >= 60 {
-            let hours = minutes / 60
-            let minutesRemainder = minutes % 60
-            return minutesRemainder == 0 ? "\(hours)h" : "\(hours)h \(minutesRemainder)m"
-        }
-        return "\(minutes)m"
+        logged.analyticsWorkout
     }
 
 }

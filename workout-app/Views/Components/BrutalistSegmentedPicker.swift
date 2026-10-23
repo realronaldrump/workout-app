@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// A compact app-themed segmented control for dense chart and filter choices.
+/// A compact segmented control for dense chart and filter choices: an ink capsule
+/// slides over a neutral track, matching the range picker.
 struct AppSegmentedPicker<SelectionValue: Hashable>: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let title: String
@@ -48,21 +49,40 @@ struct AppSegmentedPicker<SelectionValue: Hashable>: View {
             .accessibilityValue(selectedLabel)
             .onChange(of: selection) { _, _ in Haptics.toggle() }
         } else {
-            Picker(title, selection: $selection) {
+            HStack(spacing: 2) {
                 ForEach(options.indices, id: \.self) { index in
                     let option = options[index]
-                    Text(option.label)
-                        .tag(option.value)
+                    let isSelected = option.value == selection
+                    Button {
+                        guard !isSelected else { return }
+                        selection = option.value
+                        Haptics.toggle()
+                    } label: {
+                        Text(option.label)
+                            .font(Theme.Typography.subheadlineStrong)
+                            .foregroundStyle(isSelected ? Theme.Colors.onAccent : Theme.Colors.textSecondary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                            .padding(.horizontal, Theme.Spacing.sm)
+                            .frame(maxWidth: .infinity, minHeight: 38)
+                            .background {
+                                if isSelected {
+                                    Capsule(style: .continuous).fill(Theme.Colors.accent)
+                                }
+                            }
+                            .contentShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
                 }
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
+            .padding(3)
+            .background(Capsule(style: .continuous).fill(Theme.Colors.panelStrong))
             .frame(minHeight: Theme.Layout.minimumTapTarget)
             .frame(maxWidth: maxControlWidth, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .onChange(of: selection) { _, _ in
-                Haptics.toggle()
-            }
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(title)
         }
     }
 

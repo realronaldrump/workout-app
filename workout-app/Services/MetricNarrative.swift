@@ -59,7 +59,7 @@ enum MetricNarrative {
             if fromTop <= 25 { return "top \(max(fromTop, 1))% of \(metric.dailyNoun)s" }
             if fromBottom <= 25 { return "bottom \(max(fromBottom, 1))% of \(metric.dailyNoun)s" }
         }
-        return "middle of your usual range"
+        return "middle half of \(metric.dailyNoun)s"
     }
 
     // MARK: - Insight list
@@ -110,12 +110,11 @@ enum MetricNarrative {
             verdict = "ahead of"
         }
 
-        let elapsed = Int((analysis.dayFractionElapsed * 100).rounded())
         return MetricInsight(
             id: "pace",
             icon: "timer",
-            title: "On pace for \(metric.formatWithUnit(projected))",
-            detail: "\(elapsed)% through the day and \(verdict) your typical \(metric.formatWithUnit(median)).",
+            title: "Estimated today: \(metric.formatWithUnit(projected))",
+            detail: "\(verdict.prefix(1).uppercased())\(verdict.dropFirst()) your usual \(metric.formatWithUnit(median)).",
             tone: tone
         )
     }
@@ -142,9 +141,8 @@ enum MetricNarrative {
         return MetricInsight(
             id: "rhythm",
             icon: "calendar.day.timeline.left",
-            title: "\(strongName)s are your strongest",
-            detail: "You average \(metric.formatWithUnit(strongest.average)) on \(strongName)s — "
-                + "\(Int(gap.rounded()))% \(comparison) than \(weakName)s at \(metric.formatWithUnit(weakest.average)).",
+            title: "\(strongName)s average \(metric.formatWithUnit(strongest.average))",
+            detail: "\(Int(gap.rounded()))% \(comparison) than \(weakName)s (\(metric.formatWithUnit(weakest.average))).",
             tone: .neutral
         )
     }
@@ -162,9 +160,8 @@ enum MetricNarrative {
             return MetricInsight(
                 id: "streak",
                 icon: "flame.fill",
-                title: "\(favourable) \(noun)s running \(side) your midpoint",
-                detail: "Each of the last \(favourable) \(noun)s came in \(side) "
-                    + "\(metric.formatWithUnit(median)), the median for this range.",
+                title: "\(favourable) \(noun)s \(side) usual",
+                detail: "Usual: \(metric.formatWithUnit(median)).",
                 tone: .positive
             )
         }
@@ -174,9 +171,8 @@ enum MetricNarrative {
             return MetricInsight(
                 id: "streak",
                 icon: "arrow.down.right.circle",
-                title: "\(unfavourable) \(noun)s under your midpoint",
-                detail: "The last \(unfavourable) \(noun)s all landed \(side) "
-                    + "\(metric.formatWithUnit(median)).",
+                title: "\(unfavourable) \(noun)s \(side) usual",
+                detail: "Usual: \(metric.formatWithUnit(median)).",
                 tone: .caution
             )
         }
@@ -211,7 +207,7 @@ enum MetricNarrative {
             id: "peak",
             icon: "star.fill",
             title: "\(metric.formatWithUnit(best.value)) was your \(superlative)",
-            detail: "Set \(whenText). That is your \(superlative) \(metric.dailyNoun) in this range.",
+            detail: "Recorded \(whenText).",
             tone: daysAgo <= 6 ? .positive : .neutral
         )
     }
@@ -232,7 +228,7 @@ enum MetricNarrative {
         return MetricInsight(
             id: "momentum",
             icon: rising ? "chart.line.uptrend.xyaxis" : "chart.line.downtrend.xyaxis",
-            title: "This week is \(rising ? "up" : "down") \(Int(abs(momentum.percentChange).rounded()))%",
+            title: "Last 7 days: \(rising ? "up" : "down") \(Int(abs(momentum.percentChange).rounded()))%",
             detail: "\(metric.formatWithUnit(recent)) a \(metric.dailyNoun) over the last 7, "
                 + "against \(metric.formatWithUnit(prior)) the 7 before.",
             tone: tone
@@ -252,8 +248,8 @@ enum MetricNarrative {
             return MetricInsight(
                 id: "spread",
                 icon: "equal.circle.fill",
-                title: "Very repeatable",
-                detail: "Half your \(metric.dailyNoun)s land between \(low) and \(high) — a tight band.",
+                title: "Steady day to day",
+                detail: "Half your \(metric.dailyNoun)s land between \(low) and \(high).",
                 tone: .positive
             )
         }
@@ -279,8 +275,8 @@ enum MetricNarrative {
             id: "coverage",
             icon: "exclamationmark.circle",
             title: "\(recorded) of \(analysis.calendarDayCount) days recorded",
-            detail: "Gaps in the data will pull the averages around. "
-                + "Check that the source device synced on the missing days.",
+            detail: "Averages skip days with no reading. "
+                + "Check that the source device synced on those days.",
             tone: .caution
         )
     }

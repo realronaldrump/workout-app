@@ -185,7 +185,7 @@ struct ExerciseListView: View {
 
     private var destinationContent: some View {
         directoryContent
-            .navigationTitle("All Exercises")
+            .navigationTitle("Exercises")
             .navigationBarTitleDisplayMode(.inline)
             .accessibilityIdentifier("exercise-list")
     }
@@ -196,28 +196,29 @@ struct ExerciseListView: View {
 
             VStack(spacing: Theme.Spacing.sm) {
                 searchField
-                    .padding(.horizontal, Theme.Spacing.lg)
+                    .padding(.horizontal, Theme.Layout.screenGutter)
                     .padding(.top, Theme.Spacing.sm)
 
                 sortChips
-                    .padding(.horizontal, Theme.Spacing.lg)
+                    .padding(.horizontal, Theme.Layout.screenGutter)
 
                 ScrollView(showsIndicators: false) {
-                    LazyVStack(spacing: Theme.Spacing.sm) {
+                    LazyVStack(spacing: 0) {
                         if !cachedExercises.isEmpty {
                             Text(directorySummary)
-                                .font(Theme.Typography.caption)
+                                .font(Theme.Typography.subheadline)
                                 .foregroundStyle(Theme.Colors.textSecondary)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.horizontal, Theme.Spacing.xs)
                                 .padding(.top, Theme.Spacing.xs)
+                                .padding(.bottom, Theme.Spacing.sm)
                         }
 
                         exerciseRowsContent
                     }
-                    .padding(.horizontal, Theme.Spacing.lg)
+                    .padding(.horizontal, Theme.Layout.screenGutter)
                     .padding(.bottom, Theme.Spacing.xl)
                 }
+                .scrollDismissesKeyboard(.interactively)
             }
             .contentColumn()
         }
@@ -229,21 +230,35 @@ struct ExerciseListView: View {
             exerciseSectionLabel("Favorites", topPadding: Theme.Spacing.xs)
 
             ForEach(cachedFavoriteExerciseRows, id: \.name) { exercise in
-                exerciseRow(exercise, showsInlineFavoriteControl: true)
+                exerciseRow(exercise)
             }
 
             if !cachedNonFavoriteExerciseRows.isEmpty {
-                exerciseSectionLabel("All", topPadding: Theme.Spacing.md)
+                exerciseSectionLabel("Everything else", topPadding: Theme.Spacing.xl)
             }
         }
 
         if cachedExercises.isEmpty {
-            EmptyStateCard(
-                icon: "magnifyingglass",
-                tint: Theme.Colors.textTertiary,
-                title: "No Matches",
-                message: "Try a different exercise name."
-            )
+            VStack(spacing: Theme.Spacing.md) {
+                EmptyStateCard(
+                    title: searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        ? "No exercises yet" : "No matching exercises",
+                    message: searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        ? "Log a workout and every exercise in it shows up here with its records."
+                        : "Try another name, or clear the search."
+                )
+
+                if searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    AppPrimaryButton(title: "Start workout") {
+                        quickStartExercise = nil
+                        showingQuickStart = true
+                    }
+                } else {
+                    AppPillButton(title: "Clear search", systemImage: "xmark", variant: .neutral) {
+                        searchText = ""
+                    }
+                }
+            }
             .padding(.top, Theme.Spacing.xl)
         } else {
             ForEach(cachedNonFavoriteExerciseRows, id: \.name) { exercise in
@@ -257,10 +272,12 @@ struct ExerciseListView: View {
         topPadding: CGFloat
     ) -> some View {
         Text(title)
-            .sectionHeaderStyle()
+            .font(Theme.Typography.title3)
+            .foregroundStyle(Theme.Colors.textPrimary)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, Theme.Spacing.xs)
             .padding(.top, topPadding)
+            .padding(.bottom, Theme.Spacing.xs)
+            .accessibilityAddTraits(.isHeader)
     }
 
     private func exerciseMetricDestination(
@@ -283,16 +300,13 @@ struct ExerciseListView: View {
 
     private var sortChips: some View {
         HStack(spacing: Theme.Spacing.sm) {
-            Image(systemName: "arrow.up.arrow.down")
-                .font(Theme.Typography.captionBold)
-                .foregroundStyle(Theme.Colors.textTertiary)
-                .accessibilityHidden(true)
-
             TimeRangePillPicker(
                 options: SortOrder.allCases,
                 selected: $sortOrder,
                 label: { $0.rawValue },
-                selectionHint: "Double-tap to sort exercises this way"
+                selectionHint: "Sorts exercises this way",
+                controlTitle: "Sort exercises",
+                controlIcon: "arrow.up.arrow.down"
             )
         }
         .accessibilityElement(children: .contain)
@@ -303,7 +317,7 @@ struct ExerciseListView: View {
         let total = SharedFormatters.count(cachedExercises.count, "exercise")
         let favorites = cachedFavoriteRollupNames.count
         guard favorites > 0 else { return total }
-        return "\(total) · \(favorites) favorite\(favorites == 1 ? "" : "s")"
+        return "\(total), \(favorites) favorite\(favorites == 1 ? "" : "s")"
     }
 
     private var searchField: some View {
@@ -317,7 +331,7 @@ struct ExerciseListView: View {
                 .disableAutocorrection(true)
                 .font(Theme.Typography.callout)
                 .foregroundStyle(Theme.Colors.textPrimary)
-                .tint(Theme.Colors.accent)
+                .tint(Theme.Colors.textPrimary)
 
             if !searchText.isEmpty {
                 Button {
@@ -334,13 +348,12 @@ struct ExerciseListView: View {
             }
         }
         .padding(.horizontal, Theme.Spacing.lg)
-        .padding(.vertical, Theme.Spacing.md)
-        .glassBackground(cornerRadius: Theme.CornerRadius.xlarge, elevation: 1)
+        .frame(minHeight: 48)
+        .background(Capsule(style: .continuous).fill(Theme.Colors.panelStrong))
     }
 
     private func exerciseRow(
-        _ exercise: (name: String, stats: ExerciseStats),
-        showsInlineFavoriteControl: Bool = false
+        _ exercise: (name: String, stats: ExerciseStats)
     ) -> some View {
         HStack(spacing: 0) {
             ExerciseRowView(
@@ -364,34 +377,60 @@ struct ExerciseListView: View {
                 }
             )
 
-            if showsInlineFavoriteControl {
+            Menu {
                 Button {
                     toggleFavorite(exercise.name)
                 } label: {
-                    Image(systemName: "star.fill")
-                        .font(Theme.Typography.callout)
-                        .foregroundStyle(Theme.Colors.warning)
-                        .frame(width: 44, height: 44)
-                        .contentShape(Rectangle())
+                    Label(
+                        isFavoriteRollup(exercise.name) ? "Remove from favorites" : "Add to favorites",
+                        systemImage: isFavoriteRollup(exercise.name) ? "star.slash" : "star"
+                    )
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Remove from favorites")
+                Button("Start a workout with this", systemImage: "play.fill") {
+                    quickStartExercise = exercise.name
+                    showingQuickStart = true
+                }
+                Button("Sessions", systemImage: "calendar") {
+                    selectedExerciseMetric = ExerciseDirectoryMetricSelection(
+                        exerciseName: exercise.name,
+                        metric: .sessions,
+                        focus: .overview
+                    )
+                }
+                if supportsSessionVolume(exerciseName: exercise.name, stats: exercise.stats) {
+                    Button("Volume per session", systemImage: "chart.bar") {
+                        selectedExerciseMetric = ExerciseDirectoryMetricSelection(
+                            exerciseName: exercise.name,
+                            metric: .sessionVolume,
+                            focus: .total
+                        )
+                    }
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(Theme.Typography.callout)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .frame(width: Theme.Layout.minimumTapTarget, height: Theme.Layout.minimumTapTarget)
+                    .contentShape(Rectangle())
             }
+            .accessibilityLabel("Actions for \(exercise.name)")
+            .accessibilityValue(isFavoriteRollup(exercise.name) ? "Favorite" : "")
+            .accessibilityHint("Start a workout, open its sessions, or change favorite status.")
         }
-        .softCard(elevation: 1)
+        .ledgerRow(verticalPadding: 0)
         .contextMenu {
             Button {
                 toggleFavorite(exercise.name)
             } label: {
                 Label(
-                    isFavoriteRollup(exercise.name) ? "Unfavorite" : "Favorite",
+                    isFavoriteRollup(exercise.name) ? "Remove from favorites" : "Add to favorites",
                     systemImage: isFavoriteRollup(exercise.name) ? "star.slash" : "star"
                 )
             }
-            Button("View History") {
+            Button("Exercise history") {
                 selectedExercise = ExerciseSelection(id: exercise.name)
             }
-            Button("Quick Start") {
+            Button("Start a workout with this") {
                 quickStartExercise = exercise.name
                 showingQuickStart = true
             }
@@ -427,6 +466,7 @@ struct ExerciseStats {
 }
 
 struct ExerciseRowView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let name: String
     let stats: ExerciseStats
     var showsCard: Bool = true
@@ -435,118 +475,67 @@ struct ExerciseRowView: View {
     let onOpen: () -> Void
     let onMetricTap: (ExerciseAnalysisMetric, ExerciseMetricFocus) -> Void
 
-    private let monogramSize: CGFloat = 42
-
     private var tint: Color {
-        primaryMuscle?.tint ?? Theme.Colors.accent
+        primaryMuscle?.tint ?? Theme.Colors.decorativeSubtle
     }
 
-    private var monogram: String {
-        let words = name
-            .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
-            .prefix(2)
-        let letters = words.compactMap(\.first).map { String($0) }.joined()
-        return letters.isEmpty ? "?" : letters.uppercased()
-    }
-
-    /// One line of identity under the name: the main muscle and, for loaded lifts,
-    /// the best weight on record.
+    /// One line of identity under the name: the main muscle, the best weight on
+    /// record for loaded lifts, and how long since it was last trained.
     private var detailLine: String? {
         var parts: [String] = []
         if let primaryMuscle {
             parts.append(primaryMuscle.displayName)
         }
         if stats.maxWeight > 0, !ExerciseLoad.isAssistedExercise(name) {
-            parts.append("Best \(ExerciseLoad.formatWeight(stats.maxWeight, exerciseName: name))")
+            parts.append("best \(ExerciseLoad.formatWeight(stats.maxWeight, exerciseName: name))")
         }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+        if let lastDate = stats.lastPerformed {
+            parts.append(relativeDateString(for: lastDate))
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: ", ")
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            Button(action: onOpen) {
-                HStack(spacing: Theme.Spacing.md) {
-                    Text(monogram)
-                        .font(Theme.Typography.subheadlineBold)
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-                        .frame(width: monogramSize, height: monogramSize)
-                        .background(
-                            RoundedRectangle(cornerRadius: monogramSize * 0.28, style: .continuous)
-                                .fill(
-                                    LinearGradient(
-                                        colors: [tint.opacity(0.75), tint],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                        )
-                        .accessibilityHidden(true)
+        Button(action: onOpen) {
+            HStack(spacing: Theme.Spacing.md) {
+                RoundedRectangle(cornerRadius: 2, style: .continuous)
+                    .fill(tint)
+                    .frame(width: 5, height: 34)
+                    .accessibilityHidden(true)
 
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(name)
-                            .font(Theme.Typography.bodyBold)
-                            .foregroundColor(Theme.Colors.textPrimary)
-                            .lineLimit(2)
-                            .multilineTextAlignment(.leading)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(name)
+                        .font(Theme.Typography.headline)
+                        .foregroundColor(Theme.Colors.textPrimary)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                        .multilineTextAlignment(.leading)
 
-                        if let detailLine {
-                            Text(detailLine)
-                                .font(Theme.Typography.caption)
-                                .foregroundColor(Theme.Colors.textSecondary)
-                                .lineLimit(1)
-                        }
+                    if let detailLine {
+                        Text(detailLine)
+                            .font(Theme.Typography.subheadline)
+                            .foregroundColor(Theme.Colors.textSecondary)
+                            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                     }
-
-                    Spacer(minLength: Theme.Spacing.sm)
-
-                    Image(systemName: "chevron.right")
-                        .font(Theme.Typography.captionBold)
-                        .foregroundColor(Theme.Colors.textTertiary)
-                        .accessibilityHidden(true)
                 }
-                .contentShape(.rect)
+
+                Spacer(minLength: Theme.Spacing.sm)
+
+                VStack(alignment: .trailing, spacing: 0) {
+                    Text("\(stats.frequency)")
+                        .font(Theme.Typography.numberSmall)
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                    Text(stats.frequency == 1 ? "session" : "sessions")
+                        .font(Theme.Typography.caption2)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                }
+                .accessibilityElement(children: .combine)
             }
-            .buttonStyle(PressableCardButtonStyle())
-            .accessibilityHint("Opens exercise details.")
-            .accessibilityIdentifier("exercise-row-\(name)")
-
-            HStack(spacing: Theme.Spacing.xs) {
-                ExerciseMetricPill(
-                    icon: "repeat",
-                    text: "\(stats.frequency)x",
-                    accessibilityLabel: SharedFormatters.count(stats.frequency, "session")
-                ) {
-                    onMetricTap(.sessions, .overview)
-                }
-                if supportsSessionVolume {
-                    ExerciseMetricPill(
-                        icon: "chart.bar.fill",
-                        text: SharedFormatters.volumeCompact(stats.totalVolume),
-                        accessibilityLabel: "\(SharedFormatters.volumeWithUnit(stats.totalVolume)) total volume"
-                    ) {
-                        onMetricTap(.sessionVolume, .total)
-                    }
-                }
-
-                if let lastDate = stats.lastPerformed {
-                    ExerciseMetricPill(
-                        icon: "clock",
-                        text: relativeDateString(for: lastDate),
-                        accessibilityLabel: "Last performed \(relativeDateString(for: lastDate))"
-                    ) {
-                        onMetricTap(.sessions, .overview)
-                    }
-                }
-            }
-            // Pills line up under the name rather than the monogram.
-            .padding(.leading, monogramSize + Theme.Spacing.md)
+            .padding(.vertical, Theme.Spacing.md)
+            .contentShape(.rect)
         }
-        .padding(.horizontal, Theme.Spacing.md)
-        .padding(.top, Theme.Spacing.md)
-        .padding(.bottom, Theme.Spacing.xs)
-        .modifier(ExerciseRowCardModifier(isEnabled: showsCard))
+        .buttonStyle(PressableCardButtonStyle())
+        .accessibilityHint("Opens exercise details.")
+        .accessibilityIdentifier("exercise-row-\(name)")
     }
 
     private func relativeDateString(for date: Date) -> String {
@@ -557,51 +546,7 @@ struct ExerciseRowView: View {
 private enum ExerciseListFormatters {
     static let relativeDate: RelativeDateTimeFormatter = {
         let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .abbreviated
+        formatter.unitsStyle = .full
         return formatter
     }()
-}
-
-private struct ExerciseRowCardModifier: ViewModifier {
-    let isEnabled: Bool
-
-    func body(content: Content) -> some View {
-        if isEnabled {
-            content.softCard(elevation: 1)
-        } else {
-            content
-        }
-    }
-}
-
-private struct ExerciseMetricPill: View {
-    let icon: String
-    let text: String
-    let accessibilityLabel: String
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 4) {
-                Image(systemName: icon)
-                    .font(Theme.Typography.caption2Bold)
-                    .foregroundColor(Theme.Colors.accent)
-                    .accessibilityHidden(true)
-                Text(text)
-                    .font(Theme.Typography.captionStrong)
-                    .foregroundColor(Theme.Colors.textSecondary)
-                    .lineLimit(1)
-            }
-            .padding(.horizontal, Theme.Spacing.sm)
-            .padding(.vertical, 5)
-            .background(Capsule().fill(Theme.Colors.surfaceRaised))
-            .overlay(Capsule().strokeBorder(Theme.Colors.border.opacity(0.6), lineWidth: 1))
-            // The visible pill stays compact; the hit area keeps the 44pt minimum.
-            .frame(minHeight: Theme.Layout.minimumTapTarget)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(AppInteractionButtonStyle())
-        .accessibilityLabel(accessibilityLabel)
-        .accessibilityHint("Opens this metric's analysis.")
-    }
 }

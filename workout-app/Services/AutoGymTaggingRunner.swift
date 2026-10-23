@@ -473,7 +473,7 @@ enum AutoGymTaggingRunner {
             )?.distanceMeters
             let reason: String
             if let nearestDistance {
-                reason = "No confident gym match (nearest saved gym is \(Int(nearestDistance.rounded()))m away)"
+                reason = "No gym match (nearest saved gym is \(Int(nearestDistance.rounded()))m away)"
             } else {
                 reason = "No saved gym coordinates were close enough"
             }

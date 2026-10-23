@@ -8,11 +8,11 @@ struct StatCard: View {
     let color: Color
     var onTap: (() -> Void)?
 
-    @State private var isAppearing = false
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     // Keep tiles visually consistent while giving text enough vertical room
     // (prevents top/bottom clipping on metric screens).
-    private let tileHeight: CGFloat = 128
+    private let tileHeight: CGFloat = 104
 
     var body: some View {
         Group {
@@ -25,56 +25,44 @@ struct StatCard: View {
     }
 
     private var cardContent: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Image(systemName: icon)
-                .font(Theme.Iconography.title3Strong)
-                .foregroundColor(color)
-                .accessibilityHidden(true)
-
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text(value)
-                    .font(Theme.Typography.metric)
-                    .foregroundColor(Theme.Colors.textPrimary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
-                    .allowsTightening(true)
-                    .contentTransition(.numericText())
-
-                if let subtitle = subtitle {
-                    Text(subtitle)
-                        .font(Theme.Typography.caption)
-                        .foregroundColor(Theme.Colors.textSecondary)
-                        .lineLimit(1)
-                }
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .firstTextBaseline, spacing: 4) { valueContent }
+                    .fixedSize(horizontal: true, vertical: false)
+                VStack(alignment: .leading, spacing: Theme.Spacing.xs) { valueContent }
             }
 
             Text(title)
-                .font(Theme.Typography.metricLabel)
+                .font(Theme.Typography.caption)
                 .foregroundColor(Theme.Colors.textSecondary)
-                .textCase(.uppercase)
-                .tracking(0.8)
-                .lineLimit(1)
-                .minimumScaleFactor(0.9)
-                .allowsTightening(true)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, Theme.Spacing.lg)
+        .padding(.leading, Theme.Spacing.lg + 2)
+        .padding(.trailing, Theme.Spacing.lg)
         .padding(.vertical, Theme.Spacing.md)
-        .frame(height: tileHeight)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
-                .fill(color.opacity(0.06))
-        )
-        .glassBackground(opacity: 0.1, cornerRadius: Theme.CornerRadius.large, elevation: 2)
-        .opacity(isAppearing ? 1 : 0)
-        .offset(y: isAppearing ? 0 : 8)
-        .onAppear {
-            withAnimation(Theme.Animation.spring) {
-                isAppearing = true
-            }
-        }
+        .frame(minHeight: tileHeight, alignment: .bottomLeading)
+        .statChipChrome(tint: color, cornerRadius: Theme.CornerRadius.large)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabel)
+    }
+
+    @ViewBuilder
+    private var valueContent: some View {
+        Text(value)
+            .font(Theme.Typography.metric)
+            .foregroundColor(Theme.Colors.textPrimary)
+            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+            .minimumScaleFactor(dynamicTypeSize.isAccessibilitySize ? 1 : 0.85)
+            .allowsTightening(true)
+            .contentTransition(.numericText())
+
+        if let subtitle = subtitle {
+            Text(subtitle)
+                .font(Theme.Typography.caption)
+                .foregroundColor(Theme.Colors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 
     private var accessibilityLabel: String {

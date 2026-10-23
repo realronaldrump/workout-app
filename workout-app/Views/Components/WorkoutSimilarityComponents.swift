@@ -6,23 +6,16 @@ struct WorkoutSimilaritySection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Workout Match")
-                .font(Theme.Typography.title2)
-                .foregroundStyle(Theme.Colors.textPrimary)
+            SectionHeading(
+                title: "Similar workouts",
+                help: "Matches earlier workouts by shared exercises and exercise order."
+            )
 
             if let bestMatch = review.bestMatch {
-                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                    Text("Best Prior Match")
-                        .font(Theme.Typography.captionBold)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                        .textCase(.uppercase)
-                        .tracking(0.8)
-
-                    MetricTileButton(chevronPlacement: .none, action: {
-                        onCompare(bestMatch)
-                    }) {
-                        WorkoutSimilarityBestMatchCard(match: bestMatch)
-                    }
+                MetricTileButton(chevronPlacement: .none, action: {
+                    onCompare(bestMatch)
+                }) {
+                    WorkoutSimilarityBestMatchCard(match: bestMatch)
                 }
             } else {
                 WorkoutSimilarityEmptyState()
@@ -30,7 +23,7 @@ struct WorkoutSimilaritySection: View {
 
             if !review.exactOrderMatches.isEmpty {
                 WorkoutSimilarityMatchList(
-                    title: "Exact Same Order",
+                    title: "Same exercises, same order",
                     matches: review.exactOrderMatches,
                     onCompare: onCompare
                 )
@@ -38,7 +31,7 @@ struct WorkoutSimilaritySection: View {
 
             if !review.reorderedExerciseMatches.isEmpty {
                 WorkoutSimilarityMatchList(
-                    title: "Same Exercises, Different Order",
+                    title: "Same exercises, different order",
                     matches: review.reorderedExerciseMatches,
                     onCompare: onCompare
                 )
@@ -52,64 +45,37 @@ private struct WorkoutSimilarityBestMatchCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            HStack(alignment: .top, spacing: Theme.Spacing.sm) {
-                Label(match.kind.title, systemImage: match.kind.iconName)
-                    .font(Theme.Typography.captionBold)
-                    .foregroundStyle(Theme.Colors.accent)
-
-                Spacer()
-
-                Text(match.priorWorkoutDate.formatted(date: .abbreviated, time: .shortened))
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textTertiary)
-                    .multilineTextAlignment(.trailing)
-            }
-
-            Text(match.priorWorkoutName)
-                .font(Theme.Typography.title3)
-                .foregroundStyle(Theme.Colors.textPrimary)
-
-            HStack(spacing: Theme.Spacing.sm) {
-                WorkoutSimilarityInlinePill(
-                    title: "Shared",
-                    value: "\(match.sharedExerciseCount)"
-                )
-                WorkoutSimilarityInlinePill(
-                    title: "Same Spot",
-                    value: "\(match.samePositionCount)"
-                )
-                WorkoutSimilarityInlinePill(
-                    title: "Exercises",
-                    value: "\(match.priorExerciseCount)"
-                )
-            }
-
-            HStack {
-                Text(matchExplanation(match))
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Closest earlier workout")
                     .font(Theme.Typography.subheadline)
                     .foregroundStyle(Theme.Colors.textSecondary)
+                Text(SharedFormatters.workoutTitleParts(match.priorWorkoutName).title)
+                    .font(Theme.Typography.title3)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                Text(match.priorWorkoutDate.formatted(date: .abbreviated, time: .shortened))
+                    .font(Theme.Typography.subheadline)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+            }
 
-                Spacer(minLength: Theme.Spacing.md)
-
-                Text("Compare")
-                    .font(Theme.Typography.captionBold)
-                    .foregroundStyle(Theme.Colors.accent)
+            HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.xl) {
+                DisplayStat(value: "\(match.sharedExerciseCount)", label: "shared", valueFont: Theme.Typography.numberSmall)
+                DisplayStat(value: "\(match.samePositionCount)", label: "same spot", valueFont: Theme.Typography.numberSmall)
+                DisplayStat(value: "\(match.priorExerciseCount)", label: "exercises", valueFont: Theme.Typography.numberSmall)
+                Spacer(minLength: 0)
+                HStack(spacing: 3) {
+                    Text("Compare")
+                        .font(Theme.Typography.subheadlineStrong)
+                    Image(systemName: "chevron.right")
+                        .font(Theme.Typography.microLabel)
+                }
+                .foregroundStyle(Theme.Colors.textPrimary)
             }
         }
         .padding(Theme.Spacing.lg)
-        .softCard(elevation: 2)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .softCard()
     }
 
-    private func matchExplanation(_ match: WorkoutSimilarityMatch) -> String {
-        switch match.kind {
-        case .exactOrdered:
-            return "You previously ran this exact exercise sequence."
-        case .exactExercisesReordered:
-            return "You previously ran the same exercise lineup, but in a different order."
-        case .partial:
-            return "This earlier session is the closest overlap in your history."
-        }
-    }
 }
 
 private struct WorkoutSimilarityMatchList: View {
@@ -120,12 +86,10 @@ private struct WorkoutSimilarityMatchList: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             Text(title)
-                .font(Theme.Typography.captionBold)
-                .foregroundStyle(Theme.Colors.textSecondary)
-                .textCase(.uppercase)
-                .tracking(0.8)
+                .font(Theme.Typography.subheadlineStrong)
+                .foregroundStyle(Theme.Colors.textPrimary)
 
-            VStack(spacing: Theme.Spacing.sm) {
+            VStack(spacing: 0) {
                 ForEach(matches) { match in
                     MetricTileButton(chevronPlacement: .none, action: {
                         onCompare(match)
@@ -143,66 +107,34 @@ private struct WorkoutSimilarityMatchRow: View {
 
     var body: some View {
         HStack(spacing: Theme.Spacing.md) {
-            Image(systemName: match.kind.iconName)
-                .font(Theme.Typography.captionBold)
-                .foregroundStyle(Theme.Colors.accent)
-                .frame(width: 30, height: 30)
-                .background(Theme.Colors.accentTint)
-                .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.medium))
-
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(match.priorWorkoutDate.formatted(date: .abbreviated, time: .shortened))
-                    .font(Theme.Typography.bodyBold)
+                    .font(Theme.Typography.headline)
                     .foregroundStyle(Theme.Colors.textPrimary)
 
-                Text("\(match.sharedExerciseCount) shared • \(match.samePositionCount) same spot")
-                    .font(Theme.Typography.caption)
+                Text("\(match.sharedExerciseCount) shared, \(match.samePositionCount) in the same spot")
+                    .font(Theme.Typography.subheadline)
                     .foregroundStyle(Theme.Colors.textSecondary)
             }
 
             Spacer()
 
             Text("Compare")
-                .font(Theme.Typography.captionBold)
-                .foregroundStyle(Theme.Colors.accent)
-        }
-        .padding(Theme.Spacing.md)
-        .softCard(elevation: 1)
-    }
-}
-
-private struct WorkoutSimilarityInlinePill: View {
-    let title: String
-    let value: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title)
-                .font(Theme.Typography.microcopySmall)
-                .foregroundStyle(Theme.Colors.textTertiary)
-            Text(value)
-                .font(Theme.Typography.captionBold)
+                .font(Theme.Typography.subheadlineStrong)
                 .foregroundStyle(Theme.Colors.textPrimary)
+                .underline()
         }
-        .padding(.horizontal, Theme.Spacing.sm)
-        .padding(.vertical, Theme.Spacing.xs)
-        .background(Theme.Colors.surfaceRaised)
-        .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.medium))
+        .ledgerRow()
     }
 }
 
 private struct WorkoutSimilarityEmptyState: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text("No prior overlap yet")
-                .font(Theme.Typography.title3)
-                .foregroundStyle(Theme.Colors.textPrimary)
-
-            Text("No earlier workout shares any exercises with this session.")
-                .font(Theme.Typography.body)
+            Text("Nothing like this one in your history yet.")
+                .font(Theme.Typography.subheadline)
                 .foregroundStyle(Theme.Colors.textSecondary)
         }
-        .padding(Theme.Spacing.lg)
-        .softCard(elevation: 1)
+        .ledgerRow()
     }
 }

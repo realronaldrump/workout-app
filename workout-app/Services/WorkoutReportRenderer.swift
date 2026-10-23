@@ -21,7 +21,7 @@ nonisolated enum WorkoutReportRenderer {
           <meta charset="utf-8">
           <meta name="viewport" content="width=device-width, initial-scale=1">
           <meta name="color-scheme" content="light">
-          <title>Workout journal · \(escape(dateRange))</title>
+          <title>Workout journal, \(escape(dateRange))</title>
           <style>\(styles)</style>
         </head>
         <body>
@@ -37,7 +37,7 @@ nonisolated enum WorkoutReportRenderer {
             </header>
             \(breakSection(document.breaks))
             <div class="workouts">\(workouts)</div>
-            <footer>Workout history · \(escape(dateRange))</footer>
+            <footer>Workout history, \(escape(dateRange))</footer>
           </main>
           <script type="application/json" id="workout-data">\(json)</script>
         </body>
@@ -136,7 +136,7 @@ nonisolated enum WorkoutReportRenderer {
         let rows = breaks.map { item in
             """
             <li><strong>\(escape(item.name ?? "Saved break"))</strong>
-              <span>\(item.startDate) – \(item.endDate) · \(item.days) \(item.days == 1 ? "day" : "days")</span></li>
+              <span>\(item.startDate) – \(item.endDate), \(item.days) \(item.days == 1 ? "day" : "days")</span></li>
             """
         }.joined(separator: "\n")
         return """

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Full-width primary action used at the end of focused flows.
+/// Full-width primary action used at the end of focused flows: an ink capsule.
 struct AppPrimaryButton: View {
     let title: String
     var systemImage: String? = nil
@@ -15,47 +15,53 @@ struct AppPrimaryButton: View {
                         .accessibilityHidden(true)
                 }
                 Text(title)
-                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
                     .multilineTextAlignment(.center)
             }
             .font(Theme.Typography.headline)
-            .frame(maxWidth: .infinity, minHeight: 52)
+            .padding(.vertical, Theme.Spacing.sm)
+            .frame(maxWidth: .infinity, minHeight: Theme.Layout.primaryControlHeight)
         }
         .buttonStyle(BrandPrimaryButtonStyle())
         .disabled(!isEnabled)
     }
 }
 
-/// Brand gradient fill with a soft colored glow that settles when pressed.
+/// Solid ink capsule. Disabled drops to the strong neutral step.
 struct BrandPrimaryButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func makeBody(configuration: Configuration) -> some View {
-        let shape = RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
+        let shape = Capsule(style: .continuous)
         let isPressed = configuration.isPressed && isEnabled
         configuration.label
-            .foregroundStyle(isEnabled ? Color.white : Theme.Colors.textSecondary)
+            .foregroundStyle(isEnabled ? Theme.Colors.onAccent : Theme.Colors.textTertiary)
             .padding(.horizontal, Theme.Spacing.lg)
-            .background {
-                if isEnabled {
-                    shape
-                        .fill(Theme.accentGradient)
-                        .overlay(shape.strokeBorder(Color.white.opacity(0.22), lineWidth: 1))
-                        .shadow(
-                            color: Theme.Colors.accent.opacity(isPressed ? 0.14 : 0.3),
-                            radius: isPressed ? 5 : 12,
-                            x: 0,
-                            y: isPressed ? 2 : 6
-                        )
-                } else {
-                    shape.fill(Theme.Colors.border.opacity(0.5))
-                }
-            }
+            .background(shape.fill(isEnabled ? Theme.Colors.accent : Theme.Colors.panelStrong))
             .contentShape(shape)
-            .scaleEffect(isPressed && !reduceMotion ? 0.97 : 1)
-            .animation(reduceMotion ? nil : .spring(response: 0.25, dampingFraction: 0.7), value: isPressed)
+            .opacity(isPressed ? 0.82 : 1)
+            .scaleEffect(isPressed && !reduceMotion ? 0.98 : 1)
+            .animation(reduceMotion ? nil : Theme.Animation.quick, value: isPressed)
             .animation(reduceMotion ? nil : Theme.Animation.quick, value: isEnabled)
+    }
+}
+
+/// Outlined capsule for the second action next to a primary one.
+struct BrandSecondaryButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func makeBody(configuration: Configuration) -> some View {
+        let shape = Capsule(style: .continuous)
+        configuration.label
+            .foregroundStyle(isEnabled ? Theme.Colors.textPrimary : Theme.Colors.textTertiary)
+            .padding(.horizontal, Theme.Spacing.lg)
+            .background(shape.fill(configuration.isPressed ? Theme.Colors.panelStrong : Color.clear))
+            .overlay(shape.strokeBorder(Theme.Colors.rule, lineWidth: 1.5))
+            .contentShape(shape)
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.98 : 1)
+            .animation(reduceMotion ? nil : Theme.Animation.quick, value: configuration.isPressed)
     }
 }
 
@@ -73,19 +79,34 @@ struct AppPillButton: View {
     var variant: Variant = .neutral
     var action: () -> Void
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     private var backgroundColor: Color {
         switch variant {
         case .accent:
             return Theme.Colors.accent
+        case .subtle:
+            return Color.clear
         default:
             return Theme.Colors.surface
+        }
+    }
+
+    private var borderColor: Color {
+        switch variant {
+        case .accent:
+            return Theme.Colors.accent
+        case .subtle:
+            return Theme.Colors.rule
+        default:
+            return Theme.Colors.rule
         }
     }
 
     private var textColor: Color {
         switch variant {
         case .accent:
-            return .white
+            return Theme.Colors.onAccent
         case .subtle:
             return Theme.Colors.textSecondary
         case .danger:
@@ -95,43 +116,32 @@ struct AppPillButton: View {
         }
     }
 
-    private var iconColor: Color {
-        switch variant {
-        case .accent:
-            return .white
-        case .danger:
-            return Theme.Colors.error
-        case .subtle:
-            return Theme.Colors.textTertiary
-        case .neutral:
-            return Theme.Colors.accent
-        }
-    }
-
     var body: some View {
         Button(action: action) {
             HStack(spacing: 6) {
                 if let systemImage {
                     Image(systemName: systemImage)
                         .font(Theme.Typography.captionBold)
-                        .foregroundStyle(iconColor)
+                        .accessibilityHidden(true)
                 }
 
                 Text(title)
-                    .font(Theme.Typography.captionBold)
-                    .foregroundStyle(textColor)
-                    .lineLimit(2)
+                    .font(Theme.Typography.subheadlineStrong)
                     .multilineTextAlignment(.center)
             }
+            // A pill keeps its words on one line; only accessibility sizes may wrap.
+            .fixedSize(horizontal: !dynamicTypeSize.isAccessibilitySize, vertical: true)
+            .foregroundStyle(textColor)
             .padding(.horizontal, Theme.Spacing.md)
             .padding(.vertical, Theme.Spacing.xs)
             .frame(minHeight: Theme.Layout.minimumTapTarget)
             .surfaceButtonChrome(
                 fill: backgroundColor,
-                cornerRadius: Theme.CornerRadius.large
+                border: borderColor,
+                cornerRadius: Theme.CornerRadius.pill
             )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(AppInteractionButtonStyle())
     }
 }
 
@@ -152,10 +162,10 @@ struct AppPillIconButton: View {
                 )
                 .surfaceButtonChrome(
                     fill: Theme.Colors.surface,
-                    cornerRadius: Theme.CornerRadius.large
+                    cornerRadius: Theme.CornerRadius.pill
                 )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(AppInteractionButtonStyle())
         .accessibilityLabel(accessibilityLabel)
     }
 }
@@ -236,7 +246,7 @@ struct AppToolbarButton: View {
         case .neutral:
             return AppToolbarButtonPalette(
                 text: Theme.Colors.textPrimary,
-                icon: Theme.Colors.accent
+                icon: Theme.Colors.textPrimary
             )
         }
     }
@@ -245,7 +255,7 @@ struct AppToolbarButton: View {
         Button(action: action) {
             labelContent
                 .padding(.horizontal, Theme.Spacing.xs)
-                .frame(minHeight: 44)
+                .frame(minWidth: Theme.Layout.minimumTapTarget, minHeight: Theme.Layout.minimumTapTarget)
                 .contentShape(Rectangle())
         }
         .buttonStyle(AppInteractionButtonStyle())
@@ -310,7 +320,7 @@ struct AppToolbarIconButton: View {
         case .neutral:
             return AppToolbarButtonPalette(
                 text: Theme.Colors.textPrimary,
-                icon: Theme.Colors.accent
+                icon: Theme.Colors.textPrimary
             )
         }
     }

@@ -53,7 +53,7 @@ struct MetricCalendarGrid: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            Text("Day Grid")
+            Text("Daily history")
                 .font(Theme.Typography.sectionHeader2)
                 .foregroundStyle(Theme.Colors.textPrimary)
 
@@ -67,12 +67,12 @@ struct MetricCalendarGrid: View {
     private var coverageSentence: String {
         let recorded = analysis.samples.count
         let total = analysis.calendarDayCount
-        guard total > 0 else { return "Every recorded \(metric.dailyNoun), shaded by size." }
+        guard total > 0 else { return "No readings" }
         let missing = max(0, total - recorded)
         if missing == 0 {
-            return "Every one of the last \(total) days has a reading."
+            return "\(total) days recorded"
         }
-        return "\(recorded) of \(total) days recorded — \(missing) with no data."
+        return "\(recorded) of \(total) days recorded"
     }
 
     private func sideLength(for weekCount: Int, available: CGFloat) -> CGFloat {

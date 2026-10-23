@@ -44,11 +44,13 @@ struct ExportExerciseSelectionSheet: View {
                         EmptyStateCard(
                             icon: "dumbbell",
                             tint: Theme.Colors.textTertiary,
-                            title: "No Exercises",
-                            message: "Try a different search term."
+                            title: availableExerciseNames.isEmpty ? "No exercises yet" : "No matching exercises",
+                            message: availableExerciseNames.isEmpty
+                                ? "Log or import a workout to choose exercises for export."
+                                : "Try a different search."
                         )
                     } else {
-                        ScrollView(showsIndicators: false) {
+                        ScrollView {
                             LazyVStack(spacing: Theme.Spacing.sm) {
                                 ForEach(filteredExerciseNames, id: \.self) { exerciseName in
                                     ExportSelectableRow(
@@ -72,8 +74,9 @@ struct ExportExerciseSelectionSheet: View {
                 }
                 .padding(Theme.Spacing.xl)
                 .contentColumn()
+                .scrollDismissesKeyboard(.interactively)
             }
-            .navigationTitle("Select Exercises")
+            .navigationTitle("Select exercises")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 AppToolbarItem(placement: .confirmationAction) {
@@ -128,11 +131,11 @@ struct ExportWorkoutDateSelectionSheet: View {
                         EmptyStateCard(
                             icon: "calendar",
                             tint: Theme.Colors.textTertiary,
-                            title: "No Dates",
-                            message: "No workouts are available for this range."
+                            title: "No dates",
+                            message: "No workouts in this range."
                         )
                     } else {
-                        ScrollView(showsIndicators: false) {
+                        ScrollView {
                             LazyVStack(spacing: Theme.Spacing.sm) {
                                 ForEach(dateOptions) { option in
                                     ExportSelectableRow(
@@ -164,8 +167,9 @@ struct ExportWorkoutDateSelectionSheet: View {
                 }
                 .padding(Theme.Spacing.xl)
                 .contentColumn()
+                .scrollDismissesKeyboard(.interactively)
             }
-            .navigationTitle("Select Workout Dates")
+            .navigationTitle("Select workout dates")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 AppToolbarItem(placement: .confirmationAction) {
@@ -229,11 +233,13 @@ struct ExportMuscleGroupSelectionSheet: View {
                         EmptyStateCard(
                             icon: "figure.strengthtraining.functional",
                             tint: Theme.Colors.textTertiary,
-                            title: "No Muscle Groups",
-                            message: "Try a different search term."
+                            title: availableTags.isEmpty ? "No muscle groups" : "No matching muscle groups",
+                            message: availableTags.isEmpty
+                                ? "Add muscle roles to your exercises in Settings to filter by muscle group."
+                                : "Try a different search."
                         )
                     } else {
-                        ScrollView(showsIndicators: false) {
+                        ScrollView {
                             LazyVStack(spacing: Theme.Spacing.sm) {
                                 ForEach(filteredTags, id: \.id) { tag in
                                     ExportSelectableRow(
@@ -268,8 +274,9 @@ struct ExportMuscleGroupSelectionSheet: View {
                 }
                 .padding(Theme.Spacing.xl)
                 .contentColumn()
+                .scrollDismissesKeyboard(.interactively)
             }
-            .navigationTitle("Select Muscle Groups")
+            .navigationTitle("Select muscle groups")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 AppToolbarItem(placement: .confirmationAction) {
@@ -307,6 +314,8 @@ private struct ExportSelectionSearchField: View {
                 .font(Theme.Typography.callout)
                 .foregroundStyle(Theme.Colors.textPrimary)
                 .tint(Theme.Colors.accent)
+                .submitLabel(.search)
+                .accessibilityLabel(placeholder)
 
             if !text.isEmpty {
                 Button {
@@ -338,12 +347,40 @@ struct ExportWorkoutColumnSelectionSheet: View {
         selectedColumns.intersection(Set(availableColumns)).count
     }
 
+    private var fieldsHelp: String {
+        availableColumns.compactMap { column -> String? in
+            switch column {
+            case .workoutStart:
+                return "Start: date and time with a time-zone offset."
+            case .duration:
+                return "Workout duration: seconds; blank if the logged value cannot be parsed."
+            case .durationText:
+                return "Logged duration: original text, such as 45m."
+            case .parentExercise:
+                return "Parent exercise: groups left, right, and unilateral variants."
+            case .side:
+                return "Side: left, right, or unilateral."
+            case .tags:
+                return "Muscle roles: primary and secondary muscles."
+            case .weight:
+                return "Weight: pounds, as logged."
+            case .distance:
+                return "Distance: as logged; the app does not store a distance unit."
+            case .seconds:
+                return "Set duration: seconds."
+            default:
+                return nil
+            }
+        }.joined(separator: "\n\n")
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
                 AdaptiveBackground()
 
                 VStack(spacing: Theme.Spacing.md) {
+                    SectionHeading(title: "Fields", help: fieldsHelp)
                     ExportSelectionToolbar(
                         selectedCount: selectedCount,
                         totalCount: availableColumns.count,
@@ -362,7 +399,7 @@ struct ExportWorkoutColumnSelectionSheet: View {
                             ForEach(availableColumns) { column in
                                 ExportSelectableRow(
                                     isSelected: selectedColumns.contains(column),
-                                    accessibilityLabel: "\(column.title), \(column.subtitle)",
+                                    accessibilityLabel: column.title,
                                     action: {
                                         toggleColumn(column)
                                     },
@@ -374,14 +411,9 @@ struct ExportWorkoutColumnSelectionSheet: View {
                                             .background(Theme.Colors.accent.opacity(0.12))
                                             .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
 
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text(column.title)
-                                                .font(Theme.Typography.bodyBold)
-                                                .foregroundStyle(Theme.Colors.textPrimary)
-                                            Text(column.subtitle)
-                                                .font(Theme.Typography.caption)
-                                                .foregroundStyle(Theme.Colors.textSecondary)
-                                        }
+                                        Text(column.title)
+                                            .font(Theme.Typography.bodyBold)
+                                            .foregroundStyle(Theme.Colors.textPrimary)
                                     }
                                 )
                             }
@@ -399,8 +431,9 @@ struct ExportWorkoutColumnSelectionSheet: View {
                 }
                 .padding(Theme.Spacing.xl)
                 .contentColumn()
+                .scrollDismissesKeyboard(.interactively)
             }
-            .navigationTitle("Select Fields")
+            .navigationTitle("Select fields")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 AppToolbarItem(placement: .confirmationAction) {
@@ -468,11 +501,13 @@ struct ExportHealthMetricSelectionSheet: View {
                         EmptyStateCard(
                             icon: "heart.text.square",
                             tint: Theme.Colors.textTertiary,
-                            title: "No Metrics",
-                            message: "Try a different search term."
+                            title: availableMetrics.isEmpty ? "No metrics available" : "No matching metrics",
+                            message: availableMetrics.isEmpty
+                                ? "Connect Apple Health and sync your data from Settings."
+                                : "Try a different search."
                         )
                     } else {
-                        ScrollView(showsIndicators: false) {
+                        ScrollView {
                             LazyVStack(spacing: Theme.Spacing.sm) {
                                 ForEach(filteredMetrics) { metric in
                                     ExportSelectableRow(
@@ -493,7 +528,7 @@ struct ExportHealthMetricSelectionSheet: View {
                                             Text(metric.title)
                                                 .font(Theme.Typography.bodyBold)
                                                 .foregroundStyle(Theme.Colors.textPrimary)
-                                            Text("\(metric.category.title) • \(metric.displayUnit)")
+                                            Text("\(metric.category.title), \(metric.displayUnit)")
                                                 .font(Theme.Typography.caption)
                                                 .foregroundStyle(Theme.Colors.textSecondary)
                                         }
@@ -507,6 +542,7 @@ struct ExportHealthMetricSelectionSheet: View {
                 }
                 .padding(Theme.Spacing.xl)
                 .contentColumn()
+                .scrollDismissesKeyboard(.interactively)
             }
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)

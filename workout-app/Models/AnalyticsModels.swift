@@ -132,14 +132,14 @@ nonisolated struct SleepSummary: Codable {
     var sourceStatusText: String? {
         switch sourceSelectionMode {
         case .automatic:
-            return "Best available Apple Health source selected for this night."
+            return "Used the source with the most time asleep for this night."
         case .preferred:
-            return "Your preferred sleep source supplied this night."
+            return "Your preferred sleep source was used for this night."
         case .fallback:
             if let preferredSourceName, let primarySourceName, preferredSourceName != primarySourceName {
                 return "\(preferredSourceName) had no usable sleep data for this night, so \(primarySourceName) was used instead."
             }
-            return "Your preferred sleep source had no usable data for this night, so a fallback source was used."
+            return "Your preferred sleep source had no usable data for this night, so another source was used."
         case .none:
             return nil
         }
@@ -165,7 +165,7 @@ nonisolated enum SleepStage: String, Codable, CaseIterable {
     var label: String {
         switch self {
         case .awake: return "Awake"
-        case .inBed: return "In Bed"
+        case .inBed: return "In bed"
         case .core: return "Core"
         case .deep: return "Deep"
         case .rem: return "REM"

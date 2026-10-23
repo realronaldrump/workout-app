@@ -4,17 +4,22 @@ struct SleepSourceAttributionView: View {
     let summary: SleepSummary
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            if let sourceName = summary.primarySourceName, !sourceName.isEmpty {
-                Text("Source: \(sourceName)")
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textTertiary)
+        HStack(spacing: Theme.Spacing.xs) {
+            VStack(alignment: .leading, spacing: 2) {
+                if let sourceName = summary.primarySourceName, !sourceName.isEmpty {
+                    Text("Source: \(sourceName)")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Colors.textTertiary)
+                }
+                if summary.usedFallbackSource {
+                    Text("Alternate source")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                }
             }
-
+            Spacer(minLength: Theme.Spacing.xs)
             if let statusText = summary.sourceStatusText {
-                Text(statusText)
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(summary.usedFallbackSource ? Theme.Colors.textSecondary : Theme.Colors.textTertiary)
+                AppHelpButton(title: "Sleep source", message: statusText)
             }
         }
     }
@@ -24,440 +29,228 @@ struct SleepSourceAttributionView: View {
 struct HealthDataView: View {
     let healthData: WorkoutHealthData
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @State private var showingAllHeartRateSamples = false
 
-    private var metricColumns: [GridItem] {
-        if dynamicTypeSize.isAccessibilitySize {
-            return [GridItem(.flexible())]
+    private struct Reading: Identifiable {
+        let label: String
+        let value: String
+        var tint: Color = Theme.Colors.textTertiary
+        var id: String { label }
+    }
+
+    /// The four numbers that describe the session itself.
+    private var headlineStats: [(value: String, label: String)] {
+        var stats: [(String, String)] = []
+        if let avgHR = healthData.avgHeartRate { stats.append(("\(Int(avgHR))", "avg bpm")) }
+        if let maxHR = healthData.maxHeartRate { stats.append(("\(Int(maxHR))", "max bpm")) }
+        if let calories = healthData.totalCalories ?? healthData.activeCalories {
+            stats.append((Int(calories).formatted(), "cal"))
         }
-        return [GridItem(.flexible()), GridItem(.flexible())]
+        if let avgHRV = healthData.avgHRV { stats.append(("\(Int(avgHRV))", "ms HRV")) }
+        return stats
+    }
+
+    private var sessionReadings: [Reading] {
+        var readings: [Reading] = []
+        if let avgSpO2 = healthData.avgBloodOxygen {
+            readings.append(Reading(label: "Blood oxygen", value: "\(Int(avgSpO2))%", tint: HealthMetric.bloodOxygen.chartColor))
+        }
+        if let avgResp = healthData.avgRespiratoryRate {
+            readings.append(Reading(
+                label: "Respiratory rate",
+                value: String(format: "%.1f br/min", avgResp),
+                tint: HealthMetric.respiratoryRate.chartColor
+            ))
+        }
+        if let distance = healthData.distance, distance > 0 {
+            readings.append(Reading(
+                label: "Distance",
+                value: String(format: "%.2f mi", distance / 1609.34),
+                tint: HealthMetric.distanceWalkingRunning.chartColor
+            ))
+        }
+        if let steps = healthData.stepCount, steps > 0 {
+            readings.append(Reading(label: "Steps", value: steps.formatted(), tint: HealthMetric.steps.chartColor))
+        }
+        if let power = healthData.avgPower {
+            readings.append(Reading(label: "Avg power", value: "\(Int(power)) W"))
+        }
+        if let workoutType = healthData.appleWorkoutType {
+            readings.append(Reading(label: "Apple workout", value: workoutType))
+        }
+        if let duration = healthData.appleWorkoutDuration {
+            readings.append(Reading(label: "Apple workout length", value: formatDuration(duration)))
+        }
+        return readings
+    }
+
+    private var dayReadings: [Reading] {
+        var readings: [Reading] = []
+        if let restingHR = healthData.restingHeartRate {
+            readings.append(Reading(label: "Resting heart rate", value: "\(Int(restingHR)) bpm", tint: HealthMetric.restingHeartRate.chartColor))
+        }
+        if let energy = healthData.dailyActiveEnergy {
+            readings.append(Reading(label: "Active energy", value: "\(Int(energy).formatted()) cal", tint: HealthMetric.activeEnergy.chartColor))
+        }
+        if let basal = healthData.dailyBasalEnergy {
+            readings.append(Reading(label: "Resting energy", value: "\(Int(basal).formatted()) cal", tint: HealthMetric.basalEnergy.chartColor))
+        }
+        if let steps = healthData.dailySteps {
+            readings.append(Reading(label: "Steps", value: steps.formatted(), tint: HealthMetric.steps.chartColor))
+        }
+        if let exercise = healthData.dailyExerciseMinutes {
+            readings.append(Reading(label: "Exercise", value: "\(Int(exercise)) min", tint: HealthMetric.exerciseMinutes.chartColor))
+        }
+        if let move = healthData.dailyMoveMinutes {
+            readings.append(Reading(label: "Move", value: "\(Int(move)) min", tint: HealthMetric.moveMinutes.chartColor))
+        }
+        if let stand = healthData.dailyStandMinutes {
+            readings.append(Reading(label: "Stand", value: "\(Int(stand)) min", tint: HealthMetric.standMinutes.chartColor))
+        }
+        if let vo2 = healthData.vo2Max {
+            readings.append(Reading(label: "VO2 max", value: String(format: "%.1f", vo2), tint: HealthMetric.vo2Max.chartColor))
+        }
+        if let recovery = healthData.heartRateRecovery {
+            readings.append(Reading(label: "Heart rate recovery", value: "\(Int(recovery)) bpm", tint: HealthMetric.heartRateRecovery.chartColor))
+        }
+        if let walking = healthData.walkingHeartRateAverage {
+            readings.append(Reading(label: "Walking heart rate", value: "\(Int(walking)) bpm", tint: HealthMetric.walkingHeartRateAverage.chartColor))
+        }
+        if let bodyMass = healthData.bodyMass {
+            readings.append(Reading(label: "Body weight", value: String(format: "%.1f lb", bodyMass * 2.20462), tint: HealthMetric.bodyMass.chartColor))
+        }
+        if let bodyFat = healthData.bodyFatPercentage {
+            readings.append(Reading(label: "Body fat", value: String(format: "%.1f%%", bodyFat * 100), tint: HealthMetric.bodyFatPercentage.chartColor))
+        }
+        return readings
     }
 
     var body: some View {
-        VStack(spacing: Theme.Spacing.lg) {
-            // Header
-            ViewThatFits(in: .horizontal) {
-                HStack {
-                    Image(systemName: "heart.fill")
-                        .foregroundColor(Theme.Colors.error)
-                    Text("Health Metrics")
-                        .font(Theme.Typography.headline)
-
-                Spacer()
-
-                if let syncedAt = healthData.syncedAt as Date? {
-                    Text("sync \(syncedAt.formatted(.relative(presentation: .named)))")
-                        .font(Theme.Typography.caption)
-                        .foregroundColor(Theme.Colors.textTertiary)
-                }
-
-                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                    Label("Health Metrics", systemImage: "heart.fill")
-                        .font(Theme.Typography.headline)
-                        .foregroundStyle(Theme.Colors.error)
-                    if let syncedAt = healthData.syncedAt as Date? {
-                        Text("Synced \(syncedAt.formatted(.relative(presentation: .named)))")
-                            .font(Theme.Typography.caption)
-                            .foregroundColor(Theme.Colors.textTertiary)
-                    }
-                }
-            }
-            }
+        VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
+            Text("Synced \(healthData.syncedAt.formatted(.relative(presentation: .named)))")
+                .font(Theme.Typography.subheadline)
+                .foregroundStyle(Theme.Colors.textSecondary)
 
             if !healthData.hasHealthData {
                 noDataView
             } else {
-                // Key Metrics Grid
-                metricsGrid
+                if !headlineStats.isEmpty {
+                    let layout = dynamicTypeSize.isAccessibilitySize
+                        ? AnyLayout(VStackLayout(alignment: .leading, spacing: Theme.Spacing.md))
+                        : AnyLayout(StatColumns())
+                    layout {
+                        ForEach(headlineStats, id: \.label) { stat in
+                            DisplayStat(value: stat.value, label: stat.label, valueFont: Theme.Typography.number)
+                        }
+                    }
+                }
 
-                // Heart Rate Chart
                 if !healthData.heartRateSamples.isEmpty {
                     heartRateSection
+                }
+
+                if !sessionReadings.isEmpty {
+                    readingList(title: "During the workout", readings: sessionReadings)
                 }
 
                 if let sleep = healthData.sleepSummary {
                     sleepSection(summary: sleep)
                 }
 
-                if hasDailyActivityMetrics {
-                    dailyActivitySection
-                }
-
-                if hasCardioMetrics {
-                    cardioFitnessSection
-                }
-
-                // Additional Metrics
-                if hasAdditionalMetrics {
-                    additionalMetricsSection
+                if !dayReadings.isEmpty {
+                    readingList(title: "That day", readings: dayReadings)
                 }
             }
         }
         .padding(Theme.Spacing.lg)
-        .softCard(elevation: 2)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .softCard()
     }
 
     // MARK: - No Data View
 
     private var noDataView: some View {
-        VStack(spacing: Theme.Spacing.md) {
-            Image(systemName: "heart.slash")
-                .font(Theme.Iconography.feature)
-                .foregroundColor(Theme.Colors.textTertiary)
-
-            Text("No health data found")
-                .font(Theme.Typography.subheadline)
-                .foregroundColor(Theme.Colors.textSecondary)
-
-            Text("Sync to pull Apple Health samples for this workout.")
-                .font(Theme.Typography.caption)
-                .foregroundColor(Theme.Colors.textTertiary)
-                .multilineTextAlignment(.center)
-        }
-        .padding(.vertical, Theme.Spacing.xl)
-    }
-
-    // MARK: - Metrics Grid
-
-    private var metricsGrid: some View {
-        LazyVGrid(columns: metricColumns, spacing: Theme.Spacing.md) {
-            // Heart Rate
-            if let avgHR = healthData.avgHeartRate {
-                metricCard(
-                    title: "Avg Heart Rate",
-                    value: "\(Int(avgHR))",
-                    unit: "bpm",
-                    icon: "heart.fill",
-                    color: .red
-                )
-            }
-
-            // Calories
-            if let calories = healthData.totalCalories ?? healthData.activeCalories {
-                metricCard(
-                    title: "Calories",
-                    value: "\(Int(calories))",
-                    unit: "kcal",
-                    icon: "flame.fill",
-                    color: .orange
-                )
-            }
-
-            // Max Heart Rate
-            if let maxHR = healthData.maxHeartRate {
-                metricCard(
-                    title: "Max Heart Rate",
-                    value: "\(Int(maxHR))",
-                    unit: "bpm",
-                    icon: "heart.circle.fill",
-                    color: .pink
-                )
-            }
-
-            // HRV
-            if let avgHRV = healthData.avgHRV {
-                metricCard(
-                    title: "Avg HRV",
-                    value: "\(Int(avgHRV))",
-                    unit: "ms",
-                    icon: "waveform.path.ecg",
-                    color: .purple
-                )
-            }
-
-            // Blood Oxygen
-            if let avgSpO2 = healthData.avgBloodOxygen {
-                metricCard(
-                    title: "Blood Oxygen",
-                    value: "\(Int(avgSpO2))",
-                    unit: "%",
-                    icon: "lungs.fill",
-                    color: .blue
-                )
-            }
-
-            // Respiratory Rate
-            if let avgResp = healthData.avgRespiratoryRate {
-                metricCard(
-                    title: "Resp Rate",
-                    value: String(format: "%.1f", avgResp),
-                    unit: "br/min",
-                    icon: "wind",
-                    color: .cyan
-                )
-            }
-
-            // Distance (converted to miles)
-            if let distance = healthData.distance, distance > 0 {
-                metricCard(
-                    title: "Distance",
-                    value: String(format: "%.2f", distance / 1609.34),
-                    unit: "mi",
-                    icon: "figure.walk",
-                    color: .green
-                )
-            }
-
-            // Steps
-            if let steps = healthData.stepCount, steps > 0 {
-                metricCard(
-                    title: "Steps",
-                    value: "\(steps)",
-                    unit: "",
-                    icon: "shoeprints.fill",
-                    color: .teal
-                )
-            }
-        }
-    }
-
-    private func metricCard(title: String, value: String, unit: String, icon: String, color: Color) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            HStack(spacing: Theme.Spacing.xs) {
-                Image(systemName: icon)
-                    .font(Theme.Iconography.small)
-                    .foregroundColor(color)
-                Text(title)
-                    .font(Theme.Typography.caption)
-                    .foregroundColor(Theme.Colors.textSecondary)
-            }
-
-            HStack(alignment: .lastTextBaseline, spacing: 2) {
-                Text(value)
-                    .font(Theme.Typography.number)
-                    .foregroundColor(Theme.Colors.textPrimary)
-
-                if !unit.isEmpty {
-                    Text(unit)
-                        .font(Theme.Typography.caption)
-                        .foregroundColor(Theme.Colors.textTertiary)
-                }
-            }
+            Text("No health data for this workout")
+                .font(Theme.Typography.headline)
+                .foregroundStyle(Theme.Colors.textPrimary)
+            Text("Sync Apple Health to load samples.")
+                .font(Theme.Typography.subheadline)
+                .foregroundStyle(Theme.Colors.textSecondary)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
-        .background(Theme.Colors.surface.opacity(0.6))
-        .cornerRadius(Theme.CornerRadius.medium)
     }
 
     // MARK: - Heart Rate Section
 
     private var heartRateSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Relative Intensity")
-                .font(Theme.Typography.subheadline)
-                .foregroundColor(Theme.Colors.textSecondary)
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Relative intensity")
+                    .font(Theme.Typography.subheadlineStrong)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                Spacer()
+                AppHelpButton(
+                    title: "Relative intensity",
+                    message: "Groups readings by percentage of the highest heart rate recorded during this workout. "
+                        + "The bar shows the share of readings in each band."
+                )
+            }
             HeartRateZoneStrip(samples: healthData.heartRateSamples)
             WorkoutHRChart(samples: healthData.heartRateSamples)
         }
     }
 
-    // MARK: - Additional Metrics
+    // MARK: - Readings
 
-    private var hasAdditionalMetrics: Bool {
-        healthData.appleWorkoutType != nil ||
-        healthData.bodyMass != nil ||
-        healthData.restingHeartRate != nil ||
-        healthData.avgPower != nil ||
-        healthData.bodyFatPercentage != nil
-    }
+    private func readingList(title: String, readings: [Reading]) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(title)
+                .font(Theme.Typography.subheadlineStrong)
+                .foregroundStyle(Theme.Colors.textSecondary)
+                .padding(.bottom, Theme.Spacing.xs)
 
-    private var hasDailyActivityMetrics: Bool {
-        healthData.dailyActiveEnergy != nil ||
-        healthData.dailyBasalEnergy != nil ||
-        healthData.dailySteps != nil ||
-        healthData.dailyExerciseMinutes != nil ||
-        healthData.dailyMoveMinutes != nil ||
-        healthData.dailyStandMinutes != nil
-    }
-
-    private var hasCardioMetrics: Bool {
-        healthData.vo2Max != nil ||
-        healthData.heartRateRecovery != nil ||
-        healthData.walkingHeartRateAverage != nil
-    }
-
-    private var additionalMetricsSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Other Metrics")
-                .font(Theme.Typography.subheadline)
-                .foregroundColor(Theme.Colors.textSecondary)
-
-            VStack(spacing: Theme.Spacing.sm) {
-                if let workoutType = healthData.appleWorkoutType {
-                    additionalMetricRow(
-                        label: "Apple Workout",
-                        value: workoutType,
-                        icon: "figure.mixed.cardio"
-                    )
+            ForEach(readings) { reading in
+                let layout = dynamicTypeSize.isAccessibilitySize
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+                    : AnyLayout(HStackLayout(spacing: Theme.Spacing.sm))
+                layout {
+                    HStack(spacing: Theme.Spacing.sm) {
+                        TintMark(tint: reading.tint)
+                        Text(reading.label)
+                            .font(Theme.Typography.callout)
+                            .foregroundStyle(Theme.Colors.textPrimary)
+                    }
+                    if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: Theme.Spacing.sm) }
+                    Text(reading.value)
+                        .font(Theme.Typography.callout)
+                        .monospacedDigit()
+                        .foregroundStyle(Theme.Colors.textPrimary)
                 }
-
-                if let duration = healthData.appleWorkoutDuration {
-                    additionalMetricRow(
-                        label: "Duration",
-                        value: formatDuration(duration),
-                        icon: "clock"
-                    )
-                }
-
-                if let restingHR = healthData.restingHeartRate {
-                    additionalMetricRow(
-                        label: "Resting HR",
-                        value: "\(Int(restingHR)) bpm",
-                        icon: "heart"
-                    )
-                }
-
-                if let power = healthData.avgPower {
-                    additionalMetricRow(
-                        label: "Avg Power",
-                        value: "\(Int(power)) W",
-                        icon: "bolt.fill"
-                    )
-                }
-
-                if let bodyMass = healthData.bodyMass {
-                    additionalMetricRow(
-                        label: "Body Mass",
-                        value: String(format: "%.1f lbs", bodyMass * 2.20462),
-                        icon: "scalemass"
-                    )
-                }
-
-                if let bodyFat = healthData.bodyFatPercentage {
-                    additionalMetricRow(
-                        label: "Body Fat",
-                        value: String(format: "%.1f%%", bodyFat * 100),
-                        icon: "percent"
-                    )
-                }
+                .ledgerRow(verticalPadding: Theme.Spacing.sm)
+                .accessibilityElement(children: .combine)
             }
         }
     }
 
     private func sleepSection(summary: SleepSummary) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Sleep (Prev)")
-                .font(Theme.Typography.subheadline)
-                .foregroundColor(Theme.Colors.textSecondary)
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            Text("Sleep the night before")
+                .font(Theme.Typography.subheadlineStrong)
+                .foregroundStyle(Theme.Colors.textSecondary)
 
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: Theme.Spacing.xl) {
-                    sleepSummaryMetrics(summary)
-                }
-
-                VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-                    sleepSummaryMetrics(summary)
-                }
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text(String(format: "%.1f", summary.totalHours))
+                    .font(Theme.Typography.number)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                Text("hours asleep, \(formatDuration(summary.inBed)) in bed")
+                    .font(Theme.Typography.subheadline)
+                    .foregroundStyle(Theme.Colors.textSecondary)
             }
+            .accessibilityElement(children: .combine)
 
             SleepStageStrip(summary: summary)
 
             SleepSourceAttributionView(summary: summary)
         }
-        .padding(Theme.Spacing.lg)
-        .softCard(elevation: 2)
-    }
-
-    @ViewBuilder
-    private func sleepSummaryMetrics(_ summary: SleepSummary) -> some View {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(String(format: "%.1f", summary.totalHours))
-                        .font(Theme.Typography.number)
-                        .foregroundColor(Theme.Colors.textPrimary)
-                    Text("h asleep")
-                        .font(Theme.Typography.caption)
-                        .foregroundColor(Theme.Colors.textSecondary)
-                }
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(formatDuration(summary.inBed))
-                        .font(Theme.Typography.subheadline)
-                        .foregroundColor(Theme.Colors.textPrimary)
-                    Text("in bed")
-                        .font(Theme.Typography.caption)
-                        .foregroundColor(Theme.Colors.textSecondary)
-                }
-    }
-
-    private var dailyActivitySection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Daily Activity")
-                .font(Theme.Typography.subheadline)
-                .foregroundColor(Theme.Colors.textSecondary)
-
-            LazyVGrid(columns: metricColumns, spacing: Theme.Spacing.md) {
-                if let energy = healthData.dailyActiveEnergy {
-                    metricCard(title: "Active Energy", value: "\(Int(energy))", unit: "kcal", icon: "flame.fill", color: .orange)
-                }
-                if let basal = healthData.dailyBasalEnergy {
-                    metricCard(title: "Resting Energy", value: "\(Int(basal))", unit: "kcal", icon: "leaf.fill", color: .blue)
-                }
-                if let steps = healthData.dailySteps {
-                    metricCard(title: "Steps", value: "\(steps)", unit: "", icon: "shoeprints.fill", color: .teal)
-                }
-                if let exercise = healthData.dailyExerciseMinutes {
-                    metricCard(title: "Exercise", value: "\(Int(exercise))", unit: "min", icon: "figure.run", color: .green)
-                }
-                if let move = healthData.dailyMoveMinutes {
-                    metricCard(title: "Move", value: "\(Int(move))", unit: "min", icon: "figure.walk", color: .blue)
-                }
-                if let stand = healthData.dailyStandMinutes {
-                    metricCard(title: "Stand", value: "\(Int(stand))", unit: "min", icon: "figure.stand", color: .purple)
-                }
-            }
-        }
-    }
-
-    private var cardioFitnessSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Cardio Fitness")
-                .font(Theme.Typography.subheadline)
-                .foregroundColor(Theme.Colors.textSecondary)
-
-            VStack(spacing: Theme.Spacing.sm) {
-                if let vo2 = healthData.vo2Max {
-                    additionalMetricRow(label: "VO2 Max", value: String(format: "%.1f", vo2), icon: "wind")
-                }
-                if let recovery = healthData.heartRateRecovery {
-                    additionalMetricRow(label: "HR Recovery", value: "\(Int(recovery)) bpm", icon: "arrow.down.heart")
-                }
-                if let walking = healthData.walkingHeartRateAverage {
-                    additionalMetricRow(label: "Walking HR Avg", value: "\(Int(walking)) bpm", icon: "figure.walk")
-                }
-            }
-        }
-    }
-
-    private func additionalMetricRow(label: String, value: String, icon: String) -> some View {
-        ViewThatFits(in: .horizontal) {
-            HStack {
-                additionalMetricLabel(label: label, icon: icon)
-                Spacer()
-                Text(value)
-                    .font(Theme.Typography.body)
-                    .foregroundColor(Theme.Colors.textPrimary)
-            }
-
-            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                additionalMetricLabel(label: label, icon: icon)
-                Text(value)
-                    .font(Theme.Typography.bodyBold)
-                    .foregroundColor(Theme.Colors.textPrimary)
-            }
-        }
-        .padding(.vertical, Theme.Spacing.xs)
-    }
-
-    private func additionalMetricLabel(label: String, icon: String) -> some View {
-        Label {
-            Text(label)
-                .font(Theme.Typography.body)
-        } icon: {
-            Image(systemName: icon)
-                .frame(width: 24)
-        }
-        .foregroundColor(Theme.Colors.textSecondary)
     }
 
     private func formatDuration(_ seconds: TimeInterval) -> String {
@@ -495,8 +288,8 @@ struct HealthDataSummaryView: View {
                 compactMetric(
                     icon: "heart.fill",
                     value: "\(Int(avgHR))",
-                    unit: "bpm",
-                    color: .red
+                    unit: "bpm avg",
+                    color: HealthMetric.restingHeartRate.accentColor
                 )
             }
 
@@ -504,8 +297,8 @@ struct HealthDataSummaryView: View {
                 compactMetric(
                     icon: "flame.fill",
                     value: "\(Int(calories))",
-                    unit: "kcal",
-                    color: .orange
+                    unit: "cal",
+                    color: HealthMetric.activeEnergy.accentColor
                 )
             }
 
@@ -513,26 +306,28 @@ struct HealthDataSummaryView: View {
                 compactMetric(
                     icon: "waveform.path.ecg",
                     value: "\(Int(avgHRV))",
-                    unit: "ms",
-                    color: .purple
+                    unit: "ms HRV",
+                    color: HealthMetric.heartRateVariability.accentColor
                 )
             }
     }
 
     private func compactMetric(icon: String, value: String, unit: String, color: Color) -> some View {
         HStack(spacing: 4) {
-            Image(systemName: icon)
-                .font(Theme.Iconography.micro)
-                .foregroundColor(color)
+            RoundedRectangle(cornerRadius: 1, style: .continuous)
+                .fill(color)
+                .frame(width: 3, height: 11)
+                .accessibilityHidden(true)
 
             Text(value)
                 .font(Theme.Typography.captionStrong)
                 .foregroundColor(Theme.Colors.textPrimary)
 
             Text(unit)
-                .font(Theme.Typography.microcopySmall)
-                .foregroundColor(Theme.Colors.textTertiary)
+                .font(Theme.Typography.caption2)
+                .foregroundColor(Theme.Colors.textSecondary)
         }
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -546,22 +341,36 @@ struct HeartRateZoneStrip: View {
     }
 
     var body: some View {
-        GeometryReader { geometry in
-            HStack(spacing: 4) {
+        let filled = zones.filter { $0.fraction > 0 }
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            GeometryReader { geometry in
+                let spacing: CGFloat = 2
+                let available = max(geometry.size.width - spacing * CGFloat(max(filled.count - 1, 0)), 0)
+                HStack(spacing: spacing) {
+                    ForEach(filled) { zone in
+                        Rectangle()
+                            .fill(zone.color)
+                            .frame(width: max(available * zone.fraction, 2))
+                    }
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
+            }
+            .frame(height: 14)
+
+            HStack(spacing: Theme.Spacing.md) {
                 ForEach(zones) { zone in
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(zone.color.opacity(0.85))
-                        .frame(width: max(8, geometry.size.width * zone.fraction))
-                        .overlay(
-                            Text(zone.label)
-                                .font(Theme.Typography.caption)
-                                .foregroundColor(.white)
-                                .opacity(zone.fraction > 0.18 ? 1 : 0)
-                        )
+                    HStack(spacing: 4) {
+                        RoundedRectangle(cornerRadius: 1, style: .continuous)
+                            .fill(zone.color)
+                            .frame(width: 3, height: 10)
+                        Text("\(zone.label) \(Int((zone.fraction * 100).rounded()))%")
+                            .font(Theme.Typography.caption)
+                            .monospacedDigit()
+                            .foregroundStyle(zone.fraction > 0 ? Theme.Colors.textSecondary : Theme.Colors.textTertiary)
+                    }
                 }
             }
         }
-        .frame(height: 18)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Relative workout intensity")
         .accessibilityValue(
@@ -586,13 +395,15 @@ struct HeartRateZone: Identifiable {
         }
 
         let maxHR = maxSample
+        // Steps of the heart hue: harder bands are darker.
+        let heart = HealthMetric.restingHeartRate.chartColor
         // swiftlint:disable:next large_tuple
         let thresholds: [(String, Double, Double, Color)] = [
-            ("Z1", 0.5, 0.6, Theme.Colors.info),
-            ("Z2", 0.6, 0.7, Theme.Colors.accentSecondary),
-            ("Z3", 0.7, 0.8, Theme.Colors.warning),
-            ("Z4", 0.8, 0.9, Theme.Colors.error),
-            ("Z5", 0.9, 1.1, Theme.Colors.gold)
+            ("Z1", 0.5, 0.6, heart.opacity(0.22)),
+            ("Z2", 0.6, 0.7, heart.opacity(0.4)),
+            ("Z3", 0.7, 0.8, heart.opacity(0.6)),
+            ("Z4", 0.8, 0.9, heart.opacity(0.8)),
+            ("Z5", 0.9, 1.1, heart)
         ]
 
         let total = Double(samples.count)
@@ -614,40 +425,46 @@ struct SleepStageStrip: View {
         let stages = summary.stageDurations
         let ordered: [SleepStage] = [.deep, .core, .rem, .awake]
         let total = max(ordered.reduce(0) { $0 + (stages[$1] ?? 0) }, 1)
-        return ordered.map { stage in
+        return ordered.compactMap { stage in
             let duration = stages[stage] ?? 0
-            return (stage, duration / total)
+            return duration > 0 ? (stage, duration / total) : nil
         }
     }
 
     var body: some View {
-        GeometryReader { geometry in
-            HStack(spacing: 4) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            GeometryReader { geometry in
+                let spacing: CGFloat = 2
+                let available = max(geometry.size.width - spacing * CGFloat(max(stages.count - 1, 0)), 0)
+                HStack(spacing: spacing) {
+                    ForEach(stages, id: \.0) { stage, fraction in
+                        Rectangle()
+                            .fill(stage.tint)
+                            .frame(width: max(available * fraction, 2))
+                    }
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
+            }
+            .frame(height: 14)
+
+            HStack(spacing: Theme.Spacing.md) {
                 ForEach(stages, id: \.0) { stage, fraction in
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(stageColor(stage).opacity(0.85))
-                        .frame(width: max(6, geometry.size.width * fraction))
-                        .overlay(
-                            Text(stage.label)
-                                .font(Theme.Typography.caption)
-                                .foregroundColor(.white)
-                                .opacity(fraction > 0.18 ? 1 : 0),
-                            alignment: .center
-                        )
+                    HStack(spacing: 4) {
+                        RoundedRectangle(cornerRadius: 1, style: .continuous)
+                            .fill(stage.tint)
+                            .frame(width: 3, height: 10)
+                        Text("\(stage.label) \(Int((fraction * 100).rounded()))%")
+                            .font(Theme.Typography.caption)
+                            .monospacedDigit()
+                            .foregroundStyle(Theme.Colors.textSecondary)
+                    }
                 }
             }
         }
-        .frame(height: 18)
-    }
-
-    private func stageColor(_ stage: SleepStage) -> Color {
-        switch stage {
-        case .deep: return Theme.Colors.accent
-        case .core: return Theme.Colors.accentSecondary
-        case .rem: return Theme.Colors.warning
-        case .awake: return Theme.Colors.textSecondary
-        case .inBed: return Theme.Colors.textTertiary
-        case .unknown: return Theme.Colors.textTertiary
-        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Sleep stages")
+        .accessibilityValue(
+            stages.map { "\($0.0.label) \(Int(($0.1 * 100).rounded())) percent" }.joined(separator: ", ")
+        )
     }
 }

@@ -37,7 +37,7 @@ enum WorkoutRepeatHelper {
         sessionManager: WorkoutSessionManager,
         dataManager: WorkoutDataManager
     ) async {
-        await sessionManager.discardDraft()
+        guard await sessionManager.discardDraft() else { return }
         startWorkout(
             workout,
             gymProfileId: gymProfileId,
@@ -59,47 +59,25 @@ enum WorkoutRepeatHelper {
             gymProfileId: gymProfileId
         )
 
-        let increment = weightIncrement > 0 ? weightIncrement : 2.5
+        // Repeat the actual sequence, including ramp-up loads and cardio metrics.
+        // Suggestions are available in the logger, but must not rewrite past performance.
         for exercise in workout.exercises {
-            let exerciseName = exercise.name
-            let tags = ExerciseMetadataManager.shared.resolvedTags(for: exerciseName)
-            let isCardio = tags.contains { $0.builtInGroup == .cardio }
-            // Recreate the same number of sets as the original workout (within reason) so a
-            // repeated session doesn't need every set re-added by hand.
-            let setCount = min(max(exercise.sets.count, 1), 10)
-
-            let prefill: SetPrefill
-            if isCardio {
-                prefill = SetPrefill()
-            } else {
-                let history = dataManager.getExerciseHistory(for: exerciseName)
-                let recommendation = ExerciseRecommendationEngine.recommend(
-                    exerciseName: exerciseName,
-                    history: history,
-                    weightIncrement: increment
-                )
-                let midpointReps = (
-                    recommendation.repRange.lowerBound + recommendation.repRange.upperBound
-                ) / 2
-                prefill = SetPrefill(
-                    weight: recommendation.suggestedWeight,
-                    reps: midpointReps
-                )
+            let sourceSets = exercise.sets.sorted { $0.setOrder < $1.setOrder }
+            let prefills = sourceSets.map {
+                SetPrefill(weight: $0.weight, reps: $0.reps > 0 ? $0.reps : nil,
+                           distance: $0.distance > 0 ? $0.distance : nil,
+                           seconds: $0.seconds > 0 ? $0.seconds : nil)
             }
-
             let existingIds = Set(sessionManager.activeSession?.exercises.map(\.id) ?? [])
-            sessionManager.addExercise(
-                name: exerciseName,
-                initialSetPrefill: isCardio ? nil : prefill
-            )
-            guard setCount > 1,
-                  let added = sessionManager.activeSession?.exercises.first(where: { !existingIds.contains($0.id) }) else {
+            sessionManager.addExercise(name: exercise.name, initialSetPrefill: prefills.first)
+            guard let added = sessionManager.activeSession?.exercises.first(where: { !existingIds.contains($0.id) }) else {
                 continue
             }
-            for _ in 1..<setCount {
+            for prefill in prefills.dropFirst() {
                 sessionManager.addSet(exerciseId: added.id, prefill: prefill)
             }
         }
+        sessionManager.saveImmediately()
 
         sessionManager.isPresentingSessionUI = true
         Haptics.notify(.success)

@@ -13,7 +13,7 @@ struct GymBadge: View {
     private var tint: Color {
         switch style {
         case .assigned:
-            return Theme.Colors.accent
+            return Theme.Colors.textPrimary
         case .unassigned:
             return Theme.Colors.textTertiary
         case .deleted:
@@ -37,19 +37,15 @@ struct GymBadge: View {
             Image(systemName: icon)
                 .font(Theme.Typography.microLabel)
             Text(text)
-                .font(Theme.Typography.metricLabel)
+                .font(Theme.Typography.caption2Bold)
                 .lineLimit(1)
         }
         .foregroundColor(tint)
-        .padding(.horizontal, Theme.Spacing.sm)
-        .padding(.vertical, 5)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 4)
         .background(
-            Capsule()
-                .fill(tint.opacity(0.10))
-        )
-        .overlay(
-            Capsule()
-                .strokeBorder(tint.opacity(0.25), lineWidth: 1)
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.tag, style: .continuous)
+                .fill(style == .assigned ? Theme.Colors.panelStrong : tint.opacity(Theme.Opacity.mediumFill))
         )
     }
 }

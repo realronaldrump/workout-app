@@ -6,23 +6,16 @@ struct WorkoutVariantSummaryCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            HStack(spacing: Theme.Spacing.sm) {
-                Image(systemName: "square.3.layers.3d")
-                    .font(Theme.Typography.footnoteBold)
-                    .foregroundStyle(Theme.Colors.accent)
-                    .frame(width: 28, height: 28)
-                    .background(Theme.Colors.accentTint)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-
-                Text("VARIANT REVIEW")
-                    .font(Theme.Typography.metricLabel)
-                    .foregroundStyle(Theme.Colors.textTertiary)
-                    .tracking(1.2)
+            HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.sm) {
+                Text("How this one differed")
+                    .font(Theme.Typography.subheadlineStrong)
+                    .foregroundStyle(Theme.Colors.textSecondary)
 
                 Spacer()
 
-                Text("Seen \(review.exactVariantSampleSize)x")
-                    .font(Theme.Typography.captionBold)
+                Text("Seen \(review.exactVariantSampleSize)×")
+                    .font(Theme.Typography.subheadline)
+                    .monospacedDigit()
                     .foregroundStyle(Theme.Colors.textSecondary)
             }
 
@@ -30,17 +23,13 @@ struct WorkoutVariantSummaryCard: View {
                 .font(Theme.Typography.title3)
                 .foregroundStyle(Theme.Colors.textPrimary)
 
-            Text(primarySummary(for: review.differences))
-                .font(Theme.Typography.subheadline)
-                .foregroundStyle(Theme.Colors.textSecondary)
-
             VStack(spacing: Theme.Spacing.sm) {
                 ForEach(Array(review.differences.prefix(maxDifferences))) { difference in
                     WorkoutVariantDifferenceRow(difference: difference)
                 }
             }
 
-            Text("Seen \(review.exactVariantSampleSize) times across \(review.peerSampleSize) matching sessions")
+            Text("\(review.exactVariantSampleSize) of \(review.peerSampleSize) similar sessions")
                 .font(Theme.Typography.microcopy)
                 .foregroundStyle(Theme.Colors.textTertiary)
         }
@@ -76,7 +65,7 @@ struct WorkoutVariantPatternCard: View {
                 .font(Theme.Typography.subheadline)
                 .foregroundStyle(Theme.Colors.textSecondary)
 
-            Text("Based on \(pattern.baselineSampleSize) baseline sessions · last seen \(pattern.representativeWorkout.date.formatted(date: .abbreviated, time: .omitted))")
+            Text("\(pattern.baselineSampleSize) comparison sessions, \(pattern.representativeWorkout.date.formatted(date: .abbreviated, time: .omitted))")
                 .font(Theme.Typography.microcopy)
                 .foregroundStyle(Theme.Colors.textTertiary)
         }
@@ -103,8 +92,6 @@ struct WorkoutVariantDetailCard: View {
                     Text(difference.kind.title)
                         .font(Theme.Typography.captionBold)
                         .foregroundStyle(Theme.Colors.textSecondary)
-                        .textCase(.uppercase)
-                        .tracking(0.8)
                     Text(leadText(for: difference))
                         .font(Theme.Typography.headline)
                         .foregroundStyle(Theme.Colors.textPrimary)
@@ -193,7 +180,10 @@ struct WorkoutVariantMetricRow: View {
                     .font(Theme.Typography.microcopy)
                     .foregroundStyle(Theme.Colors.textSecondary)
 
-                Text("About \(differenceLabel(for: comparison)) • \(formattedValue(comparison.variantAverage, kind: comparison.kind)) vs \(formattedValue(comparison.baselineAverage, kind: comparison.kind))")
+                Text(
+                    "About \(differenceLabel(for: comparison)), \(formattedValue(comparison.variantAverage, kind: comparison.kind)) "
+                        + "vs \(formattedValue(comparison.baselineAverage, kind: comparison.kind))"
+                )
                     .font(Theme.Typography.microcopy)
                     .foregroundStyle(Theme.Colors.textSecondary)
 
@@ -250,7 +240,7 @@ private func effectClause(for comparison: WorkoutVariantMetricComparison, capita
     case .exerciseEstimatedMax:
         subject = friendlyMetricName(for: comparison)
     case .totalVolume:
-        subject = "total work"
+        subject = "total volume"
     case .totalSets:
         subject = "set count"
     case .durationMinutes:
@@ -349,7 +339,7 @@ private func friendlyMetricName(for comparison: WorkoutVariantMetricComparison) 
     case .exerciseEstimatedMax:
         return comparison.exerciseName.map { "\($0) strength" } ?? comparison.label
     case .totalVolume:
-        return "Total work"
+        return "Total volume"
     case .totalSets:
         return "Set count"
     case .durationMinutes:

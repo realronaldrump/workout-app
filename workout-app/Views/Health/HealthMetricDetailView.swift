@@ -14,7 +14,7 @@ struct HealthMetricDetailView: View {
     @State private var selectedDay: SelectedHealthDay?
 
     private var earliestDate: Date? {
-        healthManager.dailyHealthStore.keys.min()
+        healthManager.dailySnapshot.earliestDate
     }
 
     /// Recomputation is keyed rather than fired from every publisher emission, so a
@@ -24,8 +24,7 @@ struct HealthMetricDetailView: View {
             metric: metric,
             selectedRange: dateRangeContext.selectedRange,
             customRange: dateRangeContext.customRange,
-            sampleCount: healthManager.dailyHealthStore.count,
-            lastSync: healthManager.lastDailySyncDate
+            dataRevision: healthManager.dailyDataRevision
         )
     }
 
@@ -65,7 +64,7 @@ struct HealthMetricDetailView: View {
                 } else {
                     EmptyStateCard(
                         title: "Health day unavailable",
-                        message: "This day is no longer in the local Health cache."
+                        message: "This day is no longer saved on this device."
                     )
                 }
             }
@@ -107,22 +106,25 @@ struct HealthMetricDetailView: View {
                 .softCard(elevation: 1)
         }
 
-        if metric == .sleep && !model.sleepSummaries.isEmpty {
-            sleepBreakdownSection(model.sleepSummaries)
+        if metric == .sleep && model.sleepSummaryCount > 0 {
+            sleepBreakdownSection(model)
         }
     }
 
     private func trendCard(_ model: MetricScreenModel) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text(model.analysis.suggestedChartForm == .bars ? "Every \(metric.dailyNoun.capitalized)" : "Trend")
-                .font(Theme.Typography.sectionHeader2)
-                .foregroundStyle(Theme.Colors.textPrimary)
+            SectionHeading(
+                title: model.analysis.suggestedChartForm == .bars ? "Every \(metric.dailyNoun.capitalized)" : "Trend",
+                help: "Select a reading to see its value and date. The shaded range contains the middle half of completed days; "
+                    + "the dashed line is the median. Today’s incomplete readings are marked separately."
+            )
 
             MetricTrendChart(
                 metric: metric,
                 analysis: model.analysis,
                 domain: model.domain,
-                selectedDate: $chartSelectionDate
+                selectedDate: $chartSelectionDate,
+                render: model.chartRender
             )
 
             if let selectedMetricDate = selectedMetricDate(in: model),
@@ -139,7 +141,7 @@ struct HealthMetricDetailView: View {
                                 Text(selectedMetricDate.formatted(date: .abbreviated, time: .omitted))
                                     .font(Theme.Typography.bodyBold)
                                     .foregroundStyle(Theme.Colors.textPrimary)
-                                Text("View all recorded metrics for this day")
+                                Text("View day")
                                     .font(Theme.Typography.caption)
                                     .foregroundStyle(Theme.Colors.textSecondary)
                             }
@@ -152,7 +154,7 @@ struct HealthMetricDetailView: View {
 
             Divider().overlay(Theme.Colors.border.opacity(0.5))
 
-            statFooter(model.analysis)
+            statFooter(model)
         }
         .padding(Theme.Spacing.lg)
         .softCard(elevation: 1)
@@ -161,8 +163,9 @@ struct HealthMetricDetailView: View {
     /// Reference numbers the hero deliberately leaves out. Kept as one quiet row so
     /// they support the chart rather than competing with it, which is what the four
     /// large tinted tiles used to do.
-    private func statFooter(_ analysis: MetricSeriesAnalysis) -> some View {
-        LazyVGrid(
+    private func statFooter(_ model: MetricScreenModel) -> some View {
+        let analysis = model.analysis
+        return LazyVGrid(
             columns: [GridItem(.adaptive(minimum: dynamicTypeSize.isAccessibilitySize ? 150 : 84), spacing: Theme.Spacing.md)],
             alignment: .leading,
             spacing: Theme.Spacing.md
@@ -170,7 +173,7 @@ struct HealthMetricDetailView: View {
             footerStat(
                 "Median",
                 analysis.median.map(metric.formatDisplay),
-                focusDate: medianSampleDate(in: analysis)
+                focusDate: model.medianSampleDate
             )
             footerStat(
                 metric.polarity == .lowerIsBetter ? "Lowest" : "Best",
@@ -184,7 +187,7 @@ struct HealthMetricDetailView: View {
             )
             footerStat(
                 "Recorded",
-                "\(analysis.samples.count) \(metric.dailyNoun)s",
+                "\(analysis.samples.count) \(metric.dailyNoun)\(analysis.samples.count == 1 ? "" : "s")",
                 focusDate: analysis.samples.last?.date
             )
         }
@@ -212,8 +215,8 @@ struct HealthMetricDetailView: View {
                     Text(value ?? "--")
                         .font(Theme.Typography.subheadlineBold)
                         .foregroundStyle(Theme.Colors.textPrimary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                        .minimumScaleFactor(0.85)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -223,21 +226,9 @@ struct HealthMetricDetailView: View {
         )
     }
 
-    private func medianSampleDate(in analysis: MetricSeriesAnalysis) -> Date? {
-        guard let median = analysis.median else { return nil }
-        return analysis.samples.min {
-            abs($0.value - median) < abs($1.value - median)
-        }?.date
-    }
-
     private func selectedMetricDate(in model: MetricScreenModel) -> Date? {
         guard let chartSelectionDate else { return nil }
-        return MetricChartRenderModel(
-            analysis: model.analysis,
-            domain: model.domain
-        )
-        .closestPoint(to: chartSelectionDate)?
-        .date
+        return model.chartRender.closestPoint(to: chartSelectionDate)?.date
     }
 
     private func openMetricSource(_ source: MetricSource) {
@@ -246,20 +237,21 @@ struct HealthMetricDetailView: View {
     }
 
     private func healthDay(for date: Date) -> DailyHealthData? {
-        healthManager.dailyHealthStore.values.first {
-            Calendar.current.isDate($0.dayStart, inSameDayAs: date)
-        }
+        healthManager.dailySnapshot.day(on: date)
     }
 
     // MARK: - States
 
     private var emptyState: some View {
-        EmptyStateCard(
-            icon: metric.icon,
-            tint: metric.accentColor,
-            title: "No \(metric.title.lowercased()) data",
-            message: "Choose a longer range or sync recent Apple Health data."
-        )
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            EmptyStateCard(
+                icon: metric.icon,
+                tint: metric.accentColor,
+                title: "No \(metric.title.lowercased()) data in this range",
+                message: "This metric may not be recorded, shared with this app, or available for these dates."
+            )
+            HealthEmptyStateActions()
+        }
     }
 
     /// A shaped placeholder reads as "loading this screen" where a bare spinner
@@ -282,16 +274,18 @@ struct HealthMetricDetailView: View {
 
     // MARK: - Sleep breakdown
 
-    private func sleepBreakdownSection(_ summaries: [SleepSummary]) -> some View {
-        let count = Double(summaries.count)
-        let stageAverages = averageSleepStages(summaries: summaries)
-        let fallbackCount = summaries.filter(\.usedFallbackSource).count
+    private func sleepBreakdownSection(_ model: MetricScreenModel) -> some View {
+        let count = model.sleepSummaryCount
+        let stageAverages = model.sleepStageAverages
+        let fallbackCount = model.fallbackSleepCount
         let maxHours = stageAverages.values.max() ?? 1
 
         return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Sleep Stages")
-                .font(Theme.Typography.sectionHeader2)
-                .foregroundStyle(Theme.Colors.textPrimary)
+            SectionHeading(
+                title: "Sleep stages",
+                help: "Average hours in each sleep stage across recorded nights. If the preferred source has no usable data, "
+                    + "another Apple Health source is used for that night."
+            )
 
             if count == 0 {
                 Text("No sleep stage data available.")
@@ -309,8 +303,7 @@ struct HealthMetricDetailView: View {
 
             if fallbackCount > 0 {
                 Text(
-                    "\(fallbackCount) night\(fallbackCount == 1 ? "" : "s") used a fallback sleep source "
-                    + "because the preferred source had no usable sleep data."
+                    "\(fallbackCount) night\(fallbackCount == 1 ? "" : "s") from another source"
                 )
                 .font(Theme.Typography.caption)
                 .foregroundStyle(Theme.Colors.textSecondary)
@@ -338,7 +331,7 @@ struct HealthMetricDetailView: View {
                 Capsule()
                     .fill(
                         LinearGradient(
-                            colors: [sleepStageColor(stage).opacity(0.55), sleepStageColor(stage)],
+                            colors: [sleepStageColor(stage), sleepStageColor(stage)],
                             startPoint: .leading,
                             endPoint: .trailing
                         )
@@ -363,86 +356,53 @@ struct HealthMetricDetailView: View {
         }
     }
 
-    private func averageSleepStages(summaries: [SleepSummary]) -> [SleepStage: Double] {
-        guard !summaries.isEmpty else { return [:] }
-        var totals: [SleepStage: TimeInterval] = [:]
-
-        for summary in summaries {
-            for (stage, duration) in summary.stageDurations {
-                totals[stage, default: 0] += duration
-            }
-        }
-
-        let count = Double(summaries.count)
-        return totals.mapValues { ($0 / count) / 3600 }
-    }
-
     // MARK: - Computation
 
-    /// Pulls the raw values on the main actor (a cheap dictionary walk) and hands the
-    /// statistics off the main actor, so scrolling stays smooth on long histories.
     private func recompute() async {
-        let store = healthManager.dailyHealthStore
-        let resolvedRange = dateRangeContext.resolvedRange(earliest: store.keys.min())
+        let request = refreshKey
+        let snapshot = healthManager.dailySnapshot
+        let reference = Date()
+        let resolvedRange = dateRangeContext.resolvedRange(reference: reference, earliest: snapshot.earliestDate)
+        let rangeLabel = dateRangeContext.rangeLabel(reference: reference, earliest: snapshot.earliestDate)
         let ranges = HealthDayComparisonRanges(
             resolvedRange: resolvedRange,
             comparesPreviousPeriod: dateRangeContext.selectedRange != .allTime
         )
-
-        var samples: [MetricDaySample] = []
-        var previousValues: [Double] = []
-        var sleepSummaries: [SleepSummary] = []
-        let calendar = Calendar.current
-
-        for day in store.values {
-            let dayStart = calendar.startOfDay(for: day.dayStart)
-            if ranges.display.contains(dayStart) {
-                if let value = day.value(for: metric) {
-                    samples.append(
-                        MetricDaySample(date: dayStart, value: metric.displayValue(from: value))
-                    )
-                }
-                if metric == .sleep, let summary = day.sleepSummary {
-                    sleepSummaries.append(summary)
-                }
-            } else if ranges.previousComparison?.contains(dayStart) == true,
-                      let value = day.value(for: metric) {
-                previousValues.append(metric.displayValue(from: value))
-            }
+        let capturedMetric = metric
+        let worker = Task.detached(priority: .userInitiated) {
+            try HealthMetricRangeAnalysis(
+                snapshot: snapshot, metrics: [capturedMetric], ranges: ranges,
+                resolvedRange: resolvedRange, now: reference
+            )
         }
-
-        guard !samples.isEmpty else {
+        let result = try? await withTaskCancellationHandler {
+            try await worker.value
+        } onCancel: {
+            worker.cancel()
+        }
+        guard !Task.isCancelled, request == refreshKey, let result else { return }
+        guard let analysis = result.analyses[metric] else {
             model = nil
             hasComputedOnce = true
             return
         }
-
-        let capturedSamples = samples
-        let capturedMetric = metric
-        let analysis = await Task.detached(priority: .userInitiated) {
-            MetricSeriesAnalysis(
-                metric: capturedMetric,
-                samples: capturedSamples,
-                range: resolvedRange
-            )
-        }.value
-
-        guard !Task.isCancelled else { return }
-
-        let previousAverage = previousValues.isEmpty
-            ? nil
-            : previousValues.reduce(0, +) / Double(previousValues.count)
-
+        let domain = ranges.display.lowerBound...ranges.display.upperBound
+        let medianDate = analysis.median.flatMap { median in
+            analysis.samples.min { abs($0.value - median) < abs($1.value - median) }?.date
+        }
         model = MetricScreenModel(
             analysis: analysis,
             insights: MetricNarrative.insights(for: analysis),
-            previousAverage: previousAverage,
-            rangeLabel: dateRangeContext.rangeLabel(earliest: store.keys.min()),
-            domain: ranges.display.lowerBound...max(ranges.display.lowerBound, ranges.display.upperBound),
-            sleepSummaries: sleepSummaries.sorted { $0.start < $1.start }
+            previousAverage: result.previousAverages[metric],
+            rangeLabel: rangeLabel,
+            domain: domain,
+            chartRender: MetricChartRenderModel(analysis: analysis, domain: domain),
+            medianSampleDate: medianDate,
+            sleepStageAverages: result.sleepStageAverages,
+            sleepSummaryCount: result.sleepSummaryCount,
+            fallbackSleepCount: result.fallbackSleepCount
         )
-        if let chartSelectionDate,
-           !ranges.display.contains(chartSelectionDate) {
+        if let chartSelectionDate, !ranges.display.contains(chartSelectionDate) {
             self.chartSelectionDate = nil
         }
         hasComputedOnce = true
@@ -457,7 +417,11 @@ private struct MetricScreenModel {
     let previousAverage: Double?
     let rangeLabel: String
     let domain: ClosedRange<Date>
-    let sleepSummaries: [SleepSummary]
+    let chartRender: MetricChartRenderModel
+    let medianSampleDate: Date?
+    let sleepStageAverages: [SleepStage: Double]
+    let sleepSummaryCount: Int
+    let fallbackSleepCount: Int
 }
 
 private struct SelectedHealthDay: Identifiable, Hashable {
@@ -468,6 +432,5 @@ private struct MetricRefreshKey: Hashable {
     let metric: HealthMetric
     let selectedRange: AppTimeRange
     let customRange: DateInterval
-    let sampleCount: Int
-    let lastSync: Date?
+    let dataRevision: UInt64
 }

@@ -5,11 +5,11 @@ struct EmptyFrequencyWindowState: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text("No tagged muscle data in this window")
+            Text("No muscle data in this range")
                 .font(Theme.Typography.bodyBold)
                 .foregroundColor(Theme.Colors.textPrimary)
 
-            Text("Nothing tagged shows up in \(selectedWindow.detailPhrase). Try a longer range. Saved break weeks are excluded automatically.")
+            Text("Try a longer range or add muscle tags.")
                 .font(Theme.Typography.microcopy)
                 .foregroundColor(Theme.Colors.textSecondary)
         }

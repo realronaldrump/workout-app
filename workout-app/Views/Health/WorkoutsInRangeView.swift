@@ -39,7 +39,6 @@ struct WorkoutsInRangeView: View {
                 .contentColumn()
             }
         }
-        .navigationTitle("Workouts")
-        .navigationBarTitleDisplayMode(.inline)
+        .collapsingTitle("Workouts")
     }
 }

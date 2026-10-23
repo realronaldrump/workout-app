@@ -6,18 +6,29 @@ struct BackupFilesView: View {
     @State private var selectedFile: URL?
     @State private var showingDeleteAlert = false
     @State private var deletionErrorMessage: String?
+    @State private var isLoading = true
+    @State private var isDeleting = false
+    @State private var loadRevision = UUID()
 
     var body: some View {
         ZStack {
             AdaptiveBackground()
             ScrollView {
                 LazyVStack(spacing: Theme.Spacing.md) {
-                    if sections.isEmpty {
+                    if isDeleting {
+                        ProgressView("Deleting file…")
+                            .frame(maxWidth: .infinity)
+                    }
+                    if isLoading {
+                        ProgressView("Loading saved files…")
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, Theme.Spacing.xxl)
+                    } else if sections.isEmpty {
                         EmptyStateCard(
                             icon: "icloud.slash",
                             tint: Theme.Colors.textTertiary,
-                            title: "No Backup Files",
-                            message: "Exported files and master backups will appear here."
+                            title: "No backup files",
+                            message: "Create a backup from Settings > Export."
                         )
                         .padding(.top, 50)
                     } else {
@@ -31,6 +42,7 @@ struct BackupFilesView: View {
                                             selectedFile = file.url
                                             showingDeleteAlert = true
                                         }
+                                        .disabled(isDeleting)
                                     }
                                 }
                             }
@@ -40,13 +52,14 @@ struct BackupFilesView: View {
                 .padding()
                 .contentColumn()
             }
+            .refreshable { await loadFiles() }
         }
-        .navigationTitle("Backup Files")
+        .navigationTitle("Backup files")
         .navigationBarTitleDisplayMode(.inline)
         .task {
             await loadFiles()
         }
-        .alert("Delete File", isPresented: $showingDeleteAlert) {
+        .alert("Delete file", isPresented: $showingDeleteAlert) {
             Button("Cancel", role: .cancel) {}
             Button("Delete", role: .destructive) {
                 if let file = selectedFile {
@@ -56,10 +69,10 @@ struct BackupFilesView: View {
                 }
             }
         } message: {
-            Text("Are you sure you want to delete this backup file?")
+            Text("Delete \(selectedFile?.lastPathComponent ?? "this file") and its local and iCloud copies? This cannot be undone. Your workouts in the app will remain.")
         }
         .alert(
-            "Unable to Delete File",
+            "Could not delete file",
             isPresented: Binding(
                 get: { deletionErrorMessage != nil },
                 set: { isPresented in
@@ -71,16 +84,26 @@ struct BackupFilesView: View {
         ) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text(deletionErrorMessage ?? "The file could not be deleted.")
+            Text(deletionErrorMessage ?? "The file could not be deleted. Try again.")
         }
     }
 
     @MainActor
-    private func loadFiles() async {
+    private func loadFiles(allowDuringDeletion: Bool = false) async {
+        guard !isDeleting || allowDuringDeletion else { return }
+        let revision = UUID()
+        loadRevision = revision
+        if sections.isEmpty { isLoading = true }
+        defer {
+            if loadRevision == revision { isLoading = false }
+        }
+
         let files = await iCloudManager.exportAndBackupFiles()
-        sections = await Task.detached(priority: .userInitiated) { [files] in
+        let loadedSections = await Task.detached(priority: .userInitiated) { [files] in
             return BackupFileSection.sections(from: files)
         }.value
+        guard loadRevision == revision, !Task.isCancelled else { return }
+        sections = loadedSections
     }
 
     private func removeFile(_ file: URL) {
@@ -94,6 +117,12 @@ struct BackupFilesView: View {
 
     @MainActor
     private func deleteFileAndCopies(_ file: URL) async {
+        guard !isDeleting else { return }
+        isDeleting = true
+        // Invalidate a refresh that captured the inventory before deletion began.
+        loadRevision = UUID()
+        isLoading = false
+        defer { isDeleting = false }
         do {
             try await iCloudManager.deleteAllCopies(ofExportOrBackup: file)
             removeFile(file)
@@ -101,7 +130,7 @@ struct BackupFilesView: View {
         } catch {
             // A partial failure can still remove one physical copy. Reload so the
             // inventory accurately reflects whatever remains before showing the error.
-            await loadFiles()
+            await loadFiles(allowDuringDeletion: true)
             selectedFile = nil
             deletionErrorMessage = error.localizedDescription
         }
@@ -109,40 +138,52 @@ struct BackupFilesView: View {
 }
 
 struct BackupFileRow: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let file: BackupFileEntry
     let onDelete: () -> Void
 
     var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(file.fileName)
-                    .font(Theme.Typography.condensed)
-                    .foregroundStyle(Theme.Colors.textPrimary)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            Text(file.fileName)
+                .font(Theme.Typography.condensed)
+                .foregroundStyle(Theme.Colors.textPrimary)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 3)
+                .truncationMode(.middle)
+                .multilineTextAlignment(.leading)
+                .textSelection(.enabled)
 
-                if !file.detailText.isEmpty {
-                    Text(file.detailText)
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                        .lineLimit(2)
+            if !file.detailText.isEmpty {
+                Text(file.detailText)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            HStack(spacing: Theme.Spacing.md) {
+                ShareLink(item: file.url) {
+                    Label("Share", systemImage: "square.and.arrow.up")
+                        .font(Theme.Typography.captionBold)
+                        .frame(minHeight: Theme.Layout.minimumTapTarget)
                 }
-            }
+                .tint(Theme.Colors.accent)
+                .accessibilityLabel("Share \(file.fileName)")
 
-            Spacer()
+                Spacer(minLength: 0)
 
-            Button(action: onDelete) {
-                Image(systemName: "trash")
-                    .font(Theme.Typography.body)
-                    .foregroundStyle(Theme.Colors.error)
-                    .padding(8)
-                    .background(Theme.Colors.error.opacity(0.12))
-                    .clipShape(Circle())
+                Button(action: onDelete) {
+                    Label("Delete", systemImage: "trash")
+                        .font(Theme.Typography.captionBold)
+                        .foregroundStyle(Theme.Colors.error)
+                        .frame(minHeight: Theme.Layout.minimumTapTarget)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Delete \(file.fileName)")
+                .accessibilityHint("Opens a confirmation before deleting this file and its copies")
             }
-            .buttonStyle(PlainButtonStyle())
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Theme.Spacing.lg)
-        .softCard(elevation: 2)
+        .softCard(elevation: 1)
     }
 }
 
@@ -216,7 +257,7 @@ nonisolated struct BackupFileEntry: Identifiable, Equatable {
             details.append("Saved \(sortDate.formatted(date: .abbreviated, time: .shortened))")
         }
 
-        return details.joined(separator: " | ")
+        return details.joined(separator: ". ")
     }
 
     init(url: URL) {
@@ -287,27 +328,27 @@ nonisolated enum BackupFileKind: Int, CaseIterable {
     var sectionTitle: String {
         switch self {
         case .fullBackup:
-            return "Master Backups"
+            return "Full backups"
         case .strongImport:
-            return "Strong Imports"
+            return "Strong imports"
         case .workoutExport:
-            return "Workout Exports"
+            return "Workout exports"
         case .exerciseList:
-            return "Exercise Lists"
+            return "Exercise lists"
         case .exerciseHistory:
-            return "Exercise History"
+            return "Exercise history"
         case .muscleGroup:
-            return "Muscle Groups"
+            return "Muscle groups"
         case .workoutDates:
-            return "Workout Dates"
+            return "Workout dates"
         case .healthDaily:
-            return "Health Daily"
+            return "Health daily"
         case .healthWorkout:
-            return "Health Workouts"
+            return "Health workouts"
         case .healthMetricSamples:
-            return "Health Metric Samples"
+            return "Health metric samples"
         case .otherCSV:
-            return "Other CSV Files"
+            return "Other CSV files"
         }
     }
 }

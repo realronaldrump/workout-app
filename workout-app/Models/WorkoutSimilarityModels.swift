@@ -8,11 +8,11 @@ enum WorkoutSimilarityMatchKind: String, Hashable {
     nonisolated var title: String {
         switch self {
         case .exactOrdered:
-            return "Exact Same Order"
+            return "Same exercises, same order"
         case .exactExercisesReordered:
-            return "Same Exercises, Different Order"
+            return "Same exercises, different order"
         case .partial:
-            return "Closest Partial Match"
+            return "Closest partial match"
         }
     }
 

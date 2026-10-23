@@ -4,10 +4,10 @@ import SwiftUI
 
 struct PerformanceLabView: View {
     private enum TimeFilter: String, CaseIterable {
-        case twoWeeks = "2 Weeks"
-        case fourWeeks = "4 Weeks"
-        case eightWeeks = "8 Weeks"
-        case twelveWeeks = "12 Weeks"
+        case twoWeeks = "2 weeks"
+        case fourWeeks = "4 weeks"
+        case eightWeeks = "8 weeks"
+        case twelveWeeks = "12 weeks"
         case custom = "Custom"
 
         var days: Int? {
@@ -35,6 +35,7 @@ struct PerformanceLabView: View {
     @State private var customStartDate = Date()
     @State private var customEndDate = Date()
     @State private var didInitializeCustomRange = false
+    @State private var showingQuickStart = false
     @State private var selectedWorkout: Workout?
     @State private var selectedExercise: ExerciseSelection?
     @State private var selectedChangeMetric: ChangeMetric?
@@ -104,7 +105,7 @@ struct PerformanceLabView: View {
     }
 
     private var selectedWindowContextLabel: String {
-        selectedTimeFilter == .custom ? "Custom Range" : selectedWindowLabel
+        selectedTimeFilter == .custom ? "this range" : selectedWindowLabel
     }
 
     private var selectedRangeDetailLabel: String {
@@ -186,13 +187,6 @@ struct PerformanceLabView: View {
         derivedAnalytics.muscleWorkChanges
     }
 
-    private var glanceGridColumns: [GridItem] {
-        if dynamicTypeSize.isAccessibilitySize {
-            return [GridItem(.flexible())]
-        }
-        return [GridItem(.adaptive(minimum: 140, maximum: 240), spacing: Theme.Spacing.md)]
-    }
-
     var body: some View {
         ZStack {
             AdaptiveBackground()
@@ -205,17 +199,21 @@ struct PerformanceLabView: View {
                         emptyState
                     } else {
                         timeRangeSection
-                        atAGlanceSection
-                        comparisonSection
+                        if selectedRangeWorkouts.isEmpty {
+                            rangeEmptyState
+                        } else {
+                            atAGlanceSection
+                            comparisonSection
 
-                        PerformanceLabVariantSection(
-                            patterns: Array(variantEngine.library.standoutPatterns.prefix(2)),
-                            onSelectWorkout: { selectedWorkout = $0 }
-                        )
+                            PerformanceLabVariantSection(
+                                patterns: Array(variantEngine.library.standoutPatterns.prefix(2)),
+                                onSelectWorkout: { selectedWorkout = $0 }
+                            )
 
-                        strengthGainsSection
-                        muscleBalanceSection
-                        weeklyActivitySection
+                            strengthGainsSection
+                            muscleBalanceSection
+                            weeklyActivitySection
+                        }
                     }
                 }
                 .padding(.vertical, Theme.Spacing.xxl)
@@ -224,9 +222,11 @@ struct PerformanceLabView: View {
                 .frame(maxWidth: .infinity, alignment: .center)
             }
         }
-        .navigationTitle("Performance")
-        .navigationBarTitleDisplayMode(.inline)
+        .collapsingTitle("Performance")
         .accessibilityIdentifier("performance-lab")
+        .sheet(isPresented: $showingQuickStart) {
+            QuickStartView(exerciseName: nil)
+        }
         .navigationDestination(item: $selectedWorkout) { workout in
             WorkoutDetailView(workout: workout)
         }
@@ -299,7 +299,7 @@ struct PerformanceLabView: View {
     private var header: some View {
         StatsPageHeader(
             eyebrow: "Performance",
-            title: "Your Training, Measured",
+            title: "Training progress",
             subtitle: headerSubtitle,
             systemImage: "chart.line.uptrend.xyaxis"
         )
@@ -307,10 +307,10 @@ struct PerformanceLabView: View {
 
     private var headerSubtitle: String {
         guard let latest = latestWorkoutDate else {
-            return "Start logging workouts to track your progress."
+            return "No workouts logged"
         }
         let through = latest.formatted(date: .abbreviated, time: .omitted)
-        return "\(selectedRangeWorkouts.count) workouts in \(selectedWindowContextLabel) • \(workouts.count) total through \(through)"
+        return "\(selectedRangeWorkouts.count) workouts in \(selectedWindowContextLabel), \(workouts.count) total through \(through)"
     }
 
     // MARK: - Empty State
@@ -320,12 +320,33 @@ struct PerformanceLabView: View {
             Text("No workouts yet")
                 .font(Theme.Typography.title3)
                 .foregroundColor(Theme.Colors.textPrimary)
-            Text("Log a few sessions and your progress will show up here automatically.")
-                .font(Theme.Typography.body)
-                .foregroundColor(Theme.Colors.textSecondary)
+            AppPrimaryButton(title: "Start workout", systemImage: "plus") {
+                showingQuickStart = true
+            }
+            .padding(.top, Theme.Spacing.sm)
         }
         .padding(Theme.Spacing.lg)
         .softCard(elevation: 2)
+    }
+
+    private var rangeEmptyState: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            Label("No workouts in this range", systemImage: "calendar")
+                .font(Theme.Typography.title3)
+                .foregroundStyle(Theme.Colors.textPrimary)
+            Button("Show latest workout", systemImage: "arrow.clockwise") {
+                guard let latest = latestWorkoutDate else { return }
+                let start = Calendar.current.date(byAdding: .day, value: -27, to: latest) ?? latest
+                customStartDate = max(start, earliestWorkoutDate ?? start)
+                customEndDate = latest
+                selectedTimeFilter = .custom
+                Haptics.selection()
+            }
+            .font(Theme.Typography.bodyBold)
+            .frame(minHeight: Theme.Layout.minimumTapTarget)
+        }
+        .padding(Theme.Spacing.lg)
+        .softCard(elevation: 1)
     }
 
     // MARK: - Time Range
@@ -339,7 +360,7 @@ struct PerformanceLabView: View {
 
             if selectedTimeFilter == .custom {
                 BrutalistDateRangePickerRow(
-                    title: "Custom Range",
+                    title: "Custom range",
                     startDate: $customStartDate,
                     endDate: $customEndDate,
                     earliestSelectableDate: earliestWorkoutDate,
@@ -352,7 +373,7 @@ struct PerformanceLabView: View {
     @ViewBuilder
     private var timeRangePicker: some View {
         if dynamicTypeSize.isAccessibilitySize {
-            Picker("Time Range", selection: $selectedTimeFilter) {
+            Picker("Time range", selection: $selectedTimeFilter) {
                 ForEach(timeFilterOptions.indices, id: \.self) { index in
                     let option = timeFilterOptions[index]
                     Text(option.label)
@@ -376,7 +397,7 @@ struct PerformanceLabView: View {
             }
         } else {
             AppSegmentedPicker(
-                title: "Time Range",
+                title: "Time range",
                 selection: $selectedTimeFilter,
                 options: timeFilterOptions
             )
@@ -389,96 +410,48 @@ struct PerformanceLabView: View {
         let currentStreak = derivedAnalytics.currentStreak
         let bestStreak = derivedAnalytics.bestStreak
         let avgPerWeekText = String(format: "%.1f", derivedAnalytics.averageWorkoutsPerWeek)
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: Theme.Spacing.md))
+            : AnyLayout(StatColumns())
 
         return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("At a Glance")
+            Text("Summary")
                 .font(Theme.Typography.sectionHeader2)
                 .foregroundColor(Theme.Colors.textPrimary)
                 .accessibilityAddTraits(.isHeader)
 
-            if dynamicTypeSize.isAccessibilitySize {
-                LazyVGrid(columns: glanceGridColumns, spacing: Theme.Spacing.md) {
-                    glanceTiles(currentStreak: currentStreak, bestStreak: bestStreak, avgPerWeekText: avgPerWeekText)
-                }
-            } else {
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: Theme.Spacing.md) {
-                        glanceTiles(currentStreak: currentStreak, bestStreak: bestStreak, avgPerWeekText: avgPerWeekText)
-                    }
-
-                    LazyVGrid(columns: glanceGridColumns, spacing: Theme.Spacing.md) {
-                        glanceTiles(currentStreak: currentStreak, bestStreak: bestStreak, avgPerWeekText: avgPerWeekText)
-                    }
-                }
+            layout {
+                glanceStat(
+                    value: "\(selectedRangeWorkouts.count)",
+                    label: "workouts in \(selectedWindowContextLabel)",
+                    metric: .sessions
+                )
+                glanceStat(value: avgPerWeekText, label: "per week", metric: .averageFrequency)
+                glanceStat(
+                    value: "\(currentStreak)",
+                    label: currentStreak == bestStreak && currentStreak > 0 ? "day streak, your best" : "day streak",
+                    metric: .streak
+                )
             }
+            .padding(.vertical, Theme.Spacing.lg)
+            .padding(.horizontal, Theme.Spacing.md)
+            .softCard()
         }
     }
 
-    @ViewBuilder
-    private func glanceTiles(currentStreak: Int, bestStreak: Int, avgPerWeekText: String) -> some View {
-        glanceTile(
-            value: "\(selectedRangeWorkouts.count)",
-            label: "In \(selectedWindowContextLabel)",
-            icon: "calendar",
-            metric: .sessions
-        )
-        glanceTile(
-            value: avgPerWeekText,
-            label: "Avg / Week",
-            icon: "chart.bar.fill",
-            metric: .averageFrequency
-        )
-        glanceTile(
-            value: "\(currentStreak)",
-            label: currentStreak == bestStreak && currentStreak > 0 ? "Day Streak \u{2605}" : "Day Streak",
-            icon: "flame.fill",
-            metric: .streak
-        )
-    }
-
-    private func glanceTile(
-        value: String,
-        label: String,
-        icon: String,
-        metric: WorkoutMetricDetailKind
-    ) -> some View {
-        let tileColor: Color = {
-            switch icon {
-            case "flame.fill": return Theme.Colors.accentSecondary
-            case "chart.bar.fill": return Theme.Colors.success
-            default: return Theme.Colors.accent
-            }
-        }()
-
-        return AnalysisTile(
-            role: .navigate,
-            destination: "\(label) analysis",
-            accessibilityLabel: "\(label), \(value)",
-            action: {
-                selectedWorkoutMetric = WorkoutMetricDetailSelection(
-                    kind: metric
-                )
-            },
-            content: {
-                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                    IconTile(systemImage: icon, tint: tileColor, size: 30)
-                    Text(value)
-                        .font(Theme.Typography.number)
-                        .foregroundColor(Theme.Colors.textPrimary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-                        .contentTransition(.numericText())
-                    Text(label)
-                        .font(Theme.Typography.metricLabel)
-                        .foregroundColor(Theme.Colors.textSecondary)
-                        .textCase(.uppercase)
-                        .tracking(0.5)
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+    private func glanceStat(value: String, label: String, metric: WorkoutMetricDetailKind) -> some View {
+        Button {
+            Haptics.selection()
+            selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: metric)
+        } label: {
+            DisplayStat(value: value, label: label, valueFont: Theme.Typography.number)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        )
+                .padding(.horizontal, Theme.Spacing.xs)
+                .contentShape(.rect)
+        }
+        .buttonStyle(PressableCardButtonStyle())
+        .accessibilityLabel("\(value) \(label)")
+        .accessibilityHint("Opens details")
         .accessibilityIdentifier("performance-glance-\(metric.rawValue)")
     }
 
@@ -534,21 +507,16 @@ struct PerformanceLabView: View {
         let decliners = Array(exerciseGains.filter { $0.delta < 0 }.sorted { $0.delta < $1.delta }.prefix(3))
 
         return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Strength Trends")
-                .font(Theme.Typography.sectionHeader2)
-                .foregroundColor(Theme.Colors.textPrimary)
-                .accessibilityAddTraits(.isHeader)
-
-            Text("Best load per exercise, \(selectedWindowTrendSubtitle)")
-                .font(Theme.Typography.caption)
-                .foregroundColor(Theme.Colors.textSecondary)
+            SectionHeading(
+                title: "Strength trends",
+                help: "Compares the best logged weight for each exercise, \(selectedWindowTrendSubtitle)."
+            )
 
             if gainers.isEmpty && decliners.isEmpty {
-                Text("Keep training \u{2014} trends will appear after a few weeks.")
+                Text("Not enough workouts to compare.")
                     .font(Theme.Typography.body)
                     .foregroundColor(Theme.Colors.textSecondary)
-                    .padding(Theme.Spacing.lg)
-                    .softCard(elevation: 2)
+                    .ledgerRow()
             } else {
                 if !gainers.isEmpty {
                     VStack(spacing: 0) {
@@ -556,95 +524,62 @@ struct PerformanceLabView: View {
                             Button {
                                 selectedExercise = ExerciseSelection(id: item.name)
                             } label: {
-                                strengthRow(item: item)
+                                strengthRow(item: item, showsRule: index > 0)
                             }
-                            .buttonStyle(PlainButtonStyle())
-
-                            if index < gainers.count - 1 {
-                                Divider()
-                                    .padding(.horizontal, Theme.Spacing.lg)
-                            }
+                            .buttonStyle(PressableCardButtonStyle())
                         }
                     }
-                    .softCard(elevation: 2)
                 }
 
                 if !decliners.isEmpty {
-                    VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                        Text("Needs Attention")
-                            .font(Theme.Typography.captionBold)
-                            .foregroundColor(Theme.Colors.warning)
-                            .textCase(.uppercase)
-                            .tracking(0.5)
-                            .padding(.horizontal, Theme.Spacing.lg)
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text("Lower best weight")
+                            .font(Theme.Typography.subheadlineStrong)
+                            .foregroundColor(Theme.Colors.textSecondary)
                             .padding(.top, Theme.Spacing.sm)
+                            .padding(.bottom, Theme.Spacing.xs)
 
-                        VStack(spacing: 0) {
-                            ForEach(Array(decliners.enumerated()), id: \.element.id) { index, item in
-                                Button {
-                                    selectedExercise = ExerciseSelection(id: item.name)
-                                } label: {
-                                    strengthRow(item: item)
-                                }
-                                .buttonStyle(PlainButtonStyle())
-
-                                if index < decliners.count - 1 {
-                                    Divider()
-                                        .padding(.horizontal, Theme.Spacing.lg)
-                                }
+                        ForEach(Array(decliners.enumerated()), id: \.element.id) { index, item in
+                            Button {
+                                selectedExercise = ExerciseSelection(id: item.name)
+                            } label: {
+                                strengthRow(item: item, showsRule: true)
                             }
+                            .buttonStyle(PressableCardButtonStyle())
                         }
-                        .softCard(elevation: 1)
                     }
                 }
             }
         }
     }
 
-    private func strengthRow(item: ProgressContribution) -> some View {
-        HStack(spacing: Theme.Spacing.md) {
-            strengthTrendIcon(for: item.delta)
+    private func strengthRow(item: ProgressContribution, showsRule: Bool) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.md) {
+            Text(item.name)
+                .font(Theme.Typography.headline)
+                .foregroundColor(Theme.Colors.textPrimary)
+                .lineLimit(2)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(item.name)
-                    .font(Theme.Typography.bodyBold)
-                    .foregroundColor(Theme.Colors.textPrimary)
-                    .lineLimit(1)
-                Text(strengthChangeText(item.delta))
-                    .font(Theme.Typography.caption)
-                    .foregroundColor(Theme.Colors.textSecondary)
-            }
+            Spacer(minLength: Theme.Spacing.sm)
 
-            Spacer()
+            Text(strengthChangeText(item.delta))
+                .font(Theme.Typography.numberSmall)
+                .monospacedDigit()
+                .foregroundColor(item.delta > 0 ? Theme.Colors.success : (item.delta < 0 ? Theme.Colors.warning : Theme.Colors.textSecondary))
 
             Image(systemName: "chevron.right")
                 .font(Theme.Typography.caption)
                 .foregroundColor(Theme.Colors.textTertiary)
+                .accessibilityHidden(true)
         }
-        .padding(.horizontal, Theme.Spacing.lg)
-        .padding(.vertical, Theme.Spacing.md)
+        .ledgerRow(showsRule: showsRule)
         .contentShape(Rectangle())
-    }
-
-    @ViewBuilder
-    private func strengthTrendIcon(for delta: Double) -> some View {
-        let (icon, color): (String, Color) = {
-            if delta > 10 { return ("arrow.up.circle.fill", Theme.Colors.success) }
-            if delta > 0 { return ("arrow.up.right.circle.fill", Theme.Colors.success) }
-            if delta < -10 { return ("arrow.down.circle.fill", Theme.Colors.warning) }
-            if delta < 0 { return ("arrow.down.right.circle.fill", Theme.Colors.warning) }
-            return ("equal.circle.fill", Theme.Colors.textTertiary)
-        }()
-
-        Image(systemName: icon)
-            .font(Theme.Iconography.title2)
-            .foregroundColor(color)
+        .accessibilityElement(children: .combine)
     }
 
     private func strengthChangeText(_ delta: Double) -> String {
-        if abs(delta) < 0.5 { return "Holding steady" }
-        let direction = delta > 0 ? "Up" : "Down"
-        return "\(direction) \(formatWeight(abs(delta)))"
+        if abs(delta) < 0.5 { return "Even" }
+        return "\(delta > 0 ? "+" : "−")\(formatWeight(abs(delta)))"
     }
 
     // MARK: - Muscle Balance
@@ -654,17 +589,13 @@ struct PerformanceLabView: View {
         let changes = muscleWorkChanges
 
         return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Muscle Focus")
-                .font(Theme.Typography.sectionHeader2)
-                .foregroundColor(Theme.Colors.textPrimary)
-                .accessibilityAddTraits(.isHeader)
-
-            Text("Distribution across tagged groups in \(selectedRangeDetailLabel).")
-                .font(Theme.Typography.caption)
-                .foregroundColor(Theme.Colors.textSecondary)
+            SectionHeading(
+                title: "Muscle groups",
+                help: "Uses the muscle groups assigned to each exercise in the selected date range."
+            )
 
             if buckets.isEmpty {
-                Text("Tag your exercises with muscle groups to see your training balance.")
+                Text("No muscle groups assigned to these exercises.")
                     .font(Theme.Typography.body)
                     .foregroundColor(Theme.Colors.textSecondary)
                     .padding(Theme.Spacing.lg)
@@ -677,11 +608,9 @@ struct PerformanceLabView: View {
 
             if !changes.isEmpty {
                 VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                    Text("Change by Muscle Group")
+                    Text("Change by muscle group")
                         .font(Theme.Typography.captionBold)
                         .foregroundColor(Theme.Colors.textSecondary)
-                        .textCase(.uppercase)
-                        .tracking(0.5)
 
                     if let selectedChangeWindow {
                         Text(selectedChangeWindow.label)
@@ -691,14 +620,9 @@ struct PerformanceLabView: View {
 
                     VStack(spacing: 0) {
                         ForEach(Array(changes.enumerated()), id: \.element.id) { index, change in
-                            muscleChangeRow(change)
-                            if index < changes.count - 1 {
-                                Divider()
-                                    .padding(.horizontal, Theme.Spacing.lg)
-                            }
+                            muscleChangeRow(change, showsRule: index > 0)
                         }
                     }
-                    .softCard(elevation: 1)
                 }
             }
         }
@@ -768,18 +692,16 @@ struct PerformanceLabView: View {
         .sorted { abs($0.deltaEffort) > abs($1.deltaEffort) }
     }
 
-    private func muscleChangeRow(_ change: MuscleWorkChange) -> some View {
-        HStack(spacing: Theme.Spacing.sm) {
-            Circle()
-                .fill(change.tag.tint)
-                .frame(width: 10, height: 10)
+    private func muscleChangeRow(_ change: MuscleWorkChange, showsRule: Bool) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.sm) {
+            TintMark(tint: change.tag.tint)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(change.tag.shortName)
-                    .font(Theme.Typography.bodyBold)
+                    .font(Theme.Typography.headline)
                     .foregroundColor(Theme.Colors.textPrimary)
-                Text("Now \(percentLabel(for: change.currentShare)) • Before \(percentLabel(for: change.previousShare))")
-                    .font(Theme.Typography.caption)
+                Text("Now \(percentLabel(for: change.currentShare)), before \(percentLabel(for: change.previousShare))")
+                    .font(Theme.Typography.subheadline)
                     .foregroundColor(Theme.Colors.textSecondary)
             }
 
@@ -787,15 +709,16 @@ struct PerformanceLabView: View {
 
             VStack(alignment: .trailing, spacing: 2) {
                 Text(shareDeltaLabel(for: change.deltaShare))
-                    .font(Theme.Typography.captionBold)
+                    .font(Theme.Typography.numberSmall)
+                    .monospacedDigit()
                     .foregroundColor(deltaTint(for: change.deltaEffort))
                 Text(relativeEffortChangeLabel(current: change.currentEffort, previous: change.previousEffort))
                     .font(Theme.Typography.caption)
-                    .foregroundColor(Theme.Colors.textTertiary)
+                    .foregroundColor(Theme.Colors.textSecondary)
             }
         }
-        .padding(.horizontal, Theme.Spacing.lg)
-        .padding(.vertical, Theme.Spacing.sm)
+        .ledgerRow(showsRule: showsRule, verticalPadding: Theme.Spacing.sm)
+        .accessibilityElement(children: .combine)
     }
 
     // MARK: - Weekly Activity
@@ -804,13 +727,13 @@ struct PerformanceLabView: View {
         let weeks = derivedAnalytics.weeklyCounts
 
         return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Weekly Activity")
+            Text("Weekly activity")
                 .font(Theme.Typography.sectionHeader2)
                 .foregroundColor(Theme.Colors.textPrimary)
                 .accessibilityAddTraits(.isHeader)
 
             if weeks.isEmpty {
-                Text("Your weekly training pattern will appear here.")
+                Text("No workouts in this date range.")
                     .font(Theme.Typography.body)
                     .foregroundColor(Theme.Colors.textSecondary)
                     .padding(Theme.Spacing.lg)
@@ -851,7 +774,7 @@ struct PerformanceLabView: View {
 
                 Spacer()
 
-                Button("Show All") {
+                Button("Show all") {
                     selectedActivityWeek = nil
                     Haptics.selection()
                 }
@@ -1140,8 +1063,6 @@ private struct PerformanceComparisonRow: View {
                 Text(displayTitle)
                     .font(Theme.Typography.captionBold)
                     .foregroundColor(Theme.Colors.textSecondary)
-                    .textCase(.uppercase)
-                    .tracking(0.5)
                 Spacer()
                 Text(changeLabel)
                     .font(Theme.Typography.captionBold)
@@ -1202,7 +1123,7 @@ private struct PerformanceComparisonRow: View {
     private var displayTitle: String {
         switch metric.title {
         case "Sessions": return "Workouts"
-        case "Total Volume": return "Weight Lifted"
+        case "Total Volume": return "Weight lifted"
         default: return metric.title
         }
     }

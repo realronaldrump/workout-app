@@ -42,7 +42,7 @@ struct ConsistencyDetailView: View {
             consistencyBackground
 
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: Theme.Spacing.xl) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
                     // The window scopes the headline numbers too, so it leads the page.
                     rangePicker
 
@@ -227,152 +227,32 @@ struct ConsistencyDetailView: View {
     }
 
     private var consistencyBackground: some View {
-        AdaptiveBackground()
+        Theme.Colors.background.ignoresSafeArea()
     }
 
     private var heroCard: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                BrandBandLabel(text: "Consistency", systemImage: "calendar.badge.checkmark")
-                    .padding(.bottom, Theme.Spacing.xs)
-
-                ViewThatFits(in: .horizontal) {
-                    HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.md) {
-                        heroAverageValue
-                        heroAverageLabel
-                    }
-
-                    VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                        heroAverageValue
-                        heroAverageLabel
-                    }
-                }
-
-                Text("Saved break dates scale weekly goals down and keep excused gaps from breaking streaks.")
-                    .font(Theme.Typography.caption)
-                    .foregroundColor(Theme.Colors.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            if !weeklyBuckets.isEmpty {
-                Chart(weeklyBuckets) { bucket in
-                    LineMark(
-                        x: .value("Week", bucket.weekStart),
-                        y: .value("Sessions", bucket.sessions)
-                    )
-                    .interpolationMethod(.catmullRom)
-                    .foregroundStyle(Theme.Colors.accent)
-                    .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
-
-                    AreaMark(
-                        x: .value("Week", bucket.weekStart),
-                        y: .value("Sessions", bucket.sessions)
-                    )
-                    .interpolationMethod(.catmullRom)
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [Theme.Colors.accent.opacity(0.2), Theme.Colors.accent.opacity(0.01)],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-                }
-                .chartYAxis {
-                    AxisMarks(position: .leading) { value in
-                        AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
-                            .foregroundStyle(Theme.Colors.border.opacity(0.5))
-                        AxisValueLabel {
-                            if let count = value.as(Int.self) {
-                                Text("\(count)")
-                            }
-                        }
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textTertiary)
-                    }
-                }
-                .chartXAxis(.hidden)
-                .frame(height: Theme.ChartHeight.compact)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Weekly consistency trend")
-                .accessibilityValue(
-                    "\(weeklyBuckets.count) weeks. Average \(String(format: "%.1f", averageSessionsPerWeek)) sessions per week."
-                )
-            }
-
-            LazyVGrid(
-                columns: metricGridColumns,
-                spacing: Theme.Spacing.sm
-            ) {
-                HeroMetricChip(
-                    title: "Goal Weeks",
-                    value: activeGoalWeeks > 0 ? "\(goalHitWeeks)/\(activeGoalWeeks)" : "--",
-                    tint: Theme.Colors.success
-                )
-                HeroMetricChip(
-                    title: "Hit Rate",
-                    value: String(format: "%.0f%%", goalHitRate * 100),
-                    tint: Theme.Colors.accentSecondary
-                )
-                HeroMetricChip(
-                    title: "Current Streak",
-                    value: "\(currentStreakRun?.workoutDayCount ?? 0)d",
-                    tint: Theme.Colors.accent
-                )
-                HeroMetricChip(
-                    title: "Best Streak",
-                    value: "\(bestStreakLength)d",
-                    tint: Theme.Colors.warning
-                )
-            }
-        }
-        .padding(Theme.Spacing.lg)
-        .background(alignment: .topTrailing) {
-            RadialGradient(
-                colors: [Theme.Colors.accent.opacity(0.14), Theme.Colors.accent.opacity(0)],
-                center: .topTrailing,
-                startRadius: 0,
-                endRadius: 260
-            )
-            .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge, style: .continuous))
-        }
-        .softCard(cornerRadius: Theme.CornerRadius.xlarge, elevation: 2)
-    }
-
-    private var heroAverageValue: some View {
-        Text(String(format: "%.1f", averageSessionsPerWeek))
-            .font(Theme.Typography.metricLarge)
-            .foregroundStyle(Theme.Colors.textPrimary)
-            .contentTransition(.numericText())
-            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
-            .minimumScaleFactor(dynamicTypeSize.isAccessibilitySize ? 1 : 0.6)
-            .fixedSize(horizontal: false, vertical: true)
-    }
-
-    private var heroAverageLabel: some View {
-        Text("sessions/week")
-            .font(Theme.Typography.bodyBold)
-            .foregroundColor(Theme.Colors.textSecondary)
-            .fixedSize(horizontal: false, vertical: true)
+        ConsistencySummaryView(
+            average: averageSessionsPerWeek,
+            weeks: weeklyBuckets.map { TimeSeriesPoint(date: $0.weekStart, value: Double($0.sessions)) },
+            goalWeeks: goalHitWeeks,
+            totalWeeks: activeGoalWeeks,
+            currentStreak: currentStreakRun?.workoutDayCount ?? 0,
+            bestStreak: bestStreakLength
+        )
     }
 
     private var rangePicker: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            FilterRowLabel(title: "Window")
-
-            TimeRangePillPicker(
-                options: ConsistencyRange.allCases,
-                selected: $selectedRange,
-                label: { $0.label }
-            )
-        }
+        TimeRangePillPicker(
+            options: ConsistencyRange.allCases,
+            selected: $selectedRange,
+            label: { $0.label },
+            expandsToFill: true
+        )
     }
 
     private var weeklyExplorerSection: some View {
-        LazyVStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-            sectionHeader(
-                title: "Weekly Explorer",
-                subtitle: "Tap any week to inspect sessions, volume, and time load."
-            )
+        VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
+            sectionHeader(title: "Weekly workouts")
 
             if weeklyBuckets.isEmpty {
                 emptyCard(message: "No workouts in this range yet.")
@@ -409,7 +289,7 @@ struct ConsistencyDetailView: View {
 
             Group {
                 if bucket.isFullyExcused {
-                    Text("Break Week")
+                    Text("Break week")
                         .foregroundColor(Theme.Colors.textSecondary)
                         .background(
                             Capsule()
@@ -417,7 +297,7 @@ struct ConsistencyDetailView: View {
                         )
                 } else {
                     let goalHit = bucket.sessions >= requiredSessions
-                    Text(goalHit ? "Goal Hit" : "Needs \(max(requiredSessions - bucket.sessions, 0))")
+                    Text(goalHit ? "Goal hit" : "Needs \(max(requiredSessions - bucket.sessions, 0))")
                         .foregroundColor(goalHit ? Theme.Colors.success : Theme.Colors.warning)
                         .background(
                             Capsule()
@@ -485,7 +365,7 @@ struct ConsistencyDetailView: View {
                     tint: Theme.Colors.accent
                 )
                 DetailMetricTile(
-                    label: "Workout Days",
+                    label: "Workout days",
                     value: "\(bucket.uniqueWorkoutDays)",
                     tint: Theme.Colors.success
                 )
@@ -500,7 +380,7 @@ struct ConsistencyDetailView: View {
                     tint: Theme.Colors.warning
                 )
                 DetailMetricTile(
-                    label: "Excused Days",
+                    label: "Excused days",
                     value: "\(bucket.excludedDayCount)",
                     tint: Theme.Colors.textTertiary
                 )
@@ -508,10 +388,9 @@ struct ConsistencyDetailView: View {
 
             if !selectedWeekWorkouts.isEmpty {
                 VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                    Text("Week Sessions")
+                    Text("Week sessions")
                         .font(Theme.Typography.metricLabel)
                         .foregroundColor(Theme.Colors.textTertiary)
-                        .tracking(0.8)
 
                     ForEach(selectedWeekWorkouts.prefix(4)) { workout in
                         NavigationLink(destination: WorkoutDetailView(workout: workout)) {
@@ -547,14 +426,11 @@ struct ConsistencyDetailView: View {
     }
 
     private var weekdayPatternSection: some View {
-        LazyVStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-            sectionHeader(
-                title: "Weekday Pattern",
-                subtitle: "See where your training rhythm is strongest."
-            )
+        VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
+            sectionHeader(title: "By day of week")
 
             if weekdayStats.allSatisfy({ $0.sessions == 0 }) {
-                emptyCard(message: "Weekday pattern appears once you have sessions in this range.")
+                emptyCard(message: "No workouts in this range.")
             } else {
                 VStack(spacing: Theme.Spacing.sm) {
                     ForEach(weekdayStats) { stat in
@@ -576,11 +452,11 @@ struct ConsistencyDetailView: View {
                    let dayName = weekdayName(for: selectedWeekday),
                    let dayStat = weekdayStats.first(where: { $0.weekday == selectedWeekday }) {
                     VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                        Text("\(dayName) Snapshot")
+                        Text("\(dayName) workouts")
                             .font(Theme.Typography.title3)
                             .foregroundColor(Theme.Colors.textPrimary)
 
-                        Text("\(dayStat.sessions) sessions · \(SharedFormatters.volumePrecise(dayStat.totalVolume)) total volume")
+                        Text("\(dayStat.sessions) sessions, \(SharedFormatters.volumePrecise(dayStat.totalVolume)) total volume")
                             .font(Theme.Typography.caption)
                             .foregroundColor(Theme.Colors.textSecondary)
 
@@ -615,14 +491,11 @@ struct ConsistencyDetailView: View {
     }
 
     private var streakExplorerSection: some View {
-        LazyVStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-            sectionHeader(
-                title: "Streak Explorer",
-                subtitle: "Runs honor your rest allowance plus saved intentional break dates. Tap a run to inspect it."
-            )
+        VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
+            sectionHeader(title: "Streaks")
 
             if streakRuns.isEmpty {
-                emptyCard(message: "No streak runs available in this range.")
+                emptyCard(message: "No streaks in this range.")
             } else {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: Theme.Spacing.sm) {
@@ -645,7 +518,7 @@ struct ConsistencyDetailView: View {
                 if let selectedStreakRun {
                     VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                         HStack {
-                            Text("\(selectedStreakRun.workoutDayCount)-day run")
+                            Text("\(selectedStreakRun.workoutDayCount)-day streak")
                                 .font(Theme.Typography.title3)
                                 .foregroundColor(Theme.Colors.textPrimary)
                             Spacer()
@@ -663,10 +536,9 @@ struct ConsistencyDetailView: View {
                     .softCard(cornerRadius: Theme.CornerRadius.medium, elevation: 1)
 
                     VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                        Text("Sessions In Run")
+                        Text("Workouts in streak")
                             .font(Theme.Typography.metricLabel)
                             .foregroundColor(Theme.Colors.textTertiary)
-                            .tracking(0.8)
 
                         ForEach(selectedStreakWorkouts.prefix(6)) { workout in
                             NavigationLink(destination: WorkoutDetailView(workout: workout)) {
@@ -701,8 +573,8 @@ struct ConsistencyDetailView: View {
         .softCard(elevation: 2)
     }
 
-    private func sectionHeader(title: String, subtitle: String) -> some View {
-        SectionHeading(title: title, subtitle: subtitle)
+    private func sectionHeader(title: String) -> some View {
+        SectionHeading(title: title)
     }
 
     private func emptyCard(message: String) -> some View {
@@ -1066,34 +938,6 @@ private struct ConsistencyPresentation {
     )
 }
 
-private struct HeroMetricChip: View {
-    let title: String
-    let value: String
-    let tint: Color
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text(title)
-                .font(Theme.Typography.metricLabel)
-                .foregroundColor(Theme.Colors.textTertiary)
-                .textCase(.uppercase)
-                .tracking(0.8)
-            Text(value)
-                .font(Theme.Typography.monoMedium)
-                .foregroundColor(Theme.Colors.textPrimary)
-                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
-                .minimumScaleFactor(dynamicTypeSize.isAccessibilitySize ? 1 : 0.8)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, Theme.Spacing.md)
-        .padding(.vertical, Theme.Spacing.sm)
-        .statChipChrome(tint: tint)
-        .accessibilityElement(children: .combine)
-    }
-}
-
 private struct ConsistencyWeekPillar: View {
     let bucket: ConsistencyWeekBucket
     let targetSessionsPerWeek: Int
@@ -1130,8 +974,8 @@ private struct ConsistencyWeekPillar: View {
         return AnyShapeStyle(
             LinearGradient(
                 colors: [
-                    Theme.Colors.accent.opacity(0.8),
-                    Theme.Colors.accent.opacity(0.5)
+                    Theme.Colors.ink,
+                    Theme.Colors.ink
                 ],
                 startPoint: .top,
                 endPoint: .bottom
@@ -1150,7 +994,6 @@ private struct ConsistencyWeekPillar: View {
                 RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
                     .fill(fillStyle)
                     .frame(width: 24, height: fillHeight)
-                    .shadow(color: Theme.Colors.accent.opacity(0.2), radius: 6, x: 0, y: 3)
 
                     if targetOffset > 0 {
                         Rectangle()
@@ -1208,8 +1051,6 @@ private struct DetailMetricTile: View {
             Text(label)
                 .font(Theme.Typography.metricLabel)
                 .foregroundColor(Theme.Colors.textTertiary)
-                .textCase(.uppercase)
-                .tracking(0.7)
             Text(value)
                 .font(Theme.Typography.monoMedium)
                 .foregroundColor(Theme.Colors.textPrimary)
@@ -1309,7 +1150,6 @@ private struct StreakRunChip: View {
                 RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
                     .strokeBorder(isSelected ? Theme.Colors.accent.opacity(0.35) : Theme.Colors.border.opacity(0.5), lineWidth: 1)
             )
-            .shadow(color: isSelected ? Theme.Colors.accent.opacity(0.22) : .clear, radius: 8, x: 0, y: 3)
         }
         .buttonStyle(AppInteractionButtonStyle())
     }

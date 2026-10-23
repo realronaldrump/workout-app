@@ -11,11 +11,11 @@ enum HealthKitError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .notAvailable:
-            return "HealthKit is not available on this device."
+            return "Apple Health isn't available on this device."
         case .authorizationFailed(let message):
-            return "Failed to authorize HealthKit access: \(message)"
+            return "Couldn't get Health access: \(message)"
         case .queryFailed(let message):
-            return "Failed to query health data: \(message)"
+            return "Couldn't read Health data: \(message)"
         }
     }
 }
@@ -60,5 +60,76 @@ extension HKWorkoutActivityType {
         default:
             return "Workout"
         }
+    }
+}
+
+// MARK: - Batch Workout Day Metrics
+
+/// Only values whose query window is identical for every workout on the same day.
+/// Workout-window samples and the pre-workout sleep window are intentionally separate.
+nonisolated struct WorkoutDayHealthMetrics: Sendable {
+    var bodyMass: Double?
+    var bodyFatPercentage: Double?
+    var bodyTemperature: Double?
+    var bloodPressureSystolic: Double?
+    var bloodPressureDiastolic: Double?
+    var bloodGlucose: Double?
+    var basalBodyTemperature: Double?
+    var dailyActiveEnergy: Double?
+    var dailyBasalEnergy: Double?
+    var dietaryWater: Double?
+    var dietaryEnergyConsumed: Double?
+    var dietaryProtein: Double?
+    var dietaryCarbohydrates: Double?
+    var dietaryFatTotal: Double?
+    var mindfulSessionDuration: Double?
+    var dailySteps: Int?
+    var dailyExerciseMinutes: Double?
+    var dailyMoveMinutes: Double?
+    var dailyStandMinutes: Double?
+    var vo2Max: Double?
+    var heartRateRecovery: Double?
+    var walkingHeartRateAverage: Double?
+
+    func apply(to healthData: inout WorkoutHealthData) {
+        healthData.bodyMass = bodyMass
+        healthData.bodyFatPercentage = bodyFatPercentage
+        healthData.bodyTemperature = bodyTemperature
+        healthData.bloodPressureSystolic = bloodPressureSystolic
+        healthData.bloodPressureDiastolic = bloodPressureDiastolic
+        healthData.bloodGlucose = bloodGlucose
+        healthData.basalBodyTemperature = basalBodyTemperature
+        healthData.dailyActiveEnergy = dailyActiveEnergy
+        healthData.dailyBasalEnergy = dailyBasalEnergy
+        healthData.dietaryWater = dietaryWater
+        healthData.dietaryEnergyConsumed = dietaryEnergyConsumed
+        healthData.dietaryProtein = dietaryProtein
+        healthData.dietaryCarbohydrates = dietaryCarbohydrates
+        healthData.dietaryFatTotal = dietaryFatTotal
+        healthData.mindfulSessionDuration = mindfulSessionDuration
+        healthData.dailySteps = dailySteps
+        healthData.dailyExerciseMinutes = dailyExerciseMinutes
+        healthData.dailyMoveMinutes = dailyMoveMinutes
+        healthData.dailyStandMinutes = dailyStandMinutes
+        healthData.vo2Max = vo2Max
+        healthData.heartRateRecovery = heartRateRecovery
+        healthData.walkingHeartRateAverage = walkingHeartRateAverage
+    }
+}
+
+/// Owned by a single sync batch, so a later refresh always reads current HealthKit data.
+/// Failed queries are never cached; a subsequent workout can retry the same day.
+@MainActor
+final class WorkoutDayHealthMetricsCache {
+    private var values: [Date: WorkoutDayHealthMetrics] = [:]
+
+    func value(
+        for dayStart: Date,
+        load: () async throws -> WorkoutDayHealthMetrics
+    ) async throws -> WorkoutDayHealthMetrics {
+        if let value = values[dayStart] { return value }
+        let value = try await load()
+        values[dayStart] = value
+        return value
     }
 }

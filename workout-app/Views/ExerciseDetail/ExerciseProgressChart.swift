@@ -65,23 +65,11 @@ struct ExerciseProgressChart: View {
             exerciseName: String
         ) -> DerivedChartData {
             let chartData: [ChartPoint] = history.compactMap { session in
-                let value: Double
-                switch chartType {
-                case .weight:
-                    value = ExerciseLoad.bestWeight(in: session.sets, exerciseName: exerciseName)
-                case .volume:
-                    value = session.sets.reduce(0) { $0 + ($1.weight * Double($1.reps)) }
-                case .oneRepMax:
-                    value = OneRepMax.bestEstimate(in: session.sets, exerciseName: exerciseName)
-                case .reps:
-                    value = Double(session.sets.map { $0.reps }.max() ?? 0)
-                case .distance:
-                    value = session.sets.reduce(0) { $0 + $1.distance }
-                case .duration:
-                    value = session.sets.reduce(0) { $0 + $1.seconds }
-                case .count:
-                    value = Double(session.sets.reduce(0) { $0 + $1.reps })
-                }
+                let value = sessionValue(
+                    sets: session.sets,
+                    chartType: chartType,
+                    exerciseName: exerciseName
+                )
                 if chartType == .volume, value <= 0 { return nil }
                 return ChartPoint(date: session.date, value: value)
             }
@@ -89,14 +77,7 @@ struct ExerciseProgressChart: View {
 
             let indexed = chartData.enumerated().map { IndexedChartPoint(id: $0.offset, point: $0.element) }
 
-            let rollingWindow: Int? = {
-                let count = chartData.count
-                guard count >= 8 else { return nil }
-                if count >= 60 { return 10 }
-                if count >= 30 { return 7 }
-                if count >= 14 { return 5 }
-                return 3
-            }()
+            let rollingWindow = rollingAverageWindow(sampleCount: chartData.count)
 
             let indexedRolling: [IndexedChartPoint]
             if let window = rollingWindow, !chartData.isEmpty {
@@ -217,11 +198,43 @@ struct ExerciseProgressChart: View {
                 yDomain: yDomain
             )
         }
+
+        private static func sessionValue(
+            sets: [WorkoutSet],
+            chartType: ExerciseDetailView.ChartType,
+            exerciseName: String
+        ) -> Double {
+            switch chartType {
+            case .weight:
+                return ExerciseLoad.bestWeight(in: sets, exerciseName: exerciseName)
+            case .volume:
+                return sets.reduce(0) { $0 + ($1.weight * Double($1.reps)) }
+            case .oneRepMax:
+                return OneRepMax.bestEstimate(in: sets, exerciseName: exerciseName)
+            case .reps:
+                return Double(sets.map { $0.reps }.max() ?? 0)
+            case .distance:
+                return sets.reduce(0) { $0 + $1.distance }
+            case .duration:
+                return sets.reduce(0) { $0 + $1.seconds }
+            case .count:
+                return Double(sets.reduce(0) { $0 + $1.reps })
+            }
+        }
+
+        private static func rollingAverageWindow(sampleCount: Int) -> Int? {
+            guard sampleCount >= 8 else { return nil }
+            if sampleCount >= 60 { return 10 }
+            if sampleCount >= 30 { return 7 }
+            if sampleCount >= 14 { return 5 }
+            return 3
+        }
+
     }
 
     private enum ChartSeries: String {
-        case progress = "Progress"
-        case rollingAverage = "Rolling Avg"
+        case progress = "Each session"
+        case rollingAverage = "Rolling average"
         case trend = "Trend"
     }
 
@@ -247,23 +260,27 @@ struct ExerciseProgressChart: View {
         return hasher.finalize()
     }
 
+    /// Training charts are drawn in ink; yellow is reserved for the record.
     private var chartColor: Color {
-        switch chartType {
-        case .weight: return Theme.Colors.chest
-        case .volume: return Theme.Colors.quads
-        case .oneRepMax: return Theme.Colors.gold
-        case .reps: return Theme.Colors.back
-        case .distance: return Theme.Colors.cardio
-        case .duration: return Theme.Colors.cardio
-        case .count: return Theme.Colors.cardio
+        Theme.Colors.ink
+    }
+
+    /// Month names alone once the chart spans more than a couple of months, so the
+    /// last label never gets clipped against the value axis.
+    private var xAxisDateFormat: Date.FormatStyle {
+        guard let first = derived.indexedChartData.first?.date,
+              let last = derived.indexedChartData.last?.date,
+              last.timeIntervalSince(first) > 75 * 86_400 else {
+            return .dateTime.month(.abbreviated).day()
         }
+        return .dateTime.month(.abbreviated)
     }
 
     private var seriesColors: KeyValuePairs<String, Color> {
         [
             ChartSeries.progress.rawValue: chartColor,
-            ChartSeries.rollingAverage.rawValue: chartColor.opacity(0.55),
-            ChartSeries.trend.rawValue: Theme.Colors.textTertiary.opacity(0.5)
+            ChartSeries.rollingAverage.rawValue: Theme.Colors.decorativeSubtle,
+            ChartSeries.trend.rawValue: Theme.Colors.textTertiary
         ]
     }
 
@@ -344,7 +361,7 @@ struct ExerciseProgressChart: View {
             AxisMarks(values: .automatic(desiredCount: 4)) { _ in
                 AxisGridLine()
                     .foregroundStyle(Theme.Colors.border.opacity(0.35))
-                AxisValueLabel(format: .dateTime.month(.abbreviated).day())
+                AxisValueLabel(format: xAxisDateFormat)
                     .font(Theme.Typography.caption2)
                     .foregroundStyle(Theme.Colors.textTertiary)
             }
@@ -477,7 +494,7 @@ struct ExerciseProgressChart: View {
                     yEnd: .value("Upper", point.upper)
                 )
                 .foregroundStyle(chartColor.opacity(0.12))
-                .interpolationMethod(.catmullRom)
+                .interpolationMethod(.monotone)
             }
         }
     }
@@ -490,14 +507,8 @@ struct ExerciseProgressChart: View {
                 yStart: .value("Baseline", derived.yDomain.lowerBound),
                 yEnd: .value(chartLabel, isAppearing ? dataPoint.value : derived.yDomain.lowerBound)
             )
-            .foregroundStyle(
-                LinearGradient(
-                    colors: [chartColor.opacity(0.18), chartColor.opacity(0.01)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            )
-            .interpolationMethod(.catmullRom)
+            .foregroundStyle(chartColor.opacity(0.06))
+            .interpolationMethod(.linear)
         }
     }
 
@@ -510,7 +521,7 @@ struct ExerciseProgressChart: View {
             )
             .foregroundStyle(by: .value("Series", ChartSeries.progress.rawValue))
             .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
-            .interpolationMethod(.catmullRom)
+            .interpolationMethod(.linear)
         }
     }
 
@@ -524,7 +535,7 @@ struct ExerciseProgressChart: View {
                 )
                 .foregroundStyle(by: .value("Series", ChartSeries.rollingAverage.rawValue))
                 .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, dash: [2, 3]))
-                .interpolationMethod(.catmullRom)
+                .interpolationMethod(.monotone)
             }
         }
     }
@@ -536,7 +547,7 @@ struct ExerciseProgressChart: View {
                 x: .value("Date", dataPoint.date),
                 y: .value(chartLabel, isAppearing ? dataPoint.value : derived.yDomain.lowerBound)
             )
-            .foregroundStyle(dataPoint.date == derived.prDate ? Theme.Colors.gold : chartColor)
+            .foregroundStyle(dataPoint.date == derived.prDate ? Theme.Colors.plateYellow : chartColor)
             // Dense histories read better as a line; keep dots for sparse series and the PR.
             .symbolSize(
                 dataPoint.date == derived.prDate
@@ -545,9 +556,7 @@ struct ExerciseProgressChart: View {
             )
             .annotation(position: .top) {
                 if dataPoint.date == derived.prDate {
-                    Image(systemName: "trophy.fill")
-                        .font(Theme.Typography.caption2)
-                        .foregroundColor(Theme.Colors.gold)
+                    PRTag()
                         .opacity(isAppearing ? 1 : 0)
                 }
             }

@@ -32,10 +32,10 @@ final class AnalyticsDrilldownUITests: XCTestCase {
                 .waitForExistence(timeout: 8)
         )
         attachScreenshot(named: "Strength Record Analysis Hero")
-        let recordHistory = app.staticTexts["Record History"]
+        let recordHistory = app.staticTexts["Record history"]
         scrollUntilVisible(recordHistory)
         XCTAssertTrue(recordHistory.exists)
-        let topAttempts = app.staticTexts["Top Attempts"]
+        let topAttempts = app.staticTexts["Top attempts"]
         scrollUntilVisible(topAttempts)
         XCTAssertTrue(topAttempts.exists)
         attachScreenshot(named: "Strength Record Analysis")
@@ -84,7 +84,7 @@ final class AnalyticsDrilldownUITests: XCTestCase {
         record.tap()
 
         XCTAssertTrue(element("exercise-metric-detail-maxLoad").waitForExistence(timeout: 8))
-        XCTAssertTrue(app.staticTexts["Least Assistance"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Least assistance"].waitForExistence(timeout: 5))
     }
 
     func testCardioExerciseUsesHonestDistanceAnalysis() {
@@ -164,7 +164,7 @@ final class AnalyticsDrilldownUITests: XCTestCase {
             element("workout-metric-detail-averageFrequency")
                 .waitForExistence(timeout: 8)
         )
-        XCTAssertTrue(app.staticTexts["Weekly Frequency"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Weekly frequency"].waitForExistence(timeout: 5))
     }
 
     func testBodyCompositionAndRecoverySignalsFocusTheirEvidence() {
@@ -178,12 +178,15 @@ final class AnalyticsDrilldownUITests: XCTestCase {
         bodyCategory.tap()
         XCTAssertTrue(element("body-composition").waitForExistence(timeout: 8))
 
-        let sevenDay = app.buttons["body-stat-sevenDay"]
-        scrollUntilVisible(sevenDay)
-        XCTAssertTrue(sevenDay.exists)
-        sevenDay.tap()
-        XCTAssertTrue(sevenDay.isSelected)
-        attachScreenshot(named: "Body Composition Analysis")
+        XCTAssertTrue(element("body-latest-measurement").exists)
+        XCTAssertTrue(element("body-weight-chart").exists)
+        XCTAssertFalse(app.staticTexts["Chart options"].exists)
+        let history = app.buttons["body-all-readings"]
+        scrollUntilVisible(history)
+        history.tap()
+        XCTAssertTrue(element("body-measurement-history").waitForExistence(timeout: 5))
+        attachScreenshot(named: "Weight History")
+        app.buttons["Done"].tap()
 
         app.tabBars.buttons["Today"].tap()
         let signals = element("explore-signals")
@@ -197,6 +200,21 @@ final class AnalyticsDrilldownUITests: XCTestCase {
         XCTAssertTrue(heartRateVariability.exists)
         heartRateVariability.tap()
         XCTAssertTrue(element("health-metric-detail-heartRateVariability").waitForExistence(timeout: 8))
+    }
+
+    func testConsistencyExplanationIsAvailableOnlyOnRequest() {
+        let consistency = app.buttons["explore-consistency"]
+        scrollUntilVisible(consistency)
+        consistency.tap()
+        XCTAssertTrue(element("consistency-summary").waitForExistence(timeout: 5))
+
+        let explanation = "Saved break days lower weekly goals. Workouts during a break still count. "
+            + "Streaks allow the rest days set in Settings."
+        XCTAssertFalse(app.staticTexts[explanation].exists)
+        app.buttons["app-help-Consistency"].tap()
+        XCTAssertTrue(app.staticTexts[explanation].waitForExistence(timeout: 5))
+        app.buttons["app-help-close"].tap()
+        XCTAssertFalse(app.staticTexts[explanation].exists)
     }
 
     private func openExercise(named name: String) {

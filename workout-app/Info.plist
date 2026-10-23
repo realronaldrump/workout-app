@@ -30,8 +30,14 @@
 	</dict>
 	<key>UIAppFonts</key>
 	<array>
-		<string>InstrumentSans[wdth,wght].ttf</string>
-		<string>Sora[wght].ttf</string>
+		<string>BigShouldersDisplay-SemiBold.ttf</string>
+		<string>BigShouldersDisplay-Bold.ttf</string>
+		<string>BigShouldersDisplay-ExtraBold.ttf</string>
+		<string>BigShouldersDisplay-Black.ttf</string>
+		<string>Barlow-Regular.ttf</string>
+		<string>Barlow-Medium.ttf</string>
+		<string>Barlow-SemiBold.ttf</string>
+		<string>Barlow-Bold.ttf</string>
 	</array>
 	<key>UILaunchScreen</key>
 	<dict>

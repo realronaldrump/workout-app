@@ -87,34 +87,34 @@ nonisolated enum ChangelogCatalog {
             version: "1.9.2",
             releaseDate: nil,
             summary: String(
-                localized: "Muscle tracking now distinguishes primary targets from secondary assistance for more realistic workout insights."
+                localized: "Exercises now have primary and secondary muscles. Secondary muscles count as half a set."
             ),
             highlights: [
                 ChangelogHighlight(
                     title: String(localized: "Primary and secondary muscles"),
                     detail: String(
-                        localized: "Built-in exercises include curated muscle roles, and you can customize either role from the exercise editor."
+                        localized: "Built-in exercises come with muscle roles. Change either role in the exercise editor."
                     ),
                     systemImage: "figure.strengthtraining.traditional"
                 ),
                 ChangelogHighlight(
-                    title: String(localized: "Weighted muscle insights"),
+                    title: String(localized: "Secondary muscles count as half"),
                     detail: String(
-                        localized: "Primary work counts as one effective set and secondary work counts as half across balance, progress, recency, and coverage."
+                        localized: "Muscle balance, progress, recency, and coverage count primary work as one set and secondary work as half a set."
                     ),
                     systemImage: "chart.bar.xaxis"
                 ),
                 ChangelogHighlight(
-                    title: String(localized: "Portable and dependable data"),
+                    title: String(localized: "Roles in exports and backups"),
                     detail: String(
-                        localized: "Exports and backups preserve muscle roles, while existing custom tags migrate safely without losing credit."
+                        localized: "Exports and backups keep muscle roles. Existing custom tags carry over with their credit."
                     ),
                     systemImage: "externaldrive.fill.badge.checkmark"
                 ),
                 ChangelogHighlight(
                     title: String(localized: "Complete release history"),
                     detail: String(
-                        localized: "Previously missing updates are now available in What’s New so the app’s full release story is easy to revisit."
+                        localized: "Earlier versions that were missing are now listed in What's new."
                     ),
                     systemImage: "clock.arrow.circlepath"
                 )
@@ -123,26 +123,26 @@ nonisolated enum ChangelogCatalog {
         ChangelogEntry(
             version: "1.9.1",
             releaseDate: ChangelogReleaseDate(year: 2026, month: 8, day: 13),
-            summary: String(localized: "More Strong exercises are recognized automatically with accurate default muscle coverage."),
+            summary: String(localized: "More Strong exercises are built in, each with default muscles."),
             highlights: [
                 ChangelogHighlight(
-                    title: String(localized: "A much larger exercise library"),
+                    title: String(localized: "Larger exercise library"),
                     detail: String(
-                        localized: "Exercises found in your Strong history are now built in, making imports and new workout setup more familiar."
+                        localized: "Exercises from Strong histories are now built in, so imports and new workouts start from a familiar list."
                     ),
                     systemImage: "list.bullet.rectangle.portrait.fill"
                 ),
                 ChangelogHighlight(
-                    title: String(localized: "Better exercise relationships"),
+                    title: String(localized: "Linked left and right variants"),
                     detail: String(
-                        localized: "Left, right, and unilateral variants connect to their parent exercise for cleaner history and analytics."
+                        localized: "Left, right, and unilateral variants link to their parent exercise in history and analytics."
                     ),
                     systemImage: "arrow.triangle.branch"
                 ),
                 ChangelogHighlight(
-                    title: String(localized: "More accurate muscle tags"),
+                    title: String(localized: "Exercise-specific muscle tags"),
                     detail: String(
-                        localized: "New defaults use exercise-specific muscle mappings while preserving compatibility with older spelling variants."
+                        localized: "Default muscles are now set per exercise, and older spelling variants still work."
                     ),
                     systemImage: "tag.fill"
                 )
@@ -151,26 +151,26 @@ nonisolated enum ChangelogCatalog {
         ChangelogEntry(
             version: "1.9",
             releaseDate: ChangelogReleaseDate(year: 2026, month: 7, day: 30),
-            summary: String(localized: "Health and exercise details reveal trends more clearly and make progress easier to understand."),
+            summary: String(localized: "New Health charts and more stats on exercise cards."),
             highlights: [
                 ChangelogHighlight(
-                    title: String(localized: "Richer Health trends"),
+                    title: String(localized: "New Health charts"),
                     detail: String(
-                        localized: "New trend charts, calendars, rhythm views, and mini charts make patterns easier to spot at a glance."
+                        localized: "Trend charts, calendars, rhythm views, and mini charts for Health metrics."
                     ),
                     systemImage: "chart.xyaxis.line"
                 ),
                 ChangelogHighlight(
-                    title: String(localized: "Insights for each metric"),
+                    title: String(localized: "Per-metric Health details"),
                     detail: String(
-                        localized: "Health details now use metric-specific visuals and plain-language summaries instead of one generic presentation."
+                        localized: "Each Health metric has its own chart style and a plain-language summary."
                     ),
                     systemImage: "heart.text.square.fill"
                 ),
                 ChangelogHighlight(
-                    title: String(localized: "Smarter exercise stats"),
+                    title: String(localized: "More exercise stats"),
                     detail: String(
-                        localized: "Exercise cards add recent comparisons, session frequency, and compact progress lines alongside lifetime totals."
+                        localized: "Exercise cards show recent comparisons, session frequency, and progress lines next to lifetime totals."
                     ),
                     systemImage: "figure.strengthtraining.traditional"
                 )
@@ -179,12 +179,12 @@ nonisolated enum ChangelogCatalog {
         ChangelogEntry(
             version: "1.8.2",
             releaseDate: ChangelogReleaseDate(year: 2026, month: 7, day: 28),
-            summary: String(localized: "Strong import results are cleaner and easier to scan."),
+            summary: String(localized: "The Strong import summary is easier to read."),
             highlights: [
                 ChangelogHighlight(
-                    title: String(localized: "Clearer import summaries"),
+                    title: String(localized: "Import summary layout"),
                     detail: String(
-                        localized: "The completion screen uses a balanced two-column layout so imported and skipped totals stay readable."
+                        localized: "Imported and skipped totals now sit in two columns on the completion screen."
                     ),
                     systemImage: "square.grid.2x2.fill"
                 )
@@ -193,33 +193,33 @@ nonisolated enum ChangelogCatalog {
         ChangelogEntry(
             version: "1.8",
             releaseDate: ChangelogReleaseDate(year: 2026, month: 7, day: 23),
-            summary: String(localized: "A refreshed design makes workouts, history, Health, imports, and gym setup faster and easier to use."),
+            summary: String(localized: "New design across workouts, history, Health, imports, and gym setup."),
             highlights: [
                 ChangelogHighlight(
-                    title: String(localized: "A refreshed app design"),
+                    title: String(localized: "New app design"),
                     detail: String(
-                        localized: "System Dark Mode, cleaner navigation, modern materials, and responsive layouts improve the app on iPhone and iPad."
+                        localized: "System Dark Mode, simpler navigation, and layouts that adapt to iPhone and iPad."
                     ),
                     systemImage: "moon.stars.fill"
                 ),
                 ChangelogHighlight(
                     title: String(localized: "Faster workout logging"),
                     detail: String(
-                        localized: "Quick Start, active sessions, set controls, rest timers, workout names, and saving all received focused refinements."
+                        localized: "Changes to Quick Start, active sessions, set controls, rest timers, workout names, and saving."
                     ),
                     systemImage: "bolt.fill"
                 ),
                 ChangelogHighlight(
-                    title: String(localized: "Stronger history and Health tools"),
+                    title: String(localized: "History and Health updates"),
                     detail: String(
-                        localized: "Search, undo, smoother charts, clearer comparisons, and more dependable Health syncing put progress in context."
+                        localized: "Search, undo, smoother charts, clearer comparisons, and more reliable Health sync."
                     ),
                     systemImage: "chart.line.uptrend.xyaxis"
                 ),
                 ChangelogHighlight(
-                    title: String(localized: "More polished setup and access"),
+                    title: String(localized: "Setup and accessibility"),
                     detail: String(
-                        localized: "Imports, gym assignment, haptic settings, accessibility, Dynamic Type, and Reduce Motion support are improved."
+                        localized: "Improvements to imports, gym assignment, haptic settings, Dynamic Type, and Reduce Motion."
                     ),
                     systemImage: "accessibility"
                 )
@@ -229,34 +229,34 @@ nonisolated enum ChangelogCatalog {
             version: "1.7.2",
             releaseDate: ChangelogReleaseDate(year: 2026, month: 7, day: 11),
             summary: String(
-                localized: "Workout history, workout review, Health trends, and exercise setup are clearer, smarter, and more dependable."
+                localized: "Changes to workout history, workout review, Health trends, and exercise setup."
             ),
             highlights: [
                 ChangelogHighlight(
-                    title: String(localized: "A clearer workout history"),
+                    title: String(localized: "Workout history by month"),
                     detail: String(
-                        localized: "Browse workouts by month, scan compact summaries, see monthly activity, and refine results with streamlined filters."
+                        localized: "Browse workouts by month, see compact summaries and monthly activity, and filter results."
                     ),
                     systemImage: "clock.arrow.circlepath"
                 ),
                 ChangelogHighlight(
-                    title: String(localized: "A better workout review flow"),
+                    title: String(localized: "Workout review"),
                     detail: String(
-                        localized: "Compare with your previous matching workout, spot personal records, and repeat it without replacing an active session."
+                        localized: "Compare with your previous matching workout, see personal records, and repeat a workout without replacing an active session."
                     ),
                     systemImage: "chart.line.uptrend.xyaxis"
                 ),
                 ChangelogHighlight(
-                    title: String(localized: "Health trends in context"),
+                    title: String(localized: "Health period comparisons"),
                     detail: String(
-                        localized: "Compare averages with the previous period, see trend direction at a glance, and use clearer daily timeline stats."
+                        localized: "Compare averages with the previous period, see trend direction, and read clearer daily timeline stats."
                     ),
                     systemImage: "heart.text.square.fill"
                 ),
                 ChangelogHighlight(
-                    title: String(localized: "Smarter exercise setup"),
+                    title: String(localized: "Exercise setup"),
                     detail: String(
-                        localized: "A broader built-in exercise library includes muscle tags and side relationships, and backups preserve your choices."
+                        localized: "The built-in exercise library is larger and includes muscle tags and left/right links. Backups keep your changes."
                     ),
                     systemImage: "figure.strengthtraining.traditional"
                 )
@@ -265,20 +265,20 @@ nonisolated enum ChangelogCatalog {
         ChangelogEntry(
             version: "1.6.1",
             releaseDate: ChangelogReleaseDate(year: 2026, month: 7, day: 10),
-            summary: String(localized: "Health browsing stays quick and responsive, even with years of data."),
+            summary: String(localized: "Health screens load faster with years of data."),
             highlights: [
                 ChangelogHighlight(
                     title: String(localized: "Faster Health navigation"),
-                    detail: String(localized: "Explore Health categories without freezing and move between detail screens more quickly."),
+                    detail: String(localized: "Health categories no longer freeze, and detail screens open faster."),
                     systemImage: "bolt.fill"
                 ),
                 ChangelogHighlight(
                     title: String(localized: "Smoother charts"),
-                    detail: String(localized: "Long Health histories now render and respond more efficiently."),
+                    detail: String(localized: "Charts with long Health histories draw and respond faster."),
                     systemImage: "chart.xyaxis.line"
                 ),
                 ChangelogHighlight(
-                    title: String(localized: "Quicker insights"),
+                    title: String(localized: "More reliable loading"),
                     detail: String(localized: "Body Composition, Workout Health, and the daily timeline load more reliably."),
                     systemImage: "waveform.path.ecg"
                 )
@@ -287,21 +287,21 @@ nonisolated enum ChangelogCatalog {
         ChangelogEntry(
             version: "1.6",
             releaseDate: ChangelogReleaseDate(year: 2026, month: 7, day: 6),
-            summary: String(localized: "The Health experience is clearer from the daily timeline to detailed trends."),
+            summary: String(localized: "Changes to the Health daily timeline, detail screens, and body trends."),
             highlights: [
                 ChangelogHighlight(
-                    title: String(localized: "A better daily timeline"),
-                    detail: String(localized: "See all entries by default, sort newest or oldest, and open metric details directly from each day."),
+                    title: String(localized: "Daily timeline"),
+                    detail: String(localized: "See all entries by default, sort newest or oldest, and open metric details from each day."),
                     systemImage: "calendar.day.timeline.leading"
                 ),
                 ChangelogHighlight(
-                    title: String(localized: "More useful Health details"),
-                    detail: String(localized: "Screens focus on metrics with real data and explain missing information more clearly."),
+                    title: String(localized: "Health detail screens"),
+                    detail: String(localized: "Detail screens show metrics that have data and say what is missing."),
                     systemImage: "heart.text.square"
                 ),
                 ChangelogHighlight(
-                    title: String(localized: "Cleaner body trends"),
-                    detail: String(localized: "Body Composition has clearer averages, a focused Advanced tab, and simpler logbook entries."),
+                    title: String(localized: "Body trends"),
+                    detail: String(localized: "Body Composition has clearer averages, a reworked Advanced tab, and simpler logbook entries."),
                     systemImage: "scalemass.fill"
                 )
             ]
@@ -309,7 +309,7 @@ nonisolated enum ChangelogCatalog {
         ChangelogEntry(
             version: "1.5.3",
             releaseDate: ChangelogReleaseDate(year: 2026, month: 5, day: 15),
-            summary: String(localized: "Imported workouts are easier to clean up and unilateral matching is more reliable."),
+            summary: String(localized: "Imported workouts are easier to delete, and left/right exercise matching is more accurate."),
             highlights: [
                 ChangelogHighlight(
                     title: String(localized: "Easier workout deletion"),
@@ -326,7 +326,7 @@ nonisolated enum ChangelogCatalog {
         ChangelogEntry(
             version: "1.5.2",
             releaseDate: ChangelogReleaseDate(year: 2026, month: 5, day: 9),
-            summary: String(localized: "Unilateral movements connect themselves more intelligently."),
+            summary: String(localized: "Linking left and right exercises takes less manual work."),
             highlights: [
                 ChangelogHighlight(
                     title: String(localized: "Automatic side relationships"),
@@ -334,8 +334,8 @@ nonisolated enum ChangelogCatalog {
                     systemImage: "link.circle.fill"
                 ),
                 ChangelogHighlight(
-                    title: String(localized: "Smarter Add Side suggestions"),
-                    detail: String(localized: "Search existing exercises and choose the correct match while linking a side variant."),
+                    title: String(localized: "Side variant search"),
+                    detail: String(localized: "Search existing exercises and pick the match when linking a side variant."),
                     systemImage: "magnifyingglass.circle.fill"
                 ),
                 ChangelogHighlight(
@@ -348,11 +348,11 @@ nonisolated enum ChangelogCatalog {
         ChangelogEntry(
             version: "1.5.1",
             releaseDate: ChangelogReleaseDate(year: 2026, month: 4, day: 30),
-            summary: String(localized: "Export, backup, and left and right exercise tracking received a major upgrade."),
+            summary: String(localized: "New export and backup screens, and linked left and right exercises."),
             highlights: [
                 ChangelogHighlight(
                     title: String(localized: "Redesigned exports and backups"),
-                    detail: String(localized: "Use guided panels, flexible export modes, column choices, and a preview of every item in a backup."),
+                    detail: String(localized: "Choose an export mode and columns in step-by-step panels, and preview every item in a backup."),
                     systemImage: "square.and.arrow.up.fill"
                 ),
                 ChangelogHighlight(
@@ -362,12 +362,12 @@ nonisolated enum ChangelogCatalog {
                 ),
                 ChangelogHighlight(
                     title: String(localized: "More accurate totals"),
-                    detail: String(localized: "Home, History, Workout Detail, Performance Lab, and recovery views now use connected exercise rollups."),
+                    detail: String(localized: "Totals in Home, History, Workout Detail, Performance Lab, and recovery now combine linked variants."),
                     systemImage: "sum"
                 ),
                 ChangelogHighlight(
-                    title: String(localized: "Smoother sessions and Health data"),
-                    detail: String(localized: "The rest timer stays responsive, and several long-range Health edge cases are fixed."),
+                    title: String(localized: "Timer and Health fixes"),
+                    detail: String(localized: "The rest timer stays responsive, and several long-range Health bugs are fixed."),
                     systemImage: "timer"
                 )
             ]
@@ -375,16 +375,16 @@ nonisolated enum ChangelogCatalog {
         ChangelogEntry(
             version: "1.4.3",
             releaseDate: ChangelogReleaseDate(year: 2026, month: 4, day: 23),
-            summary: String(localized: "Workout timing, finishing, launch speed, and exports are more dependable."),
+            summary: String(localized: "Fixes for the rest timer, finishing workouts, launch speed, and exports."),
             highlights: [
                 ChangelogHighlight(
-                    title: String(localized: "An accurate rest timer"),
-                    detail: String(localized: "The countdown stays correct in the background or while the screen sleeps, with a new 30-second extension."),
+                    title: String(localized: "Rest timer accuracy"),
+                    detail: String(localized: "The countdown stays correct in the background and while the screen sleeps. New 30-second extension."),
                     systemImage: "timer.circle.fill"
                 ),
                 ChangelogHighlight(
-                    title: String(localized: "Protection for unfinished sets"),
-                    detail: String(localized: "Choose to complete, discard, or keep editing sets with entered data before finishing a workout."),
+                    title: String(localized: "Unfinished sets"),
+                    detail: String(localized: "Before finishing, complete, discard, or keep editing sets that have data entered."),
                     systemImage: "checklist"
                 ),
                 ChangelogHighlight(
@@ -397,7 +397,7 @@ nonisolated enum ChangelogCatalog {
         ChangelogEntry(
             version: "1.4.2",
             releaseDate: ChangelogReleaseDate(year: 2026, month: 4, day: 20),
-            summary: String(localized: "Exercise history opens faster and the app stays smoother with large workout libraries."),
+            summary: String(localized: "Exercise history opens faster with large workout libraries."),
             highlights: [
                 ChangelogHighlight(
                     title: String(localized: "Faster exercise details"),
@@ -405,13 +405,13 @@ nonisolated enum ChangelogCatalog {
                     systemImage: "bolt.fill"
                 ),
                 ChangelogHighlight(
-                    title: String(localized: "Smarter exercise matching"),
+                    title: String(localized: "Case-insensitive exercise names"),
                     detail: String(localized: "Names with different capitalization are treated as the same movement."),
                     systemImage: "textformat.abc"
                 ),
                 ChangelogHighlight(
                     title: String(localized: "Replay onboarding"),
-                    detail: String(localized: "Start the welcome walkthrough again from Feature Guides whenever you want a refresher."),
+                    detail: String(localized: "Start the welcome walkthrough again from Feature guides."),
                     systemImage: "arrow.clockwise.circle.fill"
                 )
             ]
@@ -419,11 +419,11 @@ nonisolated enum ChangelogCatalog {
         ChangelogEntry(
             version: "1.4.1",
             releaseDate: ChangelogReleaseDate(year: 2026, month: 4, day: 18),
-            summary: String(localized: "Data management is safer, clearer, and easier to understand."),
+            summary: String(localized: "New tools for clearing data, migrating old storage, and browsing backups."),
             highlights: [
                 ChangelogHighlight(
                     title: String(localized: "Selective data clearing"),
-                    detail: String(localized: "Choose exactly which workout, gym, Health, exercise, or backup data to remove."),
+                    detail: String(localized: "Choose which workout, gym, Health, exercise, or backup data to remove."),
                     systemImage: "trash.slash.fill"
                 ),
                 ChangelogHighlight(
@@ -432,8 +432,8 @@ nonisolated enum ChangelogCatalog {
                     systemImage: "arrow.triangle.2.circlepath.circle.fill"
                 ),
                 ChangelogHighlight(
-                    title: String(localized: "Organized backup files"),
-                    detail: String(localized: "Browse files by type with clear section counts and newest-first sorting."),
+                    title: String(localized: "Backup files by type"),
+                    detail: String(localized: "Files are grouped by type with counts, newest first."),
                     systemImage: "folder.fill.badge.gearshape"
                 )
             ]
@@ -441,16 +441,16 @@ nonisolated enum ChangelogCatalog {
         ChangelogEntry(
             version: "1.4",
             releaseDate: ChangelogReleaseDate(year: 2026, month: 4, day: 17),
-            summary: String(localized: "A major data upgrade makes everyday use faster and more reliable."),
+            summary: String(localized: "Workout data loads and saves faster, and backups cover more."),
             highlights: [
                 ChangelogHighlight(
                     title: String(localized: "Quicker workout data"),
-                    detail: String(localized: "Workout history and app data load and save more efficiently."),
+                    detail: String(localized: "Workout history and app data load and save faster."),
                     systemImage: "externaldrive.fill.badge.checkmark"
                 ),
                 ChangelogHighlight(
-                    title: String(localized: "Stronger data reliability"),
-                    detail: String(localized: "Expanded backup support helps preserve more of your app setup and training history."),
+                    title: String(localized: "More data in backups"),
+                    detail: String(localized: "Backups now include more of your app setup and training history."),
                     systemImage: "shield.checkered"
                 )
             ]
@@ -458,16 +458,16 @@ nonisolated enum ChangelogCatalog {
         ChangelogEntry(
             version: "1.3.1",
             releaseDate: ChangelogReleaseDate(year: 2026, month: 4, day: 15),
-            summary: String(localized: "Workout exports carry more context, and the built-in exercise library is broader."),
+            summary: String(localized: "Exports can include the gym name, and nine more exercises are built in."),
             highlights: [
                 ChangelogHighlight(
                     title: String(localized: "Gym locations in exports"),
-                    detail: String(localized: "Include the gym name with exported workout history."),
+                    detail: String(localized: "Exported workout history can include the gym name."),
                     systemImage: "mappin.and.ellipse"
                 ),
                 ChangelogHighlight(
                     title: String(localized: "More default exercises"),
-                    detail: String(localized: "Nine additional movements are recognized out of the box."),
+                    detail: String(localized: "Nine more exercises are built in."),
                     systemImage: "figure.strengthtraining.traditional"
                 )
             ]
@@ -475,26 +475,26 @@ nonisolated enum ChangelogCatalog {
         ChangelogEntry(
             version: "1.3.0",
             releaseDate: ChangelogReleaseDate(year: 2026, month: 4, day: 10),
-            summary: String(localized: "Assisted exercises, tactile feedback, charts, and core screens all feel more polished."),
+            summary: String(localized: "Assisted exercise tracking, new haptics, and updated charts and cards."),
             highlights: [
                 ChangelogHighlight(
                     title: String(localized: "Assisted exercise progress"),
-                    detail: String(localized: "Track assisted pull-ups, dips, records, and recommendations with the correct progression direction."),
+                    detail: String(localized: "Assisted pull-ups and dips treat less assistance as progress in records and recommendations."),
                     systemImage: "figure.strengthtraining.traditional"
                 ),
                 ChangelogHighlight(
                     title: String(localized: "Better haptics"),
-                    detail: String(localized: "Feel distinct feedback when completing sets, finishing workouts, adding exercises, and switching tabs."),
+                    detail: String(localized: "Distinct haptics when you complete a set, finish a workout, add an exercise, or switch tabs."),
                     systemImage: "waveform"
                 ),
                 ChangelogHighlight(
-                    title: String(localized: "Refreshed charts and cards"),
-                    detail: String(localized: "Read taller charts, clearer Health cards, improved sleep stages, and more consistent stats."),
+                    title: String(localized: "Charts and cards"),
+                    detail: String(localized: "Taller charts, clearer Health cards, updated sleep stages, and more consistent stats."),
                     systemImage: "chart.bar.xaxis"
                 ),
                 ChangelogHighlight(
-                    title: String(localized: "Clearer app states"),
-                    detail: String(localized: "Improved empty states and loading placeholders make every screen easier to understand."),
+                    title: String(localized: "Empty and loading states"),
+                    detail: String(localized: "New empty states and loading placeholders across the app."),
                     systemImage: "rectangle.3.group.fill"
                 )
             ]
@@ -502,16 +502,16 @@ nonisolated enum ChangelogCatalog {
         ChangelogEntry(
             version: "1.2.1",
             releaseDate: ChangelogReleaseDate(year: 2026, month: 4, day: 1),
-            summary: String(localized: "Workout, Health, import, and location data are faster and more dependable."),
+            summary: String(localized: "Faster screens, more reliable imports, and a Locations summary."),
             highlights: [
                 ChangelogHighlight(
-                    title: String(localized: "Location insights"),
+                    title: String(localized: "Locations summary"),
                     detail: String(localized: "Open the Locations summary in Workout History to see counts and the latest workout at each place."),
                     systemImage: "map.fill"
                 ),
                 ChangelogHighlight(
                     title: String(localized: "Faster core screens"),
-                    detail: String(localized: "Workout History, the Health dashboard, and workout details respond more quickly."),
+                    detail: String(localized: "Workout History, the Health dashboard, and workout details respond faster."),
                     systemImage: "speedometer"
                 ),
                 ChangelogHighlight(
@@ -529,7 +529,7 @@ nonisolated enum ChangelogCatalog {
         ChangelogEntry(
             version: "1.1.0",
             releaseDate: ChangelogReleaseDate(year: 2026, month: 3, day: 31),
-            summary: String(localized: "Gym tagging is more automatic, accurate, and helpful."),
+            summary: String(localized: "Automatic gym tagging, with fallback suggestions when location is not enough."),
             highlights: [
                 ChangelogHighlight(
                     title: String(localized: "Automatic gym tagging"),
@@ -537,13 +537,13 @@ nonisolated enum ChangelogCatalog {
                     systemImage: "location.fill"
                 ),
                 ChangelogHighlight(
-                    title: String(localized: "Helpful fallback suggestions"),
+                    title: String(localized: "Fallback suggestions"),
                     detail: String(localized: "See likely gym matches when location alone cannot identify the right place."),
                     systemImage: "lightbulb.fill"
                 ),
                 ChangelogHighlight(
-                    title: String(localized: "More dependable matching"),
-                    detail: String(localized: "Missing location data and limited Health access are handled more gracefully."),
+                    title: String(localized: "More reliable matching"),
+                    detail: String(localized: "Matching works with missing location data and limited Health access."),
                     systemImage: "checkmark.shield.fill"
                 )
             ]
@@ -551,16 +551,16 @@ nonisolated enum ChangelogCatalog {
         ChangelogEntry(
             version: "1.0.9",
             releaseDate: ChangelogReleaseDate(year: 2026, month: 3, day: 27),
-            summary: String(localized: "A refreshed visual style pairs with broader Health coverage and cleaner charts."),
+            summary: String(localized: "New visual style, more Health metrics, and charts that stay inside their cards."),
             highlights: [
                 ChangelogHighlight(
-                    title: String(localized: "A softer, polished design"),
-                    detail: String(localized: "Updated cards, shadows, chips, and data views create a more refined visual system."),
+                    title: String(localized: "Softer design"),
+                    detail: String(localized: "Updated cards, shadows, chips, and data views."),
                     systemImage: "sparkles"
                 ),
                 ChangelogHighlight(
-                    title: String(localized: "Expanded Health data"),
-                    detail: String(localized: "Sync and keep a broader set of Health metrics for a fuller daily picture."),
+                    title: String(localized: "More Health metrics"),
+                    detail: String(localized: "Sync and store more Health metrics for each day."),
                     systemImage: "heart.fill"
                 ),
                 ChangelogHighlight(
@@ -570,7 +570,7 @@ nonisolated enum ChangelogCatalog {
                 ),
                 ChangelogHighlight(
                     title: String(localized: "Smoother setup"),
-                    detail: String(localized: "Health and Strong import setup handle deep history while keeping the first run responsive."),
+                    detail: String(localized: "Health and Strong import setup handle long histories without slowing the first run."),
                     systemImage: "wand.and.stars"
                 )
             ]
@@ -578,16 +578,16 @@ nonisolated enum ChangelogCatalog {
         ChangelogEntry(
             version: "1.0.8",
             releaseDate: ChangelogReleaseDate(year: 2026, month: 3, day: 26),
-            summary: String(localized: "Interactive guides make every major part of the app easier to learn."),
+            summary: String(localized: "Feature guides cover the main parts of the app."),
             highlights: [
                 ChangelogHighlight(
-                    title: String(localized: "Five Feature Guides"),
-                    detail: String(localized: "Explore hands-on walkthroughs for Today, workout logging, exercise analytics, Health, and Performance Lab."),
+                    title: String(localized: "Five feature guides"),
+                    detail: String(localized: "Hands-on walkthroughs for Today, workout logging, exercise analytics, Health, and Performance Lab."),
                     systemImage: "book.pages.fill"
                 ),
                 ChangelogHighlight(
                     title: String(localized: "Cleaner returning launches"),
-                    detail: String(localized: "Existing users no longer see onboarding appear briefly when the app opens."),
+                    detail: String(localized: "Returning users no longer see onboarding flash when the app opens."),
                     systemImage: "checkmark.circle.fill"
                 )
             ]
@@ -595,15 +595,15 @@ nonisolated enum ChangelogCatalog {
         ChangelogEntry(
             version: "1.0.7",
             releaseDate: ChangelogReleaseDate(year: 2026, month: 3, day: 19),
-            summary: String(localized: "Charts, app launch, and exercise setup are clearer."),
+            summary: String(localized: "Fixes for chart labels and app launch, plus exercise tagging prompts."),
             highlights: [
                 ChangelogHighlight(
-                    title: String(localized: "Cleaner body composition charts"),
+                    title: String(localized: "Readable chart labels"),
                     detail: String(localized: "Long-range labels remain readable when forecasts are visible."),
                     systemImage: "chart.line.uptrend.xyaxis"
                 ),
                 ChangelogHighlight(
-                    title: String(localized: "Smoother app launch"),
+                    title: String(localized: "No onboarding flash"),
                     detail: String(localized: "Returning users go straight to their data without a flash of onboarding."),
                     systemImage: "bolt.fill"
                 ),
@@ -617,21 +617,21 @@ nonisolated enum ChangelogCatalog {
         ChangelogEntry(
             version: "1.0.6",
             releaseDate: ChangelogReleaseDate(year: 2026, month: 3, day: 18),
-            summary: String(localized: "Dark Mode and redesigned Health categories make the app more comfortable and focused."),
+            summary: String(localized: "Dark Mode and redesigned Health categories."),
             highlights: [
                 ChangelogHighlight(
-                    title: String(localized: "Full Dark Mode support"),
+                    title: String(localized: "Dark Mode"),
                     detail: String(localized: "Choose Light, Dark, or follow the system from Settings."),
                     systemImage: "moon.fill"
                 ),
                 ChangelogHighlight(
                     title: String(localized: "Redesigned Health categories"),
-                    detail: String(localized: "See the most important metric first, followed by focused insights and supporting data."),
+                    detail: String(localized: "Each category leads with its main metric, followed by summaries and supporting data."),
                     systemImage: "heart.text.square.fill"
                 ),
                 ChangelogHighlight(
-                    title: String(localized: "Visual polish"),
-                    detail: String(localized: "Refined colors and layout improve readability throughout the app."),
+                    title: String(localized: "Colors and layout"),
+                    detail: String(localized: "Adjusted colors and layout for readability across the app."),
                     systemImage: "paintbrush.fill"
                 )
             ]
@@ -639,7 +639,7 @@ nonisolated enum ChangelogCatalog {
         ChangelogEntry(
             version: "1.0.5",
             releaseDate: ChangelogReleaseDate(year: 2026, month: 3, day: 17),
-            summary: String(localized: "Health sync starts faster and gives you better control over stored data."),
+            summary: String(localized: "Health sync starts faster, and you can clear and resync stored Health data."),
             highlights: [
                 ChangelogHighlight(
                     title: String(localized: "Recent-first Health sync"),
@@ -653,7 +653,7 @@ nonisolated enum ChangelogCatalog {
                 ),
                 ChangelogHighlight(
                     title: String(localized: "Health cache controls"),
-                    detail: String(localized: "Clear and resync local Health data from one streamlined area in Settings."),
+                    detail: String(localized: "Clear and resync local Health data from one place in Settings."),
                     systemImage: "externaldrive.fill.badge.timemachine"
                 ),
                 ChangelogHighlight(
@@ -666,21 +666,21 @@ nonisolated enum ChangelogCatalog {
         ChangelogEntry(
             version: "1.0.2",
             releaseDate: ChangelogReleaseDate(year: 2026, month: 3, day: 13),
-            summary: String(localized: "The first major polish pass made logging, browsing, and getting started easier."),
+            summary: String(localized: "Changes to exercise browsing, finishing workouts, and first-time setup."),
             highlights: [
                 ChangelogHighlight(
                     title: String(localized: "Clearer exercise browsing"),
-                    detail: String(localized: "Find and pick exercises with refined lists, search behavior, and empty states."),
+                    detail: String(localized: "Exercise lists, search, and empty states were reworked."),
                     systemImage: "list.bullet.circle.fill"
                 ),
                 ChangelogHighlight(
-                    title: String(localized: "A better finish flow"),
+                    title: String(localized: "Finish flow"),
                     detail: String(localized: "Review completed work and manage active sessions with clearer controls."),
                     systemImage: "flag.checkered.circle.fill"
                 ),
                 ChangelogHighlight(
-                    title: String(localized: "Friendlier first use"),
-                    detail: String(localized: "Improved onboarding guidance and loading placeholders make setup easier to follow."),
+                    title: String(localized: "First-run guidance"),
+                    detail: String(localized: "Onboarding guidance and loading placeholders were reworked."),
                     systemImage: "hand.wave.fill"
                 )
             ]

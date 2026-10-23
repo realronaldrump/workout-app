@@ -53,8 +53,7 @@ struct WorkoutVariantReviewView: View {
                 .frame(maxWidth: .infinity, alignment: .center)
             }
         }
-        .navigationTitle("Workout Variants")
-        .navigationBarTitleDisplayMode(.inline)
+        .collapsingTitle("Workout variants")
         .navigationDestination(item: $selectedWorkout) { workout in
             WorkoutDetailView(workout: workout)
         }
@@ -63,15 +62,15 @@ struct WorkoutVariantReviewView: View {
     private var header: some View {
         StatsPageHeader(
             eyebrow: "Variants",
-            title: "Workout Variants",
-            subtitle: "What usually changes when you repeat a similar exercise mix in a different way.",
-            systemImage: "square.3.layers.3d"
+            title: "Workout variants",
+            systemImage: "square.3.layers.3d",
+            help: "Compares similar workouts by exercise order, duration, time, and gym. Differences do not establish cause."
         )
     }
 
     private func focusedWorkoutSection(_ review: WorkoutVariantWorkoutReview) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("This Workout")
+            Text("This workout")
                 .font(Theme.Typography.sectionHeader)
                 .foregroundStyle(Theme.Colors.textPrimary)
 
@@ -87,7 +86,7 @@ struct WorkoutVariantReviewView: View {
 
     private var standoutPatternsSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Standout Patterns")
+            Text("Standout patterns")
                 .font(Theme.Typography.sectionHeader)
                 .foregroundStyle(Theme.Colors.textPrimary)
 
@@ -104,7 +103,7 @@ struct WorkoutVariantReviewView: View {
 
     private var recentReviewsSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Recent Variant Reviews")
+            Text("Recent variant reviews")
                 .font(Theme.Typography.sectionHeader)
                 .foregroundStyle(Theme.Colors.textPrimary)
 
@@ -121,13 +120,10 @@ struct WorkoutVariantReviewView: View {
 
     private var emptyState: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Not enough repeated variation yet")
+            Text("Not enough similar workouts")
                 .font(Theme.Typography.title3)
                 .foregroundStyle(Theme.Colors.textPrimary)
 
-            Text("This feature appears once the app can compare multiple sessions with a similar exercise structure across your history.")
-                .font(Theme.Typography.body)
-                .foregroundStyle(Theme.Colors.textSecondary)
         }
         .padding(Theme.Spacing.xl)
         .softCard(elevation: 1)

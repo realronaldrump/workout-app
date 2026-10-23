@@ -23,11 +23,9 @@ struct LongestStreaksPreview: View {
             }
 
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text("Top Streaks")
+            Text("Top streaks")
                 .font(Theme.Typography.metricLabel)
                 .foregroundColor(Theme.Colors.textTertiary)
-                .textCase(.uppercase)
-                .tracking(0.8)
 
             if runs.isEmpty {
                 Text("No streaks yet")

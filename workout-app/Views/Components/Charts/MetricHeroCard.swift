@@ -40,41 +40,21 @@ struct MetricHeroCard: View {
             }
 
             if let todaySample = analysis.todaySample {
-                Divider().overlay(Theme.Colors.border.opacity(0.6))
+                Rectangle().fill(Theme.Colors.rule).frame(height: 1)
                 todayRow(todaySample)
             }
         }
         .padding(Theme.Spacing.lg)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge, style: .continuous)
-                .fill(Theme.Colors.cardBackground)
-        )
-        .background(
-            // A soft wash of the metric's own hue, so each screen has an identity
-            // instead of every metric arriving as the same grey card.
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [metric.accentColor.opacity(0.16), metric.accentColor.opacity(0.02)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge, style: .continuous)
-                .strokeBorder(metric.accentColor.opacity(0.22), lineWidth: 1)
-        )
+        .softCard()
     }
 
     private var titleRow: some View {
         HStack(spacing: Theme.Spacing.sm) {
-            Image(systemName: metric.icon)
-                .font(Theme.Iconography.mediumStrong)
-                .foregroundStyle(metric.accentColor)
-                .frame(width: 32, height: 32)
-                .background(Circle().fill(metric.accentColor.opacity(0.14)))
+            RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                .fill(metric.accentColor)
+                .frame(width: 4, height: 16)
+                .accessibilityHidden(true)
 
             Text(rangeLabel)
                 .font(Theme.Typography.caption)
@@ -83,7 +63,7 @@ struct MetricHeroCard: View {
             Spacer(minLength: 0)
 
             if let previousDelta {
-                DeltaTag(delta: previousDelta, suffix: "vs prev")
+                DeltaTag(delta: previousDelta, suffix: "vs prior")
             }
         }
     }
@@ -99,8 +79,8 @@ struct MetricHeroCard: View {
                     .minimumScaleFactor(0.6)
 
                 Text(metric.displayUnit)
-                    .font(Theme.Typography.title3)
-                    .foregroundStyle(Theme.Colors.textTertiary)
+                    .font(Theme.Typography.title4)
+                    .foregroundStyle(Theme.Colors.textSecondary)
             }
 
             Text(subtitle)
@@ -114,17 +94,16 @@ struct MetricHeroCard: View {
         let count = analysis.completed.count
         guard count > 0 else { return "No completed \(metric.dailyNoun)s in this range" }
         let noun = count == 1 ? metric.dailyNoun : "\(metric.dailyNoun)s"
-        return "Average across \(count) \(noun)"
+        return "Daily average over \(count) \(noun)"
     }
 
     @ViewBuilder
     private func todayRow(_ sample: MetricDaySample) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.sm) {
-                Text(analysis.isTodayPartial ? "TODAY SO FAR" : "LATEST")
-                    .font(Theme.Typography.microLabel)
-                    .foregroundStyle(Theme.Colors.textTertiary)
-                    .tracking(1.0)
+                Text(analysis.isTodayPartial ? "Today so far" : "Latest")
+                    .font(Theme.Typography.captionBold)
+                    .foregroundStyle(Theme.Colors.textSecondary)
 
                 Spacer(minLength: 0)
 
@@ -141,7 +120,7 @@ struct MetricHeroCard: View {
                     .foregroundStyle(Theme.Colors.textPrimary)
 
                 if analysis.isTodayPartial, let projected = analysis.projectedTodayTotal {
-                    Text("· on pace for \(metric.formatWithUnit(projected))")
+                    Text("on pace for \(metric.formatWithUnit(projected))")
                         .font(Theme.Typography.footnote)
                         .foregroundStyle(metric.accentColor)
                 }

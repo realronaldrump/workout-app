@@ -51,62 +51,6 @@ final class HealthExportAndTimelineTests: XCTestCase {
         XCTAssertEqual(previous.upperBound, dayStart(year: 2026, month: 7, day: 3))
     }
 
-    @MainActor
-    func testBodyCompositionViewModelUsesLocalDailyHealthStoreData() {
-        let rangeStart = dayStart(year: 2026, month: 1, day: 10)
-        let rangeEnd = endOfDay(dayStart(year: 2026, month: 1, day: 12))
-        let displayRange = DateInterval(start: rangeStart, end: rangeEnd)
-        let entries = [
-            DailyHealthData(dayStart: dayStart(year: 2026, month: 1, day: 5), bodyMass: 80.0),
-            DailyHealthData(dayStart: dayStart(year: 2026, month: 1, day: 10), bodyMass: 81.0),
-            DailyHealthData(dayStart: dayStart(year: 2026, month: 1, day: 11), bodyMass: 81.5),
-            DailyHealthData(dayStart: dayStart(year: 2026, month: 1, day: 12), bodyMass: 82.0)
-        ]
-        let model = BodyCompositionViewModel()
-
-        model.load(
-            dailyEntries: entries,
-            metricKind: .weight,
-            displayRange: displayRange,
-            reportGranularity: .weekly
-        )
-
-        XCTAssertEqual(model.earliestSampleDate, dayStart(year: 2026, month: 1, day: 5))
-        XCTAssertEqual(model.sampleCountInDisplayRange, 3)
-        XCTAssertEqual(model.representativeSeries.map(\.date), [
-            dayStart(year: 2026, month: 1, day: 10),
-            dayStart(year: 2026, month: 1, day: 11),
-            dayStart(year: 2026, month: 1, day: 12)
-        ])
-    }
-
-    @MainActor
-    func testBodyCompositionViewModelPreservesMultipleRawReadingsPerDay() {
-        let firstDay = Calendar.current.startOfDay(for: Date())
-        let secondDay = Calendar.current.date(byAdding: .day, value: 1, to: firstDay) ?? firstDay
-        let displayRange = DateInterval(
-            start: firstDay,
-            end: Calendar.current.date(bySettingHour: 23, minute: 59, second: 59, of: secondDay) ?? secondDay
-        )
-        let samples = [
-            BodyRawSample(timestamp: firstDay.addingTimeInterval(8 * 3_600), value: 180),
-            BodyRawSample(timestamp: firstDay.addingTimeInterval(18 * 3_600), value: 181),
-            BodyRawSample(timestamp: secondDay.addingTimeInterval(8 * 3_600), value: 179)
-        ]
-        let model = BodyCompositionViewModel()
-
-        model.load(
-            rawSamples: samples,
-            displayRange: displayRange,
-            reportGranularity: .weekly
-        )
-
-        XCTAssertEqual(model.sampleCountInDisplayRange, 3)
-        XCTAssertEqual(model.representativeSeries.count, 2)
-        XCTAssertEqual(model.logbookDays.last?.samples.count, 2)
-        XCTAssertEqual(model.logbookDays.last?.representativeTimestamp, samples[0].timestamp)
-    }
-
     func testMetricSampleStreamWriterDeduplicatesChunkBoundaries() async throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("MetricStreamWriter-\(UUID().uuidString)", isDirectory: true)

@@ -10,13 +10,13 @@ enum WorkoutVariantDimensionKind: String, Hashable {
     nonisolated var title: String {
         switch self {
         case .firstExercise:
-            return "Exercise Order"
+            return "Exercise order"
         case .durationBand:
-            return "Session Length"
+            return "Session length"
         case .exerciseCountBand:
-            return "Session Size"
+            return "Session size"
         case .timeOfDay:
-            return "Time of Day"
+            return "Time of day"
         case .gym:
             return "Location"
         }

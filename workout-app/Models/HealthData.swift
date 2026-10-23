@@ -361,13 +361,13 @@ enum HealthKitAuthorizationStatus {
     var displayText: String {
         switch self {
         case .notDetermined:
-            return "Not Set Up"
+            return "Not set up"
         case .authorized:
             return "Connected"
         case .denied:
-            return "Access Denied"
+            return "Access denied"
         case .unavailable:
-            return "Not Available"
+            return "Not available"
         }
     }
 

@@ -7,21 +7,30 @@ import UIKit
 enum FontRegistrar {
     private static var didRegister = false
 
+    private static let bundledFonts = [
+        "BigShouldersDisplay-SemiBold",
+        "BigShouldersDisplay-Bold",
+        "BigShouldersDisplay-ExtraBold",
+        "BigShouldersDisplay-Black",
+        "Barlow-Regular",
+        "Barlow-Medium",
+        "Barlow-SemiBold",
+        "Barlow-Bold"
+    ]
+
     static func registerFontsIfNeeded() {
         guard !didRegister else { return }
         didRegister = true
 
-        // If both bundled fonts are already available (e.g. via UIAppFonts in
+        // If the bundled fonts are already available (e.g. via UIAppFonts in
         // Info.plist), don't re-register them and produce duplicate logs.
         #if canImport(UIKit)
-        if UIFont(name: "InstrumentSans-Regular", size: 12) != nil,
-           UIFont(name: "Sora-Regular", size: 12) != nil {
+        if bundledFonts.allSatisfy({ UIFont(name: $0, size: 12) != nil }) {
             return
         }
         #endif
 
-        registerFont(named: "InstrumentSans[wdth,wght]", ext: "ttf")
-        registerFont(named: "Sora[wght]", ext: "ttf")
+        bundledFonts.forEach { registerFont(named: $0, ext: "ttf") }
     }
 
     private static func registerFont(named name: String, ext: String) {

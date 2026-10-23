@@ -104,6 +104,7 @@ private nonisolated enum WorkoutDetailDerivedStateBuilder {
 
 struct WorkoutDetailView: View {
     let workout: Workout
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @EnvironmentObject var healthManager: HealthKitManager
     @EnvironmentObject var dataManager: WorkoutDataManager
     @EnvironmentObject var annotationsManager: WorkoutAnnotationsManager
@@ -156,7 +157,7 @@ struct WorkoutDetailView: View {
             : date.formatted(.dateTime.month(.abbreviated).day())
 
         let timePart = date.formatted(.dateTime.hour().minute())
-        return "\(datePart) | \(timePart)"
+        return "\(datePart) at \(timePart)"
     }
 
     var body: some View {
@@ -170,15 +171,8 @@ struct WorkoutDetailView: View {
 
                     summaryCard(for: workout)
 
-                    if healthManager.isHealthKitAvailable() {
-                        healthDataSection
-                    }
-
                     VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-                        SectionHeading(
-                            title: "Exercises",
-                            subtitle: "Tap a lift to see every set"
-                        )
+                        SectionHeading(title: "Exercises")
 
                         ForEach(workout.exercises) { exercise in
                             ExerciseCard(
@@ -198,6 +192,10 @@ struct WorkoutDetailView: View {
                         }
                     }
 
+                    if healthManager.isHealthKitAvailable() {
+                        healthDataSection
+                    }
+
                     GymAssignmentCard(workout: workout)
 
                     if let review = cachedVariantReview {
@@ -213,12 +211,14 @@ struct WorkoutDetailView: View {
                         }
                     }
                 }
-                .padding(Theme.Spacing.xl)
+                .padding(.horizontal, Theme.Layout.screenGutter)
+                .padding(.top, Theme.Spacing.sm)
+                .padding(.bottom, Theme.Spacing.xxl)
                 .contentColumn()
             }
             .scrollDismissesKeyboard(.interactively)
         }
-        .navigationTitle("Workout Details")
+        .navigationTitle(workout.date.formatted(.dateTime.month(.abbreviated).day().year()))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             AppToolbarItemGroup(placement: .topBarTrailing) {
@@ -230,7 +230,7 @@ struct WorkoutDetailView: View {
                     .accessibilityHint("Edit this workout")
                 }
 
-                AppToolbarButton(title: "Repeat", systemImage: "arrow.counterclockwise", variant: .accent) {
+                AppToolbarButton(title: "Repeat", systemImage: "arrow.counterclockwise", variant: .neutral) {
                     repeatThisWorkout()
                     Haptics.selection()
                 }
@@ -255,7 +255,7 @@ struct WorkoutDetailView: View {
         .onDisappear {
             derivedRefreshTask?.cancel()
         }
-        .alert("Sync Error", isPresented: $showingSyncError) {
+        .alert("Couldn't sync Health data", isPresented: $showingSyncError) {
             Button("OK", role: .cancel) {}
         } message: {
             Text(syncErrorMessage)
@@ -302,112 +302,118 @@ struct WorkoutDetailView: View {
     }
 
     private func workoutHeader(_ workout: Workout) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+        let parts = SharedFormatters.workoutTitleParts(workout.name)
+        let recordCount = personalRecordExerciseIDs.count
+        return VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             HStack(spacing: Theme.Spacing.sm) {
-                BrandBandLabel(
-                    text: workout.date.formatted(.dateTime.weekday(.wide)),
-                    systemImage: "calendar"
+                HStack(spacing: 6) {
+                    PlateMark(category: plateCategory(for: workout), height: 16)
+                    Text(plateCategory(for: workout).title)
+                        .font(Theme.Typography.caption2Bold)
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                }
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3)
+                .background(
+                    RoundedRectangle(cornerRadius: Theme.CornerRadius.tag, style: .continuous)
+                        .fill(Theme.Colors.panelStrong)
                 )
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("\(plateCategory(for: workout).title) session")
 
-                if !personalRecordExerciseIDs.isEmpty {
-                    let count = personalRecordExerciseIDs.count
-                    HStack(spacing: 4) {
-                        Image(systemName: "trophy.fill")
-                            .font(Theme.Typography.microLabel)
-                        Text(count == 1 ? "1 PR" : "\(count) PRs")
-                            .font(Theme.Typography.bandLabel)
-                            .textCase(.uppercase)
-                            .tracking(1.1)
-                    }
-                    .foregroundStyle(Theme.Colors.gold)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 3)
-                    .background(
-                        RoundedRectangle(cornerRadius: 3, style: .continuous)
-                            .fill(Theme.Colors.gold.opacity(Theme.Opacity.mediumFill))
-                    )
-                    .accessibilityElement(children: .combine)
-                    .accessibilityLabel(count == 1 ? "1 personal record" : "\(count) personal records")
+                if recordCount > 0 {
+                    PRTag(text: recordCount == 1 ? "1 PR" : "\(recordCount) PRs")
+                        .accessibilityLabel(recordCount == 1 ? "1 personal record" : "\(recordCount) personal records")
                 }
             }
 
-            Text(workout.name)
-                .font(Theme.Typography.displayHeroCompact)
+            Text(parts.title)
+                .font(Theme.Typography.displayHero)
                 .foregroundStyle(Theme.Colors.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
 
-            Text(workoutDateTimeToolbarText(for: workout.date))
-                .font(Theme.Typography.captionStrong)
+            Text(headerMeta(for: workout, place: parts.place))
+                .font(Theme.Typography.callout)
                 .foregroundStyle(Theme.Colors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
+    }
+
+    private func headerMeta(for workout: Workout, place: String?) -> String {
+        let when = workoutDateTimeToolbarText(for: workout.date)
+        guard let place else { return when + "." }
+        return "\(place). \(when)."
+    }
+
+    /// What the session mostly trained, for the plate tag.
+    private func plateCategory(for workout: Workout) -> PlateCategory {
+        let names = Set(workout.exercises.map(\.name))
+        let assignments = ExerciseMetadataManager.shared.resolvedAssignmentMappings(for: names)
+        return PlateCategory.classify(workout, assignments: assignments)
     }
 
     private func summaryCard(for workout: Workout) -> some View {
-        MetricTileButton(
-            action: { showingSessionInsights = true },
-            content: {
-                VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-                    LazyVGrid(
-                        columns: [GridItem(.flexible()), GridItem(.flexible())],
-                        alignment: .leading,
-                        spacing: Theme.Spacing.md
-                    ) {
-                        summaryStat(
-                            title: "Duration",
-                            value: SharedFormatters.durationMinutes(
-                                Double(workout.estimatedDurationMinutes())
-                            )
-                        )
-                        summaryStat(
-                            title: "Exercises",
-                            value: cachedSummary.map { "\($0.exerciseCount)" } ?? "—"
-                        )
-                        summaryStat(
-                            title: "Sets",
-                            value: cachedSummary.map { "\($0.setCount)" } ?? "—"
-                        )
-                        summaryStat(
-                            title: "Total volume",
-                            value: cachedSummary.map {
-                                $0.volume > 0 ? SharedFormatters.volumeWithUnit($0.volume) : "—"
-                            } ?? "—"
-                        )
-                    }
+        Button {
+            showingSessionInsights = true
+            Haptics.selection()
+        } label: {
+            VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
+                let statsLayout = dynamicTypeSize.isAccessibilitySize
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: Theme.Spacing.md))
+                    : AnyLayout(StatColumns())
+                statsLayout {
+                    summaryStat(
+                        title: "time",
+                        value: SharedFormatters.durationMinutes(Double(workout.estimatedDurationMinutes()))
+                    )
+                    summaryStat(
+                        title: cachedSummary?.exerciseCount == 1 ? "exercise" : "exercises",
+                        value: cachedSummary.map { "\($0.exerciseCount)" } ?? "—"
+                    )
+                    summaryStat(
+                        title: cachedSummary?.setCount == 1 ? "set" : "sets",
+                        value: cachedSummary.map { "\($0.setCount)" } ?? "—"
+                    )
+                    summaryStat(
+                        title: "lbs lifted",
+                        value: cachedSummary.map {
+                            $0.volume > 0 ? SharedFormatters.volumeCompact($0.volume) : "—"
+                        } ?? "—"
+                    )
+                }
 
-                    if let comparison = cachedComparison {
-                        Divider()
-                            .overlay(Theme.Colors.border)
+                if let comparison = cachedComparison {
+                    Rectangle()
+                        .fill(Theme.Colors.rule)
+                        .frame(height: 1)
 
-                        ViewThatFits(in: .horizontal) {
-                            comparisonContent(comparison, stacked: false)
-                            comparisonContent(comparison, stacked: true)
-                        }
+                    ViewThatFits(in: .horizontal) {
+                        comparisonContent(comparison, stacked: false)
+                        comparisonContent(comparison, stacked: true)
                     }
                 }
-                .padding(Theme.Spacing.lg)
-                .softCard(elevation: 2)
+
+                HStack(spacing: 3) {
+                    Text("Session breakdown")
+                        .font(Theme.Typography.subheadlineStrong)
+                    Image(systemName: "chevron.right")
+                        .font(Theme.Typography.microLabel)
+                }
+                .foregroundStyle(Theme.Colors.textPrimary)
             }
-        )
+            .padding(Theme.Spacing.lg)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .softCard()
+            .contentShape(.rect)
+        }
+        .buttonStyle(PressableCardButtonStyle())
+        .accessibilityHint("Opens volume by exercise, stats, and heart rate")
     }
 
     private func summaryStat(title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            Text(title)
-                .sectionHeaderStyle()
-            Text(value)
-                .font(Theme.Typography.title2)
-                .foregroundStyle(Theme.Colors.textPrimary)
-                .lineLimit(2)
-                .minimumScaleFactor(0.8)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(Theme.Spacing.md)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
-                .fill(Theme.Colors.surfaceRaised)
-        )
+        DisplayStat(value: value, label: title)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder
@@ -431,14 +437,17 @@ struct WorkoutDetailView: View {
     }
 
     private func comparisonTitle(_ comparison: WorkoutDetailComparison) -> some View {
-        Text("vs last \(comparison.workoutName)")
-            .font(Theme.Typography.captionStrong)
+        Text("Against the last \(SharedFormatters.workoutTitleParts(comparison.workoutName).title)")
+            .font(Theme.Typography.subheadline)
             .foregroundStyle(Theme.Colors.textSecondary)
             .fixedSize(horizontal: false, vertical: true)
     }
 
     private func comparisonDeltas(_ comparison: WorkoutDetailComparison) -> some View {
-        HStack(spacing: Theme.Spacing.sm) {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: Theme.Spacing.xs))
+            : AnyLayout(HStackLayout(spacing: Theme.Spacing.sm))
+        return layout {
             if let volumeDelta = comparison.volumeDelta {
                 DeltaTag(delta: volumeDelta, suffix: "volume")
             }
@@ -457,19 +466,11 @@ struct WorkoutDetailView: View {
 
     private func variantReviewSection(review: WorkoutVariantWorkoutReview) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            HStack {
-                Text("Variant Review")
-                    .font(Theme.Typography.sectionHeader2)
-                    .foregroundColor(Theme.Colors.textPrimary)
-
-                Spacer()
-
+            SectionHeading(title: "What changed") {
                 NavigationLink {
                     WorkoutVariantReviewView(focusWorkoutId: workout.id)
                 } label: {
-                    Text("Full View")
-                        .font(Theme.Typography.captionBold)
-                        .foregroundColor(Theme.Colors.accent)
+                    TextLinkLabel(title: "Full review")
                 }
                 .buttonStyle(.plain)
             }
@@ -486,10 +487,7 @@ struct WorkoutDetailView: View {
     @ViewBuilder
     private var healthDataSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            SectionHeading(
-                title: "Health Data",
-                subtitle: cachedHealthData == nil ? nil : "Tap for heart rate, recovery, and sleep context"
-            ) {
+            SectionHeading(title: "Heart and recovery") {
                 syncButton
             }
 
@@ -515,49 +513,26 @@ struct WorkoutDetailView: View {
             HStack(spacing: 6) {
                 if healthManager.isSyncing {
                     SyncPulse()
-                } else {
-                    Image(systemName: hasData ? "arrow.triangle.2.circlepath" : "heart.text.square")
-                        .font(Theme.Iconography.medium)
                 }
-
-                Text(hasData ? "Re-sync" : "Sync")
-                    .font(Theme.Typography.subheadline)
+                Text(healthManager.isSyncing ? "Syncing…" : (hasData ? "Sync again" : "Sync"))
+                    .font(Theme.Typography.subheadlineStrong)
+                    .underline(!healthManager.isSyncing)
             }
-            .foregroundColor(.white)
-            .padding(.horizontal, Theme.Spacing.md)
-            .padding(.vertical, 7)
-            .background(Capsule().fill(Theme.accentGradient))
+            .foregroundStyle(Theme.Colors.textPrimary)
             .frame(minHeight: Theme.Layout.minimumTapTarget)
             .contentShape(.rect)
         }
         .buttonStyle(AppInteractionButtonStyle())
         .disabled(healthManager.isSyncing)
-        .opacity(healthManager.isSyncing ? 0.7 : 1.0)
+        .accessibilityLabel(healthManager.isSyncing ? "Syncing Apple Health data" : "Sync Apple Health data")
     }
 
     private var noHealthDataCard: some View {
-        HStack(alignment: .top, spacing: Theme.Spacing.md) {
-            IconTile(systemImage: "heart.text.square.fill", tint: Theme.Colors.error, size: 40)
-
-            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                Text("No health data yet")
-                    .font(Theme.Typography.headline)
-                    .foregroundColor(Theme.Colors.textPrimary)
-
-                Text("Sync this workout to load heart rate, sleep, and recovery context from Apple Health.")
-                    .font(Theme.Typography.caption)
-                    .foregroundColor(Theme.Colors.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Spacer(minLength: 0)
-        }
-        .padding(Theme.Spacing.lg)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
-                .strokeBorder(Theme.Colors.border, style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
-        )
+        Text("No heart rate or energy saved for this workout yet. Sync to pull it from Apple Health.")
+            .font(Theme.Typography.subheadline)
+            .foregroundStyle(Theme.Colors.textSecondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .ledgerRow()
     }
 
     // MARK: - Actions
@@ -652,320 +627,4 @@ struct WorkoutDetailView: View {
         }
     }
 
-}
-
-struct ExerciseCard: View {
-    let exercise: Exercise
-    var personalRecordDate: Date?
-    var highlightedSetIDs: Set<UUID> = []
-    var onViewHistory: ((String) -> Void)?
-    var onQuickStart: ((String) -> Void)?
-    @State private var isExpanded = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @ObservedObject private var metadataManager = ExerciseMetadataManager.shared
-    @ObservedObject private var metricManager = ExerciseMetricManager.shared
-
-    private var isCardio: Bool {
-        metadataManager
-            .resolvedTags(for: exercise.name)
-            .contains(where: { $0.builtInGroup == .cardio })
-    }
-
-    private var cardioConfig: ResolvedCardioMetricConfiguration {
-        metricManager.resolvedCardioConfiguration(for: exercise.name, historySets: exercise.sets)
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Button(
-                action: {
-                    withAnimation(reduceMotion ? nil : Theme.Animation.gentleSpring) {
-                        isExpanded.toggle()
-                    }
-                    Haptics.selection()
-                },
-                label: {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            ViewThatFits(in: .horizontal) {
-                                HStack(spacing: Theme.Spacing.sm) {
-                                    exerciseTitle
-
-                                    if let personalRecordDate {
-                                        PRMarkerView(date: personalRecordDate)
-                                    }
-                                }
-
-                                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                                    exerciseTitle
-
-                                    if let personalRecordDate {
-                                        PRMarkerView(date: personalRecordDate)
-                                    }
-                                }
-                            }
-
-                            ViewThatFits(in: .horizontal) {
-                                HStack(spacing: Theme.Spacing.lg) {
-                                    setCountLabel
-
-                                    if isCardio {
-                                        cardioSummaryChips
-                                    } else {
-                                        volumeLabel
-                                    }
-                                }
-
-                                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                                    setCountLabel
-
-                                    if isCardio {
-                                        cardioSummaryChips
-                                    } else {
-                                        volumeLabel
-                                    }
-                                }
-                            }
-                        }
-
-                        Spacer()
-
-                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                            .font(Theme.Typography.caption)
-                            .foregroundColor(Theme.Colors.textTertiary)
-                    }
-                }
-            )
-            .buttonStyle(.plain)
-            .frame(minHeight: Theme.Layout.minimumTapTarget)
-
-            if isExpanded {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(Array(exercise.sets.enumerated()), id: \.offset) { index, set in
-                        setRow(index: index, set: set)
-                            .padding(.horizontal, Theme.Spacing.sm)
-                            .padding(.vertical, 6)
-                            .background(
-                                RoundedRectangle(cornerRadius: Theme.CornerRadius.small, style: .continuous)
-                                    .fill(
-                                        highlightedSetIDs.contains(set.id)
-                                            ? Theme.Colors.gold.opacity(Theme.Opacity.mediumFill)
-                                            : (index.isMultiple(of: 2) ? Theme.Colors.surfaceRaised : Color.clear)
-                                    )
-                            )
-                    }
-
-                    if let onViewHistory {
-                        Button {
-                            Haptics.selection()
-                            onViewHistory(exercise.name)
-                        } label: {
-                            HStack(spacing: 4) {
-                                Text("Open lift history")
-                                Image(systemName: "arrow.right")
-                                    .font(Theme.Typography.microLabel)
-                            }
-                            .font(Theme.Typography.captionBold)
-                            .foregroundStyle(Theme.Colors.accent)
-                            .frame(minHeight: Theme.Layout.minimumTapTarget)
-                            .contentShape(.rect)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .transition(.opacity.combined(with: .move(edge: .top)))
-            } else if !exercise.sets.isEmpty {
-                setPreviewStrip
-            }
-        }
-        .padding(Theme.Spacing.lg)
-        .softCard(elevation: 2)
-        .contextMenu {
-            Button("View History") {
-                onViewHistory?(exercise.name)
-            }
-            Button("Quick Start") {
-                onQuickStart?(exercise.name)
-            }
-        }
-        .accessibilityHint("Long press for more options: View History, Quick Start")
-    }
-
-    /// Collapsed cards still show the shape of the work: every set as a compact chip.
-    private var setPreviewStrip: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 4) {
-                ForEach(Array(exercise.sets.enumerated()), id: \.offset) { _, set in
-                    let isRecord = highlightedSetIDs.contains(set.id)
-                    HStack(spacing: 3) {
-                        if isRecord {
-                            Image(systemName: "trophy.fill")
-                                .font(Theme.Typography.microLabel)
-                                .foregroundStyle(Theme.Colors.gold)
-                        }
-                        Text(isCardio ? cardioSetSummary(set) : "\(WorkoutValueFormatter.weightText(set.weight))×\(set.reps)")
-                            .font(Theme.Typography.caption2Bold)
-                            .monospacedDigit()
-                            .foregroundStyle(Theme.Colors.textSecondary)
-                    }
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 4)
-                    .background(
-                        Capsule().fill(isRecord ? Theme.Colors.gold.opacity(Theme.Opacity.mediumFill) : Theme.Colors.surfaceRaised)
-                    )
-                    .overlay(Capsule().strokeBorder(Theme.Colors.border.opacity(0.5), lineWidth: 1))
-                }
-            }
-        }
-        .scrollClipDisabled()
-        .accessibilityHidden(true)
-    }
-
-    private var exerciseTitle: some View {
-        Text(exercise.name)
-            .font(Theme.Typography.title4Bold)
-            .foregroundStyle(Theme.Colors.textPrimary)
-            .lineLimit(2)
-            .fixedSize(horizontal: false, vertical: true)
-    }
-
-    private var setCountLabel: some View {
-        Label(SharedFormatters.count(exercise.sets.count, "set"), systemImage: "number")
-            .font(Theme.Typography.caption)
-            .foregroundStyle(Theme.Colors.textSecondary)
-    }
-
-    private var volumeLabel: some View {
-        Label(SharedFormatters.volumeCompact(exercise.totalVolume), systemImage: "scalemass")
-            .font(Theme.Typography.caption)
-            .foregroundStyle(Theme.Colors.textSecondary)
-    }
-
-    @ViewBuilder
-    private func setRow(index: Int, set: WorkoutSet) -> some View {
-        let isRecord = highlightedSetIDs.contains(set.id)
-        // Weights keep their decimals (22.5 lbs used to display as 22).
-        let loadText = "\(WorkoutValueFormatter.weightText(set.weight)) lbs × \(set.reps)"
-        let volumeText = "\(WorkoutValueFormatter.weightText(set.weight * Double(set.reps))) lbs"
-
-        HStack(spacing: Theme.Spacing.md) {
-            Text("\(index + 1)")
-                .font(Theme.Typography.caption2Bold)
-                .foregroundStyle(isRecord ? Color.white : Theme.Colors.textSecondary)
-                .frame(width: 24, height: 24)
-                .background(
-                    Circle().fill(isRecord ? AnyShapeStyle(Theme.Colors.gold) : AnyShapeStyle(Theme.Colors.border.opacity(0.4)))
-                )
-                .accessibilityLabel("Set \(index + 1)")
-
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: Theme.Spacing.sm) {
-                    Text(isCardio ? cardioSetSummary(set) : loadText)
-                        .font(Theme.Typography.bodyBold)
-                        .foregroundStyle(Theme.Colors.textPrimary)
-                        .monospacedDigit()
-
-                    if isRecord {
-                        Image(systemName: "trophy.fill")
-                            .font(Theme.Typography.caption2Bold)
-                            .foregroundStyle(Theme.Colors.gold)
-                            .accessibilityLabel("Personal record")
-                    }
-
-                    Spacer(minLength: Theme.Spacing.xs)
-
-                    if !isCardio {
-                        Text(volumeText)
-                            .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.Colors.textSecondary)
-                            .monospacedDigit()
-                    }
-                }
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(isCardio ? cardioSetSummary(set) : loadText)
-                        .font(Theme.Typography.bodyBold)
-                        .foregroundStyle(Theme.Colors.textPrimary)
-                        .fixedSize(horizontal: false, vertical: true)
-                    if !isCardio {
-                        Text(volumeText)
-                            .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.Colors.textSecondary)
-                    }
-                }
-            }
-        }
-        .accessibilityElement(children: .combine)
-    }
-
-    private var cardioSummaryChips: some View {
-        let totalDistance = exercise.sets.reduce(0.0) { $0 + $1.distance }
-        let totalSeconds = exercise.sets.reduce(0.0) { $0 + $1.seconds }
-        let totalCount = exercise.sets.reduce(0) { $0 + $1.reps }
-
-        return ViewThatFits(in: .horizontal) {
-            HStack(spacing: Theme.Spacing.sm) {
-                cardioSummaryContent(
-                    totalDistance: totalDistance,
-                    totalSeconds: totalSeconds,
-                    totalCount: totalCount
-                )
-            }
-
-            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                cardioSummaryContent(
-                    totalDistance: totalDistance,
-                    totalSeconds: totalSeconds,
-                    totalCount: totalCount
-                )
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func cardioSummaryContent(
-        totalDistance: Double,
-        totalSeconds: Double,
-        totalCount: Int
-    ) -> some View {
-        if totalDistance > 0 {
-            Label("\(WorkoutValueFormatter.distanceText(totalDistance)) dist", systemImage: "location.fill")
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Colors.textSecondary)
-        }
-        if totalSeconds > 0 {
-            Label(WorkoutValueFormatter.durationText(seconds: totalSeconds), systemImage: "clock.fill")
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Colors.textSecondary)
-        }
-        if totalCount > 0 {
-            Label("\(totalCount) \(cardioConfig.countLabel)", systemImage: "number")
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Colors.textSecondary)
-        }
-    }
-
-    private func cardioSetSummary(_ set: WorkoutSet) -> String {
-        var parts: [String] = []
-        if set.distance > 0 {
-            parts.append("\(WorkoutValueFormatter.distanceText(set.distance)) dist")
-        }
-        if set.seconds > 0 {
-            parts.append(WorkoutValueFormatter.durationText(seconds: set.seconds))
-        }
-        if parts.isEmpty, set.reps > 0 {
-            parts.append("\(set.reps) \(cardioConfig.countLabel)")
-        }
-        return parts.isEmpty ? "No data" : parts.joined(separator: " · ")
-    }
-
-}
-
-struct SyncPulse: View {
-    var body: some View {
-        ProgressView()
-            .controlSize(.mini)
-            .tint(.white)
-            .accessibilityHidden(true)
-    }
 }

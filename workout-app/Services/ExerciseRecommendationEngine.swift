@@ -180,8 +180,8 @@ enum ExerciseRecommendationEngine {
             let label = ExerciseLoad.isAssistedExercise(exerciseName) ? "last best assist" : "last max"
             parts.append("\(label) \(Int(context.lastMaxWeight))")
         }
-        parts.append("\(context.repRange.lowerBound)-\(context.repRange.upperBound) reps")
-        return parts.joined(separator: " | ")
+        parts.append("rep range \(context.repRange.lowerBound)-\(context.repRange.upperBound)")
+        return parts.joined(separator: ", ")
     }
 
     private nonisolated static func medianInt(_ values: [Int]) -> Int {

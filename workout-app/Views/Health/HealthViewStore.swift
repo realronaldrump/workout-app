@@ -11,6 +11,21 @@ import Foundation
 final class HealthViewStore: ObservableObject {
     @Published private(set) var authorizationStatus: HealthKitAuthorizationStatus
     @Published private(set) var dailyHealthStore: [Date: DailyHealthData]
+    /// Invalidate before forwarding the event, but build only when a visible Health
+    /// screen asks for it. Cache bootstrap can publish several entries in one turn.
+    private var snapshotSource: [Date: DailyHealthData]
+    private var cachedDailySnapshot: HealthDailySnapshot?
+    private var snapshotCalendar: Calendar?
+    private(set) var dailyDataRevision: UInt64 = 0
+
+    var dailySnapshot: HealthDailySnapshot {
+        let calendar = Calendar.current
+        if let cachedDailySnapshot, snapshotCalendar == calendar { return cachedDailySnapshot }
+        let snapshot = HealthDailySnapshot(store: snapshotSource, calendar: calendar)
+        cachedDailySnapshot = snapshot
+        snapshotCalendar = calendar
+        return snapshot
+    }
     @Published private(set) var healthDataStore: [UUID: WorkoutHealthData]
     @Published private(set) var workouts: [Workout]
     @Published private(set) var isDailySyncing: Bool
@@ -31,6 +46,7 @@ final class HealthViewStore: ObservableObject {
         self.healthManager = healthManager
         authorizationStatus = healthManager.authorizationStatus
         dailyHealthStore = healthManager.dailyHealthStore
+        snapshotSource = healthManager.dailyHealthStore
         healthDataStore = healthManager.healthDataStore
         workouts = dataManager.workouts
         isDailySyncing = healthManager.isDailySyncing
@@ -45,7 +61,7 @@ final class HealthViewStore: ObservableObject {
 
         healthManager.$dailyHealthStore
             .dropFirst()
-            .sink { [weak self] in self?.dailyHealthStore = $0 }
+            .sink { [weak self] in self?.replaceDailyHealthStore($0) }
             .store(in: &cancellables)
 
         healthManager.$healthDataStore
@@ -75,6 +91,27 @@ final class HealthViewStore: ObservableObject {
             .removeDuplicates()
             .sink { [weak self] in self?.syncError = $0 }
             .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)
+            .merge(with: NotificationCenter.default.publisher(for: .NSCalendarDayChanged))
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.invalidateDailyCalendar() }
+            .store(in: &cancellables)
+    }
+
+    private func replaceDailyHealthStore(_ store: [Date: DailyHealthData]) {
+        snapshotSource = store
+        cachedDailySnapshot = nil
+        dailyDataRevision &+= 1
+        dailyHealthStore = store
+    }
+
+    /// Rolling ranges and partial-day statistics also change without a HealthKit write.
+    func invalidateDailyCalendar() {
+        cachedDailySnapshot = nil
+        snapshotCalendar = nil
+        dailyDataRevision &+= 1
+        objectWillChange.send()
     }
 
     func refreshAuthorizationStatus() {
@@ -90,7 +127,7 @@ final class HealthViewStore: ObservableObject {
         workouts: [Workout]
     ) {
         authorizationStatus = .authorized
-        dailyHealthStore = dailyHealth
+        replaceDailyHealthStore(dailyHealth)
         self.workouts = workouts
         lastDailySyncDate = Date()
         syncError = nil
@@ -109,12 +146,34 @@ final class HealthViewStore: ObservableObject {
         healthManager.syncError = nil
     }
 
+    /// Resolve this metric's full history without depending on which daily
+    /// summaries have already been synced into the local cache.
+    func fetchEarliestMetricSampleDate(metric: HealthMetric) async throws -> Date? {
+        guard authorizationStatus == .authorized, metric.supportsSamples else { return nil }
+#if DEBUG
+        if AnalyticsUITestFixture.isEnabled {
+            if let samples = AnalyticsUITestFixture.bodySamples[metric] {
+                return samples.first?.timestamp
+            }
+            return dailyHealthStore.values
+                .filter { day in day.value(for: metric).map(\.isFinite) ?? false }
+                .map(\.dayStart)
+                .min()
+        }
+#endif
+        guard let type = metric.quantityType else { return nil }
+        return try await healthManager.fetchEarliestQuantitySampleDate(type: type)
+    }
+
     func fetchMetricSamples(
         metric: HealthMetric,
         range: DateInterval
     ) async throws -> [HealthMetricSample] {
 #if DEBUG
         if AnalyticsUITestFixture.isEnabled {
+            if let samples = AnalyticsUITestFixture.bodySamples[metric] {
+                return samples.filter { range.contains($0.timestamp) }
+            }
             return dailyHealthStore.values
                 .compactMap { day -> HealthMetricSample? in
                     guard range.contains(day.dayStart),

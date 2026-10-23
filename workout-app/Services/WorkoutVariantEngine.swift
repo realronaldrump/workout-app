@@ -335,8 +335,8 @@ private enum WorkoutVariantAnalyzer {
         )
         let variantLabel = fingerprintParts.isEmpty
             ? "Variant"
-            : fingerprintParts.prefix(3).joined(separator: " • ")
-        let summary = sortedDifferences.prefix(2).map(\.summary).joined(separator: " • ")
+            : fingerprintParts.prefix(3).joined(separator: ", ")
+        let summary = sortedDifferences.prefix(2).map(\.summary).joined(separator: ", ")
 
         return WorkoutVariantWorkoutReview(
             id: snapshot.workout.id,
@@ -545,7 +545,7 @@ private enum WorkoutVariantAnalyzer {
         guard !sortedEvidence.isEmpty else { return nil }
 
         let evidenceArray = Array(sortedEvidence)
-        let summary = evidenceArray.prefix(2).map(\.summarySnippet).joined(separator: " • ")
+        let summary = evidenceArray.prefix(2).map(\.summarySnippet).joined(separator: ", ")
 
         return WorkoutVariantDifferenceInsight(
             id: "\(kind.rawValue)-\(variantLabel)-\(baselineLabel)",

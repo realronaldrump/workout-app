@@ -132,6 +132,73 @@ enum AnalyticsUITestFixture {
         .sorted { $0.date > $1.date }
     }()
 
+    // MARK: - Body measurements
+
+    /// Deterministic noise in -1...1, so fixture screenshots are stable run to run.
+    private nonisolated static func fixtureNoise(_ index: Int, salt: Double) -> Double {
+        let value = sin(Double(index) * 12.9898 + salt) * 43_758.5453
+        return (value - value.rounded(.down)) * 2 - 1
+    }
+
+    /// A believable year of weigh-ins: a long cut from about 196 lb, a holiday regain,
+    /// then a slower second cut. Daily water swings ride on top of the trend.
+    private nonisolated static func fixtureMorningWeight(daysAgo: Int) -> Double {
+        let day = Double(420 - daysAgo)
+        let trend: Double
+        switch day {
+        case ..<240: trend = 196 - day * 0.066
+        case ..<300: trend = 180.2 + (day - 240) * 0.05
+        default: trend = 183.2 - (day - 300) * 0.04
+        }
+        return trend + 0.55 * sin(day / 4.1) + 0.8 * fixtureNoise(daysAgo, salt: 2)
+    }
+
+    private nonisolated static func fixtureBodyFat(daysAgo: Int) -> Double {
+        let day = Double(420 - daysAgo)
+        return 0.214 - day * 0.000_11 + 0.003 * fixtureNoise(daysAgo, salt: 4)
+    }
+
+    private nonisolated static func fixtureSampleID(_ index: Int, tag: Int) -> UUID {
+        UUID(uuidString: String(format: "00000000-0000-4000-%04d-%012d", tag, index)) ?? UUID()
+    }
+
+    /// Raw samples in storage units (kg and fractions), oldest first, like an `HKSampleQuery`.
+    /// About one day in seven is skipped, with a three-week gap for a trip, and some days
+    /// have a second, heavier evening reading.
+    static let bodySamples: [HealthMetric: [HealthMetricSample]] = {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        var mass: [HealthMetricSample] = []
+        var fat: [HealthMetricSample] = []
+        for daysAgo in stride(from: 420, through: 0, by: -1) {
+            let skipped = daysAgo > 0 && (fixtureNoise(daysAgo, salt: 1) < -0.72 || (118..<139).contains(daysAgo))
+            guard !skipped,
+                  let day = calendar.date(byAdding: .day, value: -daysAgo, to: today),
+                  let morning = calendar.date(
+                      byAdding: .minute,
+                      value: 400 + Int(30 * fixtureNoise(daysAgo, salt: 3)),
+                      to: day
+                  ) else { continue }
+            let pounds = fixtureMorningWeight(daysAgo: daysAgo)
+            mass.append(HealthMetricSample(id: fixtureSampleID(daysAgo, tag: 1), timestamp: morning, value: pounds / 2.20462))
+            if daysAgo % 11 == 4 {
+                mass.append(HealthMetricSample(
+                    id: fixtureSampleID(daysAgo, tag: 2),
+                    timestamp: morning.addingTimeInterval(12 * 3_600),
+                    value: (pounds + 1.6) / 2.20462
+                ))
+            }
+            if daysAgo % 3 == 0 {
+                fat.append(HealthMetricSample(
+                    id: fixtureSampleID(daysAgo, tag: 3),
+                    timestamp: morning.addingTimeInterval(60),
+                    value: fixtureBodyFat(daysAgo: daysAgo)
+                ))
+            }
+        }
+        return [.bodyMass: mass, .bodyFatPercentage: fat]
+    }()
+
     static let dailyHealth: [Date: DailyHealthData] = {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
@@ -168,8 +235,8 @@ enum AnalyticsUITestFixture {
                     bloodOxygen: 97 + Double(index % 2),
                     respiratoryRate: 14.5 + Double(index % 4) * 0.2,
                     vo2Max: 44 + Double(index % 5) * 0.2,
-                    bodyMass: (181 - Double(index) * 0.05) / 2.20462,
-                    bodyFatPercentage: 0.18 - Double(index) * 0.000_2
+                    bodyMass: fixtureMorningWeight(daysAgo: index) / 2.20462,
+                    bodyFatPercentage: fixtureBodyFat(daysAgo: index)
                 )
             )
         }

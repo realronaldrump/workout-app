@@ -9,7 +9,7 @@ nonisolated enum WorkoutPDFError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .cannotCreateDocument: return "The PDF document could not be created."
-        case .cannotLayOutText: return "Some report text could not be laid out."
+        case .cannotLayOutText: return "Some report text did not fit on the page."
         }
     }
 }

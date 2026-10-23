@@ -55,11 +55,11 @@ struct LegacyMigrationWizardView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text("Move Saved Data")
+            Text("Move saved data")
                 .font(Theme.Typography.screenTitle)
                 .foregroundStyle(Theme.Colors.textPrimary)
 
-            Text("A previous storage format was found. Move it once before continuing.")
+            Text("Update your saved data to continue.")
                 .font(Theme.Typography.body)
                 .foregroundStyle(Theme.Colors.textSecondary)
         }
@@ -86,7 +86,7 @@ struct LegacyMigrationWizardView: View {
 
                 summaryRows(summary)
 
-                primaryButton(title: "Migrate Data", fill: Theme.Colors.accent) {
+                primaryButton(title: "Migrate data") {
                     Task { await manager.migrate() }
                 }
             }
@@ -118,7 +118,7 @@ struct LegacyMigrationWizardView: View {
 
                 summaryRows(result.summary)
 
-                primaryButton(title: "Continue", fill: Theme.Colors.success) {
+                primaryButton(title: "Continue") {
                     onContinue()
                 }
             }
@@ -128,7 +128,7 @@ struct LegacyMigrationWizardView: View {
     private func failedState(summary: LegacyMigrationSummary?, message: String) -> some View {
         MigrationPanel {
             VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-                Text("Migration needs attention")
+                Text("Migration failed")
                     .font(Theme.Typography.title3)
                     .foregroundStyle(Theme.Colors.textPrimary)
 
@@ -140,11 +140,11 @@ struct LegacyMigrationWizardView: View {
                     summaryRows(summary)
                 }
 
-                primaryButton(title: "Try Again", fill: Theme.Colors.accent) {
+                primaryButton(title: "Try again") {
                     Task { await manager.prepare() }
                 }
 
-                Button("Continue Without Migrating") {
+                Button("Continue without migrating") {
                     onContinue()
                 }
                 .font(Theme.Typography.headline)
@@ -163,16 +163,8 @@ struct LegacyMigrationWizardView: View {
         }
     }
 
-    private func primaryButton(title: String, fill: Color, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title)
-                .font(Theme.Typography.headline)
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, Theme.Spacing.md)
-                .surfaceButtonChrome(fill: fill, cornerRadius: Theme.CornerRadius.large)
-        }
-        .buttonStyle(.plain)
+    private func primaryButton(title: String, action: @escaping () -> Void) -> some View {
+        AppPrimaryButton(title: title, action: action)
     }
 }
 

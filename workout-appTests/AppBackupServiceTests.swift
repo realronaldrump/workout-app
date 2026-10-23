@@ -136,6 +136,42 @@ final class AppBackupServiceTests: XCTestCase {
         XCTAssertEqual(decoded.payload.settings.profileName, "Davis")
     }
 
+    @MainActor
+    func testNativeBackupRestoresSavedLiveWorkoutWithoutDuplicates() async throws {
+        let date = date(day: 3, hour: 9)
+        let workout = LoggedWorkout(
+            startedAt: date,
+            endedAt: date.addingTimeInterval(1_801),
+            name: "Live strength + cardio",
+            gymProfileId: UUID(),
+            exercises: [
+                LoggedExercise(name: "Pull Up", sets: [LoggedSet(order: 1, weight: 0, reps: 12)]),
+                LoggedExercise(name: "Run", sets: [LoggedSet(order: 1, weight: 0, reps: 0, distance: 2.5, seconds: 900)])
+            ],
+            createdAt: date,
+            updatedAt: date
+        )
+        let backup = BigBeautifulWorkoutBackup(
+            appVersion: "test",
+            appBuild: "1",
+            payload: AppBackupPayload(loggedWorkouts: [workout])
+        )
+        let exported = try AppBackupService.exportBackup(backup)
+        let decoded = try AppBackupService.decodeBackup(from: exported)
+        let database = AppDatabase(inMemory: true)
+        let store = WorkoutLogStore(database: database)
+        let first = store.mergeWorkoutsFromBackup(decoded.payload.loggedWorkouts)
+        try await store.waitForPendingPersistence()
+        let second = store.mergeWorkoutsFromBackup(decoded.payload.loggedWorkouts)
+        try await store.waitForPendingPersistence()
+        let restored = try database.loadLoggedWorkouts()
+
+        XCTAssertEqual(first.inserted, 1)
+        XCTAssertEqual(second.inserted, 0)
+        XCTAssertEqual(second.skipped, 1)
+        XCTAssertEqual(restored, [workout])
+    }
+
     func testClassifyImportDetectsNativeBackupBeforeExtension() throws {
         let backup = BigBeautifulWorkoutBackup(
             appVersion: "1.0",

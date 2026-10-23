@@ -17,25 +17,25 @@ enum AppDataClearCategory: String, CaseIterable, Identifiable, Sendable {
     var title: String {
         switch self {
         case .workoutHistory:
-            return "Workout History"
+            return "Workout history"
         case .gymProfiles:
-            return "Gym Profiles"
+            return "Gym profiles"
         case .gymAssignments:
-            return "Gym Assignments"
+            return "Gym assignments"
         case .healthData:
-            return "Health Data"
+            return "Health data"
         case .intentionalBreaks:
-            return "Intentional Breaks"
+            return "Planned breaks"
         case .exerciseCustomization:
-            return "Exercise Setup"
+            return "Exercise setup"
         case .profileAndPreferences:
-            return "Profile & Preferences"
+            return "Profile and preferences"
         case .guideProgress:
-            return "Onboarding & Guides"
+            return "Onboarding and guides"
         case .activeSessionDraft:
-            return "Active Session Draft"
+            return "Active session draft"
         case .importExportFiles:
-            return "Import & Backup Files"
+            return "Import and backup files"
         }
     }
 
@@ -46,7 +46,7 @@ enum AppDataClearCategory: String, CaseIterable, Identifiable, Sendable {
         case .gymProfiles:
             return "Saved gyms, addresses, coordinates, and last-used gym."
         case .gymAssignments:
-            return "Per-workout gym tags while keeping gym profiles and workouts."
+            return "Gym tags on workouts. Gym profiles and workouts stay."
         case .healthData:
             return "Cached workout Health metrics, daily Health history, coverage, and sync metadata."
         case .intentionalBreaks:
@@ -58,9 +58,9 @@ enum AppDataClearCategory: String, CaseIterable, Identifiable, Sendable {
         case .guideProgress:
             return "Onboarding state, feature guide completion, and dashboard dismissals."
         case .activeSessionDraft:
-            return "The unfinished workout currently saved as a draft."
+            return "The unfinished workout saved as a draft."
         case .importExportFiles:
-            return "CSV files and native app backup files stored locally or in iCloud."
+            return "CSV and app backup files stored on this device or in iCloud."
         }
     }
 }
@@ -174,7 +174,13 @@ enum AppDataClearService {
         }
 
         if categories.contains(.activeSessionDraft) {
-            await context.sessionManager.discardDraft()
+            guard await context.sessionManager.discardDraft() else {
+                throw NSError(
+                    domain: "AppDataClearService",
+                    code: 1,
+                    userInfo: [NSLocalizedDescriptionKey: "The active workout draft could not be cleared. Your recovery files have been kept. Try clearing the draft again."]
+                )
+            }
         }
 
         // Delete source and recovery files only after in-app stores have cleared successfully.
@@ -239,7 +245,12 @@ enum AppDataClearService {
             "intentionalRestDays",
             "sessionsPerWeekGoal",
             "appearanceMode",
-            Haptics.preferenceKey
+            Haptics.preferenceKey,
+            "bodyGoalWeightLb",
+            "bodyGoalStartWeightLb",
+            "bodyGoalStartDate",
+            "bodyGoalReachedDate",
+            "bodyRange"
         ].forEach { userDefaults.removeObject(forKey: $0) }
 
         clearHealthPreferences(healthManager: healthManager, userDefaults: userDefaults)

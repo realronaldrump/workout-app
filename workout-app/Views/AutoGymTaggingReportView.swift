@@ -69,7 +69,7 @@ struct AutoGymTaggingReportView: View {
                         summaryCard
 
                         if !skippedItems.isEmpty {
-                            resultsSection(title: "Needs Attention", items: skippedItems)
+                            resultsSection(title: "Needs review", items: skippedItems)
                         }
 
                         if !assignedItems.isEmpty {
@@ -80,7 +80,7 @@ struct AutoGymTaggingReportView: View {
                     .contentColumn()
                 }
             }
-            .navigationTitle("Auto Tag Results")
+            .navigationTitle("Auto tag results")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 AppToolbarItem(placement: .cancellationAction) {
@@ -101,7 +101,7 @@ struct AutoGymTaggingReportView: View {
 
                 Spacer()
 
-                Text("\(report.assigned) / \(report.attempted) tagged")
+                Text("\(report.assigned) of \(report.attempted) tagged")
                     .font(Theme.Typography.captionBold)
                     .foregroundStyle(Theme.Colors.textSecondary)
             }

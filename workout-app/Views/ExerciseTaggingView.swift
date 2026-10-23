@@ -23,17 +23,22 @@ struct ExerciseTaggingView: View {
             AdaptiveBackground()
             ScrollView(showsIndicators: false) {
                 LazyVStack(alignment: .leading, spacing: Theme.Spacing.xl) {
-                    introCard
-
                     VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-                        Text("Assign Muscle Roles")
-                            .font(Theme.Typography.title3)
-                            .foregroundStyle(Theme.Colors.textPrimary)
+                        HStack {
+                            Text("Muscle roles")
+                                .font(Theme.Typography.title3)
+                                .foregroundStyle(Theme.Colors.textPrimary)
+                            Spacer()
+                            AppHelpButton(
+                                title: "Muscle roles",
+                                message: "Assign primary and secondary muscles to each exercise. These roles are used in muscle charts and exports."
+                            )
+                        }
 
                         if cachedExerciseItems.isEmpty {
                             EmptyStateCard(
                                 title: "No exercises yet",
-                                message: "Import workouts first, then come back here to tag your exercises.",
+                                message: "Log or import a workout to add exercises.",
                                 icon: "tray",
                                 tint: Theme.Colors.textTertiary
                             )
@@ -61,7 +66,7 @@ struct ExerciseTaggingView: View {
                 .contentColumn()
             }
         }
-        .navigationTitle("Exercise Muscle Roles")
+        .navigationTitle("Exercise muscle roles")
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $searchText, prompt: "Search exercises")
         .onAppear(perform: rebuildExerciseCache)
@@ -133,29 +138,6 @@ struct ExerciseTaggingView: View {
         untaggedFilteredExercises = filtered.filter(\.isUntagged)
         taggedFilteredExercises = filtered.filter { !$0.isUntagged }
     }
-
-    private var introCard: some View {
-        HStack(alignment: .top, spacing: Theme.Spacing.md) {
-            Image(systemName: "tag.fill")
-                .foregroundStyle(.white)
-                .frame(width: 36, height: 36)
-                .background(Theme.Colors.accentTertiary)
-                .cornerRadius(Theme.CornerRadius.large)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Clean data in, clean insights out.")
-                    .font(Theme.Typography.headline)
-                    .foregroundStyle(Theme.Colors.textPrimary)
-                Text("Choose primary and secondary muscles once. Their weighted roles power charts, recency, coverage, and exports.")
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textSecondary)
-            }
-
-            Spacer(minLength: 0)
-        }
-        .padding(Theme.Spacing.lg)
-        .softCard(elevation: 2)
-    }
 }
 
 private struct ExerciseTaggingRow: View {
@@ -175,10 +157,8 @@ private struct ExerciseTaggingRow: View {
     var body: some View {
         HStack(spacing: Theme.Spacing.md) {
             Image(systemName: assignments.isEmpty ? "tag.slash.fill" : "tag.fill")
-                .foregroundStyle(.white)
+                .foregroundStyle(iconTint)
                 .frame(width: 30, height: 30)
-                .background(iconTint)
-                .cornerRadius(Theme.CornerRadius.large)
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.sm) {
@@ -189,16 +169,7 @@ private struct ExerciseTaggingRow: View {
                         .lineLimit(1)
 
                     if isCustomized {
-                        Text("CUSTOM")
-                            .font(Theme.Typography.metricLabel)
-                            .foregroundStyle(Theme.Colors.accentSecondary)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(Theme.Colors.accentSecondary.opacity(0.12))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                                    .strokeBorder(Theme.Colors.accentSecondary.opacity(0.7), lineWidth: 2)
-                            )
+                        TagLabel(text: "Custom", tint: Theme.Colors.textPrimary)
                     }
                 }
 

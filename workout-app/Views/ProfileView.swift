@@ -2,12 +2,14 @@ import SwiftUI
 import UIKit
 
 struct ProfileView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ObservedObject var dataManager: WorkoutDataManager
     @ObservedObject var iCloudManager: iCloudDocumentManager
     @Binding var selectedTab: AppTab
 
     @State private var showingWorkoutHistory = false
     @State private var showingExerciseList = false
+    @State private var lifetimeVolume: Double = 0
 
     @AppStorage("profileName") private var profileName = ""
 
@@ -16,12 +18,13 @@ struct ProfileView: View {
             AdaptiveBackground()
 
             ScrollView {
-                LazyVStack(spacing: Theme.Spacing.xl) {
+                LazyVStack(alignment: .leading, spacing: Theme.Spacing.section) {
                     headerSection
-                    personalInfoSection
                     preferencesSection
                 }
-                .padding()
+                .padding(.horizontal, Theme.Layout.screenGutter)
+                .padding(.top, Theme.Spacing.sm)
+                .padding(.bottom, Theme.Spacing.xxl)
                 .contentColumn()
             }
             .scrollDismissesKeyboard(.interactively)
@@ -29,6 +32,9 @@ struct ProfileView: View {
         .navigationTitle("More")
         .navigationBarTitleDisplayMode(.large)
         .analyticsScreen("Profile")
+        .task(id: dataManager.datasetRevision) {
+            await refreshLifetimeVolume()
+        }
         .navigationDestination(isPresented: $showingWorkoutHistory) {
             WorkoutHistoryView(workouts: dataManager.workouts, showsBackButton: true)
         }
@@ -39,60 +45,62 @@ struct ProfileView: View {
 
     private var headerSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-            HStack(alignment: .center, spacing: Theme.Spacing.md) {
-                Text(initials)
-                    .font(Theme.Typography.avatarMonogram)
-                    .foregroundStyle(Theme.Colors.onHeroAccent)
-                    .frame(width: 68, height: 68)
-                    .background(Circle().fill(Color.white))
-                    .overlay(Circle().strokeBorder(Color.white.opacity(0.5), lineWidth: 3).padding(-4))
-                    .shadow(color: Color.black.opacity(0.2), radius: 8, x: 0, y: 4)
-                    .accessibilityHidden(true)
-
-                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                    BrandBandLabel(text: memberBadge, fill: .white, textColor: Theme.Colors.onHeroAccent)
-                    Text(displayName)
-                        .font(Theme.Typography.displayHeroCompact)
-                        .foregroundStyle(.white)
-                        .lineLimit(2)
-                        .minimumScaleFactor(0.75)
-                }
-                .accessibilityElement(children: .combine)
+            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                Text(displayName)
+                    .font(Theme.Typography.displayHero)
+                    .foregroundStyle(profileName.isEmpty ? Theme.Colors.decorativeSubtle : Theme.Colors.textPrimary)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.6)
+                    .accessibilityAddTraits(.isHeader)
+                Text(memberBadge)
+                    .font(Theme.Typography.callout)
+                    .foregroundStyle(Theme.Colors.textSecondary)
             }
+            .accessibilityElement(children: .combine)
 
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: Theme.Spacing.sm) {
-                    profileStats
-                }
+            ProfileFieldRow(
+                title: "Name",
+                promptText: "Add your name",
+                text: $profileName
+            )
 
-                VStack(spacing: Theme.Spacing.sm) {
-                    profileStats
-                }
+            let layout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: Theme.Spacing.md))
+                : AnyLayout(StatColumns())
+            layout {
+                profileStats
             }
+            .padding(.vertical, Theme.Spacing.lg)
+            .padding(.horizontal, Theme.Spacing.md)
+            .softCard()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(Theme.Spacing.lg)
-        .background(HeroCardBackground(watermark: "trophy.fill"))
     }
 
     private var memberBadge: String {
-        guard let firstDate = dataManager.workouts.last?.date else { return "New lifter" }
-        return "Lifting since \(firstDate.formatted(.dateTime.year()))"
+        guard let firstDate = dataManager.workouts.last?.date else { return "No workouts logged yet." }
+        return "Lifting since \(firstDate.formatted(.dateTime.month(.wide).year()))."
     }
 
     @ViewBuilder
     private var profileStats: some View {
-        heroStat(title: "Workouts", value: "\(dataManager.workouts.count)") {
+        heroStat(title: dataManager.workouts.count == 1 ? "workout" : "workouts", value: "\(dataManager.workouts.count)") {
             showingWorkoutHistory = true
         }
         .accessibilityLabel(SharedFormatters.count(dataManager.workouts.count, "workout"))
-        .accessibilityHint("Double tap to view workout history")
+        .accessibilityHint("Opens workout history")
 
-        heroStat(title: "Exercises", value: "\(uniqueExercisesCount)") {
+        heroStat(title: uniqueExercisesCount == 1 ? "exercise" : "exercises", value: "\(uniqueExercisesCount)") {
             showingExerciseList = true
         }
         .accessibilityLabel(SharedFormatters.count(uniqueExercisesCount, "exercise"))
-        .accessibilityHint("Double tap to view exercise list")
+        .accessibilityHint("Opens exercise list")
+
+        heroStat(title: "lbs lifted", value: SharedFormatters.volumeCompact(lifetimeVolume)) {
+            showingWorkoutHistory = true
+        }
+        .accessibilityLabel("\(SharedFormatters.volumeWithUnit(lifetimeVolume)) lifted")
+        .accessibilityHint("Opens workout history")
     }
 
     private func heroStat(title: String, value: String, action: @escaping () -> Void) -> some View {
@@ -100,85 +108,28 @@ struct ProfileView: View {
             Haptics.selection()
             action()
         } label: {
-            HStack(alignment: .bottom) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(value)
-                        .font(Theme.Typography.number)
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-                        .contentTransition(.numericText())
-                    Text(title)
-                        .font(Theme.Typography.metricLabel)
-                        .textCase(.uppercase)
-                        .tracking(0.8)
-                        .foregroundStyle(Color.white.opacity(0.9))
-                }
-                Spacer(minLength: Theme.Spacing.xs)
-                Image(systemName: "arrow.up.right")
-                    .font(Theme.Typography.captionBold)
-                    .foregroundStyle(Color.white.opacity(0.85))
-                    .accessibilityHidden(true)
-            }
-            .padding(Theme.Spacing.md)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
-                    .fill(Color.black.opacity(0.18))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.18), lineWidth: 1)
-            )
-            .contentShape(.rect)
+            DisplayStat(value: value, label: title)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, Theme.Spacing.xs)
+                .contentShape(.rect)
         }
         .buttonStyle(PressableCardButtonStyle())
     }
 
-    private var personalInfoSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            SectionLabel(text: "Personal")
-
-            VStack(spacing: Theme.Spacing.sm) {
-                ProfileFieldRow(
-                    icon: "person.fill",
-                    color: Theme.Colors.accent,
-                    title: "Name",
-                    promptText: "Name",
-                    text: $profileName
-                )
-            }
-        }
-    }
-
     private var preferencesSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            SectionLabel(text: "Preferences")
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            SectionHeading(title: "App")
 
             VStack(spacing: 0) {
                 NavigationLink(destination: FeatureGuidesView(iCloudManager: iCloudManager)) {
-                    ProfileLinkRow(
-                        icon: "book.fill",
-                        color: Theme.Colors.accent,
-                        title: "Feature Guides",
-                        subtitle: "Learn how everything works"
-                    )
+                    ExploreRow(title: "Feature guides", subtitle: "Walkthroughs of the main screens", showsRule: false)
                 }
                 .buttonStyle(PressableCardButtonStyle())
-
-                Divider().padding(.leading, 66)
 
                 NavigationLink(destination: ChangelogHistoryView()) {
-                    ProfileLinkRow(
-                        icon: "sparkles",
-                        color: Theme.Colors.accentTertiary,
-                        title: "What's New",
-                        subtitle: "Release notes and update history"
-                    )
+                    ExploreRow(title: "What's new", subtitle: "Release notes for each version")
                 }
                 .buttonStyle(PressableCardButtonStyle())
-
-                Divider().padding(.leading, 66)
 
                 NavigationLink(
                     destination: SettingsView(
@@ -187,29 +138,26 @@ struct ProfileView: View {
                         selectedTab: $selectedTab
                     )
                 ) {
-                    ProfileLinkRow(
-                        icon: "gearshape.fill",
-                        color: Color(uiColor: .systemGray),
-                        title: "Settings",
-                        subtitle: "Health, sync, units"
-                    )
+                    ExploreRow(title: "Settings", subtitle: "Training, Apple Health, data, and appearance")
                 }
                 .buttonStyle(PressableCardButtonStyle())
             }
-            .softCard(elevation: 1)
         }
     }
 
     private var displayName: String {
-        profileName.isEmpty ? "Your Profile" : profileName
+        let name = profileName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty ? "Your name" : name
     }
 
-    private var initials: String {
-        let trimmed = profileName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let parts = trimmed.split(separator: " ")
-        let letters = parts.prefix(2).compactMap { $0.first }
-        let fallback = "ME"
-        return letters.isEmpty ? fallback : String(letters)
+    /// Matches History's total: relationship-aggregated volume per workout.
+    private func refreshLifetimeVolume() async {
+        let workouts = dataManager.workouts
+        let resolver = ExerciseRelationshipManager.shared.resolverSnapshot()
+        let total = await Task.detached(priority: .utility) {
+            workouts.reduce(0) { $0 + ExerciseAggregation.summary(for: $1, resolver: resolver).volume }
+        }.value
+        lifetimeVolume = total
     }
 
     private var uniqueExercisesCount: Int {
@@ -218,85 +166,32 @@ struct ProfileView: View {
 }
 
 private struct ProfileFieldRow: View {
-    let icon: String
-    let color: Color
     let title: String
     let promptText: String
     @Binding var text: String
     var keyboardType: UIKeyboardType = .default
 
     var body: some View {
-        HStack(alignment: .center, spacing: Theme.Spacing.md) {
-            IconTile(systemImage: icon, tint: color, size: 32)
+        HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.md) {
+            Text(title)
+                .font(Theme.Typography.subheadline)
+                .foregroundStyle(Theme.Colors.textSecondary)
 
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(Theme.Typography.metricLabel)
-                    .foregroundStyle(Theme.Colors.textTertiary)
-                    .textCase(.uppercase)
-                    .tracking(0.6)
-
-                TextField(promptText, text: $text)
-                    .font(Theme.Typography.body)
-                    .foregroundStyle(Theme.Colors.textPrimary)
-                    .keyboardType(keyboardType)
-                    .textInputAutocapitalization(.words)
-                    .submitLabel(.done)
-            }
-
-            Spacer()
-        }
-        .padding(Theme.Spacing.lg)
-        .softCard()
-    }
-}
-
-private struct ProfileLinkRow: View {
-    let icon: String
-    let color: Color
-    let title: String
-    let subtitle: String
-    var value: String?
-
-    var body: some View {
-        HStack(spacing: Theme.Spacing.md) {
-            IconTile(systemImage: icon, tint: color, size: 32)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(Theme.Typography.body)
-                    .foregroundStyle(Theme.Colors.textPrimary)
-                Text(subtitle)
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textSecondary)
-            }
-
-            Spacer()
-
-            if let value = value {
-                Text(value)
-                    .font(Theme.Typography.captionBold)
-                    .foregroundStyle(Theme.Colors.textTertiary)
-            }
-
-            Image(systemName: "chevron.right")
-                .font(Theme.Typography.caption2Bold)
-                .foregroundStyle(Theme.Colors.textTertiary)
+            TextField(promptText, text: $text)
+                .font(Theme.Typography.headline)
+                .foregroundStyle(Theme.Colors.textPrimary)
+                .keyboardType(keyboardType)
+                .textInputAutocapitalization(.words)
+                .submitLabel(.done)
+                .textContentType(.name)
+                .accessibilityLabel(title)
+                .accessibilityHint("Saved automatically as you type")
         }
         .padding(.horizontal, Theme.Spacing.lg)
-        .padding(.vertical, Theme.Spacing.md)
-    }
-}
-
-/// Reusable section label used across Profile and Settings
-private struct SectionLabel: View {
-    let text: String
-    var body: some View {
-        Text(text)
-            .font(Theme.Typography.metricLabel)
-            .foregroundStyle(Theme.Colors.textTertiary)
-            .textCase(.uppercase)
-            .tracking(1.2)
-            .padding(.horizontal)
+        .frame(minHeight: 52)
+        .background(
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
+                .fill(Theme.Colors.panelInset)
+        )
     }
 }

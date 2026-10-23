@@ -68,7 +68,7 @@ struct IntentionalBreaksView: View {
             AdaptiveBackground()
 
             ScrollView(showsIndicators: false) {
-                LazyVStack(alignment: .leading, spacing: Theme.Spacing.xl) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
                     heroCard
                         .animateOnAppear(delay: 0)
 
@@ -87,7 +87,7 @@ struct IntentionalBreaksView: View {
                 .frame(maxWidth: .infinity, alignment: .center)
             }
         }
-        .navigationTitle("Break Dates")
+        .navigationTitle("Planned breaks")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $editorDraft) { draft in
             BreakEditorSheet(
@@ -115,29 +115,20 @@ struct IntentionalBreaksView: View {
 
     private var heroCard: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                Text("INTENTIONAL BREAKS")
-                    .font(Theme.Typography.metricLabel)
-                    .foregroundColor(Theme.Colors.textTertiary)
-                    .tracking(1.0)
-
-                Text("Excuse travel, deloads, recovery, or time away without tanking consistency stats.")
-                    .font(Theme.Typography.bodyBold)
-                    .foregroundColor(Theme.Colors.textPrimary)
-
-                Text("Only days without logged workouts are excused. Suggestions come from workout gaps larger than your current \(max(0, intentionalRestDays))-day rest allowance and only surface when at least \(IntentionalBreaksAnalytics.minimumSuggestedBreakDays) days are uncovered.")
-                    .font(Theme.Typography.caption)
-                    .foregroundColor(Theme.Colors.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            SectionHeading(
+                title: "Breaks",
+                help: "Saved breaks protect streaks and lower weekly goals. Logged workouts still count. "
+                    + "Suggestions are gaps between workouts longer than your Rest days setting, with at least "
+                    + "\(IntentionalBreaksAnalytics.minimumSuggestedBreakDays) days off."
+            )
 
             LazyVGrid(
                 columns: heroMetricColumns,
                 spacing: Theme.Spacing.sm
             ) {
-                BreakMetricChip(title: "Saved Ranges", value: "\(savedBreaks.count)", tint: Theme.Colors.accent)
+                BreakMetricChip(title: "Saved breaks", value: "\(savedBreaks.count)", tint: Theme.Colors.accent)
                 BreakMetricChip(title: "Suggested", value: "\(suggestions.count)", tint: Theme.Colors.accentSecondary)
-                BreakMetricChip(title: "Excused Days", value: "\(savedExcusedDayCount)", tint: Theme.Colors.success)
+                BreakMetricChip(title: "Break days", value: "\(savedExcusedDayCount)", tint: Theme.Colors.success)
             }
         }
         .padding(Theme.Spacing.lg)
@@ -145,7 +136,7 @@ struct IntentionalBreaksView: View {
             RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge)
                 .fill(
                     LinearGradient(
-                        colors: [Theme.Colors.surface, Theme.Colors.surfaceRaised],
+                        colors: [Theme.Colors.surface, Theme.Colors.surface],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )
@@ -159,21 +150,16 @@ struct IntentionalBreaksView: View {
 
     private var actionsSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            sectionHeader(
-                title: "Actions",
-                subtitle: "Add a custom range yourself or accept the gaps the app detected."
-            )
-
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: Theme.Spacing.sm) {
-                    AppPillButton(title: "Add Custom Range", systemImage: "plus", variant: .accent) {
+                    AppPillButton(title: "Add break", systemImage: "plus", variant: .accent) {
                         editorDraft = .new(defaultDate: latestSelectableDate)
                         Haptics.selection()
                     }
 
                     if !suggestions.isEmpty {
                         AppPillButton(
-                            title: "Add \(suggestions.count) Suggested",
+                            title: "Add \(suggestions.count) suggested",
                             systemImage: "wand.and.stars",
                             variant: .neutral
                         ) {
@@ -184,7 +170,7 @@ struct IntentionalBreaksView: View {
 
                     if dismissedSuggestionCount > 0 {
                         AppPillButton(
-                            title: "Reset Dismissed",
+                            title: "Reset dismissed",
                             systemImage: "arrow.counterclockwise",
                             variant: .subtle
                         ) {
@@ -199,13 +185,10 @@ struct IntentionalBreaksView: View {
 
     private var suggestedSection: some View {
         LazyVStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            sectionHeader(
-                title: "Suggested Breaks",
-                subtitle: "Long uncovered workout gaps. Short 1-2 day gaps are intentionally ignored."
-            )
+            sectionHeader(title: "Suggested breaks")
 
             if suggestions.isEmpty {
-                emptyCard(message: "No unmarked gap ranges found right now.")
+                emptyCard(message: "No suggested breaks.")
             } else {
                 LazyVStack(spacing: Theme.Spacing.sm) {
                     ForEach(suggestions) { suggestion in
@@ -246,13 +229,13 @@ struct IntentionalBreaksView: View {
             }
 
             if savedBreaks.isEmpty {
-                emptyCard(message: "No intentional break ranges saved yet.")
+                emptyCard(message: "No saved breaks. Tap Add break to create one.")
             } else {
                 LazyVStack(spacing: Theme.Spacing.sm) {
                     ForEach(savedBreaks) { savedRange in
                         IntentionalBreakSavedCard(
-                            title: savedRange.displayName ?? "Unnamed Break",
-                            subtitle: "\(dayCountLabel(savedRange.dayCount(calendar: calendar))) · \(dateRangeLabel(startDate: savedRange.startDate, endDate: savedRange.endDate))",
+                            title: savedRange.displayName ?? "Unnamed break",
+                            subtitle: "\(dayCountLabel(savedRange.dayCount(calendar: calendar))), \(dateRangeLabel(startDate: savedRange.startDate, endDate: savedRange.endDate))",
                             hasCustomName: savedRange.displayName != nil,
                             onEdit: {
                                 editorDraft = .edit(savedRange)
@@ -270,16 +253,13 @@ struct IntentionalBreaksView: View {
     }
 
     private var savedBreaksHeader: some View {
-        sectionHeader(
-            title: "Saved Breaks",
-            subtitle: "These ranges are already neutralized in streak and consistency analytics."
-        )
+        sectionHeader(title: "Saved breaks")
     }
 
     @ViewBuilder
     private var clearSavedBreaksButton: some View {
         if !savedBreaks.isEmpty {
-            AppPillButton(title: "Clear Saved", systemImage: "trash", variant: .danger) {
+            AppPillButton(title: "Clear saved", systemImage: "trash", variant: .danger) {
                 intentionalBreaksManager.clearSavedBreaks()
                 Haptics.selection()
             }
@@ -303,18 +283,8 @@ struct IntentionalBreaksView: View {
         "\(count) day\(count == 1 ? "" : "s")"
     }
 
-    private func sectionHeader(title: String, subtitle: String) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            Text(title)
-                .font(Theme.Typography.sectionHeader2)
-                .foregroundColor(Theme.Colors.textPrimary)
-                .tracking(0.8)
-
-            Text(subtitle)
-                .font(Theme.Typography.caption)
-                .foregroundColor(Theme.Colors.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
+    private func sectionHeader(title: String) -> some View {
+        SectionHeading(title: title)
     }
 
     private func emptyCard(message: String) -> some View {
@@ -338,8 +308,6 @@ private struct BreakMetricChip: View {
             Text(title)
                 .font(Theme.Typography.metricLabel)
                 .foregroundColor(Theme.Colors.textTertiary)
-                .textCase(.uppercase)
-                .tracking(0.7)
 
             Text(value)
                 .font(Theme.Typography.monoMedium)
@@ -457,11 +425,11 @@ private struct BreakEditorDraft: Identifiable {
     let endDate: Date
 
     var navigationTitle: String {
-        mode == .edit ? "Edit Break" : "Add Break"
+        mode == .edit ? "Edit break" : "Add break"
     }
 
     var actionTitle: String {
-        mode == .edit ? "Save Changes" : "Save Break"
+        mode == .edit ? "Save changes" : "Save break"
     }
 
     static func new(defaultDate: Date) -> BreakEditorDraft {
@@ -534,8 +502,6 @@ private struct BreakEditorSheet: View {
                             Text("Name")
                                 .font(Theme.Typography.metricLabel)
                                 .foregroundColor(Theme.Colors.textTertiary)
-                                .textCase(.uppercase)
-                                .tracking(0.8)
 
                             TextField("Optional name", text: $draftName)
                                 .font(Theme.Typography.body)
@@ -557,11 +523,6 @@ private struct BreakEditorSheet: View {
                             range: draftStartDate...latestSelectableDate
                         )
 
-                        Text("Workout days inside this range still stay counted as workouts.")
-                            .font(Theme.Typography.caption)
-                            .foregroundColor(Theme.Colors.textSecondary)
-                            .padding(.horizontal, Theme.Spacing.xs)
-
                         Button {
                             let calendar = Calendar.current
                             onSave(
@@ -574,7 +535,7 @@ private struct BreakEditorSheet: View {
                         } label: {
                             Text(draft.actionTitle)
                                 .font(Theme.Typography.headline)
-                                .foregroundStyle(.white)
+                                .foregroundStyle(Theme.Colors.onAccent)
                                 .frame(maxWidth: .infinity)
                                 .padding(Theme.Spacing.md)
                                 .background(Theme.accentGradient)
@@ -599,8 +560,6 @@ private struct BreakEditorSheet: View {
             Text(title)
                 .font(Theme.Typography.metricLabel)
                 .foregroundColor(Theme.Colors.textTertiary)
-                .textCase(.uppercase)
-                .tracking(0.8)
 
             DatePicker(
                 title,

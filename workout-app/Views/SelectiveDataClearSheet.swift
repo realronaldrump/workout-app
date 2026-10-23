@@ -16,7 +16,8 @@ struct SelectiveDataClearSheet: View {
     @Binding var hasSeenOnboarding: Bool
 
     @Environment(\.dismiss) private var dismiss
-    @State private var selectedCategories = Set(AppDataClearCategory.allCases)
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @State private var selectedCategories: Set<AppDataClearCategory> = []
     @State private var showingConfirmation = false
     @State private var isClearing = false
     @State private var workoutFileCount: Int?
@@ -48,7 +49,8 @@ struct SelectiveDataClearSheet: View {
             .task {
                 await refreshFileCounts()
             }
-            .navigationTitle("Clear Data")
+            .interactiveDismissDisabled(isClearing)
+            .navigationTitle("Clear data")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 AppToolbarItem(placement: .cancellationAction) {
@@ -58,7 +60,7 @@ struct SelectiveDataClearSheet: View {
                     .disabled(isClearing)
                 }
             }
-            .alert("Clear Selected Data?", isPresented: $showingConfirmation) {
+            .alert("Clear selected data?", isPresented: $showingConfirmation) {
                 Button("Cancel", role: .cancel) {}
                 Button("Clear", role: .destructive) {
                     clearSelectedData()
@@ -67,7 +69,7 @@ struct SelectiveDataClearSheet: View {
                 Text(confirmationMessage)
             }
             .alert(
-                "Unable to Clear Selected Data",
+                "Could not clear data",
                 isPresented: Binding(
                     get: { clearErrorMessage != nil },
                     set: { if !$0 { clearErrorMessage = nil } }
@@ -77,7 +79,7 @@ struct SelectiveDataClearSheet: View {
                     clearErrorMessage = nil
                 }
             } message: {
-                Text(clearErrorMessage ?? "The selected data could not be fully removed.")
+                Text(clearErrorMessage ?? "Some of the selected data was not removed. Try again.")
             }
         }
     }
@@ -88,8 +90,12 @@ struct SelectiveDataClearSheet: View {
                 .font(Theme.Typography.title2)
                 .foregroundStyle(Theme.Colors.error)
 
-            Text("Clear everything, or keep parts like Health history, exercise setup, preferences, or backups.")
+            Text("Each item shows how much it deletes. This cannot be undone.")
                 .font(Theme.Typography.body)
+                .foregroundStyle(Theme.Colors.textSecondary)
+
+            Text("Back up first from Settings > Export.")
+                .font(Theme.Typography.caption)
                 .foregroundStyle(Theme.Colors.textSecondary)
         }
         .padding()
@@ -104,19 +110,22 @@ struct SelectiveDataClearSheet: View {
     }
 
     private var quickActions: some View {
-        HStack(spacing: Theme.Spacing.sm) {
-            Button("Select All") {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: Theme.Spacing.sm))
+            : AnyLayout(HStackLayout(spacing: Theme.Spacing.sm))
+        return layout {
+            Button("Select all") {
                 selectedCategories = Set(AppDataClearCategory.allCases)
             }
             .buttonStyle(DataClearPillButtonStyle(isActive: selectedCategories.count == AppDataClearCategory.allCases.count))
 
-            Button("Select None") {
+            Button("Deselect all") {
                 selectedCategories = []
             }
             .buttonStyle(DataClearPillButtonStyle(isActive: selectedCategories.isEmpty))
 
-            Spacer(minLength: 0)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .disabled(isClearing)
     }
 
@@ -133,6 +142,7 @@ struct SelectiveDataClearSheet: View {
                 }
             }
         }
+        .disabled(isClearing)
     }
 
     @ViewBuilder
@@ -146,7 +156,7 @@ struct SelectiveDataClearSheet: View {
     }
 
     private var analyticsPrivacyNote: some View {
-        Text("Anonymous analytics consent stays unchanged.")
+        Text("Your analytics setting is not affected.")
             .font(Theme.Typography.caption)
             .foregroundStyle(Theme.Colors.textTertiary)
             .padding(.horizontal, Theme.Spacing.xs)
@@ -161,22 +171,23 @@ struct SelectiveDataClearSheet: View {
                 if isClearing {
                     ProgressView()
                         .tint(.white)
-                    Text("Clearing...")
+                    Text("Clearing…")
                 } else if isCountingFiles {
                     ProgressView()
                         .tint(.white)
-                    Text("Counting Preview...")
+                    Text("Counting files…")
                 } else {
-                    Text(clearButtonTitle)
+                    Text(plan.isEmpty ? "Select data to clear" : clearButtonTitle)
                 }
                 Spacer()
             }
-            .font(Theme.Typography.bodyBold)
-            .foregroundStyle(.white)
-            .padding()
+            .font(Theme.Typography.headline)
+            .foregroundStyle(plan.isEmpty ? Theme.Colors.textTertiary : Color.white)
+            .padding(.horizontal, Theme.Spacing.lg)
+            .frame(minHeight: Theme.Layout.primaryControlHeight)
             .background(
-                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                    .fill(plan.isEmpty ? Theme.Colors.textTertiary : Theme.Colors.error)
+                Capsule(style: .continuous)
+                    .fill(plan.isEmpty ? Theme.Colors.panelStrong : Theme.Colors.destructiveFill)
             )
         }
         .buttonStyle(.plain)
@@ -186,8 +197,8 @@ struct SelectiveDataClearSheet: View {
 
     private var clearButtonTitle: String {
         selectedCategories.count == AppDataClearCategory.allCases.count
-            ? "Clear All App Data"
-            : "Clear Selected Data"
+            ? "Clear all app data"
+            : "Clear selected data"
     }
 
     private var isCountingFiles: Bool {
@@ -199,7 +210,7 @@ struct SelectiveDataClearSheet: View {
         let total = plan.effectiveCategories.reduce(0) { result, category in
             result + (preview(for: category).count ?? 0)
         }
-        return "This permanently deletes \(total) item\(total == 1 ? "" : "s") across: \(targets). This cannot be undone."
+        return "This deletes \(total) item\(total == 1 ? "" : "s") from: \(targets). It cannot be undone."
     }
 
     private func toggle(_ category: AppDataClearCategory) {
@@ -261,7 +272,7 @@ struct SelectiveDataClearSheet: View {
             let total = importedCount + loggedCount + (fileCount ?? 0)
             let fileText: String
             if filesHaveSeparateCategory {
-                fileText = "files counted under Import & Backup Files"
+                fileText = "files counted under Import and backup files"
             } else {
                 fileText = fileCount.map { "\($0) file\($0 == 1 ? "" : "s")" } ?? "counting files"
             }
@@ -344,6 +355,8 @@ struct SelectiveDataClearSheet: View {
             "sessionsPerWeekGoal",
             "appearanceMode",
             Haptics.preferenceKey,
+            "bodyGoalWeightLb",
+            "bodyRange",
             healthManager.preferredSleepSourceKey,
             healthManager.preferredSleepSourceNameKey
         ]
@@ -379,10 +392,8 @@ private struct DataClearCategoryRow: View {
             HStack(alignment: .top, spacing: Theme.Spacing.sm) {
                 Image(systemName: category.iconName)
                     .font(Theme.Typography.subheadlineStrong)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(category.tintColor)
                     .frame(width: 34, height: 34)
-                    .background(category.tintColor)
-                    .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
 
                 VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                     HStack(spacing: Theme.Spacing.xs) {
@@ -415,9 +426,9 @@ private struct DataClearCategoryRow: View {
 
                 Spacer(minLength: Theme.Spacing.sm)
 
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                Image(systemName: isSelected || isImplied ? "checkmark.circle.fill" : "circle")
                     .font(Theme.Typography.title3)
-                    .foregroundStyle(isSelected ? Theme.Colors.error : Theme.Colors.textTertiary)
+                    .foregroundStyle(isSelected || isImplied ? Theme.Colors.error : Theme.Colors.textTertiary)
             }
             .padding()
             .softCard(elevation: isSelected || isImplied ? 2 : 1)
@@ -427,7 +438,11 @@ private struct DataClearCategoryRow: View {
             )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(category.title). \(isSelected || isImplied ? "Selected" : "Not selected")")
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(category.title)
+        .accessibilityValue("\(preview.displayText). \(isImplied ? "Included automatically" : isSelected ? "Selected" : "Not selected")")
+        .accessibilityHint(category.subtitle)
+        .accessibilityAddTraits(isSelected || isImplied ? .isSelected : [])
     }
 }
 
@@ -437,7 +452,7 @@ private struct DataClearCategoryPreview {
 
     var displayText: String {
         guard let count else { return detail }
-        return "\(count) item\(count == 1 ? "" : "s") • \(detail)"
+        return "\(count) item\(count == 1 ? "" : "s"), \(detail)"
     }
 }
 
@@ -450,9 +465,10 @@ private struct DataClearPillButtonStyle: ButtonStyle {
             .foregroundStyle(isActive ? .white : Theme.Colors.textPrimary)
             .padding(.horizontal, Theme.Spacing.md)
             .padding(.vertical, Theme.Spacing.sm)
+            .frame(minHeight: Theme.Layout.minimumTapTarget)
             .background(
                 RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                    .fill(isActive ? Theme.Colors.error : Theme.Colors.surface)
+                    .fill(isActive ? Theme.Colors.destructiveFill : Theme.Colors.surface)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: Theme.CornerRadius.small)

@@ -71,7 +71,7 @@ final class LegacyDataMigrationManager: ObservableObject {
             case .noMigratableRecords:
                 phase = .failed(
                     plan.summary,
-                    "Saved data files were found, but no records could be read from them."
+                    "Saved data files were found, but no records could be read. Try again, or continue without migrating."
                 )
             case .alreadyCompleted, .notNeeded:
                 phase = .notNeeded

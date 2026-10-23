@@ -32,6 +32,7 @@ private final class MainTabServices: ObservableObject {
 
 enum AppTab: String, CaseIterable, Hashable {
     case today
+    case body
     case health
     case history
     case more
@@ -61,15 +62,41 @@ private struct ActiveSessionInset: View {
     let isVisible: Bool
 
     var body: some View {
-        if isVisible,
-           sessionManager.activeSession != nil,
-           !sessionManager.isPresentingSessionUI {
-            ActiveSessionBar()
-                .environmentObject(sessionManager)
-                .padding(.horizontal, Theme.Spacing.lg)
-                .padding(.bottom, Theme.Spacing.lg)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-                .zIndex(9)
+        if isVisible && !sessionManager.isPresentingSessionUI {
+            VStack(spacing: Theme.Spacing.sm) {
+                if let message = sessionManager.draftRecoveryMessage {
+                    VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                        Label("Workout draft needs attention", systemImage: "exclamationmark.triangle")
+                            .font(Theme.Typography.subheadlineBold)
+                            .foregroundStyle(Theme.Colors.warning)
+                        Text(message)
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Colors.textSecondary)
+                        HStack {
+                            if let url = sessionManager.recoveredDraftURL {
+                                ShareLink(item: url) { Label("Export recovery file", systemImage: "square.and.arrow.up") }
+                            }
+                            if sessionManager.activeSession == nil {
+                                Button("Reopen draft") { Task { await sessionManager.restoreDraft() } }
+                            }
+                            Spacer()
+                            Button("Dismiss") { sessionManager.dismissDraftRecoveryMessage() }
+                        }
+                        .font(Theme.Typography.captionBold)
+                        .frame(minHeight: Theme.Layout.minimumTapTarget)
+                    }
+                    .padding(Theme.Spacing.lg)
+                    .background(Theme.Colors.surfaceRaised, in: RoundedRectangle(cornerRadius: Theme.CornerRadius.large))
+                }
+                if sessionManager.activeSession != nil {
+                    ActiveSessionBar()
+                        .environmentObject(sessionManager)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .padding(.horizontal, Theme.Spacing.lg)
+            .padding(.bottom, Theme.Spacing.lg)
+            .zIndex(9)
         }
     }
 }
@@ -122,6 +149,7 @@ struct MainTabView: View {
     @StateObject private var similarityEngine = WorkoutSimilarityEngine()
     @StateObject private var migrationManager = LegacyDataMigrationManager()
     @StateObject private var changelogStore = ChangelogStore()
+    @StateObject private var bodyStore = BodyStore()
     @ObservedObject private var relationshipManager = ExerciseRelationshipManager.shared
     @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
     @State private var showingOnboarding = false
@@ -178,6 +206,14 @@ struct MainTabView: View {
                 }
                 .tag(AppTab.today)
 
+                NavigationStack {
+                    BodyView(isTabRoot: true)
+                }
+                .tabItem {
+                    Label("Body", systemImage: "scalemass.fill")
+                }
+                .tag(AppTab.body)
+
                 HealthTabRoot(healthStore: healthStore)
                 .tabItem {
                     Label("Health", systemImage: "heart.fill")
@@ -204,6 +240,8 @@ struct MainTabView: View {
                 }
                 .tag(AppTab.more)
             }
+            // Titles sit on a flat band of ground rather than over faded content.
+            .scrollEdgeEffectStyle(.hard, for: .top)
         }
         .environmentObject(dataManager)
         .environmentObject(logStore)
@@ -213,6 +251,7 @@ struct MainTabView: View {
         .environmentObject(insightsEngine)
         .environmentObject(healthDateRangeContext)
         .environmentObject(healthStore)
+        .environmentObject(bodyStore)
         .environmentObject(variantEngine)
         .environmentObject(similarityEngine)
         .tint(Theme.Colors.accent)
@@ -404,7 +443,6 @@ struct MainTabView: View {
             await dataManager.setLoggedWorkoutsOffMain(logStore.workouts)
             await dataManager.reloadPersistedMigrationState()
             await importLatestNativeBackupIfNeeded()
-            await sessionManager.restoreDraft()
 
             // Detect existing users before evaluating onboarding. CSV-imported
             // workout data loads later (in HomeView), so at this point

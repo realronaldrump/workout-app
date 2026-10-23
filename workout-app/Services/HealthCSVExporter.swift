@@ -10,15 +10,15 @@ enum HealthExportError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .noDailyDataInRange:
-            return "No daily health data found in that date range"
+            return "No daily Health data in that date range. Choose a wider range."
         case .noWorkoutHealthData:
-            return "No workout-linked health data was available to export"
+            return "No Health data is linked to workouts in this range."
         case .noMetricSamples:
-            return "No Apple Health samples were found for the selected metrics"
+            return "No Apple Health samples for the selected metrics. Choose other metrics or a wider range."
         case .noMetricsSelected:
-            return "Select at least one health metric to export"
+            return "Select at least one Health metric to export."
         case .invalidDateRange:
-            return "Invalid date range"
+            return "The date range is not valid. Choose another range."
         }
     }
 }

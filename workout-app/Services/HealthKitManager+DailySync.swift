@@ -30,6 +30,7 @@ struct DailyHealthCoveragePlanner {
     static func missingRanges(
         in range: DateInterval,
         coveredDays: Set<Date>,
+        additionalCoveredDays: Set<Date> = [],
         batchSizeDays: Int,
         direction: DailyHealthCoverageDirection,
         calendar: Calendar = .current
@@ -44,7 +45,7 @@ struct DailyHealthCoveragePlanner {
         var previousDay: Date?
 
         for day in allDays {
-            if coveredDays.contains(day) {
+            if coveredDays.contains(day) || additionalCoveredDays.contains(day) {
                 if let startDay = spanStart, let previousDay {
                     uncoveredSpans.append((start: startDay, end: previousDay))
                     spanStart = nil
@@ -321,34 +322,75 @@ extension HealthKitManager {
         maxBatches: Int? = nil,
         direction: DailyHealthCoverageDirection = .forward
     ) async {
-        guard authorizationStatus == .authorized else { return }
-        guard range.start < range.end else { return }
+        guard authorizationStatus == .authorized, !Task.isCancelled else { return }
+        guard range.start < range.end, batchSizeDays > 0 else { return }
+        if let maxBatches, maxBatches <= 0 { return }
+        guard !DailyHealthCoveragePlanner.dayStarts(in: range).allSatisfy({
+            dailyHealthCoverage.contains($0)
+        }) else { return }
 
-        let missingRanges = DailyHealthCoveragePlanner.missingRanges(
-            in: range,
-            coveredDays: dailyHealthCoverage,
-            batchSizeDays: batchSizeDays,
-            direction: direction
-        )
-        guard !missingRanges.isEmpty else { return }
+        // Today's totals deliberately remain outside persistent coverage. Remember ranges
+        // completed during this request so filling history cannot endlessly reload today.
+        var completedDays: Set<Date> = []
+        var completedBatches = 0
 
-        let plannedRanges: [DateInterval]
-        if let maxBatches {
-            plannedRanges = Array(missingRanges.prefix(maxBatches))
-        } else {
-            plannedRanges = missingRanges
-        }
-
-        for missingRange in plannedRanges {
-            guard !isDailySyncing else { return }
-
-            do {
-                try await syncDailyHealthData(range: missingRange)
-            } catch {
-                print("Failed to sync daily health data: \(error)")
-                return
+        do {
+            let initiallyCompleted = try await waitForActiveDailyHealthSync()
+            for completedRange in initiallyCompleted where completedRange.end >= range.end {
+                completedDays.formUnion(DailyHealthCoveragePlanner.dayStarts(in: completedRange))
             }
+
+            // Plan the complete history once. Repeatedly planning the original range after
+            // every batch would multiply calendar work by the number of history batches.
+            var pendingRanges = DailyHealthCoveragePlanner.missingRanges(
+                in: range,
+                coveredDays: dailyHealthCoverage,
+                additionalCoveredDays: completedDays,
+                batchSizeDays: batchSizeDays,
+                direction: direction
+            ).reversed().map { $0 }
+
+            while let candidate = pendingRanges.popLast() {
+                try Task.checkCancellation()
+                if let maxBatches, completedBatches >= maxBatches { return }
+
+                let sharedRanges = try await waitForActiveDailyHealthSync()
+                for completedRange in sharedRanges where completedRange.end >= candidate.end {
+                    completedDays.formUnion(DailyHealthCoveragePlanner.dayStarts(in: completedRange))
+                }
+
+                // Another request may have filled part of this batch while we were awaiting
+                // earlier work. Re-check only this bounded range, preserving its direction.
+                let missingRanges = DailyHealthCoveragePlanner.missingRanges(
+                    in: candidate,
+                    coveredDays: dailyHealthCoverage,
+                    additionalCoveredDays: completedDays,
+                    batchSizeDays: batchSizeDays,
+                    direction: direction
+                )
+                guard let nextRange = missingRanges.first else { continue }
+                pendingRanges.append(contentsOf: missingRanges.dropFirst().reversed())
+
+                try await syncDailyHealthData(range: nextRange)
+                completedDays.formUnion(DailyHealthCoveragePlanner.dayStarts(in: nextRange))
+                completedBatches += 1
+            }
+        } catch is CancellationError {
+            return
+        } catch {
+            print("Failed to sync daily health data: \(error)")
         }
+    }
+
+    private func waitForActiveDailyHealthSync() async throws -> [DateInterval] {
+        var completedRanges: [DateInterval] = []
+        while let activeTask = dailyHealthSyncTask {
+            let activeRange = dailyHealthSyncRange
+            try await activeTask.value
+            if let activeRange { completedRanges.append(activeRange) }
+            try Task.checkCancellation()
+        }
+        return completedRanges
     }
 
     func ensureEarliestAvailableDailyHealthDate(force: Bool = false) async {
@@ -402,15 +444,13 @@ extension HealthKitManager {
             return []
         }
 
-        let samples = try await fetchQuantitySamples(
+        return try await fetchMappedQuantitySamples(
             type: type,
             from: range.start,
             to: range.end,
             limit: HKObjectQueryNoLimit,
             ascending: true
-        )
-
-        return samples.map { sample in
+        ) { sample in
             let raw = sample.quantity.doubleValue(for: unit)
             return HealthMetricSample(
                 id: sample.uuid,

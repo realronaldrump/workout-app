@@ -27,19 +27,19 @@ struct HomeView: View {
     @State private var selectedExercise: ExerciseSelection?
     @State private var selectedWorkout: Workout?
     @State private var selectedWorkoutMetric: WorkoutMetricDetailSelection?
-    @State private var selectedChangeMetric: ChangeMetric?
     @State private var showingMuscleBalance = false
     @State private var showingMuscleRecency = false
     @State private var showingConsistencyDetail = false
     @State private var pendingRepeatWorkout: Workout?
     @State private var cachedWeekBuckets: [HomeWeekBucket] = []
     @State private var cachedExerciseCounts: [UUID: Int] = [:]
-    @State private var cachedOverallStats: WorkoutStats?
     @State private var cachedCurrentWeekStreak = 0
-    @State private var cachedWeeklyChangeMetrics: [ChangeMetric] = []
     @State private var cachedMuscleSuggestions: [MuscleGroupSuggestion] = []
     @State private var cachedUntaggedExerciseNames: [String] = []
     @State private var cachedHomeHighlights: [HighlightItem] = []
+    @State private var cachedPlateCategories: [UUID: PlateCategory] = [:]
+    @State private var cachedRackWeeks: [RackWeek] = []
+    @State private var hasDerivedLoadedHistory = false
     @State private var selectedWeekBucketStart: Date?
     @State private var derivedStateTask: Task<Void, Never>?
     @State private var recoveryCoverageTask: Task<Void, Never>?
@@ -68,14 +68,9 @@ struct HomeView: View {
             AdaptiveBackground()
 
             ScrollView(showsIndicators: false) {
-                LazyVStack(alignment: .leading, spacing: Theme.Spacing.xl) {
-                    headerSection
-
-                    quickActionsSection
-
-                    if dataManager.isLoading && dataManager.workouts.isEmpty {
-                        LoadingCard()
-                            .padding(.horizontal, Theme.Spacing.lg)
+                VStack(alignment: .leading, spacing: 0) {
+                    if isAwaitingInitialHistory || (dataManager.isLoading && dataManager.workouts.isEmpty) {
+                        TodayLoadingHero(weeklyGoal: min(max(sessionsPerWeekGoal, 1), 14))
                     } else if let error = dataManager.error, dataManager.workouts.isEmpty {
                         ErrorCard(message: error) {
                             Task {
@@ -85,21 +80,17 @@ struct HomeView: View {
                                 )
                             }
                         }
-                        .padding(.horizontal, Theme.Spacing.lg)
                     } else if dataManager.workouts.isEmpty {
-                        VStack(spacing: Theme.Spacing.md) {
-                            HomeEmptyState()
-
-                            // New users are the ones who need a path in; returning users
-                            // still have import in Settings.
-                            SecondaryChip(title: "Import workout history", icon: "arrow.down.to.line") {
-                                showingImportWizard = true
-                            }
-                        }
-                        .padding(.horizontal, Theme.Spacing.lg)
-                        .animateOnAppear(delay: 0.15)
+                        emptySection
                     } else {
-                        // Pre-workout briefing with recovery signals and muscle recency cues.
+                        heroSection
+
+                        if shouldShowUntaggedBanner {
+                            untaggedExercisesBanner
+                                .padding(.top, Theme.Spacing.section)
+                        }
+
+                        // Recovery signals and the muscle groups that are due.
                         PreWorkoutBriefingCard(
                             recoverySignals: recoveryCoverageEngine.recoverySignals,
                             muscleSuggestions: cachedMuscleSuggestions,
@@ -113,44 +104,43 @@ struct HomeView: View {
                                 showingMuscleRecency = true
                             }
                         )
-                        .padding(.horizontal, Theme.Spacing.lg)
-                        .animateOnAppear(delay: 0.15)
+                        .padding(.top, Theme.Spacing.section)
 
-                        if shouldShowUntaggedBanner {
-                            untaggedExercisesBanner
-                                .padding(.horizontal, Theme.Spacing.lg)
-                        }
+                        weekSection
+                            .padding(.top, Theme.Spacing.section)
 
-                        weeklySummarySection
-                            .padding(.horizontal, Theme.Spacing.lg)
-
-                        // Today surfaces one useful signal. Deeper analysis remains one tap
-                        // away in Explore instead of turning the home screen into a report.
+                        // Today surfaces one result worth noticing. Deeper analysis stays
+                        // one tap away instead of turning the home screen into a report.
                         if !cachedHomeHighlights.isEmpty {
                             HighlightsSectionView(
-                                title: "Latest insight",
+                                title: "Latest result",
                                 items: Array(cachedHomeHighlights.prefix(1))
                             )
-                                .padding(.horizontal, Theme.Spacing.lg)
+                            .padding(.top, Theme.Spacing.section)
                         }
 
-                        // Recent workouts with repeat capability
                         recentWorkoutsSection
-                            .padding(.horizontal, Theme.Spacing.lg)
+                            .padding(.top, Theme.Spacing.section)
 
                         exploreSection
-                            .padding(.horizontal, Theme.Spacing.lg)
+                            .padding(.top, Theme.Spacing.section)
                     }
                 }
-                .padding(.top, Theme.Spacing.sm)
+                .padding(.horizontal, Theme.Layout.screenGutter)
+                .padding(.top, Theme.Spacing.xs)
                 .padding(.bottom, Theme.Spacing.xxl)
                 .frame(maxWidth: maxContentWidth, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .center)
             }
         }
         .navigationTitle("Today")
-        // The custom greeting header carries the large-title role on this screen.
-        .navigationBarTitleDisplayMode(.inline)
+        .navigationSubtitle(Date.now.formatted(.dateTime.weekday(.wide).month(.wide).day()))
+        .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            AppToolbarItem(placement: .topBarTrailing) {
+                healthStatusButton
+            }
+        }
         .analyticsScreen("Home")
         .navigationDestination(item: $selectedExercise) { selection in
             ExerciseDetailView(
@@ -169,9 +159,6 @@ struct HomeView: View {
                 workouts: selectedWeekBucket?.workouts ?? weeklyWorkouts
             )
         }
-        .navigationDestination(item: $selectedChangeMetric) { metric in
-            ChangeMetricDetailView(metric: metric, window: changeWindow, workouts: dataManager.workouts)
-        }
         .navigationDestination(isPresented: $showingConsistencyDetail) {
             ConsistencyDetailView(workouts: dataManager.workouts)
         }
@@ -179,7 +166,7 @@ struct HomeView: View {
             MuscleBalanceDetailView(
                 dataManager: dataManager,
                 dateRange: weeklyDateRange,
-                rangeLabel: "This Week"
+                rangeLabel: "This week"
             )
         }
         .navigationDestination(isPresented: $showingMuscleRecency) {
@@ -235,6 +222,9 @@ struct HomeView: View {
             rebuildHomeHighlights()
             await refreshRecoveryCoverage()
         }
+        .onChange(of: dataManager.hasLoadedImportedHistory) { _, _ in
+            scheduleHomeDerivedStateRefresh(debounceNs: 0)
+        }
         .onChange(of: dataManager.workouts) { _, _ in
             scheduleHomeDerivedStateRefresh()
             triggerAutoHealthSync()
@@ -259,54 +249,6 @@ struct HomeView: View {
 
     // MARK: - Header
 
-    private var headerSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            TimelineView(.periodic(from: .now, by: 60)) { context in
-                Text(context.date.formatted(.dateTime.weekday(.wide).month(.wide).day()).uppercased())
-                    .font(Theme.Typography.metricLabel)
-                    .tracking(1.2)
-                    .foregroundColor(Theme.Colors.textSecondary)
-            }
-
-            Text(greetingHeadline)
-                .font(Theme.Typography.displayHero)
-                .foregroundColor(Theme.Colors.textPrimary)
-                .lineLimit(2)
-                .minimumScaleFactor(0.8)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityAddTraits(.isHeader)
-
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: Theme.Spacing.sm) {
-                    healthStatusButton
-                    Text(headerSubtitle)
-                        .font(Theme.Typography.caption)
-                        .foregroundColor(Theme.Colors.textSecondary)
-                        .lineLimit(1)
-                }
-
-                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                    healthStatusButton
-                    Text(headerSubtitle)
-                        .font(Theme.Typography.caption)
-                        .foregroundColor(Theme.Colors.textSecondary)
-                }
-            }
-        }
-        .padding(.horizontal, Theme.Spacing.lg)
-        .animateOnAppear(delay: 0)
-    }
-
-    private var greetingHeadline: String {
-        let firstName = profileName
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .split(separator: " ")
-            .first
-            .map(String.init)
-        guard let firstName, !firstName.isEmpty else { return greetingText + "." }
-        return "\(greetingText), \(firstName)."
-    }
-
     private var healthStatusButton: some View {
         Button {
             selectedTab = .health
@@ -316,19 +258,10 @@ struct HomeView: View {
                 isActive: isHealthFresh,
                 isSyncing: healthManager.isAutoSyncing
             )
+            .padding(.horizontal, Theme.Spacing.xs)
         }
         .buttonStyle(.plain)
         .accessibilityHint("Opens Health")
-    }
-
-    private var greetingText: String {
-        let hour = Calendar.current.component(.hour, from: Date())
-        switch hour {
-        case 5..<12: return "Good morning"
-        case 12..<17: return "Good afternoon"
-        case 17..<22: return "Good evening"
-        default: return "Late night"
-        }
     }
 
     // MARK: - Untagged Exercises Banner
@@ -352,131 +285,92 @@ struct HomeView: View {
     }
 
     private var untaggedExercisesBanner: some View {
-        HStack(spacing: Theme.Spacing.md) {
-            IconTile(systemImage: "tag.fill", tint: Theme.Colors.accentTertiary, size: 32)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text("\(untaggedExerciseNames.count) exercise\(untaggedExerciseNames.count == 1 ? "" : "s") without muscle roles")
-                    .font(Theme.Typography.captionBold)
+        let count = untaggedExerciseNames.count
+        return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.sm) {
+                Text("\(count)")
+                    .font(Theme.Typography.title3)
                     .foregroundStyle(Theme.Colors.textPrimary)
-                Text("Tag them for muscle tracking")
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textTertiary)
+                Text(
+                    count == 1
+                        ? "exercise has no muscle roles yet, so it can't color your plates or count toward muscle recency."
+                        : "exercises have no muscle roles yet, so they can't color your plates or count toward muscle recency."
+                )
+                    .font(Theme.Typography.subheadline)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
-            Spacer()
-
-            Button {
-                Haptics.selection()
-                showingTagging = true
-            } label: {
-                Text("Tag")
-                    .font(Theme.Typography.captionBold)
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, Theme.Spacing.md)
-                    .padding(.vertical, Theme.Spacing.xs)
-                    .frame(minHeight: Theme.Layout.minimumTapTarget)
-                    .background(Theme.Colors.accent)
-                    .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.medium))
-            }
-            .buttonStyle(.plain)
-
-            Button {
-                withAnimation(reduceMotion ? nil : Theme.Animation.spring) {
-                    dismissedUntaggedCount = untaggedExerciseNames.count
+            HStack(spacing: Theme.Spacing.sm) {
+                AppPillButton(title: "Tag exercises", variant: .accent) {
+                    Haptics.selection()
+                    showingTagging = true
                 }
-            } label: {
-                Image(systemName: "xmark")
-                    .font(Theme.Typography.caption2Bold)
-                    .foregroundStyle(Theme.Colors.textTertiary)
-                    .frame(
-                        minWidth: Theme.Layout.minimumTapTarget,
-                        minHeight: Theme.Layout.minimumTapTarget
-                    )
-                    .contentShape(.rect)
+                .accessibilityLabel("Tag exercises with muscle roles")
+
+                AppPillButton(title: "Not now", variant: .subtle) {
+                    withAnimation(reduceMotion ? nil : Theme.Animation.spring) {
+                        dismissedUntaggedCount = count
+                    }
+                }
+                .accessibilityLabel("Dismiss tagging reminder")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Dismiss tagging reminder")
         }
-        .padding(Theme.Spacing.md)
-        .softCard(elevation: 1)
-        .transition(.asymmetric(
-            insertion: .move(edge: .top).combined(with: .opacity),
-            removal: .opacity
-        ))
+        .padding(Theme.Spacing.lg)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .softCard()
+        .transition(.opacity)
     }
 
-    // MARK: - Quick Actions
+    // MARK: - Hero
 
-    private var quickActionsSection: some View {
-        VStack(spacing: Theme.Spacing.md) {
-            TodayHeroCard(
-                sessionsThisWeek: currentWeekBucket?.stats.totalWorkouts ?? 0,
-                weeklyGoal: min(max(sessionsPerWeekGoal, 1), 14),
-                streakWeeks: cachedCurrentWeekStreak,
-                weekStart: SharedFormatters.startOfWeekSunday(for: Date()),
-                trainedDays: currentWeekTrainedDays,
-                activeSession: sessionManager.activeSession,
-                onPrimaryAction: {
-                    Haptics.selection()
-                    if sessionManager.activeSession != nil {
-                        sessionManager.isPresentingSessionUI = true
-                    } else {
-                        startQuickSession(exercise: nil)
-                    }
-                },
-                onOpenWeek: {
-                    Haptics.selection()
-                    showingConsistencyDetail = true
+    private var heroSection: some View {
+        TodayHero(
+            sessionsThisWeek: currentWeekBucket?.stats.totalWorkouts ?? 0,
+            weeklyGoal: min(max(sessionsPerWeekGoal, 1), 14),
+            streakWeeks: cachedCurrentWeekStreak,
+            plates: currentWeekPlates,
+            activeSession: sessionManager.activeSession,
+            lastWorkout: dataManager.workouts.first,
+            onPrimaryAction: {
+                Haptics.selection()
+                if sessionManager.activeSession != nil {
+                    sessionManager.isPresentingSessionUI = true
+                } else {
+                    startQuickSession(exercise: nil)
                 }
-            )
-            .padding(.horizontal, Theme.Spacing.lg)
-            .animateOnAppear(delay: 0.05)
+            },
+            onRepeatLast: { workout in
+                repeatWorkout(workout)
+            },
+            onOpenWeek: {
+                Haptics.selection()
+                showingConsistencyDetail = true
+            }
+        )
+    }
 
-            // Repeat last workout
-            if sessionManager.activeSession == nil, let lastWorkout = dataManager.workouts.first {
-                Button(
-                    action: {
-                        Haptics.selection()
-                        repeatWorkout(lastWorkout)
-                    },
-                    label: {
-                        HStack(spacing: Theme.Spacing.md) {
-                            IconTile(
-                                systemImage: "arrow.counterclockwise",
-                                tint: Theme.Colors.accentSecondary,
-                                size: 40
-                            )
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Repeat last workout")
-                                    .font(Theme.Typography.caption)
-                                    .foregroundStyle(Theme.Colors.textSecondary)
-                                Text(lastWorkout.name)
-                                    .font(Theme.Typography.bodyBold)
-                                    .foregroundStyle(Theme.Colors.textPrimary)
-                                    .lineLimit(1)
-                            }
-                            Spacer(minLength: Theme.Spacing.sm)
-                            Text(lastWorkout.date.formatted(.relative(presentation: .named)))
-                                .font(Theme.Typography.captionStrong)
-                                .foregroundStyle(Theme.Colors.textTertiary)
-                                .lineLimit(1)
-                            Image(systemName: "chevron.right")
-                                .font(Theme.Typography.caption2Bold)
-                                .foregroundStyle(Theme.Colors.textTertiary)
-                        }
-                        .padding(.horizontal, Theme.Spacing.md)
-                        .padding(.vertical, Theme.Spacing.md)
-                        .softCard(elevation: 1)
-                        .contentShape(.rect)
-                    }
-                )
-                .buttonStyle(PressableCardButtonStyle())
-                .padding(.horizontal, Theme.Spacing.lg)
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel("Repeat last workout: \(lastWorkout.name)")
-                .accessibilityHint("Double tap to start this workout again")
-                .animateOnAppear(delay: 0.1)
+    private var emptySection: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
+            HomeEmptyState(weeklyGoal: min(max(sessionsPerWeekGoal, 1), 14))
+
+            VStack(spacing: Theme.Spacing.sm) {
+                AppPrimaryButton(title: "Start workout") {
+                    Haptics.selection()
+                    startQuickSession(exercise: nil)
+                }
+
+                // New users are the ones who need a path in; returning users
+                // still have import in Settings.
+                Button {
+                    Haptics.selection()
+                    showingImportWizard = true
+                } label: {
+                    Text("Import history from Strong")
+                        .font(Theme.Typography.headline)
+                        .frame(maxWidth: .infinity, minHeight: 52)
+                }
+                .buttonStyle(BrandSecondaryButtonStyle())
             }
         }
     }
@@ -485,169 +379,72 @@ struct HomeView: View {
         cachedWeekBuckets.first { $0.isCurrentWeek }
     }
 
-    private var currentWeekTrainedDays: Set<Date> {
-        let calendar = Calendar.current
-        return Set((currentWeekBucket?.workouts ?? []).map { calendar.startOfDay(for: $0.date) })
+    private var currentWeekPlates: [LoadedPlate] {
+        cachedRackWeeks.last?.plates ?? []
     }
 
-    // MARK: - Weekly Summary
+    // MARK: - Week
 
-    private var weeklySummarySection: some View {
-        let buckets = cachedWeekBuckets
-        let selectedBucket = selectedWeekBucket ?? buckets.first
-
+    private var weekSection: some View {
+        let bucket = selectedWeekBucket
+        let selectedStart = selectedWeekBucketStart ?? cachedWeekBuckets.first?.weekStart
         return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             SectionHeading(
-                title: "Week by Week",
-                subtitle: buckets.count > 1 ? "Swipe to look back" : nil
-            )
+                title: bucket?.title ?? selectedStart.map(Self.weekTitle(for:)) ?? "This week",
+                subtitle: bucket.map { "\($0.rangeLabel), \($0.statusLabel.lowercased())" }
+            ) {
+                Button {
+                    Haptics.selection()
+                    showingConsistencyDetail = true
+                } label: {
+                    TextLinkLabel(title: "Consistency")
+                }
+                .buttonStyle(.plain)
+            }
 
-            if selectedBucket != nil {
-                ScrollView(.horizontal) {
-                    LazyHStack(alignment: .top, spacing: Theme.Spacing.md) {
-                        ForEach(buckets) { bucket in
-                            WeeklySummaryCarouselCard(
-                                bucket: bucket,
-                                onMetricTap: { kind in
-                                    selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: kind)
-                                },
-                                onWorkoutTap: { workout in
-                                    selectedWorkout = workout
-                                }
-                            )
-                            .containerRelativeFrame(.horizontal)
-                            .id(bucket.weekStart)
+            if cachedRackWeeks.count > 1 {
+                WeekRackChart(
+                    weeks: cachedRackWeeks,
+                    goal: min(max(sessionsPerWeekGoal, 1), 14),
+                    selectedWeekStart: selectedStart,
+                    onSelect: { weekStart in
+                        withAnimation(reduceMotion ? nil : Theme.Animation.quick) {
+                            selectedWeekBucketStart = weekStart
                         }
                     }
-                    .scrollTargetLayout()
-                }
-                .scrollIndicators(.hidden)
-                .scrollTargetBehavior(.paging)
-                .scrollPosition(id: selectedWeekSelection)
-                .animation(
-                    reduceMotion ? nil : Theme.Animation.gentleSpring,
-                    value: selectedWeekBucketStart
                 )
-                .accessibilityLabel("Weekly summaries")
-                .padding(Theme.Spacing.lg)
-                .softCard(elevation: 2)
+                .padding(.horizontal, -Theme.Layout.screenGutter)
+                .accessibilityLabel("Weekly sessions")
+            }
 
-                if buckets.count > 1 {
-                    HStack(spacing: Theme.Spacing.sm) {
-                        ForEach(visibleWeekIndicatorBuckets(from: buckets)) { bucket in
-                            Button {
-                                selectedWeekBucketStart = bucket.weekStart
-                            } label: {
-                                Capsule()
-                                    .fill(isSelectedWeekBucket(bucket) ? Theme.Colors.accent : Theme.Colors.border)
-                                    .frame(width: isSelectedWeekBucket(bucket) ? 20 : 8, height: 8)
-                                    .frame(minWidth: Theme.Layout.minimumTapTarget, minHeight: Theme.Layout.minimumTapTarget)
-                                    .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel(bucket.rangeLabel)
-                            .accessibilityValue(isSelectedWeekBucket(bucket) ? "Selected" : "")
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, -Theme.Spacing.sm)
-                }
+            WeekStatsRow(bucket: bucket) { kind in
+                selectedWorkoutMetric = WorkoutMetricDetailSelection(kind: kind)
             }
         }
-        .animateOnAppear(delay: 0.15)
     }
 
-    private var consistencySection: some View {
-        return ConsistencyView(
-            stats: cachedOverallStats ?? emptyStats,
-            workouts: dataManager.workouts,
-            timeRange: .allTime,
-            onTap: {
-                showingConsistencyDetail = true
-            }
-        )
-        .animateOnAppear(delay: 0.2)
-    }
-
-    // MARK: - Change Metrics (always visible — key differentiator)
-
-    private var changeSection: some View {
-        let metrics = cachedWeeklyChangeMetrics
-        return Group {
-            if !metrics.isEmpty {
-                VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-                    HStack {
-                        Text("vs Last Week")
-                            .font(Theme.Typography.sectionHeader2)
-                            .foregroundColor(Theme.Colors.textPrimary)
-                        Spacer()
-                        NavigationLink {
-                            PerformanceLabView(
-                                dataManager: dataManager,
-                                annotationsManager: annotationsManager,
-                                gymProfilesManager: gymProfilesManager
-                            )
-                        } label: {
-                            Text("More")
-                                .font(Theme.Typography.captionBold)
-                                .foregroundColor(Theme.Colors.accent)
-                                .textCase(.uppercase)
-                                .tracking(0.8)
-                        }
-                        .buttonStyle(.plain)
-                    }
-
-                    ViewThatFits(in: .horizontal) {
-                        HStack(spacing: Theme.Spacing.sm) {
-                            ForEach(metrics) { metric in
-                                MetricTileButton(
-                                    action: { selectedChangeMetric = metric },
-                                    content: { CompactChangeCard(metric: metric) }
-                                )
-                            }
-                        }
-
-                        VStack(spacing: Theme.Spacing.sm) {
-                            ForEach(metrics) { metric in
-                                MetricTileButton(
-                                    action: { selectedChangeMetric = metric },
-                                    content: { CompactChangeCard(metric: metric) }
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
+    private static func weekTitle(for weekStart: Date) -> String {
+        "Week of \(weekStart.formatted(Date.FormatStyle().month(.abbreviated).day()))"
     }
 
     // MARK: - Recent Workouts
 
     private var recentWorkoutsSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            SectionHeading(title: "Recent Workouts") {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            SectionHeading(title: "Recent") {
                 NavigationLink(destination: WorkoutHistoryView(workouts: dataManager.workouts, showsBackButton: true)) {
-                    HStack(spacing: 4) {
-                        Text("See All")
-                            .font(Theme.Typography.captionBold)
-                        Image(systemName: "arrow.right")
-                            .font(Theme.Typography.microLabel)
-                    }
-                    .foregroundColor(Theme.Colors.accent)
-                    .padding(.horizontal, Theme.Spacing.md)
-                    .padding(.vertical, 7)
-                    .background(Capsule().fill(Theme.Colors.accentTint))
-                    .frame(minHeight: Theme.Layout.minimumTapTarget)
-                    .contentShape(.rect)
+                    TextLinkLabel(title: "All history")
                 }
-                .buttonStyle(AppInteractionButtonStyle())
+                .buttonStyle(.plain)
             }
 
-            VStack(spacing: Theme.Spacing.sm) {
-                ForEach(Array(dataManager.workouts.prefix(3).enumerated()), id: \.element.id) { _, workout in
+            VStack(spacing: 0) {
+                ForEach(Array(dataManager.workouts.prefix(3).enumerated()), id: \.element.id) { index, workout in
                     HomeWorkoutRow(
                         workout: workout,
                         exerciseCount: cachedExerciseCounts[workout.id] ?? workout.exercises.count,
+                        category: cachedPlateCategories[workout.id],
+                        showsRule: index > 0,
                         onRepeat: { repeatWorkout(workout) },
                         onTap: { selectedWorkout = workout }
                     )
@@ -659,16 +456,10 @@ struct HomeView: View {
     // MARK: - Explore
 
     private var exploreSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            SectionHeading(title: "Explore", subtitle: "Dig into trends, lifts, and recovery")
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            SectionHeading(title: "Training")
 
-            LazyVGrid(
-                columns: [
-                    GridItem(.flexible(), spacing: Theme.Spacing.md),
-                    GridItem(.flexible(), spacing: Theme.Spacing.md)
-                ],
-                spacing: Theme.Spacing.md
-            ) {
+            VStack(spacing: 0) {
                 NavigationLink {
                     PerformanceLabView(
                         dataManager: dataManager,
@@ -676,74 +467,53 @@ struct HomeView: View {
                         gymProfilesManager: gymProfilesManager
                     )
                 } label: {
-                    ExploreRow(title: "Performance", subtitle: "Trends", icon: "chart.line.uptrend.xyaxis", tint: Theme.Colors.success)
+                    ExploreRow(title: "Performance", subtitle: "Strength and volume trends", showsRule: false)
                 }
-                .buttonStyle(PlainButtonStyle())
+                .buttonStyle(PressableCardButtonStyle())
                 .accessibilityIdentifier("explore-performance")
 
                 NavigationLink {
                     ExerciseListView(dataManager: dataManager)
                 } label: {
-                    ExploreRow(title: "Exercises", subtitle: "By lift", icon: "figure.strengthtraining.traditional", tint: Theme.Colors.accentSecondary)
+                    ExploreRow(title: "Exercises", subtitle: "Every lift, its records and history")
                 }
-                .buttonStyle(PlainButtonStyle())
+                .buttonStyle(PressableCardButtonStyle())
                 .accessibilityIdentifier("explore-exercises")
-
-                NavigationLink {
-                    RecoveryCoverageDetailView(engine: recoveryCoverageEngine)
-                } label: {
-                    ExploreRow(title: "Signals", subtitle: "Recovery + coverage", icon: "waveform.path.ecg", tint: Theme.Colors.accentTertiary)
-                }
-                .buttonStyle(PlainButtonStyle())
-                .accessibilityIdentifier("explore-signals")
 
                 Button {
                     showingConsistencyDetail = true
                 } label: {
-                    ExploreRow(
-                        title: "Consistency",
-                        subtitle: "Rhythm + streaks",
-                        icon: "calendar.badge.checkmark",
-                        tint: Theme.Colors.accent
-                    )
+                    ExploreRow(title: "Consistency", subtitle: "Weekly goals and streaks")
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressableCardButtonStyle())
+                .accessibilityIdentifier("explore-consistency")
 
                 NavigationLink {
                     MuscleRecencyView(dataManager: dataManager)
                 } label: {
-                    ExploreRow(
-                        title: "Muscles",
-                        subtitle: "Last worked",
-                        icon: "clock.arrow.trianglehead.counterclockwise.rotate.90",
-                        tint: Theme.Colors.accentSecondary
-                    )
+                    ExploreRow(title: "Muscles", subtitle: "When each group was last trained")
                 }
-                .buttonStyle(PlainButtonStyle())
+                .buttonStyle(PressableCardButtonStyle())
+
+                NavigationLink {
+                    RecoveryCoverageDetailView(engine: recoveryCoverageEngine)
+                } label: {
+                    ExploreRow(title: "Recovery", subtitle: "Sleep, heart rate, and muscle coverage")
+                }
+                .buttonStyle(PressableCardButtonStyle())
+                .accessibilityIdentifier("explore-signals")
 
                 NavigationLink {
                     WorkoutVariantReviewView()
                 } label: {
-                    ExploreRow(
-                        title: "Variants",
-                        subtitle: "What changed",
-                        icon: "square.3.layers.3d",
-                        tint: Theme.Colors.accent
-                    )
+                    ExploreRow(title: "Variants", subtitle: "How repeat workouts have changed")
                 }
-                .buttonStyle(PlainButtonStyle())
+                .buttonStyle(PressableCardButtonStyle())
             }
         }
     }
 
     // MARK: - Data Helpers
-
-    private var headerSubtitle: String {
-        if let lastWorkout = dataManager.workouts.first {
-            return "Last workout \(lastWorkout.date.formatted(date: .abbreviated, time: .omitted))"
-        }
-        return "No workouts yet."
-    }
 
     private var syncStatusText: String {
         if healthManager.isAutoSyncing { return "Syncing Health" }
@@ -760,7 +530,8 @@ struct HomeView: View {
     }
 
     private var isHealthFresh: Bool {
-        guard let lastSync = healthManager.lastSyncDate else { return false }
+        guard healthManager.authorizationStatus == .authorized,
+              let lastSync = healthManager.lastSyncDate else { return false }
         return abs(lastSync.timeIntervalSinceNow) < 3600 * 6
     }
 
@@ -778,29 +549,10 @@ struct HomeView: View {
         return cachedWeekBuckets.first
     }
 
-    private var selectedWeekSelection: Binding<Date?> {
-        Binding(
-            get: { selectedWeekBucketStart ?? cachedWeekBuckets.first?.weekStart },
-            set: { selectedWeekBucketStart = $0 }
-        )
-    }
-
     private var weeklyDateRange: DateInterval {
         let now = Date()
         let weekStart = SharedFormatters.startOfWeekSunday(for: now)
         return DateInterval(start: weekStart, end: now)
-    }
-
-    private var changeWindow: ChangeMetricWindow {
-        let calendar = Calendar.current
-        let current = weeklyDateRange
-        let previousStart = calendar.date(byAdding: .day, value: -7, to: current.start) ?? current.start
-        let previousEnd = calendar.date(byAdding: .day, value: -7, to: current.end) ?? current.end
-        return ChangeMetricWindow(
-            label: "This week",
-            current: current,
-            previous: DateInterval(start: previousStart, end: previousEnd)
-        )
     }
 
     private func buildHomeHighlights() -> [HighlightItem] {
@@ -822,7 +574,8 @@ struct HomeView: View {
                     subtitle: insight.date.formatted(date: .abbreviated, time: .omitted),
                     icon: insight.type.iconName,
                     tint: SharedFormatters.highlightTint(for: insight.type),
-                    action: action
+                    action: action,
+                    isRecord: insight.type == .personalRecord
                 )
             )
         }
@@ -909,6 +662,11 @@ struct HomeView: View {
 
     private func refreshHomeDerivedState() {
         let fingerprint = homeDerivedFingerprint
+        defer {
+            if dataManager.hasLoadedImportedHistory {
+                hasDerivedLoadedHistory = true
+            }
+        }
         guard fingerprint != homeDerivedCacheKey else { return }
 
         let workouts = dataManager.workouts
@@ -928,16 +686,6 @@ struct HomeView: View {
             for: workouts,
             intentionalBreakRanges: breaks
         )
-        cachedOverallStats = workouts.isEmpty
-            ? nil
-            : dataManager.calculateStats(for: workouts, intentionalBreakRanges: breaks)
-
-        let allMetrics = WorkoutAnalytics.changeMetrics(for: workouts, window: changeWindow, resolver: resolver)
-        let preferredMetrics = allMetrics.filter {
-            $0.title.contains("Sessions") || $0.title.contains("Volume")
-        }
-        cachedWeeklyChangeMetrics = Array((preferredMetrics.isEmpty ? allMetrics : preferredMetrics).prefix(3))
-
         let allExerciseNames = dataManager.allExerciseNames()
         let exerciseNames = Set(allExerciseNames)
         let assignmentMappings = metadataManager.resolvedAssignmentMappings(
@@ -945,6 +693,14 @@ struct HomeView: View {
             resolver: resolver
         )
         cachedUntaggedExerciseNames = allExerciseNames.filter { assignmentMappings[$0]?.isEmpty ?? true }
+
+        let rackWeeks = buildRackWeeks(
+            workouts: workouts,
+            buckets: weekBuckets,
+            assignments: assignmentMappings
+        )
+        cachedRackWeeks = rackWeeks.weeks
+        cachedPlateCategories = rackWeeks.categories
 
         guard !workouts.isEmpty else {
             cachedMuscleSuggestions = []
@@ -1014,6 +770,12 @@ struct HomeView: View {
             rebuildHomeHighlights()
             await refreshRecoveryCoverage()
         }
+    }
+
+    /// Holds the screen on the loading state until the saved import has arrived and this
+    /// screen has summarized it, so the week never renders from partial data and then jumps.
+    private var isAwaitingInitialHistory: Bool {
+        !hasDerivedLoadedHistory && dataManager.error == nil && !isAnalyticsUITestFixture
     }
 
     private var isAnalyticsUITestFixture: Bool {
@@ -1118,6 +880,43 @@ struct HomeView: View {
         return buckets
     }
 
+    /// Weeks for the rack chart, oldest first: up to half a year back, never before the
+    /// first workout. Also returns each recent session's plate category.
+    private func buildRackWeeks(
+        workouts: [Workout],
+        buckets: [HomeWeekBucket],
+        assignments: [String: [ExerciseMuscleAssignment]]
+    ) -> (weeks: [RackWeek], categories: [UUID: PlateCategory]) {
+        let calendar = Calendar.current
+        let currentWeekStart = SharedFormatters.startOfWeekSunday(for: Date())
+        guard let earliest = workouts.last else {
+            return ([RackWeek(weekStart: currentWeekStart, plates: [], isBreak: false)], [:])
+        }
+        let earliestWeekStart = SharedFormatters.startOfWeekSunday(for: earliest.date)
+        let windowStart = calendar.date(byAdding: .weekOfYear, value: -25, to: currentWeekStart) ?? currentWeekStart
+        let firstWeek = max(earliestWeekStart, windowStart)
+
+        let recentWorkouts = workouts.filter { $0.date >= firstWeek }
+        var categories: [UUID: PlateCategory] = [:]
+        for workout in recentWorkouts {
+            categories[workout.id] = PlateCategory.classify(workout, assignments: assignments)
+        }
+        let grouped = Dictionary(grouping: recentWorkouts) { SharedFormatters.startOfWeekSunday(for: $0.date) }
+        let breakWeeks = Set(buckets.filter(\.isSavedBreakWeek).map(\.weekStart))
+
+        var weeks: [RackWeek] = []
+        var cursor = firstWeek
+        while cursor <= currentWeekStart {
+            let plates = (grouped[cursor] ?? [])
+                .sorted { $0.date < $1.date }
+                .map { LoadedPlate(id: $0.id, date: $0.date, category: categories[$0.id] ?? .fullBody) }
+            weeks.append(RackWeek(weekStart: cursor, plates: plates, isBreak: breakWeeks.contains(cursor)))
+            guard let next = calendar.date(byAdding: .weekOfYear, value: 1, to: cursor) else { break }
+            cursor = next
+        }
+        return (weeks, categories)
+    }
+
     private func syncSelectedWeekBucket() {
         guard !cachedWeekBuckets.isEmpty else {
             selectedWeekBucketStart = nil
@@ -1132,26 +931,6 @@ struct HomeView: View {
         selectedWeekBucketStart = cachedWeekBuckets.first?.weekStart
     }
 
-    private func isSelectedWeekBucket(_ bucket: HomeWeekBucket) -> Bool {
-        guard let selectedWeekBucketStart else {
-            return Calendar.current.isDate(bucket.weekStart, inSameDayAs: cachedWeekBuckets.first?.weekStart ?? bucket.weekStart)
-        }
-        return Calendar.current.isDate(bucket.weekStart, inSameDayAs: selectedWeekBucketStart)
-    }
-
-    private func visibleWeekIndicatorBuckets(from buckets: [HomeWeekBucket]) -> [HomeWeekBucket] {
-        let maxVisibleIndicators = 7
-        guard buckets.count > maxVisibleIndicators else {
-            return buckets
-        }
-
-        let selectedIndex = buckets.firstIndex(where: { isSelectedWeekBucket($0) }) ?? 0
-        let halfWindow = maxVisibleIndicators / 2
-        let lowerBound = max(0, min(selectedIndex - halfWindow, buckets.count - maxVisibleIndicators))
-        let upperBound = min(lowerBound + maxVisibleIndicators, buckets.count)
-
-        return Array(buckets[lowerBound..<upperBound])
-    }
 }
 
 // swiftlint:enable type_body_length file_length

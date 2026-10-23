@@ -533,7 +533,7 @@ enum iCloudError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .containerNotAvailable:
-            return "Storage container is not available."
+            return "Storage is unavailable. Check iCloud Drive in Settings, then try again."
         }
     }
 }

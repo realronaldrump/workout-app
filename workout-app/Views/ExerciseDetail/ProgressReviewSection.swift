@@ -4,193 +4,243 @@ struct ProgressReviewSection: View {
     let review: ExerciseProgressReview
     let gymNameProvider: (UUID?) -> String?
 
-    private var comparison: ExerciseBlockComparison? {
-        review.comparison
-    }
-
-    private var isAssisted: Bool {
-        ExerciseLoad.isAssistedExercise(review.exerciseName)
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                    Text("Progress Review")
-                        .font(Theme.Typography.sectionHeader2)
-                        .foregroundStyle(Theme.Colors.textPrimary)
-
-                    Text("Compare your last two training blocks for this lift.")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                }
-
-                Spacer()
-
+            SectionHeading(
+                title: "Progress review",
+                help: "Compares your two most recent training blocks for this exercise."
+            ) {
                 NavigationLink {
                     ProgressReviewView(review: review, gymNameProvider: gymNameProvider)
                 } label: {
-                    Text("View Full Review")
-                        .font(Theme.Typography.captionBold)
-                        .foregroundStyle(Theme.Colors.accent)
-                        .textCase(.uppercase)
-                        .tracking(0.8)
+                    TextLinkLabel(title: "Full review")
                 }
                 .buttonStyle(.plain)
             }
 
-            VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-                if let comparison {
-                    HStack(spacing: Theme.Spacing.sm) {
-                        statusBadge(status: comparison.outcomeStatus)
-                        Text(comparison.primaryObservedMetric)
-                            .font(Theme.Typography.captionBold)
-                            .foregroundStyle(Theme.Colors.textSecondary)
-                    }
+            if let comparison = review.comparison {
+                ProgressOutcomeSummary(comparison: comparison, deltaFont: Theme.Typography.metric)
+            }
 
-                    Text(comparison.summary)
-                        .font(Theme.Typography.body)
+            if !review.latestComparableBlocks.isEmpty {
+                TrainingBlockTable(review: review, gymNameProvider: gymNameProvider, isCompact: true)
+            }
+
+            if !review.findings.isEmpty {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("What changed")
+                        .font(Theme.Typography.subheadlineStrong)
                         .foregroundStyle(Theme.Colors.textPrimary)
+                        .padding(.bottom, Theme.Spacing.xs)
 
-                    Text(comparison.deltaLabel)
-                        .font(Theme.Typography.metric)
-                        .foregroundStyle(statusColor(for: comparison.outcomeStatus))
-                }
-
-                VStack(spacing: Theme.Spacing.md) {
-                    ForEach(review.latestComparableBlocks) { block in
-                        compactBlockCard(block)
-                    }
-                }
-
-                if !review.findings.isEmpty {
-                    VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                        Text("What Changed")
-                            .font(Theme.Typography.captionBold)
-                            .foregroundStyle(Theme.Colors.textSecondary)
-                            .textCase(.uppercase)
-                            .tracking(0.8)
-
-                        ForEach(Array(review.findings.prefix(2))) { finding in
-                            findingRow(finding)
-                        }
+                    let findings = Array(review.findings.prefix(2))
+                    ForEach(Array(findings.enumerated()), id: \.element.id) { index, finding in
+                        ProgressFindingRow(finding: finding, showsRule: index < findings.count - 1)
                     }
                 }
             }
-            .padding(Theme.Spacing.lg)
-            .softCard(elevation: 2)
         }
     }
+}
 
-    @ViewBuilder
-    private func compactBlockCard(_ block: ExerciseTrainingBlock) -> some View {
+/// The headline of a block comparison: the change, its verdict, and the plain-language summary.
+private struct ProgressOutcomeSummary: View {
+    let comparison: ExerciseBlockComparison
+    var deltaFont: Font
+    var evidence: [String] = []
+
+    var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            HStack {
-                Text(blockDateLabel(block))
-                    .font(Theme.Typography.subheadline)
-                    .foregroundStyle(Theme.Colors.textPrimary)
-
-                Spacer()
-
-                Text(SharedFormatters.count(block.sessionCount, "session"))
-                    .font(Theme.Typography.captionBold)
-                    .foregroundStyle(Theme.Colors.textSecondary)
+            if comparison.outcomeStatus == .notComparable {
+                // There is no change to headline, so the verdict leads instead.
+                TagLabel(text: comparison.outcomeStatus.title, tint: comparison.outcomeStatus.tint)
+            } else {
+                HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.md) {
+                    Text(comparison.deltaLabel)
+                        .font(deltaFont)
+                        .foregroundStyle(comparison.outcomeStatus.tint)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                    TagLabel(text: comparison.outcomeStatus.title, tint: comparison.outcomeStatus.tint)
+                }
             }
 
-            HStack(spacing: Theme.Spacing.sm) {
-                metricPill(title: "Lane", value: block.dominantRepLane.label)
-                metricPill(title: "Freq", value: "\(decimal(block.sessionsPerWeek))/wk")
-                metricPill(title: "Order", value: block.commonOrderBand.label)
-            }
-
-            HStack(spacing: Theme.Spacing.sm) {
-                metricPill(title: isAssisted ? "Least Assist" : "Best", value: weightLabel(block.outcome.bestWeight))
-                metricPill(title: "Sets", value: decimal(block.medianSetsPerSession))
-                metricPill(title: "Gym", value: resolvedGymLabel(for: block))
-            }
-
-            if let bodyweight = block.medianBodyweight {
-                Text("Median bodyweight \(decimal(bodyweight)) lb")
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textTertiary)
-            }
-        }
-        .padding(Theme.Spacing.md)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
-                .fill(Theme.Colors.surfaceRaised)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
-                .strokeBorder(Theme.Colors.border.opacity(0.6), lineWidth: 1)
-        )
-    }
-
-    @ViewBuilder
-    private func findingRow(_ finding: ExerciseReviewFinding) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(finding.title)
-                .font(Theme.Typography.captionBold)
-                .foregroundStyle(Theme.Colors.textPrimary)
-            Text(finding.message)
-                .font(Theme.Typography.caption)
+            Text(comparison.primaryObservedMetric)
+                .font(Theme.Typography.subheadlineStrong)
                 .foregroundStyle(Theme.Colors.textSecondary)
+
+            Text(comparison.summary)
+                .font(Theme.Typography.body)
+                .foregroundStyle(Theme.Colors.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if !evidence.isEmpty {
+                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                    ForEach(evidence, id: \.self) { item in
+                        Text(item)
+                            .font(Theme.Typography.subheadline)
+                            .foregroundStyle(Theme.Colors.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .padding(.top, Theme.Spacing.xs)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, 2)
+        .accessibilityElement(children: .combine)
     }
+}
 
-    @ViewBuilder
-    private func metricPill(title: String, value: String) -> some View {
+private struct ProgressFindingRow: View {
+    let finding: ExerciseReviewFinding
+    var showsRule = true
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(title)
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Colors.textTertiary)
-            Text(value)
-                .font(Theme.Typography.captionBold)
+            Text(finding.title)
+                .font(Theme.Typography.headline)
                 .foregroundStyle(Theme.Colors.textPrimary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
+            Text(finding.message)
+                .font(Theme.Typography.subheadline)
+                .foregroundStyle(Theme.Colors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.horizontal, Theme.Spacing.md)
-        .padding(.vertical, Theme.Spacing.sm)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
-                .fill(Theme.Colors.surface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
-                .strokeBorder(Theme.Colors.border.opacity(0.6), lineWidth: 1)
-        )
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .ledgerRow(showsRule: showsRule)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// Training blocks laid out like a log sheet: one column per block, one row per measure,
+/// so the earlier and latest block read straight across.
+private struct TrainingBlockTable: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    let review: ExerciseProgressReview
+    let gymNameProvider: (UUID?) -> String?
+    var isCompact: Bool
+
+    private var blocks: [ExerciseTrainingBlock] { review.latestComparableBlocks }
+
+    private var rows: [(label: String, values: [String])] {
+        let isAssisted = ExerciseLoad.isAssistedExercise(review.exerciseName)
+        var rows: [(String, [String])] = [
+            ("Sessions", blocks.map { "\($0.sessionCount)" }),
+            ("Per week", blocks.map { decimal($0.sessionsPerWeek) }),
+            ("Rep range", blocks.map(\.dominantRepLane.label)),
+            (isAssisted ? "Least assistance" : "Best weight", blocks.map {
+                ExerciseLoad.formatWeight($0.outcome.bestWeight, exerciseName: review.exerciseName)
+            }),
+            ("Sets per session", blocks.map { decimal($0.medianSetsPerSession) }),
+            ("Order", blocks.map(\.commonOrderBand.label))
+        ]
+        if !isCompact {
+            rows.append(("Volume per session", blocks.map { SharedFormatters.volumeWithUnit($0.medianVolumePerSession) }))
+        }
+        rows.append(("Gym", blocks.map(gymLabel)))
+        if blocks.contains(where: { $0.medianBodyweight != nil }) {
+            rows.append(("Bodyweight", blocks.map { block in
+                block.medianBodyweight.map { "\(decimal($0)) lb" } ?? "None"
+            }))
+        }
+        return rows
     }
 
-    @ViewBuilder
-    private func statusBadge(status: ExerciseBlockOutcomeStatus) -> some View {
-        Text(status.title)
-            .font(Theme.Typography.captionBold)
-            .foregroundStyle(statusColor(for: status))
-            .padding(.horizontal, Theme.Spacing.md)
-            .padding(.vertical, Theme.Spacing.xs)
-            .background(
-                Capsule()
-                    .fill(statusColor(for: status).opacity(0.12))
-            )
-    }
-
-    private func statusColor(for status: ExerciseBlockOutcomeStatus) -> Color {
-        switch status {
-        case .improved:
-            return Theme.Colors.success
-        case .flat:
-            return Theme.Colors.accent
-        case .regressed:
-            return Theme.Colors.error
-        case .notComparable:
-            return Theme.Colors.warning
+    var body: some View {
+        if dynamicTypeSize.isAccessibilitySize || blocks.count == 1 {
+            stacked
+        } else {
+            grid
         }
     }
 
-    private func resolvedGymLabel(for block: ExerciseTrainingBlock) -> String {
+    private var grid: some View {
+        Grid(alignment: .leading, horizontalSpacing: Theme.Spacing.md, verticalSpacing: 0) {
+            GridRow {
+                Color.clear.frame(width: 1, height: 1)
+                ForEach(Array(blocks.enumerated()), id: \.element.id) { index, block in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(index == blocks.count - 1 ? "Latest" : "Before")
+                            .font(Theme.Typography.subheadlineStrong)
+                            .foregroundStyle(Theme.Colors.textPrimary)
+                        Text(dateRange(block))
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Colors.textSecondary)
+                            .lineLimit(2)
+                    }
+                    .padding(.bottom, Theme.Spacing.sm)
+                }
+            }
+            GridRow {
+                Rectangle()
+                    .fill(Theme.Colors.ink)
+                    .frame(height: 2)
+                    .gridCellColumns(blocks.count + 1)
+            }
+            ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
+                GridRow(alignment: .firstTextBaseline) {
+                    Text(row.label)
+                        .font(Theme.Typography.subheadline)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    ForEach(Array(row.values.enumerated()), id: \.offset) { column, value in
+                        Text(value)
+                            .font(column == row.values.count - 1 ? Theme.Typography.bodyBold : Theme.Typography.body)
+                            .foregroundStyle(Theme.Colors.textPrimary)
+                            .monospacedDigit()
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.85)
+                    }
+                }
+                .padding(.vertical, Theme.Spacing.sm)
+                if index < rows.count - 1 {
+                    GridRow {
+                        Rectangle()
+                            .fill(Theme.Colors.rule)
+                            .frame(height: 1)
+                            .gridCellColumns(blocks.count + 1)
+                    }
+                }
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilitySummary)
+    }
+
+    private var stacked: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
+            ForEach(Array(blocks.enumerated()), id: \.element.id) { index, block in
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("\(index == blocks.count - 1 ? "Latest" : "Before"), \(dateRange(block))")
+                        .font(Theme.Typography.headline)
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                        .padding(.bottom, Theme.Spacing.xs)
+                    ForEach(Array(rows.enumerated()), id: \.offset) { rowIndex, row in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(row.label)
+                                .font(Theme.Typography.subheadline)
+                                .foregroundStyle(Theme.Colors.textSecondary)
+                            Text(row.values[index])
+                                .font(Theme.Typography.bodyBold)
+                                .foregroundStyle(Theme.Colors.textPrimary)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .ledgerRow(showsRule: rowIndex < rows.count - 1, verticalPadding: Theme.Spacing.sm)
+                    }
+                }
+            }
+        }
+    }
+
+    private var accessibilitySummary: String {
+        blocks.enumerated().map { index, block in
+            let name = index == blocks.count - 1 ? "Latest block" : "Earlier block"
+            let values = rows.map { "\($0.label) \($0.values[index])" }.joined(separator: ", ")
+            return "\(name), \(dateRange(block)): \(values)"
+        }
+        .joined(separator: ". ")
+    }
+
+    private func gymLabel(_ block: ExerciseTrainingBlock) -> String {
         if let commonGym = block.commonGym, !commonGym.isEmpty, commonGym != "Unassigned" {
             return commonGym
         }
@@ -200,15 +250,15 @@ struct ProgressReviewSection: View {
         return block.commonGymId == nil ? "Unassigned" : "Deleted gym"
     }
 
-    private func blockDateLabel(_ block: ExerciseTrainingBlock) -> String {
-        let style = Date.FormatStyle().month(.abbreviated).day()
+    private func dateRange(_ block: ExerciseTrainingBlock) -> String {
+        let sameYear = Calendar.current.isDate(block.startDate, equalTo: block.endDate, toGranularity: .year)
+            && Calendar.current.isDate(block.endDate, equalTo: .now, toGranularity: .year)
+        let style = sameYear
+            ? Date.FormatStyle().month(.abbreviated).day()
+            : Date.FormatStyle().month(.abbreviated).day().year()
         let start = block.startDate.formatted(style)
         let end = block.endDate.formatted(style)
-        return start == end ? start : "\(start) - \(end)"
-    }
-
-    private func weightLabel(_ value: Double) -> String {
-        ExerciseLoad.formatWeight(value, exerciseName: review.exerciseName)
+        return start == end ? start : "\(start) – \(end)"
     }
 
     private func decimal(_ value: Double) -> String {
@@ -216,238 +266,69 @@ struct ProgressReviewSection: View {
     }
 }
 
+private extension ExerciseBlockOutcomeStatus {
+    var tint: Color {
+        switch self {
+        case .improved: return Theme.Colors.success
+        case .flat: return Theme.Colors.textPrimary
+        case .regressed: return Theme.Colors.error
+        case .notComparable: return Theme.Colors.textSecondary
+        }
+    }
+}
+
 struct ProgressReviewView: View {
     let review: ExerciseProgressReview
     let gymNameProvider: (UUID?) -> String?
-
-    private var isAssisted: Bool {
-        ExerciseLoad.isAssistedExercise(review.exerciseName)
-    }
 
     var body: some View {
         ZStack {
             AdaptiveBackground()
 
             ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: Theme.Spacing.xxl) {
-                    header
+                VStack(alignment: .leading, spacing: Theme.Spacing.section) {
+                    VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                        Text(review.exerciseName)
+                            .font(Theme.Typography.screenTitle)
+                            .foregroundStyle(Theme.Colors.textPrimary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text("Your two most recent training blocks, compared on logged sets, rep range, frequency, exercise order, and gym.")
+                            .font(Theme.Typography.subheadline)
+                            .foregroundStyle(Theme.Colors.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
 
                     if let comparison = review.comparison {
-                        comparisonSection(comparison)
+                        ProgressOutcomeSummary(
+                            comparison: comparison,
+                            deltaFont: Theme.Typography.metricLarge,
+                            evidence: comparison.supportingEvidence
+                        )
                     }
 
-                    blocksSection
+                    if !review.latestComparableBlocks.isEmpty {
+                        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+                            SectionHeading(title: "Training blocks")
+                            TrainingBlockTable(review: review, gymNameProvider: gymNameProvider, isCompact: false)
+                        }
+                    }
 
                     if !review.findings.isEmpty {
-                        findingsSection
-                    }
-                }
-                .padding(.vertical, Theme.Spacing.xxl)
-                .padding(.horizontal, Theme.Spacing.lg)
-            }
-        }
-        .navigationTitle("Progress Review")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            StatsPageHeader(
-                eyebrow: "Progress review",
-                title: review.exerciseName,
-                subtitle: "Compares the last two blocks for this lift using actual sets, rep ranges, and session context.",
-                systemImage: "arrow.triangle.2.circlepath"
-            )
-        }
-    }
-
-    @ViewBuilder
-    private func comparisonSection(_ comparison: ExerciseBlockComparison) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Outcome")
-                .font(Theme.Typography.sectionHeader)
-                .foregroundStyle(Theme.Colors.textPrimary)
-
-            VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-                HStack(spacing: Theme.Spacing.sm) {
-                    Text(comparison.outcomeStatus.title)
-                        .font(Theme.Typography.captionBold)
-                        .foregroundStyle(statusColor(for: comparison.outcomeStatus))
-                        .padding(.horizontal, Theme.Spacing.md)
-                        .padding(.vertical, Theme.Spacing.xs)
-                        .background(
-                            Capsule()
-                                .fill(statusColor(for: comparison.outcomeStatus).opacity(0.12))
-                        )
-
-                    Text(comparison.primaryObservedMetric)
-                        .font(Theme.Typography.captionBold)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                }
-
-                Text(comparison.summary)
-                    .font(Theme.Typography.body)
-                    .foregroundStyle(Theme.Colors.textPrimary)
-
-                Text(comparison.deltaLabel)
-                    .font(Theme.Typography.metricLarge)
-                    .foregroundStyle(statusColor(for: comparison.outcomeStatus))
-
-                if !comparison.supportingEvidence.isEmpty {
-                    VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                        Text("Quick Evidence")
-                            .font(Theme.Typography.captionBold)
-                            .foregroundStyle(Theme.Colors.textSecondary)
-                            .textCase(.uppercase)
-                            .tracking(0.8)
-
-                        ForEach(comparison.supportingEvidence, id: \.self) { item in
-                            Text(item)
-                                .font(Theme.Typography.caption)
-                                .foregroundStyle(Theme.Colors.textSecondary)
+                        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                            SectionHeading(title: "Observed changes")
+                            VStack(spacing: 0) {
+                                ForEach(Array(review.findings.enumerated()), id: \.element.id) { index, finding in
+                                    ProgressFindingRow(finding: finding, showsRule: index < review.findings.count - 1)
+                                }
+                            }
                         }
                     }
                 }
-            }
-            .padding(Theme.Spacing.xl)
-            .softCard(elevation: 2)
-        }
-    }
-
-    private var blocksSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Training Blocks")
-                .font(Theme.Typography.sectionHeader)
-                .foregroundStyle(Theme.Colors.textPrimary)
-
-            ForEach(review.latestComparableBlocks) { block in
-                expandedBlockCard(block)
+                .padding(.vertical, Theme.Spacing.xl)
+                .padding(.horizontal, Theme.Layout.screenGutter)
             }
         }
-    }
-
-    private var findingsSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Observed Changes")
-                .font(Theme.Typography.sectionHeader)
-                .foregroundStyle(Theme.Colors.textPrimary)
-
-            ForEach(review.findings) { finding in
-                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                    Text(finding.title)
-                        .font(Theme.Typography.title3)
-                        .foregroundStyle(Theme.Colors.textPrimary)
-                    Text(finding.message)
-                        .font(Theme.Typography.body)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(Theme.Spacing.lg)
-                .softCard(elevation: 1)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func expandedBlockCard(_ block: ExerciseTrainingBlock) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(blockDateLabel(block))
-                        .font(Theme.Typography.title3)
-                        .foregroundStyle(Theme.Colors.textPrimary)
-                    Text(SharedFormatters.count(block.sessionCount, "session"))
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                }
-
-                Spacer()
-
-                Text("Lane \(block.dominantRepLane.label)")
-                    .font(Theme.Typography.captionBold)
-                    .foregroundStyle(Theme.Colors.accent)
-                    .padding(.horizontal, Theme.Spacing.md)
-                    .padding(.vertical, Theme.Spacing.xs)
-                    .background(
-                        Capsule()
-                            .fill(Theme.Colors.accentTint)
-                    )
-            }
-
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: Theme.Spacing.md) {
-                detailMetric(title: "Sessions / Week", value: "\(decimal(block.sessionsPerWeek))")
-                detailMetric(title: "Common Order", value: block.commonOrderBand.label)
-                detailMetric(title: isAssisted ? "Least Assistance" : "Best Weight", value: weightLabel(block.outcome.bestWeight))
-                detailMetric(title: "Median Sets", value: decimal(block.medianSetsPerSession))
-                detailMetric(title: "Median Volume", value: SharedFormatters.volumeWithUnit(block.medianVolumePerSession))
-                detailMetric(title: "Gym", value: resolvedGymLabel(for: block))
-            }
-
-            if let bodyweight = block.medianBodyweight {
-                Text("Median bodyweight during this block: \(decimal(bodyweight)) lb")
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textTertiary)
-            }
-        }
-        .padding(Theme.Spacing.xl)
-        .softCard(elevation: 2)
-    }
-
-    @ViewBuilder
-    private func detailMetric(title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title)
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Colors.textTertiary)
-            Text(value)
-                .font(Theme.Typography.bodyBold)
-                .foregroundStyle(Theme.Colors.textPrimary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(Theme.Spacing.md)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
-                .fill(Theme.Colors.surfaceRaised)
-        )
-    }
-
-    private func statusColor(for status: ExerciseBlockOutcomeStatus) -> Color {
-        switch status {
-        case .improved:
-            return Theme.Colors.success
-        case .flat:
-            return Theme.Colors.accent
-        case .regressed:
-            return Theme.Colors.error
-        case .notComparable:
-            return Theme.Colors.warning
-        }
-    }
-
-    private func resolvedGymLabel(for block: ExerciseTrainingBlock) -> String {
-        if let commonGym = block.commonGym, !commonGym.isEmpty, commonGym != "Unassigned" {
-            return commonGym
-        }
-        if let resolved = gymNameProvider(block.commonGymId) {
-            return resolved
-        }
-        return block.commonGymId == nil ? "Unassigned" : "Deleted gym"
-    }
-
-    private func blockDateLabel(_ block: ExerciseTrainingBlock) -> String {
-        let style = Date.FormatStyle().month(.abbreviated).day().year()
-        let start = block.startDate.formatted(style)
-        let end = block.endDate.formatted(style)
-        return start == end ? start : "\(start) - \(end)"
-    }
-
-    private func weightLabel(_ value: Double) -> String {
-        ExerciseLoad.formatWeight(value, exerciseName: review.exerciseName)
-    }
-
-    private func decimal(_ value: Double) -> String {
-        String(format: "%.1f", value)
+        .navigationTitle("Progress review")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }

@@ -11,9 +11,9 @@ struct WorkoutHealthInsightsView: View {
     @State private var showBloodOxygenSamples = false
     @State private var isLoadingRawSamples = false
     @State private var rawSampleError: String?
-    @State private var heartRateRows: [(Date, String)] = []
-    @State private var hrvRows: [(Date, String)] = []
-    @State private var bloodOxygenRows: [(Date, String)] = []
+    @State private var rawSampleSnapshot = WorkoutRawSampleSnapshot(data: nil)
+    @State private var rawSampleRevision = 0
+    @State private var rawSampleRows = WorkoutRawSampleRows.empty
 
     var body: some View {
         ZStack {
@@ -30,7 +30,7 @@ struct WorkoutHealthInsightsView: View {
                     } else {
                         EmptyStateCard(
                             title: "No health data",
-                            message: "Sync Apple Health for this workout to unlock charts and samples."
+                            message: "Sync Apple Health for this workout."
                         )
                     }
                 }
@@ -39,11 +39,16 @@ struct WorkoutHealthInsightsView: View {
                 .contentColumn()
             }
         }
-        .navigationTitle("Health")
-        .navigationBarTitleDisplayMode(.inline)
-        .onAppear { refreshRawSampleRows() }
-        .onReceive(healthManager.$healthDataStore.dropFirst()) { _ in
-            refreshRawSampleRows()
+        .collapsingTitle("Health")
+        .onReceive(healthManager.$healthDataStore.map { store in
+            WorkoutRawSampleSnapshot(data: store[workout.id])
+        }.removeDuplicates()) { snapshot in
+            guard snapshot != rawSampleSnapshot else { return }
+            rawSampleSnapshot = snapshot
+            rawSampleRevision &+= 1
+        }
+        .task(id: rawSampleRevision) {
+            await refreshRawSampleRows()
         }
     }
 
@@ -59,11 +64,14 @@ struct WorkoutHealthInsightsView: View {
     @ViewBuilder
     private func rawSamplesSection(data: WorkoutHealthData) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            SectionHeading(title: "Raw Samples")
+            SectionHeading(
+                title: "Measurements",
+                help: "Loads the individual heart rate, HRV, blood oxygen, and respiratory readings for this workout from Apple Health."
+            )
 
             if data.heartRateSamples.isEmpty, data.hrvSamples.isEmpty, data.bloodOxygenSamples.isEmpty {
                 VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-                    Text("Raw samples are not cached for this workout.")
+                    Text("Measurements haven’t been loaded for this workout.")
                         .font(Theme.Typography.body)
                         .foregroundStyle(Theme.Colors.textSecondary)
 
@@ -73,29 +81,19 @@ struct WorkoutHealthInsightsView: View {
                         HStack(spacing: Theme.Spacing.sm) {
                             if isLoadingRawSamples {
                                 ProgressView()
-                                    .tint(.white)
+                                    .tint(Theme.Colors.onAccent)
                             } else {
                                 Image(systemName: "waveform.path.ecg")
                                     .font(Theme.Typography.subheadlineStrong)
                             }
 
-                            Text(isLoadingRawSamples ? "Loading Samples" : "Load Raw Samples")
+                            Text(isLoadingRawSamples ? "Loading measurements" : "Load measurements")
                                 .font(Theme.Typography.headline)
-                                .foregroundStyle(.white)
                         }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, Theme.Spacing.md)
-                        .surfaceButtonChrome(
-                            fill: Theme.Colors.accent,
-                            cornerRadius: Theme.CornerRadius.large
-                        )
+                        .frame(maxWidth: .infinity, minHeight: Theme.Layout.primaryControlHeight)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(BrandPrimaryButtonStyle())
                     .disabled(isLoadingRawSamples)
-
-                    Text("This fetches workout-level heart rate, HRV, blood oxygen, and respiratory samples on demand without re-syncing the whole app.")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textTertiary)
 
                     if let rawSampleError {
                         Text(rawSampleError)
@@ -108,7 +106,7 @@ struct WorkoutHealthInsightsView: View {
             } else {
                 if !data.heartRateSamples.isEmpty {
                     Toggle(isOn: $showHeartRateSamples) {
-                        Text("Heart Rate")
+                        Text("Heart rate")
                             .font(Theme.Typography.subheadline)
                             .foregroundStyle(Theme.Colors.textPrimary)
                     }
@@ -116,8 +114,8 @@ struct WorkoutHealthInsightsView: View {
 
                     if showHeartRateSamples {
                         samplesList(
-                            title: "Heart Rate Samples",
-                            rows: heartRateRows
+                            title: "Heart rate readings",
+                            rows: rawSampleRows.heartRate
                         )
                     }
                 }
@@ -132,15 +130,15 @@ struct WorkoutHealthInsightsView: View {
 
                     if showHRVSamples {
                         samplesList(
-                            title: "HRV Samples",
-                            rows: hrvRows
+                            title: "HRV readings",
+                            rows: rawSampleRows.hrv
                         )
                     }
                 }
 
                 if !data.bloodOxygenSamples.isEmpty {
                     Toggle(isOn: $showBloodOxygenSamples) {
-                        Text("Blood Oxygen")
+                        Text("Blood oxygen")
                             .font(Theme.Typography.subheadline)
                             .foregroundStyle(Theme.Colors.textPrimary)
                     }
@@ -148,8 +146,8 @@ struct WorkoutHealthInsightsView: View {
 
                     if showBloodOxygenSamples {
                         samplesList(
-                            title: "Blood Oxygen Samples",
-                            rows: bloodOxygenRows
+                            title: "Blood oxygen readings",
+                            rows: rawSampleRows.bloodOxygen
                         )
                     }
                 }
@@ -197,25 +195,18 @@ struct WorkoutHealthInsightsView: View {
         }
     }
 
-    private func refreshRawSampleRows() {
-        guard let data = healthManager.getHealthData(for: workout.id) else {
-            heartRateRows = []
-            hrvRows = []
-            bloodOxygenRows = []
-            return
+    private func refreshRawSampleRows() async {
+        let snapshot = rawSampleSnapshot
+        let revision = rawSampleRevision
+        let task = Task.detached(priority: .userInitiated) {
+            snapshot.rows()
         }
-
-        heartRateRows = data.heartRateSamples
-            .sorted { $0.timestamp > $1.timestamp }
-            .prefix(40)
-            .map { ($0.timestamp, "\(Int($0.value)) bpm") }
-        hrvRows = data.hrvSamples
-            .sorted { $0.timestamp > $1.timestamp }
-            .prefix(40)
-            .map { ($0.timestamp, "\(Int($0.value)) ms") }
-        bloodOxygenRows = data.bloodOxygenSamples
-            .sorted { $0.timestamp > $1.timestamp }
-            .prefix(40)
-            .map { ($0.timestamp, String(format: "%.1f%%", $0.value)) }
+        let rows = await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+        guard !Task.isCancelled, revision == rawSampleRevision else { return }
+        rawSampleRows = rows
     }
 }

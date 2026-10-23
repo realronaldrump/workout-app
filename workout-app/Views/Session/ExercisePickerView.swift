@@ -17,62 +17,125 @@ struct ExercisePickerView: View {
 
     /// Exercises already in the current workout; shown as added instead of silently no-oping.
     var alreadyAdded: Set<String> = []
+    var allowsMultipleSelection = false
     let onSelect: (String) -> Void
+    @State private var selectedNames: [String] = []
 
     var body: some View {
         NavigationStack {
             List {
+                if allowsMultipleSelection && !selectedNames.isEmpty {
+                    Section {
+                        ForEach(Array(selectedNames.enumerated()), id: \.element) { index, name in
+                            HStack(spacing: Theme.Spacing.md) {
+                                selectionNumber(index + 1)
+                                Text(name)
+                                    .font(Theme.Typography.headline)
+                                    .foregroundStyle(Theme.Colors.textPrimary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                Spacer(minLength: Theme.Spacing.sm)
+                                Button {
+                                    select(name)
+                                } label: {
+                                    Image(systemName: "minus")
+                                        .font(Theme.Typography.subheadlineBold)
+                                        .foregroundStyle(Theme.Colors.textPrimary)
+                                        .frame(width: Theme.Layout.minimumTapTarget, height: Theme.Layout.minimumTapTarget)
+                                        .contentShape(.rect)
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("Remove \(name) from selection")
+                            }
+                            .loadedListRow()
+                        }
+                    } header: {
+                        LoadedListHeader(title: "Adding", detail: "In this order")
+                    }
+                }
+
                 if shouldShowCreateOption {
-                    Section("New Exercise") {
+                    Section {
                         createRow
+                            .loadedListRow()
+                    } header: {
+                        LoadedListHeader(title: "New exercise")
                     }
                 }
 
                 if query.isEmpty {
                     if !recentExercises.isEmpty {
-                        Section("Recent") {
+                        Section {
                             ForEach(recentExercises, id: \.self) { name in
                                 exerciseRow(name)
+                                    .loadedListRow()
                             }
+                        } header: {
+                            LoadedListHeader(title: "Recent")
                         }
                     }
 
                     let favorites = favoriteNamesExcludingRecent
                     if !favorites.isEmpty {
-                        Section("Favorites") {
+                        Section {
                             ForEach(favorites, id: \.self) { name in
                                 exerciseRow(name)
+                                    .loadedListRow()
                             }
+                        } header: {
+                            LoadedListHeader(title: "Favorites")
                         }
                     }
 
-                    Section(recentExercises.isEmpty && favorites.isEmpty ? "All Exercises" : "All Others") {
+                    Section {
                         ForEach(allExercisesExcludingFeatured, id: \.self) { name in
                             exerciseRow(name)
+                                .loadedListRow()
                         }
+                    } header: {
+                        LoadedListHeader(title: recentExercises.isEmpty && favorites.isEmpty ? "All exercises" : "Everything else")
                     }
                 } else if filteredExercises.isEmpty {
                     Section {
                         ContentUnavailableView.search(text: query)
+                            .listRowBackground(Theme.Colors.ground)
                     }
                 } else {
-                    Section("Results") {
+                    Section {
                         ForEach(filteredExercises, id: \.self) { name in
                             exerciseRow(name)
+                                .loadedListRow()
                         }
+                    } header: {
+                        LoadedListHeader(title: "Results", detail: SharedFormatters.count(filteredExercises.count, "match", plural: "matches"))
                     }
                 }
             }
-            .listStyle(.insetGrouped)
-            .scrollContentBackground(.hidden)
-            .background(AdaptiveBackground())
-            .navigationTitle("Add Exercise")
+            .loadedListStyle()
+            .scrollDismissesKeyboard(.interactively)
+            .navigationTitle(allowsMultipleSelection ? "Add exercises" : "Add exercise")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 AppToolbarItem(placement: .cancellationAction) {
                     AppToolbarButton(title: "Close", systemImage: "xmark", variant: .subtle) {
                         dismiss()
                     }
+                }
+            }
+            .safeAreaInset(edge: .bottom) {
+                if allowsMultipleSelection {
+                    VStack(spacing: Theme.Spacing.xs) {
+                        AppPrimaryButton(
+                            title: selectedNames.isEmpty ? "Pick exercises to add" : "Add \(SharedFormatters.count(selectedNames.count, "exercise"))",
+                            isEnabled: !selectedNames.isEmpty
+                        ) {
+                            for name in selectedNames { onSelect(name) }
+                            dismiss()
+                        }
+                    }
+                    .contentColumn(maxWidth: 640)
+                    .padding(.horizontal, Theme.Layout.screenGutter)
+                    .padding(.vertical, Theme.Spacing.sm)
+                    .background(Theme.Colors.ground)
                 }
             }
             .searchable(text: $searchText, prompt: "Search exercises")
@@ -168,18 +231,16 @@ struct ExercisePickerView: View {
         Button {
             select(query)
         } label: {
-            Label {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Create “\(query)”")
-                        .font(Theme.Typography.bodyBold)
-                        .foregroundStyle(Theme.Colors.textPrimary)
-                    Text("Adds it to this workout and your exercise library")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                }
-            } icon: {
-                Image(systemName: "plus.circle.fill")
-                    .foregroundStyle(Theme.Colors.accent)
+            HStack(spacing: Theme.Spacing.md) {
+                Image(systemName: "plus")
+                    .font(Theme.Typography.subheadlineBold)
+                    .foregroundStyle(Theme.Colors.onAccent)
+                    .frame(width: 28, height: 28)
+                    .background(Circle().fill(Theme.Colors.accent))
+                    .accessibilityHidden(true)
+                Text("Create “\(query)”")
+                    .font(Theme.Typography.headline)
+                    .foregroundStyle(Theme.Colors.textPrimary)
             }
             .frame(minHeight: Theme.Layout.minimumTapTarget)
         }
@@ -188,23 +249,32 @@ struct ExercisePickerView: View {
 
     private func exerciseRow(_ name: String) -> some View {
         let isAdded = isAlreadyAdded(name)
+        let isSelected = selectedNames.contains(name)
         return HStack(spacing: Theme.Spacing.sm) {
             Button {
                 select(name)
             } label: {
                 HStack {
                     Text(name)
-                        .font(Theme.Typography.body)
-                        .foregroundStyle(isAdded ? Theme.Colors.textSecondary : Theme.Colors.textPrimary)
+                        .font(Theme.Typography.headline)
+                        .foregroundStyle(isAdded ? Theme.Colors.textTertiary : Theme.Colors.textPrimary)
                         .multilineTextAlignment(.leading)
                     Spacer(minLength: Theme.Spacing.sm)
                     if isAdded {
-                        Label("Added", systemImage: "checkmark")
+                        Text("In workout")
                             .font(Theme.Typography.captionBold)
                             .foregroundStyle(Theme.Colors.success)
+                    } else if let index = selectedNames.firstIndex(of: name) {
+                        selectionNumber(index + 1)
+                    } else if allowsMultipleSelection {
+                        Circle()
+                            .strokeBorder(Theme.Colors.rule, lineWidth: 2)
+                            .frame(width: 28, height: 28)
+                            .accessibilityHidden(true)
                     } else {
                         Image(systemName: "plus")
-                            .foregroundStyle(Theme.Colors.accent)
+                            .font(Theme.Typography.subheadlineBold)
+                            .foregroundStyle(Theme.Colors.textPrimary)
                             .accessibilityHidden(true)
                     }
                 }
@@ -213,14 +283,15 @@ struct ExercisePickerView: View {
             }
             .buttonStyle(.plain)
             .disabled(isAdded)
-            .accessibilityLabel(isAdded ? "\(name), already in this workout" : "Add \(name)")
+            .accessibilityLabel(isAdded ? "\(name), already in this workout" : isSelected ? "Deselect \(name)" : "Add \(name)")
+            .accessibilityAddTraits(isSelected ? .isSelected : [])
 
             Button {
                 toggleFavorite(name)
             } label: {
                 Image(systemName: isFavorite(name) ? "star.fill" : "star")
                     .font(Theme.Typography.callout)
-                    .foregroundStyle(isFavorite(name) ? Theme.Colors.warning : Theme.Colors.textSecondary)
+                    .foregroundStyle(isFavorite(name) ? Theme.Colors.plateYellow : Theme.Colors.decorativeSubtle)
                     .frame(width: Theme.Layout.minimumTapTarget, height: Theme.Layout.minimumTapTarget)
                     .contentShape(.rect)
             }
@@ -233,8 +304,18 @@ struct ExercisePickerView: View {
             } label: {
                 Label(isFavorite(name) ? "Unfavorite" : "Favorite", systemImage: isFavorite(name) ? "star.slash" : "star")
             }
-            .tint(Theme.Colors.warning)
+            .tint(Theme.Colors.plateYellow)
         }
+    }
+
+    /// The order an exercise will be added in, stamped in an ink disc.
+    private func selectionNumber(_ number: Int) -> some View {
+        Text("\(number)")
+            .font(Theme.Typography.captionBold)
+            .foregroundStyle(Theme.Colors.onAccent)
+            .frame(width: 28, height: 28)
+            .background(Circle().fill(Theme.Colors.accent))
+            .accessibilityHidden(true)
     }
 
     private func isAlreadyAdded(_ name: String) -> Bool {
@@ -243,8 +324,19 @@ struct ExercisePickerView: View {
     }
 
     private func select(_ name: String) {
-        onSelect(name)
-        dismiss()
+        guard !isAlreadyAdded(name) else { return }
+        if allowsMultipleSelection {
+            if let index = selectedNames.firstIndex(of: name) {
+                selectedNames.remove(at: index)
+            } else {
+                selectedNames.append(name)
+                if !allExercises.contains(name) { allExercises.append(name); allExercises.sort(by: localizedAscending) }
+            }
+            Haptics.selection()
+        } else {
+            onSelect(name)
+            dismiss()
+        }
     }
 
     private func isFavorite(_ name: String) -> Bool {
@@ -268,7 +360,7 @@ struct ExercisePickerView: View {
         let resolver = relationshipManager.resolverSnapshot()
         let catalogNames = ExerciseMetadataManager.defaultExerciseNames
         let relationshipNames = relationshipManager.relationships.values.flatMap { [$0.exerciseName, $0.parentName] }
-        let dataNames = dataManager.allExerciseNames()
+        let dataNames = dataManager.allExerciseNames() + selectedNames
         allExercises = Array(Set(dataNames + catalogNames + relationshipNames)).sorted(by: localizedAscending)
 
         var seenRecent = Set<String>()

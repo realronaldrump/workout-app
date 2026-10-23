@@ -38,7 +38,6 @@ struct GuideDetailView: View {
                 Text(guide.title)
                     .font(Theme.Typography.cardHeader)
                     .foregroundStyle(Theme.Colors.textPrimary)
-                    .tracking(0.5)
             }
         }
         .overlay {
@@ -107,26 +106,10 @@ struct GuideDetailView: View {
                 .overlay(Theme.Colors.border.opacity(0.3))
 
             VStack(spacing: Theme.Spacing.md) {
-                Image(systemName: isCompleted ? "checkmark.seal.fill" : guide.icon)
-                    .font(Theme.Iconography.feature)
-                    .foregroundStyle(isCompleted ? Theme.Colors.success : guide.iconColor.opacity(0.3))
-
-                Text(isCompleted ? "Guide Completed" : "End of Guide")
+                Text(isCompleted ? "Guide complete" : "End of guide")
                     .font(Theme.Typography.sectionHeader)
                     .foregroundStyle(Theme.Colors.textPrimary)
-                    .tracking(0.8)
 
-                if isCompleted {
-                    Text("You can revisit this guide anytime from your profile.")
-                        .font(Theme.Typography.callout)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                        .multilineTextAlignment(.center)
-                } else {
-                    Text("Mark this guide as complete when you're ready.")
-                        .font(Theme.Typography.callout)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                        .multilineTextAlignment(.center)
-                }
             }
         }
         .frame(maxWidth: .infinity)
@@ -151,18 +134,10 @@ struct GuideDetailView: View {
                     dismiss()
                 } label: {
                     Text("Back")
-                        .font(Theme.Typography.bodyBold)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, Theme.Spacing.md)
-                        .background(Theme.Colors.surfaceRaised)
-                        .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.medium))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                                .strokeBorder(Theme.Colors.border.opacity(0.4), lineWidth: 1)
-                        )
+                        .font(Theme.Typography.headline)
+                        .frame(maxWidth: .infinity, minHeight: Theme.Layout.primaryControlHeight)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(BrandSecondaryButtonStyle())
 
                 if !isCompleted {
                     Button {
@@ -176,16 +151,11 @@ struct GuideDetailView: View {
                             Image(systemName: "checkmark")
                                 .font(Theme.Typography.captionBold)
                             Text("Complete")
-                                .font(Theme.Typography.bodyBold)
+                                .font(Theme.Typography.headline)
                         }
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, Theme.Spacing.md)
-                        .background(Theme.accentGradient)
-                        .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.medium))
-                        .shadow(color: Theme.Colors.accent.opacity(0.2), radius: 8, y: 4)
+                        .frame(maxWidth: .infinity, minHeight: Theme.Layout.primaryControlHeight)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(BrandPrimaryButtonStyle())
                 }
             }
             .padding(.horizontal, Theme.Spacing.lg)
@@ -211,12 +181,11 @@ struct GuideDetailView: View {
                 completionBadge
 
                 VStack(spacing: Theme.Spacing.sm) {
-                    Text("GUIDE COMPLETE")
+                    Text("Guide complete")
                         .font(Theme.Typography.sectionHeader)
                         .foregroundStyle(Theme.Colors.textPrimary)
-                        .tracking(1.5)
 
-                    Text("Nice work! You can revisit this\nguide anytime from your profile.")
+                    Text("Replay it from Feature guides.")
                         .font(Theme.Typography.body)
                         .foregroundStyle(Theme.Colors.textSecondary)
                         .multilineTextAlignment(.center)
@@ -231,7 +200,7 @@ struct GuideDetailView: View {
                 } label: {
                     Text("Done")
                         .font(Theme.Typography.bodyBold)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Theme.Colors.onAccent)
                         .frame(maxWidth: 200)
                         .padding(.vertical, Theme.Spacing.md)
                         .background(Theme.accentGradient)
@@ -261,6 +230,5 @@ struct GuideDetailView: View {
                 .font(Theme.Iconography.featureLarge)
                 .foregroundStyle(Theme.Colors.success)
         }
-        .shadow(color: Theme.Colors.success.opacity(0.15), radius: 16, y: 6)
     }
 }

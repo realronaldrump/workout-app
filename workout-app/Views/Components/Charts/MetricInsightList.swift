@@ -13,13 +13,12 @@ struct MetricInsightList: View {
 
     var body: some View {
         if !insights.isEmpty {
-            VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                 SectionHeading(title: title)
 
-                VStack(spacing: Theme.Spacing.sm) {
+                VStack(spacing: 0) {
                     ForEach(Array(insights.enumerated()), id: \.element.id) { index, insight in
-                        MetricInsightRow(insight: insight, tint: tint)
-                            .staggeredAppear(index: index)
+                        MetricInsightRow(insight: insight, tint: tint, showsRule: index > 0)
                     }
                 }
             }
@@ -31,6 +30,7 @@ struct MetricInsightRow: View {
 
     let insight: MetricInsight
     let tint: Color
+    var showsRule = true
 
     private var toneColor: Color {
         switch insight.tone {
@@ -41,50 +41,32 @@ struct MetricInsightRow: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: Theme.Spacing.md) {
-            Image(systemName: insight.icon)
-                .font(Theme.Iconography.mediumStrong)
-                .foregroundStyle(toneColor)
-                .frame(width: 34, height: 34)
-                .background(
-                    RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
-                        .fill(toneColor.opacity(0.13))
-                )
-                .accessibilityHidden(true)
+        HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.sm) {
+            TintMark(tint: toneColor)
+                .alignmentGuide(.firstTextBaseline) { dimensions in dimensions[.bottom] - 2 }
 
-            VStack(alignment: .leading, spacing: 3) {
-                Text(insight.title)
-                    .font(Theme.Typography.subheadlineBold)
-                    .foregroundStyle(Theme.Colors.textPrimary)
-                    .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(insight.title)
+                        .font(Theme.Typography.headline)
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if insight.id == "coverage" {
+                        AppHelpButton(title: "Missing readings", message: insight.detail)
+                    }
+                }
 
-                Text(insight.detail)
-                    .font(Theme.Typography.footnote)
-                    .foregroundStyle(Theme.Colors.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                if insight.id != "coverage" {
+                    Text(insight.detail)
+                        .font(Theme.Typography.subheadline)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
 
             Spacer(minLength: 0)
         }
-        .padding(Theme.Spacing.md)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
-                .fill(Theme.Colors.cardBackground)
-        )
-        .overlay(alignment: .leading) {
-            UnevenRoundedRectangle(
-                topLeadingRadius: Theme.CornerRadius.large,
-                bottomLeadingRadius: Theme.CornerRadius.large,
-                style: .continuous
-            )
-            .fill(toneColor.opacity(0.85))
-            .frame(width: 3)
-        }
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
-                .strokeBorder(Theme.Colors.border.opacity(0.5), lineWidth: 1)
-        )
-        .accessibilityElement(children: .combine)
+        .ledgerRow(showsRule: showsRule)
+        .accessibilityElement(children: .contain)
     }
 }

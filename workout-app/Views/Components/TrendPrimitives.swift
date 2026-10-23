@@ -34,7 +34,8 @@ nonisolated struct TrendDelta: Hashable, Sendable {
     var label: String {
         guard !isFlat else { return "0%" }
         let rounded = Int(percentChange.rounded())
-        return rounded > 0 ? "+\(rounded)%" : "\(rounded)%"
+        if rounded == 0 { return "0%" }
+        return (rounded > 0 ? "+" : "−") + "\(abs(rounded))%"
     }
 }
 
@@ -59,9 +60,12 @@ struct DeltaTag: View {
         }
         .font(Theme.Typography.caption2Bold)
         .foregroundStyle(tint)
-        .padding(.horizontal, Theme.Spacing.sm)
-        .padding(.vertical, Theme.Spacing.xs)
-        .background(Capsule().fill(tint.opacity(Theme.Opacity.mediumFill)))
+        .padding(.horizontal, 6)
+        .padding(.vertical, 3)
+        .background(
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.tag, style: .continuous)
+                .fill(tint.opacity(Theme.Opacity.mediumFill))
+        )
         .accessibilityElement(children: .combine)
     }
 }
@@ -80,19 +84,13 @@ struct Sparkline: View {
             if points.count >= 2 {
                 if areaFill {
                     areaPath(points: points, size: geometry.size)
-                        .fill(
-                            LinearGradient(
-                                colors: [tint.opacity(0.20), tint.opacity(0.01)],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
+                        .fill(tint.opacity(0.1))
                 }
 
                 linePath(points: points)
                     .stroke(
                         tint,
-                        style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round)
+                        style: StrokeStyle(lineWidth: 1.75, lineCap: .round, lineJoin: .round)
                     )
 
                 if showsEndDot, let last = points.last {
@@ -155,6 +153,7 @@ struct Sparkline: View {
 }
 
 struct InlineStat: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let icon: String
     let value: String
     var label: String? = nil
@@ -170,7 +169,8 @@ struct InlineStat: View {
             Text(value)
                 .font(Theme.Typography.captionStrong)
                 .foregroundStyle(Theme.Colors.textSecondary)
-                .lineLimit(1)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(label ?? value)

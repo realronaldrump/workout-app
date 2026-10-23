@@ -37,8 +37,7 @@ struct RecoveryCoverageDetailView: View {
                 .contentColumn()
             }
         }
-        .navigationTitle("Recovery & Coverage")
-        .navigationBarTitleDisplayMode(.inline)
+        .collapsingTitle("Recovery & coverage")
         .accessibilityIdentifier("recovery-coverage-detail")
         .navigationDestination(item: $selectedHealthMetric) { metric in
             HealthMetricDetailView(metric: metric)
@@ -48,8 +47,7 @@ struct RecoveryCoverageDetailView: View {
     private var headerSection: some View {
         StatsPageHeader(
             eyebrow: "Signals",
-            title: "Recovery & Coverage",
-            subtitle: "How your recovery metrics are moving and how consistently each muscle group gets trained.",
+            title: "Recovery & coverage",
             systemImage: "waveform.path.ecg"
         )
         .padding(.horizontal, Theme.Spacing.lg)
@@ -58,83 +56,25 @@ struct RecoveryCoverageDetailView: View {
     // MARK: - Recovery Signals
 
     private var recoverySignalsSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Recovery Signals")
-                .font(Theme.Typography.sectionHeader)
-                .foregroundColor(Theme.Colors.textPrimary)
-                .tracking(1.0)
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            SectionHeading(
+                title: "Recovery signals",
+                subtitle: "Last 7 days against the 30 days before"
+            )
 
-            VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-                Text("Each row compares your recent 7-day average to the prior 30-day baseline.")
-                    .font(Theme.Typography.caption)
-                    .foregroundColor(Theme.Colors.textSecondary)
-
-                VStack(spacing: Theme.Spacing.md) {
-                    ForEach(engine.recoverySignals) { signal in
-                        AnalysisTile(
-                            role: .navigate,
-                            destination: "\(signal.metric.title) analysis",
-                            accessibilityLabel: "\(signal.metric.title), \(String(format: "%.1f", signal.currentValue)) \(signal.unit)",
-                            action: { selectedHealthMetric = signal.metric },
-                            content: {
-                                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                                    HStack {
-                                        Image(systemName: signal.icon)
-                                            .font(Theme.Typography.subheadlineBold)
-                                            .foregroundColor(Theme.Colors.accentSecondary)
-                                        Text(signal.metric.title)
-                                            .font(Theme.Typography.headline)
-                                            .foregroundColor(Theme.Colors.textPrimary)
-
-                                        Spacer()
-
-                                        Text(String(format: "%+.1f%%", signal.percentChange))
-                                            .font(Theme.Typography.metricLabel)
-                                            .foregroundColor(Theme.Colors.textSecondary)
-                                            .textCase(.uppercase)
-                                            .tracking(0.5)
-                                    }
-
-                                    HStack(spacing: Theme.Spacing.lg) {
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text("Current")
-                                                .font(Theme.Typography.metricLabel)
-                                                .foregroundColor(Theme.Colors.textTertiary)
-                                                .textCase(.uppercase)
-                                            Text(String(format: "%.1f %@", signal.currentValue, signal.unit))
-                                                .font(Theme.Typography.headline)
-                                                .foregroundColor(Theme.Colors.textPrimary)
-                                        }
-
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text("Baseline")
-                                                .font(Theme.Typography.metricLabel)
-                                                .foregroundColor(Theme.Colors.textTertiary)
-                                                .textCase(.uppercase)
-                                            Text(String(format: "%.1f %@", signal.baselineValue, signal.unit))
-                                                .font(Theme.Typography.headline)
-                                                .foregroundColor(Theme.Colors.textSecondary)
-                                        }
-
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text("Deviation")
-                                                .font(Theme.Typography.metricLabel)
-                                                .foregroundColor(Theme.Colors.textTertiary)
-                                                .textCase(.uppercase)
-                                            Text(String(format: "%+.1f%%", signal.percentChange))
-                                                .font(Theme.Typography.headline)
-                                                .foregroundColor(Theme.Colors.textPrimary)
-                                        }
-                                    }
-                                }
-                            }
-                        )
-                        .accessibilityIdentifier("recovery-signal-\(signal.metric.rawValue)")
+            VStack(spacing: 0) {
+                ForEach(Array(engine.recoverySignals.enumerated()), id: \.element.id) { index, signal in
+                    Button {
+                        selectedHealthMetric = signal.metric
+                    } label: {
+                        RecoverySignalRow(signal: signal)
+                            .ledgerRow(showsRule: index > 0)
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityHint("Opens \(signal.metric.title) analysis")
+                    .accessibilityIdentifier("recovery-signal-\(signal.metric.rawValue)")
                 }
             }
-            .padding(Theme.Spacing.lg)
-            .softCard(elevation: 2)
         }
     }
 
@@ -142,17 +82,11 @@ struct RecoveryCoverageDetailView: View {
 
     private var frequencySection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Muscle Group Coverage")
-                .font(Theme.Typography.sectionHeader)
-                .foregroundColor(Theme.Colors.textPrimary)
-                .tracking(1.0)
-
-            Text(
-                "Each bar shows how many active weeks reached at least one effective set for that muscle group. " +
-                    "Primary sets count 1.0, secondary sets count 0.5, and fully excused break weeks are removed."
+            SectionHeading(
+                title: "Muscle group coverage",
+                help: "Weeks with at least one effective set for each muscle group. Primary sets count as 1, "
+                    + "secondary sets as 0.5. Fully excused break weeks are excluded."
             )
-                .font(Theme.Typography.caption)
-                .foregroundColor(Theme.Colors.textSecondary)
 
             TimeRangePillPicker(
                 options: FrequencyInsightWindow.presets,
@@ -164,12 +98,7 @@ struct RecoveryCoverageDetailView: View {
                 if frequencyInsights.isEmpty {
                     EmptyFrequencyWindowState(selectedWindow: selectedFrequencyWindow)
                 } else {
-                    FrequencyCoverageLeaderboard(
-                        insights: frequencyInsights,
-                        highlightedMuscleGroup: nil
-                    )
-                    .padding(Theme.Spacing.lg)
-                    .softCard(elevation: 1)
+                    FrequencyCoverageLeaderboard(insights: frequencyInsights)
                 }
             }
         }
@@ -178,22 +107,55 @@ struct RecoveryCoverageDetailView: View {
     // MARK: - No Data
 
     private var noDataSection: some View {
-        VStack(spacing: Theme.Spacing.md) {
-            Image(systemName: "chart.xyaxis.line")
-                .font(Theme.Iconography.feature)
-                .foregroundColor(Theme.Colors.textTertiary)
-
-            Text("Not enough data yet")
-                .font(Theme.Typography.title3)
-                .foregroundColor(Theme.Colors.textPrimary)
-
-            Text("Sync Apple Health and keep logging tagged workouts to unlock recovery signals and muscle coverage.")
-                .font(Theme.Typography.body)
-                .foregroundColor(Theme.Colors.textSecondary)
-                .multilineTextAlignment(.center)
-        }
-        .padding(Theme.Spacing.xl)
+        EmptyStateCard(
+            title: "Not enough data yet",
+            message: "Sync Apple Health to see recovery signals. Tag exercises with muscle roles to see coverage."
+        )
         .padding(.horizontal, Theme.Spacing.lg)
-        .softCard(elevation: 2)
+    }
+}
+
+/// One recovery metric: this week's average against its baseline, keyed to the metric's hue.
+private struct RecoverySignalRow: View {
+    let signal: RecoverySignal
+
+    var body: some View {
+        HStack(alignment: .center, spacing: Theme.Spacing.md) {
+            TintMark(tint: signal.metric.chartColor, height: 36)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(signal.metric.title)
+                    .font(Theme.Typography.headline)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                Text("Baseline \(BodyFormat.number(signal.baselineValue)) \(signal.unit)")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+            }
+            Spacer(minLength: Theme.Spacing.sm)
+            VStack(alignment: .trailing, spacing: 2) {
+                HStack(alignment: .firstTextBaseline, spacing: 3) {
+                    Text(BodyFormat.number(signal.currentValue))
+                        .font(Theme.Typography.numberSmall)
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                        .monospacedDigit()
+                    Text(signal.unit)
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                }
+                Text(changeText)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .monospacedDigit()
+            }
+            Image(systemName: "chevron.right")
+                .font(Theme.Typography.captionBold)
+                .foregroundStyle(Theme.Colors.textTertiary)
+                .accessibilityHidden(true)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var changeText: String {
+        let change = BodyFormat.signed(signal.percentChange)
+        return change == BodyFormat.number(0) ? "Same as baseline" : change + "%"
     }
 }

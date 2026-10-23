@@ -25,8 +25,8 @@ struct WorkoutHRChart: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text("Heart Rate")
-                .font(Theme.Typography.headline)
+            Text("Heart rate")
+                .font(Theme.Typography.subheadlineStrong)
                 .foregroundStyle(Theme.Colors.textSecondary)
 
             Chart {
@@ -39,15 +39,16 @@ struct WorkoutHRChart: View {
                         yStart: .value("Baseline", domainY.lowerBound),
                         yEnd: .value("BPM", sample.value)
                     )
-                    .foregroundStyle(Theme.Colors.error.opacity(0.16))
-                    .interpolationMethod(.catmullRom)
+                    .foregroundStyle(HealthMetric.restingHeartRate.chartColor.opacity(0.12))
+                    .interpolationMethod(.monotone)
 
                     LineMark(
                         x: .value("Time", sample.timestamp),
                         y: .value("BPM", sample.value)
                     )
-                    .foregroundStyle(Theme.Colors.error)
-                    .interpolationMethod(.catmullRom)
+                    .foregroundStyle(HealthMetric.restingHeartRate.chartColor)
+                    .lineStyle(StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
+                    .interpolationMethod(.monotone)
                 }
             }
             .chartYScale(domain: domainY)

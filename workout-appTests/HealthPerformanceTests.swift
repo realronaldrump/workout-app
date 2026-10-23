@@ -77,30 +77,84 @@ final class HealthPerformanceTests: XCTestCase {
     }
 
     @MainActor
-    func testBodyCompositionLoadPublishesOneAtomicSnapshot() {
-        let calendar = Calendar.current
-        let start = calendar.startOfDay(for: Date())
-        let entries = (0..<30).map { offset in
-            DailyHealthData(
-                dayStart: calendar.date(byAdding: .day, value: offset, to: start) ?? start,
-                bodyMass: 80 + Double(offset) / 10
-            )
+    func testHealthStoreRevisesIndexWhenAnExistingDayChangesWithoutASyncTimestamp() {
+        let healthManager = HealthKitManager()
+        let day = Calendar.current.startOfDay(for: Date())
+        healthManager.dailyHealthStore = [day: DailyHealthData(dayStart: day, steps: 100)]
+        let store = HealthViewStore(healthManager: healthManager, dataManager: WorkoutDataManager())
+        let revision = store.dailyDataRevision
+        let syncDate = store.lastDailySyncDate
+        var emittedIndexedSteps: Double?
+        let subscription = store.$dailyHealthStore.dropFirst().sink { _ in
+            emittedIndexedSteps = store.dailySnapshot.day(on: day)?.steps
         }
-        let range = DateInterval(start: start, end: entries.last?.dayStart ?? start)
-        let model = BodyCompositionViewModel()
-        var changeCount = 0
-        let cancellable = model.objectWillChange.sink { changeCount += 1 }
 
-        model.load(
-            dailyEntries: entries,
-            metricKind: .weight,
-            displayRange: range,
-            reportGranularity: .weekly
-        )
+        healthManager.dailyHealthStore[day] = DailyHealthData(dayStart: day, steps: 250)
+
+        XCTAssertEqual(store.dailyHealthStore.count, 1)
+        XCTAssertEqual(store.lastDailySyncDate, syncDate)
+        XCTAssertGreaterThan(store.dailyDataRevision, revision)
+        XCTAssertEqual(store.dailySnapshot.day(on: day)?.steps, 250)
+        XCTAssertEqual(emittedIndexedSteps, 250, "Subscribers must receive the new index with the cache event")
+        let updatedRevision = store.dailyDataRevision
+        healthManager.dailySyncProgress = 0.8
+        XCTAssertEqual(store.dailyDataRevision, updatedRevision)
+        withExtendedLifetime(subscription) {}
+    }
+
+    @MainActor
+    func testCalendarInvalidationRefreshesHealthWithoutMutatingCachedReadings() {
+        let healthManager = HealthKitManager()
+        let day = Calendar.current.startOfDay(for: Date())
+        healthManager.dailyHealthStore = [day: DailyHealthData(dayStart: day, steps: 100)]
+        let store = HealthViewStore(healthManager: healthManager, dataManager: WorkoutDataManager())
+        _ = store.dailySnapshot
+        let revision = store.dailyDataRevision
+        var changeCount = 0
+        let subscription = store.objectWillChange.sink { changeCount += 1 }
+
+        store.invalidateDailyCalendar()
 
         XCTAssertEqual(changeCount, 1)
-        XCTAssertFalse(model.representativeSeries.isEmpty)
-        withExtendedLifetime(cancellable) {}
+        XCTAssertGreaterThan(store.dailyDataRevision, revision)
+        XCTAssertEqual(store.dailyHealthStore.count, 1)
+        XCTAssertEqual(store.dailySnapshot.day(on: day)?.steps, 100)
+        withExtendedLifetime(subscription) {}
+    }
+
+    @MainActor
+    func testWorkoutHealthSeriesCachesExactStatisticsAndLatestExtremeDates() {
+        let start = Date(timeIntervalSinceReferenceDate: 0)
+        let points = [
+            HealthTrendPoint(date: start.addingTimeInterval(3), value: 20, label: "Test"),
+            HealthTrendPoint(date: start, value: 10, label: "Test"),
+            HealthTrendPoint(date: start.addingTimeInterval(1), value: .nan, label: "Test"),
+            HealthTrendPoint(date: start.addingTimeInterval(2), value: 10, label: "Test")
+        ]
+        let series = HealthMetricSeries(label: "Test", unit: "bpm", color: .red, points: points)
+
+        XCTAssertEqual(series.points.map(\.value), [10, 10, 20])
+        XCTAssertEqual(series.average ?? 0, 40.0 / 3, accuracy: 0.0001)
+        XCTAssertEqual(series.minimumPoint?.date, start.addingTimeInterval(2))
+        XCTAssertEqual(series.maximumPoint?.date, start.addingTimeInterval(3))
+        XCTAssertEqual(series.sparklinePoints.count, 3)
+    }
+
+    func testBodyTrendEngineHandlesTenYearsOfWeighInsQuickly() {
+        let calendar = Calendar.current
+        let start = calendar.startOfDay(for: Date(timeIntervalSinceReferenceDate: 0))
+        let samples = (0..<3_650).map { offset in
+            BodyRawSample(
+                timestamp: calendar.date(byAdding: .day, value: offset, to: start) ?? start,
+                value: 190 + sin(Double(offset) / 30) * 6
+            )
+        }
+        let began = Date()
+        let series = BodyTrendEngine.build(samples: samples, kind: .weight, calendar: calendar)
+
+        XCTAssertEqual(series.readingDayCount, 3_650)
+        XCTAssertNotNil(series.residualSigma)
+        XCTAssertLessThan(Date().timeIntervalSince(began), 1.0)
     }
 
     func testChartPointSamplerCapsMarksAndPreservesExtrema() {

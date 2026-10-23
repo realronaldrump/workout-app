@@ -59,7 +59,7 @@ struct HealthPermissionAuditView: View {
                 .contentColumn()
             }
         }
-        .navigationTitle("Health Permissions")
+        .navigationTitle("Health permissions")
         .navigationBarTitleDisplayMode(.inline)
         .task {
             await loadAudit()
@@ -71,19 +71,14 @@ struct HealthPermissionAuditView: View {
 
     private var headerCard: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Review Health Access")
-                .font(Theme.Typography.sectionHeader)
-                .foregroundStyle(Theme.Colors.textPrimary)
-
-            Text(
-                "Use this when Health metrics are missing or after an app update adds new Apple Health types."
+            SectionHeading(
+                title: "Health access",
+                help: "Apple reports whether an access decision was recorded, not whether each read permission is on. "
+                    + "If readings are missing, review access here, then check the toggles in Apple Health."
             )
-            .font(Theme.Typography.caption)
-            .foregroundStyle(Theme.Colors.textSecondary)
-            .fixedSize(horizontal: false, vertical: true)
 
             AppPrimaryButton(
-                title: isRequestingAuthorization ? "Checking Access…" : "Review Health Access",
+                title: isRequestingAuthorization ? "Checking access…" : "Review Health access",
                 systemImage: isRequestingAuthorization ? nil : "heart.text.square.fill",
                 isEnabled: !isRequestingAuthorization && healthManager.authorizationStatus != .unavailable
             ) {
@@ -95,16 +90,12 @@ struct HealthPermissionAuditView: View {
                     .font(Theme.Typography.caption)
             }
 
-            Button("Open App Settings", systemImage: "gear") {
+            Button("Open Settings", systemImage: "gear") {
                 guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
                 openURL(url)
             }
             .frame(minHeight: Theme.Layout.minimumTapTarget)
 
-            Text("For privacy, Apple only reports whether a decision was recorded—not whether individual read access was granted. Review the toggles in Apple Health if data is still missing.")
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Colors.textTertiary)
-                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(Theme.Spacing.lg)
         .softCard()
@@ -126,14 +117,6 @@ struct HealthPermissionAuditView: View {
                 }
             }
 
-            Text(
-                needsReviewCount == 0
-                    ? "All requested Health types have a recorded authorization decision."
-                    : "\(needsReviewCount) type\(needsReviewCount == 1 ? "" : "s") may need another review in the authorization flow or Health app."
-            )
-            .font(Theme.Typography.caption)
-            .foregroundStyle(Theme.Colors.textSecondary)
-            .fixedSize(horizontal: false, vertical: true)
         }
         .padding(Theme.Spacing.lg)
         .softCard()
@@ -148,7 +131,7 @@ struct HealthPermissionAuditView: View {
         )
 
         summaryMetric(
-            title: "Needs Review",
+            title: "Needs review",
             value: "\(needsReviewCount)",
             tint: needsReviewCount == 0 ? Theme.Colors.success : Theme.Colors.warning
         )
@@ -199,21 +182,17 @@ struct HealthPermissionAuditView: View {
         HStack(alignment: .top, spacing: Theme.Spacing.sm) {
             Image(systemName: statusIcon(for: item.status))
                 .font(Theme.Typography.subheadlineStrong)
-                .foregroundStyle(.white)
+                .foregroundStyle(statusColor(for: item.status))
                 .frame(width: 32, height: 32)
-                .background(statusColor(for: item.status))
-                .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.title)
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Colors.textPrimary)
-                Text(item.summary)
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
+
             }
 
+            AppHelpButton(title: item.title, message: item.summary)
             Spacer(minLength: Theme.Spacing.sm)
 
             Text(statusTitle(for: item.status))
@@ -233,9 +212,6 @@ struct HealthPermissionAuditView: View {
                 Text("Checking Health permissions...")
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Colors.textPrimary)
-                Text("Reviewing each requested HealthKit type.")
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textSecondary)
             }
 
             Spacer()
@@ -263,7 +239,7 @@ struct HealthPermissionAuditView: View {
     private func statusTitle(for status: HealthPermissionAuditItem.Status) -> String {
         switch status {
         case .needsReview:
-            return "Needs Review"
+            return "Needs review"
         case .decisionRecorded:
             return "Recorded"
         case .unavailable:
@@ -312,7 +288,7 @@ struct HealthPermissionAuditView: View {
             do {
                 try await healthManager.requestAuthorization()
                 await loadAudit()
-                actionMessage = "Health access review completed. Check any remaining items marked Needs Review."
+                actionMessage = "Review complete. Check any items still marked Needs review."
             } catch {
                 let message = error.localizedDescription
                 await loadAudit()

@@ -22,7 +22,7 @@ nonisolated enum HistoryDateWindow: CaseIterable, Hashable, Sendable {
 
     var title: String {
         switch self {
-        case .allTime: return "All Time"
+        case .allTime: return "All time"
         case .last30Days: return "30 Days"
         case .last90Days: return "90 Days"
         case .lastYear: return "1 Year"
@@ -31,7 +31,7 @@ nonisolated enum HistoryDateWindow: CaseIterable, Hashable, Sendable {
 
     var summaryLabel: String {
         switch self {
-        case .allTime: return "All-time archive"
+        case .allTime: return "All time"
         case .last30Days: return "Last 30 days"
         case .last90Days: return "Last 90 days"
         case .lastYear: return "Last 12 months"
@@ -126,7 +126,7 @@ nonisolated enum HistoryDurationBand: CaseIterable, Identifiable, Hashable, Send
         case .quick: return "Quick"
         case .standard: return "Standard"
         case .extended: return "Extended"
-        case .longHaul: return "Long Haul"
+        case .longHaul: return "Long haul"
         }
     }
 
@@ -163,6 +163,7 @@ nonisolated struct HistoryLocationBreakdownItem: Identifiable, Hashable, Sendabl
 
 struct HistoryLocationBreakdownSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     let items: [HistoryLocationBreakdownItem]
 
@@ -175,13 +176,16 @@ struct HistoryLocationBreakdownSheet: View {
                     EmptyStateCard(
                         icon: "mappin.slash",
                         tint: Theme.Colors.textTertiary,
-                        title: "No Locations in View",
-                        message: "Adjust the current filters or date window to see location history here."
+                        title: "No locations in view",
+                        message: "Try a different date range or clear filters."
                     )
                 } else {
                     List {
                         ForEach(items) { item in
-                            HStack(alignment: .top, spacing: Theme.Spacing.md) {
+                            let layout = dynamicTypeSize.isAccessibilitySize
+                                ? AnyLayout(VStackLayout(alignment: .leading, spacing: Theme.Spacing.sm))
+                                : AnyLayout(HStackLayout(alignment: .top, spacing: Theme.Spacing.md))
+                            layout {
                                 VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                                     Text(item.option.title)
                                         .font(Theme.Typography.bodyBold)
@@ -199,9 +203,9 @@ struct HistoryLocationBreakdownSheet: View {
                                     }
                                 }
 
-                                Spacer(minLength: Theme.Spacing.sm)
+                                if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: Theme.Spacing.sm) }
 
-                                VStack(alignment: .trailing, spacing: Theme.Spacing.xs) {
+                                VStack(alignment: dynamicTypeSize.isAccessibilitySize ? .leading : .trailing, spacing: Theme.Spacing.xs) {
                                     Text("Last workout")
                                         .font(Theme.Typography.metricLabel)
                                         .foregroundStyle(Theme.Colors.textTertiary)
@@ -209,9 +213,10 @@ struct HistoryLocationBreakdownSheet: View {
                                     Text(item.lastWorkoutDate.formatted(.dateTime.month(.abbreviated).day().year()))
                                         .font(Theme.Typography.captionBold)
                                         .foregroundStyle(Theme.Colors.textPrimary)
-                                        .multilineTextAlignment(.trailing)
+                                        .multilineTextAlignment(dynamicTypeSize.isAccessibilitySize ? .leading : .trailing)
                                 }
                             }
+                            .accessibilityElement(children: .combine)
                             .padding(.vertical, Theme.Spacing.xs)
                             .listRowBackground(Theme.Colors.elevated)
                             .listRowSeparatorTint(Theme.Colors.border)

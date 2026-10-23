@@ -22,20 +22,18 @@ struct FeatureGuidesView: View {
             AdaptiveBackground()
 
             ScrollView {
-                VStack(alignment: .leading, spacing: Theme.Spacing.xxl) {
-                    headerSection
-                        .animateOnAppear(delay: 0)
-
+                VStack(alignment: .leading, spacing: Theme.Spacing.section) {
                     progressSection
-                        .animateOnAppear(delay: 0.05)
 
-                    ForEach(Array(groupedGuides.enumerated()), id: \.element.0) { groupIndex, group in
-                        categorySection(group.0, guides: group.1, startIndex: groupIndex * 3)
+                    ForEach(groupedGuides, id: \.0) { group in
+                        categorySection(group.0, guides: group.1)
                     }
 
                     replayOnboardingSection
                 }
-                .padding(Theme.Spacing.lg)
+                .padding(.horizontal, Theme.Layout.screenGutter)
+                .padding(.top, Theme.Spacing.xs)
+                .padding(.bottom, Theme.Spacing.xxl)
                 .contentColumn()
             }
             .scrollIndicators(.hidden)
@@ -48,245 +46,122 @@ struct FeatureGuidesView: View {
                 hasSeenOnboarding: $hasSeenOnboarding
             )
         }
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                Text("Feature Guides")
-                    .font(Theme.Typography.cardHeader)
-                    .foregroundStyle(Theme.Colors.textPrimary)
-                    .tracking(0.5)
-            }
-        }
-    }
-
-    // MARK: - Header
-
-    private var headerSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text("LEARN THE APP")
-                .font(Theme.Typography.screenTitle)
-                .foregroundStyle(Theme.Colors.textPrimary)
-                .tracking(1.5)
-
-            Text("Interactive guides that walk you through every feature. Explore at your own pace — come back anytime.")
-                .font(Theme.Typography.body)
-                .foregroundStyle(Theme.Colors.textSecondary)
-                .lineSpacing(4)
-        }
+        .navigationTitle("Feature guides")
+        .navigationBarTitleDisplayMode(.large)
     }
 
     // MARK: - Progress
 
+    /// One plate per guide, loaded as each is finished.
     private var progressSection: some View {
         let completed = guideManager.completionCount
         let total = guideManager.totalCount
-        let fraction = total > 0 ? Double(completed) / Double(total) : 0
 
-        return VStack(spacing: Theme.Spacing.md) {
-            HStack {
-                HStack(spacing: Theme.Spacing.sm) {
-                    Image(systemName: "checkmark.seal.fill")
-                        .font(Theme.Typography.footnoteStrong)
-                        .foregroundStyle(completed == total ? Theme.Colors.success : Theme.Colors.accent)
-
-                    Text("\(completed) of \(total) completed")
-                        .font(Theme.Typography.callout)
-                        .foregroundStyle(Theme.Colors.textPrimary)
+        return VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            HStack(alignment: .center, spacing: Theme.Spacing.md) {
+                HStack(spacing: 3) {
+                    ForEach(0..<max(total, 0), id: \.self) { index in
+                        let shape = RoundedRectangle(cornerRadius: 2, style: .continuous)
+                        Group {
+                            if index < completed {
+                                shape.fill(Theme.Colors.ink)
+                            } else {
+                                shape.strokeBorder(Theme.Colors.decorativeSubtle, style: StrokeStyle(lineWidth: 1, dash: [2, 2]))
+                            }
+                        }
+                        .frame(width: 8, height: 26)
+                    }
                 }
+                .animation(reduceMotion ? nil : Theme.Animation.quick, value: completed)
+                .accessibilityHidden(true)
 
-                Spacer()
-
-                if completed == total && total > 0 {
-                    Text("ALL DONE")
-                        .font(Theme.Typography.metricLabel)
-                        .foregroundStyle(Theme.Colors.success)
-                        .tracking(1.0)
-                }
+                Text(completed == total && total > 0 ? "All \(total) done" : "\(completed) of \(total) done")
+                    .font(Theme.Typography.subheadlineStrong)
+                    .foregroundStyle(Theme.Colors.textPrimary)
             }
-
-            // Progress bar
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(Theme.Colors.surfaceRaised)
-
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(
-                            completed == total && total > 0
-                                ? AnyShapeStyle(Theme.successGradient)
-                                : AnyShapeStyle(Theme.accentGradient)
-                        )
-                        .frame(width: max(0, geo.size.width * fraction))
-                        .animation(Theme.Animation.spring, value: fraction)
-                }
-            }
-            .frame(height: 6)
-            .overlay(
-                RoundedRectangle(cornerRadius: 4)
-                    .strokeBorder(Theme.Colors.border.opacity(0.2), lineWidth: 1)
-            )
         }
-        .padding(Theme.Spacing.lg)
-        .softCard()
+        .accessibilityElement(children: .combine)
     }
 
     // MARK: - Category Section
 
-    private func categorySection(_ category: GuideCategory, guides: [FeatureGuide], startIndex: Int) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            categoryLabel(category)
-                .staggeredAppear(index: startIndex, baseDelay: 0.08)
+    private func categorySection(_ category: GuideCategory, guides: [FeatureGuide]) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            SectionHeading(title: category.rawValue)
 
-            VStack(spacing: Theme.Spacing.sm) {
+            VStack(spacing: 0) {
                 ForEach(Array(guides.enumerated()), id: \.element.id) { index, guide in
                     NavigationLink(destination: GuideDetailView(guide: guide)) {
-                        guideCard(guide)
+                        guideRow(guide, showsRule: index > 0)
                     }
-                    .buttonStyle(.plain)
-                    .staggeredAppear(index: startIndex + index + 1, baseDelay: 0.08)
+                    .buttonStyle(PressableCardButtonStyle())
                 }
             }
         }
     }
 
-    private func categoryLabel(_ category: GuideCategory) -> some View {
-        HStack(spacing: Theme.Spacing.sm) {
-            Image(systemName: categoryIcon(category))
-                .font(Theme.Typography.caption)
-                .foregroundStyle(categoryColor(category))
+    // MARK: - Guide Row
 
-            Text(category.rawValue)
-                .font(Theme.Typography.metricLabel)
-                .foregroundStyle(Theme.Colors.textTertiary)
-                .tracking(1.2)
-                .textCase(.uppercase)
-        }
-        .padding(.horizontal, Theme.Spacing.sm)
-    }
-
-    // MARK: - Guide Card
-
-    private func guideCard(_ guide: FeatureGuide) -> some View {
+    private func guideRow(_ guide: FeatureGuide, showsRule: Bool) -> some View {
         let isCompleted = guideManager.isCompleted(guide)
 
-        return HStack(spacing: Theme.Spacing.md) {
-            // Icon
-            ZStack {
-                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                    .fill(guide.iconColor.opacity(0.1))
-                    .frame(width: 52, height: 52)
-
-                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                    .strokeBorder(guide.iconColor.opacity(0.2), lineWidth: 1)
-                    .frame(width: 52, height: 52)
-
-                Image(systemName: guide.icon)
-                    .font(Theme.Iconography.title3Strong)
-                    .foregroundStyle(guide.iconColor)
-            }
-
-            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                HStack(spacing: Theme.Spacing.sm) {
-                    Text(guide.title)
-                        .font(Theme.Typography.bodyBold)
-                        .foregroundStyle(Theme.Colors.textPrimary)
-
-                    if isCompleted {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.Colors.success)
-                    }
-                }
-
+        return HStack(alignment: .center, spacing: Theme.Spacing.md) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(guide.title)
+                    .font(Theme.Typography.title4)
+                    .foregroundStyle(Theme.Colors.textPrimary)
                 Text(guide.subtitle)
-                    .font(Theme.Typography.caption)
+                    .font(Theme.Typography.subheadline)
                     .foregroundStyle(Theme.Colors.textSecondary)
-                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
-            Spacer()
+            Spacer(minLength: Theme.Spacing.sm)
+
+            if isCompleted {
+                TagLabel(text: "Done", tint: Theme.Colors.success)
+            }
 
             Image(systemName: "chevron.right")
-                .font(Theme.Typography.caption2Bold)
+                .font(Theme.Typography.caption)
                 .foregroundStyle(Theme.Colors.textTertiary)
+                .accessibilityHidden(true)
         }
-        .padding(Theme.Spacing.lg)
-        .softCard()
+        .ledgerRow(showsRule: showsRule)
+        .contentShape(.rect)
+        .accessibilityElement(children: .combine)
     }
 
     // MARK: - Replay Onboarding
 
     private var replayOnboardingSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            HStack(spacing: Theme.Spacing.sm) {
-                Image(systemName: "arrow.counterclockwise")
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textTertiary)
-
-                Text("GETTING STARTED")
-                    .font(Theme.Typography.metricLabel)
-                    .foregroundStyle(Theme.Colors.textTertiary)
-                    .tracking(1.2)
-            }
-            .padding(.horizontal, Theme.Spacing.sm)
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            SectionHeading(title: "Getting started")
 
             Button {
                 showingOnboarding = true
             } label: {
-                HStack(spacing: Theme.Spacing.md) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                            .fill(Theme.Colors.accent.opacity(0.1))
-                            .frame(width: 52, height: 52)
-
-                        RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                            .strokeBorder(Theme.Colors.accent.opacity(0.2), lineWidth: 1)
-                            .frame(width: 52, height: 52)
-
-                        Image(systemName: "arrow.counterclockwise.circle.fill")
-                            .font(Theme.Iconography.title3Strong)
-                            .foregroundStyle(Theme.Colors.accent)
-                    }
-
-                    VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                        Text("Replay Onboarding")
-                            .font(Theme.Typography.bodyBold)
+                HStack(alignment: .center, spacing: Theme.Spacing.md) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Replay onboarding")
+                            .font(Theme.Typography.title4)
                             .foregroundStyle(Theme.Colors.textPrimary)
-
-                        Text("Walk through the welcome wizard again")
-                            .font(Theme.Typography.caption)
+                        Text("Go through the welcome steps again")
+                            .font(Theme.Typography.subheadline)
                             .foregroundStyle(Theme.Colors.textSecondary)
-                            .lineLimit(2)
                     }
 
-                    Spacer()
+                    Spacer(minLength: Theme.Spacing.sm)
 
                     Image(systemName: "chevron.right")
-                        .font(Theme.Typography.caption2Bold)
+                        .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.Colors.textTertiary)
+                        .accessibilityHidden(true)
                 }
-                .padding(Theme.Spacing.lg)
-                .softCard()
+                .ledgerRow(showsRule: false)
+                .contentShape(.rect)
             }
-            .buttonStyle(.plain)
-        }
-    }
-
-    // MARK: - Helpers
-
-    private func categoryIcon(_ category: GuideCategory) -> String {
-        switch category {
-        case .essentials: return "star.fill"
-        case .features: return "square.grid.2x2.fill"
-        case .advanced: return "flask.fill"
-        }
-    }
-
-    private func categoryColor(_ category: GuideCategory) -> Color {
-        switch category {
-        case .essentials: return Theme.Colors.accent
-        case .features: return Theme.Colors.accentSecondary
-        case .advanced: return Theme.Colors.accentTertiary
+            .buttonStyle(PressableCardButtonStyle())
         }
     }
 }

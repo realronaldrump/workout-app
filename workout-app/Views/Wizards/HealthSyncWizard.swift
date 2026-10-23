@@ -22,10 +22,10 @@ struct HealthSyncWizard: View {
 
     private var syncSummaryText: String {
         if initialWorkoutTargets.isEmpty {
-            return "Recent workout cache is already covered."
+            return "Recent workouts are already synced."
         }
 
-        return "Recent workouts \(healthManager.syncedWorkoutsCount) / \(initialWorkoutTargets.count)"
+        return "Recent workouts: \(healthManager.syncedWorkoutsCount) of \(initialWorkoutTargets.count)"
     }
 
     var body: some View {
@@ -66,21 +66,21 @@ struct HealthSyncWizard: View {
                 isPresented: $showingCloseConfirmation,
                 titleVisibility: .visible
             ) {
-                Button("Run in Background") {
+                Button("Continue in background") {
                     isPresented = false
                 }
-                Button("Keep Open", role: .cancel) {}
+                Button("Keep open", role: .cancel) {}
             } message: {
                 Text("You can close this screen and sync will continue.")
             }
-            .alert("Health Sync Failed", isPresented: Binding(
+            .alert("Health sync failed", isPresented: Binding(
                 get: { errorMessage != nil },
                 set: { newValue in
                     if !newValue { errorMessage = nil }
                 }
             )) {
                 Button("Close", role: .cancel) { isPresented = false }
-                Button("Retry") {
+                Button("Try again") {
                     errorMessage = nil
                     hasStartedSync = false
                     withAnimation(reduceMotion ? nil : Theme.Animation.spring) {
@@ -88,7 +88,7 @@ struct HealthSyncWizard: View {
                     }
                 }
             } message: {
-                Text(errorMessage ?? "Unknown error")
+                Text(errorMessage ?? "Something went wrong. Try again.")
             }
         }
         .analyticsScreen("HealthSyncWizard", source: source)
@@ -134,19 +134,18 @@ struct HealthSyncWizard: View {
                                 .frame(width: 160, height: 160)
                         )
 
-                    Text("Health Sync")
+                    Text("Health sync")
                         .font(Theme.Typography.title)
                         .foregroundStyle(Theme.Colors.textPrimary)
 
-                    Text("Read-only, on-device, and starts with recent history.")
+                    Text("Sync recent workouts and the past year of daily Health data.")
                         .font(Theme.Typography.body)
                         .foregroundStyle(Theme.Colors.textSecondary)
                         .multilineTextAlignment(.center)
 
                     if skippedOlderWorkoutCount > 0 {
                         Text(
-                            "We start with recent missing workouts and the last year of daily Health history so setup stays fast. " +
-                            "Older history can be backfilled later."
+                            "Sync older workouts later from Settings > Health data."
                         )
                         .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.Colors.textTertiary)
@@ -157,7 +156,7 @@ struct HealthSyncWizard: View {
                 .padding(Theme.Spacing.xl)
             }
 
-            primaryActionButton(title: "Next", fill: Theme.Colors.accent) {
+            primaryActionButton(title: "Next") {
                 withAnimation(reduceMotion ? nil : Theme.Animation.spring) { step = 1 }
             }
             .padding(.horizontal, Theme.Spacing.xl)
@@ -173,10 +172,10 @@ struct HealthSyncWizard: View {
                         .font(Theme.Iconography.wizard)
                         .foregroundStyle(Theme.Colors.accent)
 
-                    Text("Read Access")
+                    Text("Read access")
                         .font(Theme.Typography.title2)
 
-                    Text("Read-only, on-device, private.")
+                    Text("Choose which Health data this app can read. Your Health records won’t be changed.")
                         .font(Theme.Typography.body)
                         .foregroundStyle(Theme.Colors.textSecondary)
                         .multilineTextAlignment(.center)
@@ -186,8 +185,7 @@ struct HealthSyncWizard: View {
             }
 
             primaryActionButton(
-                title: isAuthorizing ? "Waiting for Apple Health…" : "Authorize",
-                fill: Theme.Colors.accent,
+                title: isAuthorizing ? "Waiting for Apple Health…" : "Connect Apple Health",
                 isEnabled: !isAuthorizing,
                 action: requestAuthorization
             )
@@ -200,7 +198,7 @@ struct HealthSyncWizard: View {
         ScrollView {
             VStack(spacing: Theme.Spacing.xl) {
                 ProgressView(value: healthManager.syncProgress) {
-                    Text("Syncing Health Data")
+                    Text("Syncing Health data")
                         .font(Theme.Typography.headline)
                 } currentValueLabel: {
                     Text("\(Int(healthManager.syncProgress * 100))%")
@@ -213,10 +211,6 @@ struct HealthSyncWizard: View {
                 Text(syncSummaryText)
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Colors.textSecondary)
-
-                Text("Daily history covers the last 12 months by default.")
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textTertiary)
 
                 if healthManager.isDailySyncing {
                     Text("Daily Health \(Int(healthManager.dailySyncProgress * 100))%")
@@ -241,10 +235,10 @@ struct HealthSyncWizard: View {
                         .font(Theme.Iconography.wizardHero)
                         .foregroundStyle(Theme.Colors.success)
 
-                    Text(workouts.isEmpty ? "Connected" : "Sync Complete")
+                    Text(workouts.isEmpty ? "Connected" : "Sync complete")
                         .font(Theme.Typography.title)
 
-                    Text(workouts.isEmpty ? "We'll start syncing once you import or log workouts." : "Recent Health data is ready.")
+                    Text(workouts.isEmpty ? "Sync starts once you import or log workouts." : "Recent Health data is ready.")
                         .font(Theme.Typography.body)
                         .foregroundStyle(Theme.Colors.textSecondary)
                         .multilineTextAlignment(.center)
@@ -253,8 +247,7 @@ struct HealthSyncWizard: View {
                         Text(
                             "Skipped \(skippedOlderWorkoutCount) older unsynced "
                                 + "workout\(skippedOlderWorkoutCount == 1 ? "" : "s") "
-                                + "to keep setup fast. Use Health Cache or Health "
-                                + "History in Settings to backfill more."
+                                + "to keep setup fast. Sync them later from Settings > Health data."
                         )
                         .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.Colors.textTertiary)
@@ -265,7 +258,7 @@ struct HealthSyncWizard: View {
                 .padding(Theme.Spacing.xl)
             }
 
-            primaryActionButton(title: "Done", fill: Theme.Colors.success) {
+            primaryActionButton(title: "Done") {
                 isPresented = false
             }
             .padding(.horizontal, Theme.Spacing.xl)
@@ -277,7 +270,6 @@ struct HealthSyncWizard: View {
 
     private func primaryActionButton(
         title: String,
-        fill: Color,
         isEnabled: Bool = true,
         action: @escaping () -> Void
     ) -> some View {
@@ -285,21 +277,15 @@ struct HealthSyncWizard: View {
             HStack(spacing: Theme.Spacing.sm) {
                 if !isEnabled {
                     ProgressView()
-                        .tint(.white)
+                        .tint(Theme.Colors.textSecondary)
                 }
                 Text(title)
                     .font(Theme.Typography.headline)
             }
-            .foregroundStyle(.white)
-            .frame(maxWidth: .infinity, minHeight: Theme.Layout.minimumTapTarget)
-            .surfaceButtonChrome(
-                fill: fill,
-                cornerRadius: Theme.CornerRadius.large
-            )
+            .frame(maxWidth: .infinity, minHeight: Theme.Layout.primaryControlHeight)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(BrandPrimaryButtonStyle())
         .disabled(!isEnabled)
-        .opacity(isEnabled ? 1 : 0.72)
     }
 
     private func requestAuthorization() {

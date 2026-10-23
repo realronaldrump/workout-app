@@ -7,6 +7,7 @@ struct HealthHubView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @EnvironmentObject var healthManager: HealthViewStore
     @EnvironmentObject private var dateRangeContext: HealthDateRangeContext
+    @EnvironmentObject private var bodyStore: BodyStore
 
     @State private var timelineDensity: TimelineDensity = .compact
     @State private var timelineSortOrder: DailyTimelineSortOrder = .newestFirst
@@ -18,7 +19,7 @@ struct HealthHubView: View {
     @State private var operationError: String?
 
     private var earliestDate: Date? {
-        healthManager.dailyHealthStore.keys.min()
+        healthManager.dailySnapshot.earliestDate
     }
 
     private var rangeLabel: String {
@@ -49,8 +50,8 @@ struct HealthHubView: View {
 
     private var headerSubtitle: String {
         let dayCount = cachedDailyData.count
-        let countLabel = dayCount == 1 ? "1 day with data" : "\(dayCount) days with data"
-        return "\(rangeLabel) • \(countLabel)"
+        let countLabel = dayCount == 1 ? "1 day of data" : "\(dayCount) days of data"
+        return "\(rangeLabel). \(countLabel)."
     }
 
     private var headlineInsight: String? {
@@ -60,11 +61,12 @@ struct HealthHubView: View {
                 abs($0.delta?.percentChange ?? 0) < abs($1.delta?.percentChange ?? 0)
             }),
             let delta = card.delta else { return nil }
-        let direction = delta.isFlat ? "held steady" : (delta.percentChange > 0 ? "rose" : "fell")
         let change = Int(abs(delta.percentChange).rounded())
-        let changeText = delta.isFlat ? "" : " \(change)%"
         let unit = card.unit.isEmpty ? "" : " \(card.unit)"
-        return "\(card.metric.title) averaged \(card.value)\(unit) — \(direction)\(changeText) vs the prior period."
+        let comparison = delta.isFlat
+            ? "level with the prior period"
+            : "\(change)% \(delta.percentChange > 0 ? "higher" : "lower") than the prior period"
+        return "Biggest change: \(card.metric.narrativeNoun) averaged \(card.value)\(unit), \(comparison)."
     }
 
     var body: some View {
@@ -72,17 +74,16 @@ struct HealthHubView: View {
             AdaptiveBackground()
 
             ScrollView(showsIndicators: false) {
-                LazyVStack(alignment: .leading, spacing: Theme.Spacing.xxl) {
-                    if healthManager.authorizationStatus == .authorized {
-                        headerSection
-                    }
-
+                LazyVStack(alignment: .leading, spacing: Theme.Spacing.section) {
                     if healthManager.authorizationStatus == .unavailable {
                         unavailableCard
                     } else if healthManager.authorizationStatus != .authorized {
                         accessCard
                     } else {
-                        timeRangeSection
+                        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+                            timeRangeSection
+                            headerSection
+                        }
 
                         if let error = operationError ?? healthManager.syncError {
                             syncErrorCard(error)
@@ -103,10 +104,14 @@ struct HealthHubView: View {
                         }
                     }
                 }
-                .padding(.vertical, Theme.Spacing.xxl)
-                .padding(.horizontal, Theme.Spacing.lg)
+                .padding(.top, Theme.Spacing.sm)
+                .padding(.bottom, Theme.Spacing.xxl)
+                .padding(.horizontal, Theme.Layout.screenGutter)
                 .contentColumn()
             }
+        }
+        .refreshable {
+            await catchUpRecentHealthData(force: true)
         }
         .navigationTitle("Health")
         .navigationBarTitleDisplayMode(.large)
@@ -116,6 +121,7 @@ struct HealthHubView: View {
         .onAppear {
             healthManager.refreshAuthorizationStatus()
             refreshCachedContent()
+            if !bodyStore.hasLoaded { bodyStore.refresh(from: healthManager) }
         }
         .task {
             await catchUpRecentHealthData()
@@ -130,135 +136,115 @@ struct HealthHubView: View {
                 refreshCachedContent()
             }
         }
+        .onChange(of: healthManager.dailyDataRevision) { _, _ in
+            refreshCachedContent()
+        }
         .onChange(of: timelineSortOrder) { _, _ in
             refreshTimelineRows()
-        }
-        .onReceive(
-            healthManager.$dailyHealthStore
-                .dropFirst()
-                .debounce(for: .milliseconds(100), scheduler: RunLoop.main)
-        ) { store in
-            refreshCachedContent(from: store)
         }
     }
 
     private var headerSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+        VStack(alignment: .leading, spacing: 2) {
             Text(headerSubtitle)
-                .font(Theme.Typography.body)
+                .font(Theme.Typography.subheadline)
                 .foregroundStyle(Theme.Colors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
 
             syncStatusRow
         }
     }
 
     private var syncStatusRow: some View {
-        HStack(spacing: Theme.Spacing.sm) {
-            if isCatchUpSyncing || healthManager.isDailySyncing {
-                ProgressView()
-                Text("Syncing recent Health data…")
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textSecondary)
-            } else if let lastSync = healthManager.lastDailySyncDate {
-                Text("Last sync \(formatSyncDate(lastSync))")
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textSecondary)
-
-                Spacer(minLength: Theme.Spacing.xs)
-
-                Button("Sync now", systemImage: "arrow.clockwise") {
-                    Task { await catchUpRecentHealthData(force: true) }
-                }
-                .font(Theme.Typography.captionBold)
-                .frame(minHeight: Theme.Layout.minimumTapTarget)
-            } else {
-                Button("Sync Health", systemImage: "arrow.clockwise") {
-                    Task { await catchUpRecentHealthData(force: true) }
-                }
-                .font(Theme.Typography.captionBold)
-                .frame(minHeight: Theme.Layout.minimumTapTarget)
-            }
+        (dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: Theme.Spacing.xs))
+            : AnyLayout(HStackLayout(spacing: Theme.Spacing.sm))) {
+            syncStatusContent
         }
     }
 
-    private var timeRangeSection: some View {
-        HealthDateRangeSection(earliestDate: earliestDate)
-            .padding(.horizontal, Theme.Spacing.xs)
-    }
-
-    private var summarySection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            SectionHeading(title: "Overview")
-
-            if let headlineInsight {
-                Text(headlineInsight)
-                    .font(Theme.Typography.caption)
+    @ViewBuilder
+    private var syncStatusContent: some View {
+        if isCatchUpSyncing || healthManager.isDailySyncing {
+            HStack(spacing: Theme.Spacing.sm) {
+                ProgressView()
+                    .controlSize(.small)
+                Text("Syncing recent Health data")
+                    .font(Theme.Typography.subheadline)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+            }
+            .frame(minHeight: Theme.Layout.minimumTapTarget)
+        } else {
+            if let lastSync = healthManager.lastDailySyncDate {
+                Text("Synced \(formatSyncDate(lastSync))")
+                    .font(Theme.Typography.subheadline)
                     .foregroundStyle(Theme.Colors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: Theme.Spacing.md) {
-                    ForEach(cachedSummaryCards) { card in
-                        MetricTileButton(
-                            action: {
-                                selectedMetric = card.metric
-                            },
-                            content: {
-                                HealthSummaryCard(model: card)
-                            }
-                        )
-                        .accessibilityIdentifier("health-summary-\(card.metric.rawValue)")
+            Button {
+                Task { await catchUpRecentHealthData(force: true) }
+            } label: {
+                TextLinkLabel(title: "Sync now", showsChevron: false)
+                    .underline()
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private var timeRangeSection: some View {
+        HealthDateRangeSection(earliestDate: earliestDate, showsResolvedLabel: false)
+    }
+
+    private var summarySection: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            SectionHeading(title: "Readings", subtitle: "Daily averages for the range")
+
+            if let headlineInsight {
+                Text(headlineInsight)
+                    .font(Theme.Typography.callout)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.bottom, Theme.Spacing.xs)
+            }
+
+            VStack(spacing: 0) {
+                ForEach(Array(cachedSummaryCards.enumerated()), id: \.element.id) { index, card in
+                    Button {
+                        Haptics.selection()
+                        selectedMetric = card.metric
+                    } label: {
+                        HealthReadingRow(model: card, showsRule: index > 0 || headlineInsight != nil)
                     }
+                    .buttonStyle(PressableCardButtonStyle())
+                    .accessibilityIdentifier("health-summary-\(card.metric.rawValue)")
                 }
             }
         }
     }
 
     private var dailyTimelineSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            HStack {
-                Text("Daily Timeline")
-                    .font(Theme.Typography.sectionHeader2)
-                    .foregroundStyle(Theme.Colors.textPrimary)
-
-                Spacer()
-
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            SectionHeading(title: "Day by day", subtitle: timelineSummaryText) {
                 timelineSortMenu
-
-                if canShowLessTimeline {
-                    Button("Show Less") {
-                        withAnimation(reduceMotion ? nil : Theme.Animation.smooth) {
-                            timelineDensity = .compact
-                        }
-                    }
-                    .font(Theme.Typography.metricLabel)
-                    .foregroundStyle(Theme.Colors.accent)
-                }
             }
 
-            if let timelineSummaryText {
-                Text(timelineSummaryText)
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textTertiary)
-            }
-
-            LazyVStack(spacing: Theme.Spacing.md) {
-                ForEach(timelinePresentation.rows) { row in
+            LazyVStack(spacing: 0) {
+                ForEach(Array(timelinePresentation.rows.enumerated()), id: \.element.id) { index, row in
                     NavigationLink {
                         DailyHealthDetailView(day: row.day)
                     } label: {
-                        DailyTimelineRow(model: row)
+                        DailyTimelineRow(model: row, showsRule: index > 0)
                             .equatable()
                     }
                     .buttonStyle(PressableCardButtonStyle())
                 }
             }
 
-            if canShowMoreTimeline || canShowAllTimeline {
-                HStack(spacing: Theme.Spacing.md) {
+            if canShowMoreTimeline || canShowAllTimeline || canShowLessTimeline {
+                HStack(spacing: Theme.Spacing.sm) {
                     if canShowMoreTimeline {
-                        Button("Show More") {
+                        AppPillButton(title: "Show more") {
                             withAnimation(reduceMotion ? nil : Theme.Animation.smooth) {
                                 timelineDensity = .expanded
                             }
@@ -266,40 +252,44 @@ struct HealthHubView: View {
                     }
 
                     if canShowAllTimeline {
-                        Button("Show All") {
+                        AppPillButton(title: "Show all") {
                             withAnimation(reduceMotion ? nil : Theme.Animation.smooth) {
                                 timelineDensity = .all
                             }
                         }
                     }
+
+                    if canShowLessTimeline {
+                        AppPillButton(title: "Show less", variant: .subtle) {
+                            withAnimation(reduceMotion ? nil : Theme.Animation.smooth) {
+                                timelineDensity = .compact
+                            }
+                        }
+                    }
                 }
-                .font(Theme.Typography.metricLabel)
-                .foregroundStyle(Theme.Colors.accent)
-                .textCase(.uppercase)
-                .tracking(0.8)
+                .padding(.top, Theme.Spacing.sm)
             }
         }
     }
 
     private var timelineSortMenu: some View {
         Menu {
-            Picker("Timeline Sort", selection: $timelineSortOrder) {
+            Picker("Timeline sort", selection: $timelineSortOrder) {
                 ForEach(DailyTimelineSortOrder.allCases) { order in
                     Label(order.title, systemImage: order.icon)
                         .tag(order)
                 }
             }
         } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "arrow.up.arrow.down")
-                    .font(Theme.Typography.captionBold)
-                    .foregroundStyle(Theme.Colors.accent)
+            HStack(spacing: 4) {
                 Text(timelineSortOrder.shortTitle)
-                    .font(Theme.Typography.captionBold)
-                    .foregroundStyle(Theme.Colors.textPrimary)
+                    .font(Theme.Typography.subheadlineStrong)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(Theme.Typography.microLabel)
             }
-            .padding(.horizontal, Theme.Spacing.sm)
+            .foregroundStyle(Theme.Colors.textPrimary)
             .frame(minHeight: Theme.Layout.minimumTapTarget)
+            .contentShape(.rect)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Sort daily timeline")
@@ -307,29 +297,25 @@ struct HealthHubView: View {
     }
 
     private var categorySection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            SectionHeading(title: "Explore Health")
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            SectionHeading(title: "Categories")
 
-            LazyVGrid(
-                columns: [
-                    GridItem(
-                        .adaptive(minimum: dynamicTypeSize.isAccessibilitySize ? 280 : 150),
-                        spacing: Theme.Spacing.md
-                    )
-                ],
-                spacing: Theme.Spacing.md
-            ) {
-                ForEach(HealthHubCategory.allCases) { category in
+            VStack(spacing: 0) {
+                ForEach(Array(HealthHubCategory.allCases.enumerated()), id: \.element.id) { index, category in
                     NavigationLink {
                         if category == .sessions {
                             HealthDashboardView()
                         } else if category == .body {
-                            BodyCompositionView()
+                            BodyView()
                         } else {
                             HealthCategoryDetailView(category: category)
                         }
                     } label: {
-                        HealthCategoryCard(category: category)
+                        HealthCategoryRow(
+                            category: category,
+                            value: category == .body ? bodyStore.weight.latest.map { BodyFormat.weight($0.trend) } : nil,
+                            showsRule: index > 0
+                        )
                     }
                     .buttonStyle(PressableCardButtonStyle())
                     .accessibilityIdentifier("health-category-\(category.rawValue)")
@@ -339,15 +325,19 @@ struct HealthHubView: View {
     }
 
     private var accessCard: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text(healthManager.authorizationStatus == .denied ? "Review Apple Health Access" : "Connect Apple Health")
-                .font(Theme.Typography.title3)
-                .foregroundStyle(Theme.Colors.textPrimary)
+        VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                Text(healthManager.authorizationStatus == .denied ? "Health access is off." : "Apple Health isn't connected.")
+                    .font(Theme.Typography.displayHeroCompact)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityAddTraits(.isHeader)
 
-            Text(accessDescription)
-                .font(Theme.Typography.body)
-                .foregroundStyle(Theme.Colors.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
+                Text(accessDescription)
+                    .font(Theme.Typography.body)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             if healthManager.authorizationStatus == .denied {
                 AppPrimaryButton(title: "Open Settings", systemImage: "gear") {
@@ -355,21 +345,23 @@ struct HealthHubView: View {
                     openURL(url)
                 }
 
-                Button("Try Health Access Again", systemImage: "arrow.clockwise") {
+                Button {
                     Task { await connectAndSync() }
+                } label: {
+                    Text("Request access again")
+                        .font(Theme.Typography.headline)
+                        .frame(maxWidth: .infinity, minHeight: 52)
                 }
-                .frame(minHeight: Theme.Layout.minimumTapTarget)
+                .buttonStyle(BrandSecondaryButtonStyle())
             } else {
                 AppPrimaryButton(
-                    title: dynamicTypeSize.isAccessibilitySize ? "Connect Health" : "Connect Apple Health",
-                    systemImage: "heart.fill"
+                    title: dynamicTypeSize.isAccessibilitySize ? "Connect Health" : "Connect Apple Health"
                 ) {
                     Task { await connectAndSync() }
                 }
             }
         }
-        .padding(dynamicTypeSize.isAccessibilitySize ? Theme.Spacing.lg : Theme.Spacing.xl)
-        .softCard(elevation: 1)
+        .padding(.top, Theme.Spacing.lg)
     }
 
     private var accessDescription: String {
@@ -380,51 +372,47 @@ struct HealthHubView: View {
         }
 
         return dynamicTypeSize.isAccessibilitySize
-            ? "See health and recovery trends. Your data stays on device."
-            : "See activity, sleep, vitals, body measurements, and recovery trends in one place. Your Health data stays on your devices."
+            ? "See sleep, heart, and body trends next to your training. Your data stays on device."
+            : "See sleep, heart, activity, and body trends next to your training. Your Health data stays on your devices."
     }
 
     private var unavailableCard: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Health Data Unavailable")
-                .font(Theme.Typography.title3)
-                .foregroundStyle(Theme.Colors.textPrimary)
-
-            Text("Apple Health isn’t available on this device.")
-                .font(Theme.Typography.body)
-                .foregroundStyle(Theme.Colors.textSecondary)
-        }
-        .padding(Theme.Spacing.xl)
-        .softCard(elevation: 1)
+        EmptyStateCard(
+            title: "Apple Health isn't available here",
+            message: "This device doesn't support Apple Health, so sleep, heart, and body readings can't appear."
+        )
     }
 
     private var emptyState: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text("No health data yet")
-                .font(Theme.Typography.title3)
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            Text(healthManager.dailyHealthStore.isEmpty ? "No readings yet" : "No readings in this range")
+                .font(Theme.Typography.sectionHeader2)
                 .foregroundStyle(Theme.Colors.textPrimary)
+                .accessibilityAddTraits(.isHeader)
 
-            Text("Sync recent Apple Health data to see daily activity, sleep, vitals, and recovery trends.")
+            Text(healthManager.dailyHealthStore.isEmpty
+                 ? "Sync Apple Health to see daily activity, sleep, vitals, and recovery. Only data you allow appears."
+                 : "Your saved Health data falls outside these dates. View all time or pick another range.")
                 .font(Theme.Typography.body)
                 .foregroundStyle(Theme.Colors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
 
-            Button {
-                Task { await catchUpRecentHealthData(force: true) }
-            } label: {
-                HStack(spacing: Theme.Spacing.xs) {
-                    Image(systemName: "arrow.clockwise")
-                    Text("Sync Now")
-                        .tracking(0.8)
+            AppPillButton(
+                title: healthManager.dailyHealthStore.isEmpty ? "Sync now" : "View all time",
+                systemImage: healthManager.dailyHealthStore.isEmpty ? "arrow.clockwise" : "calendar",
+                variant: .accent
+            ) {
+                if healthManager.dailyHealthStore.isEmpty {
+                    Task { await catchUpRecentHealthData(force: true) }
+                } else {
+                    dateRangeContext.selectedRange = .allTime
                 }
-                .font(Theme.Typography.metricLabel)
-                .textCase(.uppercase)
-                .foregroundStyle(Theme.Colors.accent)
             }
-            .padding(.top, Theme.Spacing.xs)
-            .frame(minHeight: Theme.Layout.minimumTapTarget)
+            .disabled(isCatchUpSyncing || healthManager.isDailySyncing)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Theme.Spacing.xl)
-        .softCard(elevation: 1)
+        .softCard()
     }
 
     private func connectAndSync() async {
@@ -476,34 +464,31 @@ struct HealthHubView: View {
 
     private func syncErrorCard(_ message: String) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Label("Health Sync Needs Attention", systemImage: "exclamationmark.triangle.fill")
+            Text("Health sync stopped")
                 .font(Theme.Typography.headline)
                 .foregroundStyle(Theme.Colors.error)
 
             Text(message)
-                .font(Theme.Typography.caption)
+                .font(Theme.Typography.subheadline)
                 .foregroundStyle(Theme.Colors.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            HStack {
-                Button("Try Again", systemImage: "arrow.clockwise") {
+            HStack(spacing: Theme.Spacing.sm) {
+                AppPillButton(title: "Try again", systemImage: "arrow.clockwise", variant: .accent) {
                     operationError = nil
                     healthManager.clearSyncError()
                     Task { await catchUpRecentHealthData(force: true) }
                 }
 
-                Spacer()
-
-                Button("Dismiss") {
+                AppPillButton(title: "Dismiss", variant: .subtle) {
                     operationError = nil
                     healthManager.clearSyncError()
                 }
             }
-            .font(Theme.Typography.captionBold)
-            .frame(minHeight: Theme.Layout.minimumTapTarget)
         }
         .padding(Theme.Spacing.lg)
-        .background(Theme.Colors.error.opacity(0.08), in: RoundedRectangle(cornerRadius: Theme.CornerRadius.large))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .tintedSection(Theme.Colors.error)
     }
 
     private func buildSummaryCards(
@@ -515,11 +500,11 @@ struct HealthHubView: View {
         // screen. Hardcoding them meant sleep read orange on this screen and violet on
         // its own.
         let configurations: [HealthSummaryConfiguration] = [
-            HealthSummaryConfiguration(metric: .steps, title: "Avg Steps", tint: HealthMetric.steps.accentColor, higherIsBetter: true),
-            HealthSummaryConfiguration(metric: .sleep, title: "Avg Sleep", tint: HealthMetric.sleep.accentColor, higherIsBetter: true),
-            HealthSummaryConfiguration(metric: .restingHeartRate, title: "Resting HR", tint: HealthMetric.restingHeartRate.accentColor, higherIsBetter: false),
-            HealthSummaryConfiguration(metric: .heartRateVariability, title: "Avg HRV", tint: HealthMetric.heartRateVariability.accentColor, higherIsBetter: true),
-            HealthSummaryConfiguration(metric: .activeEnergy, title: "Active Energy", tint: HealthMetric.activeEnergy.accentColor, higherIsBetter: true)
+            HealthSummaryConfiguration(metric: .sleep, title: "Sleep", tint: HealthMetric.sleep.accentColor, higherIsBetter: true),
+            HealthSummaryConfiguration(metric: .restingHeartRate, title: "Resting heart rate", tint: HealthMetric.restingHeartRate.accentColor, higherIsBetter: false),
+            HealthSummaryConfiguration(metric: .heartRateVariability, title: "HRV", tint: HealthMetric.heartRateVariability.accentColor, higherIsBetter: true),
+            HealthSummaryConfiguration(metric: .steps, title: "Steps", tint: HealthMetric.steps.accentColor, higherIsBetter: true),
+            HealthSummaryConfiguration(metric: .activeEnergy, title: "Active energy", tint: HealthMetric.activeEnergy.accentColor, higherIsBetter: true)
         ]
 
         return configurations.compactMap { configuration in
@@ -563,32 +548,18 @@ struct HealthHubView: View {
         HealthHubFormatters.mediumDateTime.string(from: date)
     }
 
-    private func refreshCachedContent(from emittedStore: [Date: DailyHealthData]? = nil) {
-        let store = emittedStore ?? healthManager.dailyHealthStore
-        let resolvedRange = dateRangeContext.resolvedRange(earliest: store.keys.min())
+    private func refreshCachedContent() {
+        let snapshot = healthManager.dailySnapshot
+        let resolvedRange = dateRangeContext.resolvedRange(earliest: snapshot.earliestDate)
         let ranges = HealthDayComparisonRanges(
             resolvedRange: resolvedRange,
             comparesPreviousPeriod: dateRangeContext.selectedRange != .allTime
         )
-        var filtered: [DailyHealthData] = []
-        var currentComparison: [DailyHealthData] = []
-        var previous: [DailyHealthData] = []
-
-        for day in store.values {
-            let dayStart = Calendar.current.startOfDay(for: day.dayStart)
-            if ranges.display.contains(dayStart) {
-                filtered.append(day)
-            }
-            if ranges.currentComparison?.contains(dayStart) == true {
-                currentComparison.append(day)
-            } else if ranges.previousComparison?.contains(dayStart) == true {
-                previous.append(day)
-            }
-        }
-
-        filtered.sort { $0.dayStart < $1.dayStart }
-        currentComparison.sort { $0.dayStart < $1.dayStart }
-        previous.sort { $0.dayStart < $1.dayStart }
+        // The shared index already orders the cache. A one-week selection now
+        // visits only those days instead of sorting and normalizing all history.
+        let filtered = Array(snapshot.days(in: ranges.display))
+        let currentComparison = ranges.currentComparison.map { Array(snapshot.days(in: $0)) } ?? []
+        let previous = ranges.previousComparison.map { Array(snapshot.days(in: $0)) } ?? []
         cachedDailyData = filtered
         cachedSummaryCards = buildSummaryCards(
             from: currentComparison,
@@ -705,94 +676,96 @@ private struct DailyTimelinePresentation {
     }
 }
 
-private struct HealthSummaryCard: View {
+/// One reading on the board: its name and change on the left, the period's shape in
+/// its own hue, and the average at poster scale on the right.
+private struct HealthReadingRow: View {
     let model: HealthSummaryCardModel
+    var showsRule = true
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            HStack(spacing: Theme.Spacing.xs) {
-                Image(systemName: model.icon)
-                    .font(Theme.Iconography.medium)
-                    .foregroundStyle(model.tint)
-                    .frame(width: 26, height: 26)
-                    .background(
-                        Circle()
-                            .fill(model.tint.opacity(Theme.Opacity.subtleFill))
-                    )
-                Text(model.title)
-                    .font(Theme.Typography.metricLabel)
-                    .foregroundStyle(Theme.Colors.textSecondary)
-                    .textCase(.uppercase)
-                    .tracking(0.8)
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: Theme.Spacing.sm))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: Theme.Spacing.md))
+        layout {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: Theme.Spacing.sm) {
+                    RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                        .fill(model.tint)
+                        .frame(width: 4, height: 16)
+                        .accessibilityHidden(true)
+                    Text(model.title)
+                        .font(Theme.Typography.headline)
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                        .lineLimit(2)
+                }
+                if let delta = model.delta {
+                    DeltaTag(delta: delta, suffix: "vs prior")
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if !dynamicTypeSize.isAccessibilitySize {
+                Sparkline(values: model.sparklineValues, tint: model.tint, areaFill: false)
+                    .frame(width: 72, height: 30)
             }
 
-            HStack(alignment: .lastTextBaseline, spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
                 Text(model.value)
                     .font(Theme.Typography.number)
                     .foregroundStyle(Theme.Colors.textPrimary)
-
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
                 Text(model.unit)
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textTertiary)
+                    .foregroundStyle(Theme.Colors.textSecondary)
             }
-
-            if let delta = model.delta {
-                DeltaTag(delta: delta, suffix: "vs prior")
-            }
-
-            Sparkline(values: model.sparklineValues, tint: model.tint)
-                .frame(height: 34)
+            .frame(minWidth: 96, alignment: .trailing)
         }
-        .padding(Theme.Spacing.md)
-        .frame(width: dynamicTypeSize.isAccessibilitySize ? 240 : 168, alignment: .leading)
-        .softCard(elevation: 1)
-        .overlay(alignment: .top) {
-            UnevenRoundedRectangle(
-                topLeadingRadius: Theme.CornerRadius.large,
-                topTrailingRadius: Theme.CornerRadius.large
-            )
-            .fill(model.tint)
-            .frame(height: 3)
-        }
+        .ledgerRow(showsRule: showsRule)
+        .accessibilityElement(children: .combine)
     }
 }
 
-private struct HealthCategoryCard: View {
+/// A Health category in the index: its name in the display face and what it holds.
+private struct HealthCategoryRow: View {
     let category: HealthHubCategory
+    /// A live reading shown at the trailing edge, such as trend weight on the Body row.
+    var value: String?
+    var showsRule = true
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            HStack(alignment: .top) {
-                IconTile(systemImage: category.icon, tint: category.tint, size: 40)
-                Spacer()
+        HStack(spacing: Theme.Spacing.md) {
+            RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                .fill(category.tint)
+                .frame(width: 4, height: 34)
+                .accessibilityHidden(true)
 
-                Image(systemName: "arrow.up.right")
-                    .font(Theme.Typography.caption2Bold)
-                    .foregroundStyle(Theme.Colors.textTertiary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(category.title)
+                    .font(Theme.Typography.cardHeader)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                Text(category.subtitle)
+                    .font(Theme.Typography.subheadline)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
-            Text(category.title)
-                .font(Theme.Typography.cardHeader)
-                .foregroundStyle(Theme.Colors.textPrimary)
+            Spacer(minLength: Theme.Spacing.sm)
 
-            Text(category.subtitle)
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Colors.textSecondary)
+            if let value {
+                Text(value)
+                    .font(Theme.Typography.numberSmall)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+            }
+
+            Image(systemName: "chevron.right")
+                .font(Theme.Typography.captionBold)
+                .foregroundStyle(Theme.Colors.textTertiary)
+                .accessibilityHidden(true)
         }
-        .padding(Theme.Spacing.md)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [category.tint.opacity(0.10), category.tint.opacity(0)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-        )
-        .softCard(elevation: 1)
+        .ledgerRow(showsRule: showsRule)
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -833,7 +806,7 @@ private struct DailyTimelineRowModel: Identifiable, Equatable {
         }
 
         self.dayNumber = HealthHubFormatters.dayNumber.string(from: day.dayStart)
-        self.monthAbbrev = HealthHubFormatters.monthAbbrev.string(from: day.dayStart).uppercased()
+        self.monthAbbrev = HealthHubFormatters.monthAbbrev.string(from: day.dayStart)
         self.isToday = calendar.isDateInToday(day.dayStart)
         self.stats = Self.makeStats(for: day)
     }
@@ -859,8 +832,8 @@ private struct DailyTimelineRowModel: Identifiable, Equatable {
                     id: "steps",
                     label: "Steps",
                     icon: "figure.walk",
-                    value: "\(Int(steps))",
-                    unit: ""
+                    value: Int(steps).formatted(),
+                    unit: "steps"
                 )
             )
         }
@@ -905,49 +878,37 @@ private struct DailyTimelineRowModel: Identifiable, Equatable {
 
 private struct DailyTimelineRow: View, Equatable {
     let model: DailyTimelineRowModel
+    var showsRule = true
+
+    static func == (lhs: DailyTimelineRow, rhs: DailyTimelineRow) -> Bool {
+        lhs.model == rhs.model && lhs.showsRule == rhs.showsRule
+    }
 
     var body: some View {
-        HStack(alignment: .top, spacing: Theme.Spacing.md) {
-            // Date badge
-            VStack(spacing: 1) {
+        HStack(alignment: .center, spacing: Theme.Spacing.md) {
+            VStack(spacing: -2) {
                 Text(model.monthAbbrev)
-                    .font(Theme.Typography.microLabel)
-                    .foregroundStyle(model.isToday ? .white : Theme.Colors.textTertiary)
+                    .font(Theme.Typography.caption2Bold)
+                    .foregroundStyle(Theme.Colors.textSecondary)
                 Text(model.dayNumber)
-                    .font(Theme.Typography.numberSmall)
-                    .foregroundStyle(model.isToday ? .white : Theme.Colors.textPrimary)
+                    .font(Theme.Typography.title2)
+                    .foregroundStyle(model.isToday ? Theme.Colors.success : Theme.Colors.textPrimary)
             }
-            .frame(width: 42, height: 42)
-            .background(
-                RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                    .fill(model.isToday ? Theme.Colors.accent : Theme.Colors.accent.opacity(Theme.Opacity.subtleFill))
-            )
+            .frame(minWidth: 44)
+            .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                HStack(alignment: .firstTextBaseline) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(model.title)
-                            .font(Theme.Typography.subheadlineBold)
-                            .foregroundStyle(Theme.Colors.textPrimary)
-                        Text(model.subtitle)
-                            .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.Colors.textSecondary)
-                    }
-
-                    Spacer()
-
-                    Image(systemName: "chevron.right")
-                        .font(Theme.Typography.caption2Bold)
-                        .foregroundStyle(Theme.Colors.textTertiary)
-                }
+            VStack(alignment: .leading, spacing: 6) {
+                Text(model.isToday ? "Today" : model.title)
+                    .font(Theme.Typography.headline)
+                    .foregroundStyle(Theme.Colors.textPrimary)
 
                 if model.stats.isEmpty {
-                    Text("No key metrics recorded for this day.")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textTertiary)
+                    Text("No key readings this day")
+                        .font(Theme.Typography.subheadline)
+                        .foregroundStyle(Theme.Colors.textSecondary)
                 } else {
                     ViewThatFits(in: .horizontal) {
-                        HStack(spacing: Theme.Spacing.sm) {
+                        HStack(spacing: Theme.Spacing.md) {
                             ForEach(model.stats) { stat in
                                 timelineStat(stat)
                                     .fixedSize(horizontal: true, vertical: false)
@@ -955,7 +916,7 @@ private struct DailyTimelineRow: View, Equatable {
                         }
 
                         LazyVGrid(
-                            columns: [GridItem(.adaptive(minimum: 96), alignment: .leading)],
+                            columns: [GridItem(.adaptive(minimum: 92), alignment: .leading)],
                             alignment: .leading,
                             spacing: Theme.Spacing.sm
                         ) {
@@ -966,18 +927,32 @@ private struct DailyTimelineRow: View, Equatable {
                     }
                 }
             }
+
+            Spacer(minLength: 0)
+
+            Image(systemName: "chevron.right")
+                .font(Theme.Typography.captionBold)
+                .foregroundStyle(Theme.Colors.textTertiary)
+                .accessibilityHidden(true)
         }
-        .padding(Theme.Spacing.md)
-        .softCard(elevation: 1)
+        .ledgerRow(showsRule: showsRule)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(model.title), \(model.subtitle)")
     }
 
     private func timelineStat(_ stat: DailyTimelineStatModel) -> some View {
-        InlineStat(
-            icon: stat.icon,
-            value: stat.value + stat.unit,
-            label: stat.label,
-            tint: statTint(for: stat.id)
-        )
+        HStack(spacing: 5) {
+            RoundedRectangle(cornerRadius: 1, style: .continuous)
+                .fill(statTint(for: stat.id))
+                .frame(width: 3, height: 12)
+                .accessibilityHidden(true)
+            Text(stat.unit.isEmpty || stat.unit == "h" ? stat.value + stat.unit : "\(stat.value) \(stat.unit)")
+                .font(Theme.Typography.subheadlineStrong)
+                .foregroundStyle(Theme.Colors.textSecondary)
+                .lineLimit(1)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(stat.label) \(stat.value) \(stat.unit)")
     }
 
     private func statTint(for id: String) -> Color {
@@ -986,7 +961,7 @@ private struct DailyTimelineRow: View, Equatable {
         case "steps": return HealthMetric.steps.accentColor
         case "energy": return HealthMetric.activeEnergy.accentColor
         case "resting": return HealthMetric.restingHeartRate.accentColor
-        default: return Theme.Colors.accent
+        default: return Theme.Colors.textPrimary
         }
     }
 }

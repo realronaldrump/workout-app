@@ -8,10 +8,14 @@ struct HighlightItem: Identifiable {
     let icon: String
     let tint: Color
     let action: (() -> Void)?
+    var isRecord = false
 }
 
+/// One noteworthy result, written as a log line: what happened, when, and a stamp
+/// when it was a personal record.
 struct HighlightCardView: View {
     let item: HighlightItem
+    var showsRule = true
 
     var body: some View {
         Group {
@@ -33,47 +37,43 @@ struct HighlightCardView: View {
     }
 
     private var content: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            HStack(spacing: Theme.Spacing.sm) {
-                IconTile(systemImage: item.icon, tint: item.tint, size: 26)
-                Text(item.title)
-                    .font(Theme.Typography.metricLabel)
-                    .foregroundColor(Theme.Colors.textSecondary)
-                    .textCase(.uppercase)
-                    .tracking(0.8)
-                Spacer()
+        HStack(alignment: .top, spacing: Theme.Spacing.md) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: Theme.Spacing.sm) {
+                    if item.isRecord {
+                        PRTag()
+                    } else {
+                        TagLabel(text: item.title, tint: item.tint)
+                    }
+                    if let subtitle = item.subtitle {
+                        Text(subtitle)
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Colors.textSecondary)
+                    }
+                }
+
+                Text(item.value)
+                    .font(Theme.Typography.headline)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
-            Text(item.value)
-                .font(Theme.Typography.title4)
-                .foregroundColor(Theme.Colors.textPrimary)
-                .multilineTextAlignment(.leading)
-                .lineLimit(nil)
-                .fixedSize(horizontal: false, vertical: true)
-                .layoutPriority(1)
+            Spacer(minLength: Theme.Spacing.sm)
 
-            if let subtitle = item.subtitle {
-                Text(subtitle)
-                    .font(Theme.Typography.caption)
-                    .foregroundColor(Theme.Colors.textTertiary)
+            if item.action != nil {
+                Image(systemName: "chevron.right")
+                    .font(Theme.Typography.captionBold)
+                    .foregroundStyle(Theme.Colors.textTertiary)
+                    .padding(.top, 4)
+                    .accessibilityHidden(true)
             }
         }
-        .padding(Theme.Spacing.lg)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(alignment: .leading) {
-            // Tinted leading edge ties the card to the insight's color.
-            LinearGradient(
-                colors: [item.tint.opacity(0.10), item.tint.opacity(0)],
-                startPoint: .leading,
-                endPoint: .trailing
-            )
-            .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous))
-        }
-        .softCard(elevation: 1)
+        .ledgerRow(showsRule: showsRule)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(item.title): \(item.value)\(item.subtitle.map { ", \($0)" } ?? "")")
         .accessibilityAddTraits(item.action != nil ? .isButton : [])
-        .accessibilityHint(item.action != nil ? "Double tap for details" : "")
+        .accessibilityHint(item.action != nil ? "Opens details" : "")
     }
 }
 
@@ -82,19 +82,21 @@ struct HighlightsSectionView: View {
     let items: [HighlightItem]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-            Text(title.uppercased())
-                .font(Theme.Typography.metricLabel)
-                .foregroundColor(Theme.Colors.textTertiary)
-                .tracking(1.2)
-                .padding(.leading, 4)
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            SectionHeading(title: title)
 
             if items.isEmpty {
                 EmptyHighlightsView()
             } else {
-                VStack(spacing: Theme.Spacing.sm) {
-                    ForEach(items) { item in
-                        HighlightCardView(item: item)
+                VStack(spacing: 0) {
+                    ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                        HighlightCardView(item: item, showsRule: true)
+                            .overlay(alignment: .bottom) {
+                                if index == items.count - 1 {
+                                    Rectangle().fill(Theme.Colors.rule).frame(height: 1)
+                                        .accessibilityHidden(true)
+                                }
+                            }
                     }
                 }
             }
@@ -104,15 +106,10 @@ struct HighlightsSectionView: View {
 
 struct EmptyHighlightsView: View {
     var body: some View {
-        HStack(spacing: Theme.Spacing.md) {
-            Image(systemName: "sparkles")
-                .foregroundColor(Theme.Colors.textTertiary)
-            Text("Highlights appear after a few sessions.")
-                .font(Theme.Typography.caption)
-                .foregroundColor(Theme.Colors.textSecondary)
-            Spacer()
-        }
-        .padding(Theme.Spacing.lg)
-        .softCard(elevation: 1)
+        Text("Records and big jumps show up here after a few sessions.")
+            .font(Theme.Typography.subheadline)
+            .foregroundStyle(Theme.Colors.textSecondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .ledgerRow()
     }
 }

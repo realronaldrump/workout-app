@@ -10,15 +10,15 @@ enum WorkoutExportError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidDateRange:
-            return "Invalid date range"
+            return "The date range is not valid. Choose another range."
         case .noWorkoutsInRange:
-            return "No workouts found in that date range"
+            return "No workouts in that date range. Choose a wider range."
         case .noSetsInRange:
-            return "No logged sets found in that date range"
+            return "No logged sets in that date range. Choose a wider range."
         case .noExercisesInRange:
-            return "No exercises found in that date range"
+            return "No exercises in that date range. Choose a wider range."
         case .noColumnsSelected:
-            return "Select at least one export field"
+            return "Select at least one field to export."
         }
     }
 }
@@ -151,6 +151,30 @@ nonisolated enum WorkoutExportColumn: String, CaseIterable, Hashable, Identifiab
 }
 
 struct WorkoutCSVExporter {
+    /// Export the just-saved workout without waiting for the history screen to refresh.
+    /// The filename does not contain user-entered text, and the file is written atomically.
+    nonisolated static func exportLoggedWorkout(
+        _ workout: LoggedWorkout,
+        to directory: URL,
+        format: WorkoutExportFormat = .csv,
+        gymName: String? = nil,
+        weightUnit: String? = "lbs",
+        calendar: Calendar = .current
+    ) throws -> URL {
+        let fileName = "workout_\(workout.id.uuidString)_\(UUID().uuidString).\(format.fileExtension)"
+        let destination = directory.appendingPathComponent(fileName)
+        let document = try WorkoutExportDocument(
+            workouts: [workout.analyticsWorkout],
+            startDate: workout.startedAt,
+            endDateInclusive: workout.startedAt,
+            gymNamesByWorkoutID: gymName.map { [workout.id: $0] } ?? [:],
+            weightUnit: weightUnit,
+            calendar: calendar
+        )
+        try document.write(to: destination, format: format)
+        return destination
+    }
+
     /// One complete record per set, with stable IDs, numeric values, and selected columns.
     /// Missing values are empty cells; no row inherits context from an earlier row.
     nonisolated static func exportWorkoutHistoryCSV(

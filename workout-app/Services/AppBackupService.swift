@@ -7,9 +7,9 @@ nonisolated enum AppBackupError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .unsupportedImportFile:
-            return "Select a Strong CSV or Big Beautiful Workout backup file."
+            return "Choose a Strong CSV or a backup from this app."
         case .invalidBackupFormat:
-            return "This backup file is not a valid Big Beautiful Workout backup."
+            return "This file is not a valid backup from this app."
         }
     }
 }
@@ -200,6 +200,11 @@ nonisolated struct AppBackupSettings: Codable {
     var earliestAvailableDailyHealthDate: Date?
     var dailyHealthStoreVersion: Int?
     var pendingWorkoutSleepSummaryRefresh: Bool?
+    var bodyGoalWeightLb: Double?
+    var bodyGoalStartWeightLb: Double?
+    var bodyGoalStartDate: Double?
+    var bodyGoalReachedDate: Double?
+    var bodyRange: String?
 }
 
 enum AppBackupService {
@@ -523,7 +528,12 @@ enum AppBackupService {
             dailyHealthStoreVersion: userDefaults.object(forKey: healthManager.dailyHealthStoreVersionKey) as? Int,
             pendingWorkoutSleepSummaryRefresh: userDefaults.object(
                 forKey: healthManager.pendingWorkoutSleepSummaryRefreshKey
-            ) as? Bool
+            ) as? Bool,
+            bodyGoalWeightLb: userDefaults.object(forKey: "bodyGoalWeightLb") as? Double,
+            bodyGoalStartWeightLb: userDefaults.object(forKey: "bodyGoalStartWeightLb") as? Double,
+            bodyGoalStartDate: userDefaults.object(forKey: "bodyGoalStartDate") as? Double,
+            bodyGoalReachedDate: userDefaults.object(forKey: "bodyGoalReachedDate") as? Double,
+            bodyRange: userDefaults.string(forKey: "bodyRange")
         )
     }
 }
@@ -701,6 +711,20 @@ enum AppBackupImporter {
         filled += setIfMissing(
             settings.appearanceMode,
             forKey: "appearanceMode",
+            userDefaults: userDefaults,
+            persistedValues: persistedValues
+        )
+        for (value, key) in [
+            (settings.bodyGoalWeightLb, "bodyGoalWeightLb"),
+            (settings.bodyGoalStartWeightLb, "bodyGoalStartWeightLb"),
+            (settings.bodyGoalStartDate, "bodyGoalStartDate"),
+            (settings.bodyGoalReachedDate, "bodyGoalReachedDate")
+        ] {
+            filled += setIfMissing(value, forKey: key, userDefaults: userDefaults, persistedValues: persistedValues)
+        }
+        filled += setIfMissing(
+            settings.bodyRange,
+            forKey: "bodyRange",
             userDefaults: userDefaults,
             persistedValues: persistedValues
         )

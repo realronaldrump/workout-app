@@ -31,7 +31,7 @@ struct GymSelectionSheet: View {
                         if showAllGyms {
                             optionRow(
                                 title: "All gyms",
-                                subtitle: "Combine all locations",
+                                subtitle: nil,
                                 icon: "globe.americas.fill",
                                 tint: Theme.Colors.accentSecondary,
                                 selection: .allGyms
@@ -41,7 +41,7 @@ struct GymSelectionSheet: View {
                         if showUnassigned {
                             optionRow(
                                 title: "Unassigned",
-                                subtitle: "No gym tagged",
+                                subtitle: nil,
                                 icon: "mappin.slash",
                                 tint: Theme.Colors.textTertiary,
                                 selection: .unassigned
@@ -81,8 +81,8 @@ struct GymSelectionSheet: View {
                             EmptyStateCard(
                                 icon: "mappin.and.ellipse",
                                 tint: Theme.Colors.accentSecondary,
-                                title: "No Gyms Yet",
-                                message: "Add a gym profile first."
+                                title: "No gyms yet",
+                                message: "Add a gym in Settings > Gyms first."
                             )
                         }
 
@@ -97,12 +97,9 @@ struct GymSelectionSheet: View {
                                         .foregroundStyle(Theme.Colors.accent)
 
                                     VStack(alignment: .leading, spacing: 4) {
-                                        Text("Add New Gym")
+                                        Text("Add gym")
                                             .font(Theme.Typography.headline)
                                             .foregroundColor(Theme.Colors.textPrimary)
-                                        Text("Create a profile and assign immediately")
-                                            .font(Theme.Typography.caption)
-                                            .foregroundColor(Theme.Colors.textSecondary)
                                     }
 
                                     Spacer()

@@ -30,9 +30,9 @@ struct MuscleRecencyView: View {
                 LazyVStack(alignment: .leading, spacing: Theme.Spacing.xl) {
                     StatsPageHeader(
                         eyebrow: "Recency",
-                        title: "Muscle Recency",
-                        subtitle: "When each muscle group last reached one effective set of work.",
-                        systemImage: "clock.arrow.circlepath"
+                        title: "Muscle recency",
+                        systemImage: "clock.arrow.circlepath",
+                        help: "A muscle counts as trained after one effective set: a primary set counts as one, a secondary set as half."
                     )
 
                     ForEach(RecencyBucket.allCases, id: \.self) { bucket in
@@ -64,8 +64,7 @@ struct MuscleRecencyView: View {
                 .contentColumn()
             }
         }
-        .navigationTitle("Muscle Recency")
-        .navigationBarTitleDisplayMode(.inline)
+        .collapsingTitle("Muscle recency")
         .onAppear(perform: refreshRecencyRows)
         .onReceive(
             dataManager.$workouts
@@ -171,9 +170,9 @@ private enum RecencyBucket: CaseIterable {
 
     var title: String {
         switch self {
-        case .fresh: return "Trained recently"
-        case .dueSoon: return "This week"
-        case .overdue: return "Waiting a while"
+        case .fresh: return "0 to 3 days ago"
+        case .dueSoon: return "4 to 7 days ago"
+        case .overdue: return "8+ days ago"
         case .never: return "Not trained yet"
         }
     }

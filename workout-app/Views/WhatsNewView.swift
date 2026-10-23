@@ -15,7 +15,7 @@ struct WhatsNewSheetView: View {
                     AppToolbarItem(placement: .topBarTrailing) {
                         AppToolbarIconButton(
                             systemImage: "xmark",
-                            accessibilityLabel: String(localized: "Close What's New"),
+                            accessibilityLabel: String(localized: "Close what's new"),
                             variant: .subtle,
                             action: close
                         )
@@ -39,7 +39,7 @@ struct WhatsNewSheetView: View {
                     Image(systemName: "arrow.right")
                         .font(Theme.Typography.subheadlineBold)
                 }
-                .foregroundStyle(.white)
+                .foregroundStyle(Theme.Colors.onAccent)
                 .frame(maxWidth: .infinity)
                 .frame(minHeight: 52)
                 .background(Theme.accentGradient)
@@ -70,7 +70,7 @@ struct ChangelogHistoryView: View {
 
     var body: some View {
         WhatsNewContent(entries: ChangelogCatalog.entries, style: .history)
-            .navigationTitle("What's New")
+            .navigationTitle("What's new")
             .navigationBarTitleDisplayMode(.inline)
             .analyticsScreen("ChangelogHistory")
             .onAppear {
@@ -121,18 +121,17 @@ private struct WhatsNewContent: View {
                     .frame(width: 104, height: 104)
 
                 Circle()
-                    .fill(Theme.accentGradient)
+                    .fill(Theme.Colors.accent)
                     .frame(width: 76, height: 76)
-                    .shadow(color: Theme.Colors.accent.opacity(0.25), radius: 14, y: 6)
 
-                Image(systemName: "sparkles")
+                Image(systemName: "clock.arrow.circlepath")
                     .font(Theme.Iconography.hero)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Theme.Colors.onAccent)
                     .accessibilityHidden(true)
             }
 
             VStack(spacing: Theme.Spacing.xs) {
-                Text("What's New")
+                Text("What's new")
                     .font(Theme.Typography.screenTitle)
                     .foregroundStyle(Theme.Colors.textPrimary)
                     .multilineTextAlignment(.center)
@@ -153,11 +152,11 @@ private struct WhatsNewContent: View {
     private var heroSubtitle: String {
         switch style {
         case .history:
-            return String(localized: "A look back at how the app has grown.")
+            return String(localized: "Changes in every release, newest first.")
         case .automatic where entries.count == 1:
-            return String(localized: "A thoughtful update is ready to explore.")
+            return String(localized: "Changes in this version.")
         case .automatic:
-            return String(localized: "You have \(entries.count) meaningful updates to catch up on.")
+            return String(localized: "Changes across \(entries.count) versions.")
         }
     }
 }

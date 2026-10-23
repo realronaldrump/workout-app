@@ -176,7 +176,7 @@ extension HealthKitManager {
             PermissionAuditDescriptor(
                 id: "workoutRoute",
                 title: "Workout Routes",
-                summary: "Location series attached to supported workouts.",
+                summary: "Route locations recorded during supported workouts.",
                 section: "Workout",
                 makeType: { HKSeriesType.workoutRoute() }
             ),

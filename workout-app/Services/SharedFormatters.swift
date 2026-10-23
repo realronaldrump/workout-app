@@ -48,6 +48,20 @@ enum SharedFormatters {
         "\(value) \(value == 1 ? singular : (plural ?? singular + "s"))"
     }
 
+    // MARK: - Workout Names
+
+    /// Splits Strong-style names such as "Evening Workout - Aspen Glen Club" into the
+    /// session's title and where it happened. Names without a separator stay whole.
+    nonisolated static func workoutTitleParts(_ name: String) -> (title: String, place: String?) {
+        guard let range = name.range(of: " - ", options: .backwards) else {
+            return (name, nil)
+        }
+        let title = name[..<range.lowerBound].trimmingCharacters(in: .whitespaces)
+        let place = name[range.upperBound...].trimmingCharacters(in: .whitespaces)
+        guard !title.isEmpty, !place.isEmpty else { return (name, nil) }
+        return (title, place)
+    }
+
     // MARK: - Elapsed Time Formatting
 
     /// Formats a `TimeInterval` as `h:mm:ss` or `m:ss`.
@@ -98,7 +112,7 @@ enum SharedFormatters {
         }
 
         if !filtered.isEmpty {
-            return filtered.joined(separator: " • ")
+            return filtered.joined(separator: ", ")
         }
         return message
     }

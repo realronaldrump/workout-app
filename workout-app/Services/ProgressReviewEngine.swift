@@ -217,7 +217,7 @@ enum ProgressReviewEngine {
                 primaryObservedMetric: "Rep range changed",
                 delta: 0,
                 deltaLabel: "Not comparable",
-                summary: "\(exerciseName) changed rep ranges, so the last two blocks are not directly comparable.",
+                summary: "\(exerciseName) changed rep ranges, so the last two blocks aren't comparable.",
                 supportingEvidence: supportingEvidence(previous: previous, current: current).prefix(3).map { $0.0 }
             )
         }
@@ -303,42 +303,56 @@ enum ProgressReviewEngine {
         })
     }
 
+    private struct RankedEvidence {
+        let priority: Int
+        let id: String
+        let title: String
+        let message: String
+    }
+
     private static func supportingEvidence(
         previous: DerivedBlock,
         current: DerivedBlock
     ) -> [(String, String, String)] {
-        var evidence: [(priority: Int, id: String, title: String, message: String)] = []
+        var evidence: [RankedEvidence] = []
 
         let previousFrequency = previous.block.sessionsPerWeek
         let currentFrequency = current.block.sessionsPerWeek
         let frequencyDelta = currentFrequency - previousFrequency
         let frequencyMessage: String
         if abs(frequencyDelta) >= 0.25 {
-            frequencyMessage = "Sessions per week moved from \(decimal(previousFrequency)) to \(decimal(currentFrequency)) during this stretch."
+            frequencyMessage = "Sessions per week moved from \(decimal(previousFrequency)) to \(decimal(currentFrequency))."
         } else {
-            frequencyMessage = "Sessions per week stayed close at \(decimal(previousFrequency)) to \(decimal(currentFrequency)) during this stretch."
+            frequencyMessage = "Sessions per week barely changed, from \(decimal(previousFrequency)) to \(decimal(currentFrequency))."
         }
-        evidence.append((0, "frequency", "Frequency", frequencyMessage))
+        evidence.append(RankedEvidence(priority: 0, id: "frequency", title: "Frequency", message: frequencyMessage))
 
         let previousFirstRate = previous.firstAppearanceRate * 100
         let currentFirstRate = current.firstAppearanceRate * 100
         let orderMessage: String
         if previous.block.commonOrderBand != current.block.commonOrderBand {
-            orderMessage = "This lift moved from \(previous.block.commonOrderBand.label) to \(current.block.commonOrderBand.label) most often, while first-position use shifted from \(percent(previousFirstRate)) to \(percent(currentFirstRate))."
+            orderMessage = """
+                This lift moved from \(previous.block.commonOrderBand.label) to \(current.block.commonOrderBand.label) most often, \
+                while first-position use shifted from \(percent(previousFirstRate)) to \(percent(currentFirstRate)).
+                """
         } else {
-            orderMessage = "Its common slot stayed at \(current.block.commonOrderBand.label), with first-position use moving from \(percent(previousFirstRate)) to \(percent(currentFirstRate))."
+            orderMessage = "Usual slot was \(current.block.commonOrderBand.label) in both blocks. Done first in \(percent(previousFirstRate)) of sessions before, \(percent(currentFirstRate)) now."
         }
-        evidence.append((1, "order", "Exercise Order", orderMessage))
+        evidence.append(RankedEvidence(priority: 1, id: "order", title: "Exercise order", message: orderMessage))
 
         let previousSets = previous.block.medianSetsPerSession
         let currentSets = current.block.medianSetsPerSession
-        let setMessage = "Median sets per session moved from \(decimal(previousSets)) to \(decimal(currentSets)) in this block."
-        evidence.append((2, "sets", "Sets Per Session", setMessage))
+        let setMessage = "Median sets per session moved from \(decimal(previousSets)) to \(decimal(currentSets))."
+        evidence.append(RankedEvidence(priority: 2, id: "sets", title: "Sets per session", message: setMessage))
 
         let previousVolume = previous.block.outcome.laneVolume
         let currentVolume = current.block.outcome.laneVolume
-        let volumeMessage = "Volume in the \(current.block.dominantRepLane.label) rep range moved from \(SharedFormatters.volumeWithUnit(previousVolume)) to \(SharedFormatters.volumeWithUnit(currentVolume)) during this stretch."
-        evidence.append((3, "volume", "Rep Range Volume", volumeMessage))
+        let volumeMessage = """
+            Volume in the \(current.block.dominantRepLane.label) rep range moved from \
+            \(SharedFormatters.volumeWithUnit(previousVolume)) to \(SharedFormatters.volumeWithUnit(currentVolume)) during \
+            this stretch.
+            """
+        evidence.append(RankedEvidence(priority: 3, id: "volume", title: "Rep range volume", message: volumeMessage))
 
         if let previousGymId = previous.block.commonGymId,
            let currentGymId = current.block.commonGymId,
@@ -346,13 +360,13 @@ enum ProgressReviewEngine {
             let previousGym = gymContextLabel(for: previous.block)
             let currentGym = gymContextLabel(for: current.block)
             let gymMessage = "The dominant location context changed from \(previousGym) to \(currentGym) in this block."
-            evidence.append((4, "gym", "Gym Context", gymMessage))
+            evidence.append(RankedEvidence(priority: 4, id: "gym", title: "Gym", message: gymMessage))
         }
 
         if let previousWeight = previous.block.medianBodyweight,
            let currentWeight = current.block.medianBodyweight {
-            let weightMessage = "Median bodyweight moved from \(decimal(previousWeight)) lb to \(decimal(currentWeight)) lb during this stretch."
-            evidence.append((5, "bodyweight", "Bodyweight", weightMessage))
+            let weightMessage = "Median bodyweight moved from \(decimal(previousWeight)) lb to \(decimal(currentWeight)) lb."
+            evidence.append(RankedEvidence(priority: 5, id: "bodyweight", title: "Bodyweight", message: weightMessage))
         }
 
         return evidence

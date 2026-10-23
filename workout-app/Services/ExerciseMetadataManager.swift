@@ -212,7 +212,6 @@ class ExerciseMetadataManager: ObservableObject {
         let compatibilityMappings: [String: [ExerciseMuscleAssignment]] = [
             // Strong exports contain these historical spelling variants. Keep the picker
             // canonical while still tagging imported workouts under their original names.
-            "Hallow Hold": builtInAssignments([.core]),
             "Kneeling Bilateral Lat Pulldown - Kinesis Machind": builtInAssignments([.back, .biceps]),
             "Push Ups": builtInAssignments([.chest, .triceps, .shoulders]),
             "Stair stepper": builtInAssignments([.cardio])

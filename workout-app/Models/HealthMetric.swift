@@ -20,19 +20,19 @@ enum HealthHubCategory: String, CaseIterable, Identifiable {
         case .vitals: return "Vitals"
         case .cardio: return "Cardio"
         case .body: return "Body"
-        case .sessions: return "Workout Health"
+        case .sessions: return "Workout health"
         }
     }
 
     var subtitle: String {
         switch self {
-        case .activity: return "Move, exercise, steps"
-        case .sleep: return "Sleep and recovery"
-        case .heart: return "Heart trends"
-        case .vitals: return "SpO2, respiration, temp"
-        case .cardio: return "Fitness metrics"
-        case .body: return "Body composition"
-        case .sessions: return "Workout-linked metrics"
+        case .activity: return "Steps, energy, exercise, and standing"
+        case .sleep: return "Time asleep and sleep stages"
+        case .heart: return "Resting rate, HRV, and recovery"
+        case .vitals: return "Blood oxygen, breathing, temperature"
+        case .cardio: return "VO2 max"
+        case .body: return "Weight and body fat"
+        case .sessions: return "Heart rate and sleep around workouts"
         }
     }
 
@@ -48,14 +48,15 @@ enum HealthHubCategory: String, CaseIterable, Identifiable {
         }
     }
 
+    /// A category borrows its lead metric's hue so the hub and its screens agree.
     var tint: Color {
         switch self {
-        case .activity: return Theme.Colors.warning
-        case .sleep: return Theme.Colors.accentSecondary
-        case .heart: return Theme.Colors.error
-        case .vitals: return Theme.Colors.accent
-        case .cardio: return Theme.Colors.success
-        case .body: return Theme.Colors.accent
+        case .activity: return HealthMetric.steps.accentColor
+        case .sleep: return HealthMetric.sleep.accentColor
+        case .heart: return HealthMetric.restingHeartRate.accentColor
+        case .vitals: return HealthMetric.bloodOxygen.accentColor
+        case .cardio: return HealthMetric.vo2Max.accentColor
+        case .body: return HealthMetric.bodyMass.accentColor
         case .sessions: return Theme.Colors.textPrimary
         }
     }
@@ -104,24 +105,24 @@ enum HealthMetric: String, CaseIterable, Identifiable, Sendable {
     var title: String {
         switch self {
         case .steps: return "Steps"
-        case .activeEnergy: return "Active Energy"
-        case .basalEnergy: return "Resting Energy"
-        case .exerciseMinutes: return "Exercise Minutes"
-        case .moveMinutes: return "Move Minutes"
-        case .standMinutes: return "Stand Minutes"
-        case .distanceWalkingRunning: return "Walking + Running"
-        case .flightsClimbed: return "Flights Climbed"
+        case .activeEnergy: return "Active energy"
+        case .basalEnergy: return "Resting energy"
+        case .exerciseMinutes: return "Exercise minutes"
+        case .moveMinutes: return "Move minutes"
+        case .standMinutes: return "Stand minutes"
+        case .distanceWalkingRunning: return "Walking + running"
+        case .flightsClimbed: return "Flights climbed"
         case .sleep: return "Sleep"
-        case .restingHeartRate: return "Resting Heart Rate"
-        case .walkingHeartRateAverage: return "Walking Heart Rate"
+        case .restingHeartRate: return "Resting heart rate"
+        case .walkingHeartRateAverage: return "Walking heart rate"
         case .heartRateVariability: return "HRV (SDNN)"
-        case .heartRateRecovery: return "Heart Rate Recovery"
-        case .bloodOxygen: return "Blood Oxygen"
-        case .respiratoryRate: return "Respiratory Rate"
-        case .bodyTemperature: return "Body Temperature"
-        case .vo2Max: return "VO2 Max"
-        case .bodyMass: return "Body Mass"
-        case .bodyFatPercentage: return "Body Fat"
+        case .heartRateRecovery: return "Heart rate recovery"
+        case .bloodOxygen: return "Blood oxygen"
+        case .respiratoryRate: return "Respiratory rate"
+        case .bodyTemperature: return "Body temperature"
+        case .vo2Max: return "VO2 max"
+        case .bodyMass: return "Body mass"
+        case .bodyFatPercentage: return "Body fat"
         }
     }
 
@@ -324,7 +325,7 @@ enum HealthMetric: String, CaseIterable, Identifiable, Sendable {
 
     /// Converts a stored value into the units shown in the UI (matches `displayUnit`).
     /// - Important: This is used for chart axes/interaction so the user sees the same units everywhere.
-    func displayValue(from stored: Double) -> Double {
+    nonisolated func displayValue(from stored: Double) -> Double {
         switch self {
         case .distanceWalkingRunning:
             return stored / 1609.34
@@ -341,11 +342,11 @@ enum HealthMetric: String, CaseIterable, Identifiable, Sendable {
     func formatDisplay(_ displayValue: Double) -> String {
         switch self {
         case .steps:
-            return "\(Int(displayValue))"
+            return Int(displayValue).formatted()
         case .activeEnergy, .basalEnergy:
-            return "\(Int(displayValue))"
+            return Int(displayValue).formatted()
         case .exerciseMinutes, .moveMinutes, .standMinutes:
-            return "\(Int(displayValue))"
+            return Int(displayValue).formatted()
         case .distanceWalkingRunning:
             return String(format: "%.2f", displayValue)
         case .flightsClimbed:
@@ -374,11 +375,11 @@ enum HealthMetric: String, CaseIterable, Identifiable, Sendable {
     func format(_ value: Double) -> String {
         switch self {
         case .steps:
-            return "\(Int(value))"
+            return Int(value).formatted()
         case .activeEnergy, .basalEnergy:
-            return "\(Int(value))"
+            return Int(value).formatted()
         case .exerciseMinutes, .moveMinutes, .standMinutes:
-            return "\(Int(value))"
+            return Int(value).formatted()
         case .distanceWalkingRunning:
             return String(format: "%.2f", value / 1609.34)
         case .flightsClimbed:
@@ -413,7 +414,7 @@ enum HealthMetric: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
-struct HealthMetricSample: Identifiable, Codable, Sendable {
+nonisolated struct HealthMetricSample: Identifiable, Codable, Sendable {
     let id: UUID
     let timestamp: Date
     let value: Double

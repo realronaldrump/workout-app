@@ -8,6 +8,7 @@ struct ExerciseRangeBreakdown: View {
     @State private var derived: DerivedBreakdown = .empty
     @State private var derivedCacheKey: Int?
     @State private var selectedMetric: ExerciseMetricSelection?
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private var history: [(date: Date, sets: [WorkoutSet])] {
         sessions.map { (date: $0.date, sets: $0.sets) }
@@ -80,52 +81,47 @@ struct ExerciseRangeBreakdown: View {
         var id: String { label }
     }
 
-    private let metricColumns = [
-        GridItem(.flexible(), spacing: Theme.Spacing.sm),
-        GridItem(.flexible(), spacing: Theme.Spacing.sm)
-    ]
-
     private var repDescriptors: [RepRangeDescriptor] {
         [
             RepRangeDescriptor(
-                label: "1-3",
+                label: "1–3",
                 range: 1...3,
-                tint: Theme.Colors.error,
+                tint: Theme.Colors.ink,
                 title: "Peak strength",
                 detail: "Near-maximal triples and singles"
             ),
             RepRangeDescriptor(
-                label: "4-6",
+                label: "4–6",
                 range: 4...6,
-                tint: Theme.Colors.warning,
+                tint: Theme.Colors.ink.opacity(0.8),
                 title: "Strength",
                 detail: "Heavy working sets"
             ),
             RepRangeDescriptor(
-                label: "7-10",
+                label: "7–10",
                 range: 7...10,
-                tint: Theme.Colors.accent,
+                tint: Theme.Colors.ink.opacity(0.62),
                 title: "Growth",
                 detail: "Classic hypertrophy zone"
             ),
             RepRangeDescriptor(
-                label: "11-15",
+                label: "11–15",
                 range: 11...15,
-                tint: Theme.Colors.accentSecondary,
+                tint: Theme.Colors.ink.opacity(0.46),
                 title: "Volume",
                 detail: "Longer tension-focused sets"
             ),
             RepRangeDescriptor(
-                label: "16-20",
+                label: "16–20",
                 range: 16...20,
-                tint: Theme.Colors.success,
+                tint: Theme.Colors.ink.opacity(0.32),
                 title: "Endurance",
                 detail: "High-rep conditioning work"
             ),
             RepRangeDescriptor(
                 label: "21+",
                 range: 21...Int.max,
-                tint: Theme.Colors.textSecondary,
+                tint: Theme.Colors.ink.opacity(0.2),
                 title: "Burnout",
                 detail: "Finishers and metabolic sets"
             )
@@ -137,35 +133,35 @@ struct ExerciseRangeBreakdown: View {
             IntensityZoneDescriptor(
                 label: "<50%",
                 range: 0.0...0.5,
-                tint: Theme.Colors.textSecondary,
+                tint: Theme.Colors.ink.opacity(0.2),
                 title: "Primer",
                 detail: "Warm-up or technique emphasis"
             ),
             IntensityZoneDescriptor(
-                label: "50-65%",
+                label: "50–65%",
                 range: 0.5...0.65,
-                tint: Theme.Colors.accentSecondary,
+                tint: Theme.Colors.ink.opacity(0.36),
                 title: "Base",
-                detail: "Comfortable submax work"
+                detail: "Light to moderate loads"
             ),
             IntensityZoneDescriptor(
-                label: "65-75%",
+                label: "65–75%",
                 range: 0.65...0.75,
-                tint: Theme.Colors.accent,
+                tint: Theme.Colors.ink.opacity(0.55),
                 title: "Build",
-                detail: "Moderate tension and accumulation"
+                detail: "Moderate loads, more total reps"
             ),
             IntensityZoneDescriptor(
-                label: "75-85%",
+                label: "75–85%",
                 range: 0.75...0.85,
-                tint: Theme.Colors.warning,
+                tint: Theme.Colors.ink.opacity(0.78),
                 title: "Working",
-                detail: "Productive heavy sets"
+                detail: "Heavy sets short of max effort"
             ),
             IntensityZoneDescriptor(
                 label: "85%+",
                 range: 0.85...Double.greatestFiniteMagnitude,
-                tint: Theme.Colors.error,
+                tint: Theme.Colors.ink,
                 title: "Peak",
                 detail: "Near-limit effort"
             )
@@ -342,21 +338,21 @@ struct ExerciseRangeBreakdown: View {
     private var snapshotMetrics: [SnapshotMetric] {
         var metrics: [SnapshotMetric] = [
             SnapshotMetric(
-                label: "Sessions",
+                label: history.count == 1 ? "session" : "sessions",
                 value: "\(history.count)",
                 icon: "calendar",
                 tint: Theme.Colors.accent,
                 metric: .sessions
             ),
             SnapshotMetric(
-                label: "Sets Logged",
+                label: "sets",
                 value: "\(totalSets)",
                 icon: "number.square",
                 tint: Theme.Colors.accentSecondary,
                 metric: .setCount
             ),
             SnapshotMetric(
-                label: "Avg Reps",
+                label: "avg reps",
                 value: formattedDecimal(averageReps),
                 icon: "repeat",
                 tint: Theme.Colors.success,
@@ -367,7 +363,7 @@ struct ExerciseRangeBreakdown: View {
         if let averageIntensity {
             metrics.append(
                 SnapshotMetric(
-                    label: "Avg Load",
+                    label: "avg load",
                     value: percentText(averageIntensity),
                     icon: "bolt.fill",
                     tint: Theme.Colors.warning,
@@ -382,16 +378,10 @@ struct ExerciseRangeBreakdown: View {
     private var repPanelMetrics: [PanelMetric] {
         [
             PanelMetric(
-                label: "Most Common",
+                label: "most common",
                 value: dominantRepBucket?.label ?? "No data",
                 detail: dominantRepBucket?.title ?? "No sets logged yet",
                 tint: dominantRepBucket?.tint ?? Theme.Colors.textSecondary
-            ),
-            PanelMetric(
-                label: "Average Set",
-                value: "\(formattedDecimal(averageReps)) reps",
-                detail: "Across every logged working set",
-                tint: Theme.Colors.accent
             )
         ]
     }
@@ -399,13 +389,13 @@ struct ExerciseRangeBreakdown: View {
     private var intensityPanelMetrics: [PanelMetric] {
         [
             PanelMetric(
-                label: "Most Common",
+                label: "most common",
                 value: dominantIntensityBucket?.label ?? "No data",
                 detail: dominantIntensityBucket?.title ?? "No intensity estimate available",
                 tint: dominantIntensityBucket?.tint ?? Theme.Colors.textSecondary
             ),
             PanelMetric(
-                label: "Hard Sets",
+                label: "of sets at 75%+",
                 value: percentText(hardIntensityShare),
                 detail: "Share at 75%+ of estimated 1RM",
                 tint: Theme.Colors.warning
@@ -423,35 +413,24 @@ struct ExerciseRangeBreakdown: View {
                 snapshotStrip
 
                 distributionPanel(
-                    title: "Rep Range Profile",
-                    subtitle: "Where this lift spends its effort across strength, growth, and endurance work.",
-                    icon: "chart.bar.xaxis",
-                    accent: Theme.Colors.accent,
+                    title: "Reps per set",
+                    help: nil,
                     metrics: repPanelMetrics,
-                    buckets: repDisplayBuckets,
-                    footnote: repFootnote
+                    buckets: repDisplayBuckets
                 )
 
                 if intensityDisplayBuckets.isEmpty {
                     intensityUnavailableCard
                 } else {
                     distributionPanel(
-                        title: "Intensity Mix",
-                        subtitle: "Estimated from your best logged 1RM for this exercise, so you can see how often you lift heavy.",
-                        icon: "bolt.badge.clock",
-                        accent: Theme.Colors.warning,
+                        title: "Weight as a share of your estimated max",
+                        help: "Each set's weight divided by your best estimated one-rep max for this exercise. This is an estimate, not a tested maximum.",
                         metrics: intensityPanelMetrics,
-                        buckets: intensityDisplayBuckets,
-                        footnote: intensityFootnote
+                        buckets: intensityDisplayBuckets
                     )
                 }
             }
         }
-        .padding(Theme.Spacing.lg)
-        .background(sectionBackground)
-        .overlay(sectionOutline)
-        .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge))
-        .softCard(cornerRadius: Theme.CornerRadius.xlarge, elevation: 2)
         .onAppear {
             recomputeIfNeeded()
         }
@@ -467,307 +446,127 @@ struct ExerciseRangeBreakdown: View {
     }
 
     private var sectionHeader: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            HStack(alignment: .top, spacing: Theme.Spacing.md) {
-                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                    Text("Rep Ranges & Intensity")
-                        .font(Theme.Typography.sectionHeader2)
-                        .foregroundStyle(Theme.Colors.textPrimary)
-
-                    Text("A clearer picture of how this exercise is actually being trained.")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                }
-
-                Spacer(minLength: Theme.Spacing.md)
-
-                if totalSets > 0 {
-                    Text(SharedFormatters.count(totalSets, "set"))
-                        .font(Theme.Typography.captionBold)
-                        .foregroundStyle(Theme.Colors.textPrimary)
-                        .padding(.horizontal, Theme.Spacing.md)
-                        .padding(.vertical, Theme.Spacing.sm)
-                        .background(
-                            Capsule()
-                                .fill(Theme.Colors.surface)
-                        )
-                        .overlay(
-                            Capsule()
-                                .strokeBorder(Theme.Colors.border.opacity(0.6), lineWidth: 1)
-                        )
-                }
-            }
-        }
+        SectionHeading(
+            title: "Rep ranges and intensity",
+            subtitle: totalSets > 0 ? "Across \(SharedFormatters.count(totalSets, "set"))" : nil
+        )
     }
 
     private var snapshotStrip: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: Theme.Spacing.sm) {
-                ForEach(snapshotMetrics) { metric in
-                    AnalysisTile(
-                        role: .navigate,
-                        destination: "\(metric.label) analysis",
-                        accessibilityLabel: "\(metric.label), \(metric.value)",
-                        radius: Theme.CornerRadius.pill,
-                        padding: Theme.Spacing.sm,
-                        action: {
-                            selectedMetric = ExerciseMetricSelection(
-                                scope: scope,
-                                metric: metric.metric,
-                                focus: .overview
-                            )
-                        },
-                        content: {
-                            HStack(spacing: Theme.Spacing.sm) {
-                                Image(systemName: metric.icon)
-                                    .font(Theme.Typography.captionBold)
-                                    .foregroundStyle(metric.tint)
-
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(metric.label)
-                                        .font(Theme.Typography.caption2Bold)
-                                        .foregroundStyle(Theme.Colors.textTertiary)
-
-                                    Text(metric.value)
-                                        .font(Theme.Typography.subheadlineBold)
-                                        .foregroundStyle(Theme.Colors.textPrimary)
-                                }
-                            }
-                        }
-                    )
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: Theme.Spacing.md))
+            : AnyLayout(StatColumns())
+        return layout {
+            ForEach(snapshotMetrics) { metric in
+                Button {
+                    selectedMetric = ExerciseMetricSelection(scope: scope, metric: metric.metric, focus: .overview)
+                } label: {
+                    DisplayStat(value: metric.value, label: metric.label, valueFont: Theme.Typography.numberSmall)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, Theme.Spacing.xs)
+                        .contentShape(.rect)
                 }
+                .buttonStyle(PressableCardButtonStyle())
+                .accessibilityLabel("\(metric.value) \(metric.label)")
+                .accessibilityHint("Opens \(metric.label) analysis")
             }
-            .padding(.vertical, 1)
         }
+        .padding(.vertical, Theme.Spacing.md)
+        .padding(.horizontal, Theme.Spacing.sm)
+        .softCard()
     }
 
     private var emptyStateCard: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Label("No set history yet", systemImage: "waveform.path.ecg")
-                .font(Theme.Typography.bodyBold)
-                .foregroundStyle(Theme.Colors.textPrimary)
-
-            Text("Once you log a few sessions, this section will show where your reps cluster and how heavy you usually work.")
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Colors.textSecondary)
-        }
-        .padding(Theme.Spacing.lg)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
-                .fill(Theme.Colors.surface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
-                .strokeBorder(Theme.Colors.border.opacity(0.55), lineWidth: 1)
-        )
+        Text("Log a set to see rep ranges and intensity.")
+            .font(Theme.Typography.subheadline)
+            .foregroundStyle(Theme.Colors.textSecondary)
+            .ledgerRow()
     }
 
     private var intensityUnavailableCard: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Label("Intensity data needs loaded sets", systemImage: "scalemass")
-                .font(Theme.Typography.bodyBold)
-                .foregroundStyle(Theme.Colors.textPrimary)
-
-            Text("Keep logging weights on this exercise and the estimated intensity profile will appear automatically.")
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Colors.textSecondary)
-        }
-        .padding(Theme.Spacing.lg)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
-                .fill(Theme.Colors.surface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
-                .strokeBorder(Theme.Colors.border.opacity(0.55), lineWidth: 1)
-        )
+        Text("Log a weighted set to compare against your estimated max.")
+            .font(Theme.Typography.subheadline)
+            .foregroundStyle(Theme.Colors.textSecondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .ledgerRow()
     }
 
     private func distributionPanel(
         title: String,
-        subtitle: String,
-        icon: String,
-        accent: Color,
+        help: String?,
         metrics: [PanelMetric],
-        buckets: [BreakdownBucket],
-        footnote: String
+        buckets: [BreakdownBucket]
     ) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            HStack(alignment: .top, spacing: Theme.Spacing.md) {
-                Image(systemName: icon)
-                    .font(Theme.Iconography.title3Strong)
-                    .foregroundStyle(accent)
-                    .frame(width: 42, height: 42)
-                    .background(
-                        RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                            .fill(accent.opacity(0.12))
-                    )
-
-                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                    Text(title)
-                        .font(Theme.Typography.cardHeader)
-                        .foregroundStyle(Theme.Colors.textPrimary)
-
-                    Text(subtitle)
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textSecondary)
+            HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.sm) {
+                Text(title)
+                    .font(Theme.Typography.title3)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityAddTraits(.isHeader)
+                Spacer(minLength: 0)
+                if let help {
+                    AppHelpButton(title: title, message: help)
                 }
             }
 
-            LazyVGrid(columns: metricColumns, spacing: Theme.Spacing.sm) {
+            HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.xl) {
                 ForEach(metrics) { metric in
-                    panelMetricCard(metric)
+                    DisplayStat(value: metric.value, label: metric.label, valueFont: Theme.Typography.numberSmall)
                 }
+                Spacer(minLength: 0)
             }
 
             DistributionStrip(buckets: buckets)
-                .frame(height: 20)
+                .frame(height: 14)
+                .accessibilityHidden(true)
 
-            VStack(spacing: Theme.Spacing.sm) {
-                ForEach(buckets) { bucket in
-                    bucketRow(bucket)
+            VStack(spacing: 0) {
+                ForEach(Array(buckets.enumerated()), id: \.element.id) { index, bucket in
+                    bucketRow(bucket, showsRule: index < buckets.count - 1)
                 }
             }
-
-            Text(footnote)
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Colors.textSecondary)
         }
-        .padding(Theme.Spacing.lg)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
-                .fill(Theme.Colors.surface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
-                .strokeBorder(Theme.Colors.border.opacity(0.55), lineWidth: 1)
-        )
     }
 
-    private func panelMetricCard(_ metric: PanelMetric) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            Text(metric.label)
-                .font(Theme.Typography.caption2Bold)
-                .foregroundStyle(Theme.Colors.textTertiary)
+    private func bucketRow(_ bucket: BreakdownBucket, showsRule: Bool) -> some View {
+        HStack(alignment: .center, spacing: Theme.Spacing.md) {
+            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                .fill(bucket.count > 0 ? bucket.tint : Theme.Colors.rule)
+                .frame(width: 6, height: 22)
+                .accessibilityHidden(true)
 
-            Text(metric.value)
-                .font(Theme.Typography.subheadlineBold)
-                .foregroundStyle(metric.tint)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-
-            Text(metric.detail)
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Colors.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(Theme.Spacing.md)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                .fill(metric.tint.opacity(0.08))
-        )
-    }
-
-    private func bucketRow(_ bucket: BreakdownBucket) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.sm) {
-                HStack(spacing: Theme.Spacing.sm) {
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.sm) {
+                    Text(bucket.title)
+                        .font(Theme.Typography.headline)
+                        .foregroundStyle(bucket.count > 0 ? Theme.Colors.textPrimary : Theme.Colors.textTertiary)
                     Text(bucket.label)
-                        .font(Theme.Typography.captionBold)
-                        .foregroundStyle(bucket.tint)
-                        .padding(.horizontal, Theme.Spacing.sm)
-                        .padding(.vertical, 6)
-                        .background(
-                            Capsule()
-                                .fill(bucket.tint.opacity(0.12))
-                        )
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(bucket.title)
-                            .font(Theme.Typography.subheadlineBold)
-                            .foregroundStyle(Theme.Colors.textPrimary)
-
-                        Text(bucket.detail)
-                            .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.Colors.textSecondary)
-                    }
+                        .font(Theme.Typography.subheadline)
+                        .monospacedDigit()
+                        .foregroundStyle(Theme.Colors.textSecondary)
                 }
-
-                Spacer(minLength: Theme.Spacing.sm)
-
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text(SharedFormatters.count(bucket.count, "set"))
-                        .font(Theme.Typography.captionBold)
-                        .foregroundStyle(Theme.Colors.textPrimary)
-
-                    Text(percentText(bucket.percent))
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textTertiary)
-                }
+                Text(bucket.detail)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
-            GeometryReader { proxy in
-                let width = max(proxy.size.width * bucket.percent, bucket.count > 0 ? 10 : 0)
-                ZStack(alignment: .leading) {
-                    Capsule()
-                        .fill(Theme.Colors.surfaceRaised)
+            Spacer(minLength: Theme.Spacing.sm)
 
-                    Capsule()
-                        .fill(
-                            LinearGradient(
-                                colors: [bucket.tint.opacity(0.35), bucket.tint],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-                        .frame(width: width)
-                }
+            VStack(alignment: .trailing, spacing: 1) {
+                Text(percentText(bucket.percent))
+                    .font(Theme.Typography.numberSmall)
+                    .foregroundStyle(bucket.count > 0 ? Theme.Colors.textPrimary : Theme.Colors.textTertiary)
+                Text(SharedFormatters.count(bucket.count, "set"))
+                    .font(Theme.Typography.caption)
+                    .monospacedDigit()
+                    .foregroundStyle(Theme.Colors.textSecondary)
             }
-            .frame(height: 10)
         }
-        .padding(Theme.Spacing.md)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                .fill(Theme.Colors.surfaceRaised)
-        )
-    }
-
-    private var repFootnote: String {
-        guard let dominantRepBucket else {
-            return "Rep distribution will appear after you log more sessions."
-        }
-
-        return "\(percentText(dominantRepBucket.percent)) of your logged sets land in \(dominantRepBucket.label), so this lift currently trends toward \(dominantRepBucket.title.lowercased())."
-    }
-
-    private var intensityFootnote: String {
-        guard let dominantIntensityBucket else {
-            return "Intensity profile appears once the app can estimate a reference 1RM."
-        }
-
-        return "\(percentText(dominantIntensityBucket.percent)) of your loaded sets sit in the \(dominantIntensityBucket.label) zone, with \(percentText(hardIntensityShare)) of work at 75%+ of estimated 1RM."
-    }
-
-    private var sectionBackground: some View {
-        RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge)
-            .fill(
-                LinearGradient(
-                    colors: [
-                        Theme.Colors.cardBackground,
-                        Theme.Colors.surfaceRaised
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-    }
-
-    private var sectionOutline: some View {
-        RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge)
-            .strokeBorder(Theme.Colors.border.opacity(0.55), lineWidth: 1)
+        .ledgerRow(showsRule: showsRule, verticalPadding: Theme.Spacing.sm)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(bucket.title), \(bucket.label): \(SharedFormatters.count(bucket.count, "set")), \(percentText(bucket.percent))")
     }
 
     private func percentText(_ value: Double) -> String {
@@ -784,42 +583,17 @@ private struct DistributionStrip: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let totalSpacing = CGFloat(max(buckets.count - 1, 0)) * Theme.Spacing.xs
-            let availableWidth = max(proxy.size.width - totalSpacing, 0)
-
-            HStack(spacing: Theme.Spacing.xs) {
-                ForEach(Array(buckets.enumerated()), id: \.element.id) { index, bucket in
-                    RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                        .fill(
-                            bucket.count > 0
-                            ? AnyShapeStyle(
-                                LinearGradient(
-                                    colors: [bucket.tint.opacity(0.55), bucket.tint],
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
-                            )
-                            : AnyShapeStyle(Theme.Colors.surfaceRaised)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                                .strokeBorder(
-                                    bucket.count > 0 ? bucket.tint.opacity(0.35) : Theme.Colors.border.opacity(0.45),
-                                    lineWidth: 1
-                                )
-                        )
-                        .frame(width: segmentWidth(for: index, availableWidth: availableWidth))
+            let filled = buckets.filter { $0.count > 0 }
+            let spacing: CGFloat = 2
+            let available = max(proxy.size.width - spacing * CGFloat(max(filled.count - 1, 0)), 0)
+            HStack(spacing: spacing) {
+                ForEach(filled) { bucket in
+                    Rectangle()
+                        .fill(bucket.tint)
+                        .frame(width: max(available * bucket.percent, 3))
                 }
             }
+            .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
         }
-    }
-
-    private func segmentWidth(for index: Int, availableWidth: CGFloat) -> CGFloat {
-        guard !buckets.isEmpty else { return 0 }
-        let bucket = buckets[index]
-        if bucket.percent > 0 {
-            return max(availableWidth * bucket.percent, 8)
-        }
-        return 0
     }
 }

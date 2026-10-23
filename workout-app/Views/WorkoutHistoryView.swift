@@ -383,7 +383,7 @@ private nonisolated enum HistoryDerivedStateBuilder {
 
         return HistoryLocationOption(
             kind: .deleted,
-            title: "Deleted Gym",
+            title: "Deleted gym",
             subtitle: "Original gym no longer saved",
             sortOrder: 95
         )
@@ -392,7 +392,7 @@ private nonisolated enum HistoryDerivedStateBuilder {
     private static func optionSubtitle(baseSubtitle: String?, workoutCount: Int) -> String {
         let count = "\(workoutCount) workout" + (workoutCount == 1 ? "" : "s")
         guard let baseSubtitle, !baseSubtitle.isEmpty else { return count }
-        return "\(baseSubtitle) • \(count)"
+        return "\(baseSubtitle), \(count)"
     }
 
     private static func checkCancellation(at index: Int) throws {
@@ -405,6 +405,8 @@ private nonisolated enum HistoryDerivedStateBuilder {
 struct WorkoutHistoryView: View {
     let workouts: [Workout]
     var showsBackButton = false
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var searchText = ""
     @State private var selectedTimeWindow: HistoryDateWindow = .allTime
@@ -434,19 +436,23 @@ struct WorkoutHistoryView: View {
             ScrollView(showsIndicators: false) {
                 // Month headers pin while scrolling so a long history always shows where you are.
                 LazyVStack(alignment: .leading, spacing: Theme.Spacing.xl, pinnedViews: [.sectionHeaders]) {
-                    header
+                    VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+                        header
 
-                    if derivedState.isReady && derivedState.totalCount > 0 {
-                        filterChips
+                        if derivedState.isReady && derivedState.totalCount > 0 {
+                            filterChips
+                        }
                     }
 
                     content
                 }
-                .padding(.horizontal, Theme.Spacing.lg)
-                .padding(.vertical, Theme.Spacing.xl)
+                .padding(.horizontal, Theme.Layout.screenGutter)
+                .padding(.top, Theme.Spacing.sm)
+                .padding(.bottom, Theme.Spacing.xxl)
                 .frame(maxWidth: Theme.Layout.maxContentWidth, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .center)
             }
+            .scrollDismissesKeyboard(.interactively)
         }
         .navigationTitle("History")
         .navigationBarTitleDisplayMode(.large)
@@ -465,7 +471,7 @@ struct WorkoutHistoryView: View {
             switch sheet {
             case .location:
                 MultiSelectSheet(
-                    title: "Filter Locations",
+                    title: "Filter locations",
                     items: derivedState.locationOptions,
                     selectedItems: $selectedLocations,
                     itemTitle: { $0.title },
@@ -473,7 +479,7 @@ struct WorkoutHistoryView: View {
                 )
             case .exercise:
                 MultiSelectSheet(
-                    title: "Filter Exercises",
+                    title: "Filter exercises",
                     items: derivedState.exerciseOptions,
                     selectedItems: $selectedExercises,
                     itemTitle: { $0.name },
@@ -481,7 +487,7 @@ struct WorkoutHistoryView: View {
                 )
             case .duration:
                 MultiSelectSheet(
-                    title: "Filter Durations",
+                    title: "Filter durations",
                     items: HistoryDurationBand.allCases,
                     selectedItems: $selectedDurationBands,
                     itemTitle: { $0.title },
@@ -529,17 +535,42 @@ struct WorkoutHistoryView: View {
     }
 
     private var header: some View {
-        Text(historySubtitle)
-            .font(Theme.Typography.subheadline)
-            .foregroundStyle(Theme.Colors.textSecondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            Text(historySubtitle)
+                .font(Theme.Typography.subheadline)
+                .foregroundStyle(Theme.Colors.textSecondary)
+
+            if derivedState.isReady && hasActiveFilters {
+                let layout = dynamicTypeSize.isAccessibilitySize
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: Theme.Spacing.xs))
+                    : AnyLayout(HStackLayout(spacing: Theme.Spacing.sm))
+                layout {
+                    let count = selectedOverviewSection?.count ?? derivedState.filteredCount
+                    Text("Showing \(count) of \(derivedState.totalCount) workouts")
+                        .font(Theme.Typography.subheadlineStrong)
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                        .accessibilityIdentifier("history-result-count")
+                    if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 0) }
+                    Button {
+                        clearFilters()
+                        Haptics.selection()
+                    } label: {
+                        TextLinkLabel(title: "Clear all", showsChevron: false)
+                            .underline()
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Clear search and all filters")
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var historySubtitle: String {
         let count = derivedState.isReady ? derivedState.totalCount : workouts.count
         let workoutLabel = "\(count) workout" + (count == 1 ? "" : "s")
         guard let date = derivedState.firstWorkoutDate else { return workoutLabel }
-        return "\(workoutLabel) · since \(date.formatted(.dateTime.month(.abbreviated).year()))"
+        return "\(workoutLabel) since \(date.formatted(.dateTime.month(.wide).year()))."
     }
 
     private var filterChips: some View {
@@ -591,18 +622,6 @@ struct WorkoutHistoryView: View {
                     presentedFilterSheet = .duration
                 }
 
-                if hasActiveFilters {
-                    Button {
-                        clearFilters()
-                        Haptics.selection()
-                    } label: {
-                        Text("Reset")
-                            .font(Theme.Typography.captionStrong)
-                            .foregroundStyle(Theme.Colors.accent)
-                            .frame(minHeight: 44)
-                    }
-                    .buttonStyle(.plain)
-                }
             }
         }
         .scrollClipDisabled()
@@ -630,29 +649,25 @@ struct WorkoutHistoryView: View {
     @ViewBuilder
     private var content: some View {
         if !derivedState.isReady {
-            ProgressView()
+            ProgressView("Loading history…")
                 .tint(Theme.Colors.accent)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, Theme.Spacing.xxl)
         } else if derivedState.totalCount == 0 {
             EmptyStateCard(
-                icon: "clock.badge.exclamationmark",
-                tint: Theme.Colors.accent,
-                title: "No History Yet",
-                message: "Import workouts or finish a session to start your history."
+                title: "Nothing logged yet",
+                message: "Finish a session or import your Strong history, and every workout lands here by month."
             )
             .padding(.top, Theme.Spacing.lg)
         } else if derivedState.monthSections.isEmpty {
             VStack(spacing: Theme.Spacing.md) {
                 EmptyStateCard(
-                    icon: "line.3.horizontal.decrease.circle",
-                    tint: Theme.Colors.accentSecondary,
-                    title: "No Matches",
-                    message: "Broaden your search or reset the active filters."
+                    title: "No matches",
+                    message: "Try another workout or exercise name, or clear your search and filters."
                 )
 
                 AppPillButton(
-                    title: "Reset Filters",
+                    title: "Clear search and filters",
                     systemImage: "arrow.counterclockwise",
                     variant: .accent
                 ) {
@@ -675,43 +690,38 @@ struct WorkoutHistoryView: View {
     }
 
     private var overviewStrip: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .center, spacing: Theme.Spacing.lg) {
-                overviewSummary
-                Spacer(minLength: Theme.Spacing.sm)
-                overviewChart
-            }
-
-            VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-                overviewSummary
-                overviewChart
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
+        VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
+            overviewSummary
+            overviewChart
         }
-        .padding(Theme.Spacing.md)
-        .softCard(elevation: 1)
     }
 
     private var overviewSummary: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: Theme.Spacing.md))
+            : AnyLayout(StatColumns())
+        return layout {
             historySummaryLink(
-                label: "Workouts",
+                label: derivedState.filteredCount == 1 ? "workout" : "workouts",
                 value: "\(derivedState.filteredCount)",
                 kind: .sessions
             )
             historySummaryLink(
-                label: "Avg Duration",
+                label: "avg length",
                 value: SharedFormatters.durationMinutes(derivedState.averageDurationMinutes),
                 kind: .averageDuration
             )
             if derivedState.totalVolume > 0 {
                 historySummaryLink(
-                    label: "Volume",
-                    value: SharedFormatters.volumeWithUnit(derivedState.totalVolume),
+                    label: "lbs lifted",
+                    value: SharedFormatters.volumeCompact(derivedState.totalVolume),
                     kind: .totalVolume
                 )
             }
         }
+        .padding(.vertical, Theme.Spacing.lg)
+        .padding(.horizontal, Theme.Spacing.md)
+        .softCard()
     }
 
     private func historySummaryLink(
@@ -719,91 +729,77 @@ struct WorkoutHistoryView: View {
         value: String,
         kind: WorkoutMetricDetailKind
     ) -> some View {
-        AnalysisTile(
-            role: .navigate,
-            destination: "\(label) analysis",
-            accessibilityLabel: "\(label), \(value)",
-            radius: Theme.CornerRadius.small,
-            padding: Theme.Spacing.xs,
-            action: {
-                selectedMetric = WorkoutMetricDetailSelection(
-                    kind: kind
-                )
-            },
-            content: {
-                HStack(spacing: Theme.Spacing.xs) {
-                    Text(label)
-                        .sectionHeaderStyle()
-                    Text(value)
-                        .font(Theme.Typography.numberSmall)
-                        .foregroundStyle(Theme.Colors.textPrimary)
-                        .monospacedDigit()
-                }
-            }
-        )
+        Button {
+            Haptics.selection()
+            selectedMetric = WorkoutMetricDetailSelection(kind: kind)
+        } label: {
+            DisplayStat(value: value, label: label)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, Theme.Spacing.xs)
+                .contentShape(.rect)
+        }
+        .buttonStyle(PressableCardButtonStyle())
+        .accessibilityLabel("\(label), \(value)")
+        .accessibilityHint("Opens \(label) analysis")
         .accessibilityIdentifier("history-summary-\(kind.rawValue)")
     }
 
     private var overviewChart: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Workouts by month")
+                    .font(Theme.Typography.subheadlineStrong)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                Spacer(minLength: Theme.Spacing.sm)
+                Text("Tap a month to focus it")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.textTertiary)
+            }
             Chart(derivedState.monthlyChart) { point in
                 BarMark(
                     x: .value("Month", point.monthStart, unit: .month),
                     y: .value("Workouts", point.count)
                 )
                 .foregroundStyle(
-                    selectedOverviewMonth == nil
-                        ? AnyShapeStyle(Theme.Colors.accent.gradient)
-                        : AnyShapeStyle(
-                            isSelectedOverviewMonth(point.monthStart)
-                                ? Theme.Colors.accent
-                                : Theme.Colors.textTertiary
-                        )
+                    selectedOverviewMonth == nil || isSelectedOverviewMonth(point.monthStart)
+                        ? Theme.Colors.textPrimary
+                        : Theme.Colors.decorativeSubtle
                 )
-                .cornerRadius(3)
-
-                if isSelectedOverviewMonth(point.monthStart) {
-                    RuleMark(x: .value("Selected month", point.monthStart, unit: .month))
-                        .foregroundStyle(Theme.Colors.textPrimary)
-                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
-                }
+                .cornerRadius(2)
             }
             .chartXSelection(value: $selectedOverviewMonth)
-            .chartXAxis(.hidden)
+            .chartXAxis {
+                AxisMarks(values: .stride(by: .month, count: 3)) { _ in
+                    AxisValueLabel(format: .dateTime.month(.abbreviated), centered: false)
+                        .font(Theme.Typography.caption2)
+                        .foregroundStyle(Theme.Colors.textTertiary)
+                }
+            }
             .chartYAxis(.hidden)
-            .frame(width: 124, height: 56)
+            .frame(height: 84)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Workouts per month for the current results")
             .accessibilityValue(overviewChartAccessibilityValue)
             .accessibilityHint("Swipe up or down to focus a month and its workouts.")
             .accessibilityAdjustableAction(adjustOverviewMonth)
+        }
     }
 
     private func selectedMonthContext(_ section: HistoryMonthSection) -> some View {
-        VStack {
-            HStack(spacing: Theme.Spacing.sm) {
-                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                    Text("Focused Month")
-                        .sectionHeaderStyle()
-                    Text(section.title)
-                        .font(Theme.Typography.bodyBold)
-                        .foregroundStyle(Theme.Colors.textPrimary)
-                    Text("\(section.count) contributing workout\(section.count == 1 ? "" : "s")")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                }
-
-                Spacer()
-
-                Button("Show All") {
-                    selectedOverviewMonth = nil
-                    Haptics.selection()
-                }
-                .font(Theme.Typography.metricLabel)
-                .frame(minHeight: Theme.Layout.minimumTapTarget)
+        HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.sm) {
+            Text("Showing \(section.title) only")
+                .font(Theme.Typography.subheadlineStrong)
+                .foregroundStyle(Theme.Colors.textPrimary)
+            Spacer(minLength: Theme.Spacing.sm)
+            Button {
+                selectedOverviewMonth = nil
+                Haptics.selection()
+            } label: {
+                TextLinkLabel(title: "All months", showsChevron: false)
+                    .underline()
             }
+            .buttonStyle(.plain)
         }
-        .padding(Theme.Spacing.lg)
-        .tintedSection(Theme.Colors.accent, cornerRadius: Theme.CornerRadius.large)
     }
 
     private var selectedOverviewSection: HistoryMonthSection? {
@@ -849,18 +845,19 @@ struct WorkoutHistoryView: View {
 
     private func monthSection(_ section: HistoryMonthSection) -> some View {
         Section {
-            LazyVStack(spacing: Theme.Spacing.sm) {
-                ForEach(section.rows) { row in
+            LazyVStack(spacing: 0) {
+                ForEach(Array(section.rows.enumerated()), id: \.element.id) { index, row in
                     WorkoutHistoryRow(
                         workout: row.workout,
                         onDeleted: { loggedWorkoutDeleted($0) },
-                        precomputedMetrics: row.metrics
+                        precomputedMetrics: row.metrics,
+                        showsRule: index > 0
                     )
                 }
             }
         } header: {
             ViewThatFits(in: .horizontal) {
-                HStack(alignment: .center, spacing: Theme.Spacing.sm) {
+                HStack(alignment: .lastTextBaseline, spacing: Theme.Spacing.sm) {
                     monthTitle(section)
                     Spacer(minLength: Theme.Spacing.xs)
                     monthMetadata(section)
@@ -871,21 +868,20 @@ struct WorkoutHistoryView: View {
                     monthMetadata(section)
                 }
             }
-            .padding(.vertical, Theme.Spacing.sm)
+            .padding(.top, Theme.Spacing.md)
+            .padding(.bottom, Theme.Spacing.sm)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background {
                 // Extends to the screen edges so rows slide cleanly beneath the pinned header.
                 Rectangle()
-                    .fill(Theme.Colors.background.opacity(0.94))
-                    .padding(.horizontal, -Theme.Spacing.lg)
+                    .fill(Theme.Colors.ground)
+                    .padding(.horizontal, -Theme.Layout.screenGutter)
                     .overlay(alignment: .bottom) {
                         Rectangle()
-                            .fill(Theme.Colors.border.opacity(0.5))
-                            .frame(height: 0.5)
-                            .padding(.horizontal, -Theme.Spacing.lg)
+                            .fill(Theme.Colors.ink)
+                            .frame(height: 2)
                     }
             }
-            // Pull rows closer to their header than the stack's between-section spacing.
             .padding(.bottom, -Theme.Spacing.md)
             .accessibilityAddTraits(.isHeader)
         }
@@ -893,19 +889,15 @@ struct WorkoutHistoryView: View {
 
     private func monthTitle(_ section: HistoryMonthSection) -> some View {
         Text(section.title)
-            .font(Theme.Typography.sectionHeader2)
+            .font(Theme.Typography.sectionHeader)
             .foregroundStyle(Theme.Colors.textPrimary)
     }
 
     private func monthMetadata(_ section: HistoryMonthSection) -> some View {
         HStack(spacing: Theme.Spacing.sm) {
             Text(monthSummary(section))
-                .font(Theme.Typography.captionStrong)
+                .font(Theme.Typography.subheadline)
                 .foregroundStyle(Theme.Colors.textSecondary)
-                .padding(.horizontal, Theme.Spacing.sm)
-                .padding(.vertical, 4)
-                .background(Capsule().fill(Theme.Colors.surfaceRaised))
-                .overlay(Capsule().strokeBorder(Theme.Colors.border.opacity(0.5), lineWidth: 1))
 
             if let delta = section.delta {
                 DeltaTag(delta: delta)
@@ -916,7 +908,7 @@ struct WorkoutHistoryView: View {
     private func monthSummary(_ section: HistoryMonthSection) -> String {
         let count = SharedFormatters.count(section.count, "workout")
         guard section.volume > 0 else { return count }
-        return "\(count) · \(SharedFormatters.volumeWithUnit(section.volume))"
+        return "\(count), \(SharedFormatters.volumeWithUnit(section.volume))"
     }
 
     private var visibleWorkouts: [Workout] {
@@ -931,23 +923,24 @@ struct WorkoutHistoryView: View {
     }
 
     private var hasActiveFilters: Bool {
-        !searchText.isEmpty
+        !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || selectedTimeWindow != .allTime
             || selectedLocations != nil
             || selectedExercises != nil
             || selectedDurationBands != nil
+            || selectedOverviewMonth != nil
     }
 
     private func selectionTitle(_ title: String, count: Int?) -> String {
         guard let count else { return title }
-        return "\(title) · \(count)"
+        return "\(title) (\(count))"
     }
 
     private func durationSubtitle(for band: HistoryDurationBand) -> String {
         let count = visibleWorkouts.filter {
             band.contains(minutes: $0.estimatedDurationMinutes())
         }.count
-        return "\(band.subtitle) • \(count) workout" + (count == 1 ? "" : "s")
+        return "\(band.subtitle), \(count) workout" + (count == 1 ? "" : "s")
     }
 
     private func clearFilters() {
@@ -956,6 +949,7 @@ struct WorkoutHistoryView: View {
         selectedLocations = nil
         selectedExercises = nil
         selectedDurationBands = nil
+        selectedOverviewMonth = nil
         scheduleDerivedStateRefresh(debounceNs: 0)
     }
 
@@ -981,7 +975,7 @@ struct WorkoutHistoryView: View {
             .frame(minHeight: Theme.Layout.minimumTapTarget)
 
             Button {
-                withAnimation(.snappy) { recentlyDeletedWorkout = nil }
+                withAnimation(reduceMotion ? nil : .snappy) { recentlyDeletedWorkout = nil }
             } label: {
                 Image(systemName: "xmark")
                     .font(Theme.Typography.captionBold)
@@ -995,14 +989,15 @@ struct WorkoutHistoryView: View {
         .padding(.leading, Theme.Spacing.lg)
         .padding(.trailing, Theme.Spacing.xs)
         .padding(.vertical, Theme.Spacing.xs)
-        .glassBackground(opacity: 0.24, cornerRadius: Theme.CornerRadius.xlarge, elevation: 1, interactive: true)
-        .padding(.horizontal, Theme.Spacing.lg)
+        .background(Theme.Colors.elevated, in: Capsule(style: .continuous))
+        .overlay(Capsule(style: .continuous).strokeBorder(Theme.Colors.rule, lineWidth: 1))
+        .padding(.horizontal, Theme.Layout.screenGutter)
         .transition(.move(edge: .bottom).combined(with: .opacity))
         .task(id: workout.id) {
             // Auto-dismiss the undo affordance so it doesn't linger over the list forever.
             try? await Task.sleep(for: .seconds(8))
             guard !Task.isCancelled, recentlyDeletedWorkout?.id == workout.id else { return }
-            withAnimation(.snappy) { recentlyDeletedWorkout = nil }
+            withAnimation(reduceMotion ? nil : .snappy) { recentlyDeletedWorkout = nil }
         }
     }
 
@@ -1090,8 +1085,6 @@ private struct HistoryFilterChipLabel: View {
 
     var body: some View {
         HStack(spacing: Theme.Spacing.xs) {
-            Image(systemName: systemImage)
-                .accessibilityHidden(true)
             Text(title)
                 .lineLimit(1)
             if showsChevron {
@@ -1100,19 +1093,19 @@ private struct HistoryFilterChipLabel: View {
                     .accessibilityHidden(true)
             }
         }
-        .font(Theme.Typography.captionStrong)
-        .foregroundStyle(isActive ? Theme.Colors.accent : Theme.Colors.textSecondary)
+        .font(Theme.Typography.subheadlineStrong)
+        .foregroundStyle(isActive ? Theme.Colors.onAccent : Theme.Colors.textPrimary)
         .padding(.horizontal, Theme.Spacing.md)
-        .frame(minHeight: 44)
+        .frame(minHeight: 40)
         .background(
-            Capsule().fill(isActive ? Theme.Colors.accentTint : Theme.Colors.surface)
+            Capsule(style: .continuous).fill(isActive ? Theme.Colors.accent : Color.clear)
         )
         .overlay(
-            Capsule().strokeBorder(
-                isActive ? Theme.Colors.accent.opacity(0.24) : Theme.Colors.border.opacity(0.7),
-                lineWidth: 1
-            )
+            Capsule(style: .continuous).strokeBorder(isActive ? Theme.Colors.accent : Theme.Colors.rule, lineWidth: 1.5)
         )
+        .frame(minHeight: Theme.Layout.minimumTapTarget)
+        .contentShape(Capsule())
+        .accessibilityValue(isActive ? "Filter applied" : "All included")
     }
 }
 
@@ -1120,6 +1113,8 @@ struct WorkoutHistoryRow: View {
     let workout: Workout
     var onDeleted: ((LoggedWorkout) -> Void)?
     let precomputedMetrics: HistoryRowMetrics?
+    var showsRule = true
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @EnvironmentObject private var healthManager: HealthKitManager
     @EnvironmentObject private var annotationsManager: WorkoutAnnotationsManager
@@ -1136,11 +1131,13 @@ struct WorkoutHistoryRow: View {
     init(
         workout: Workout,
         onDeleted: ((LoggedWorkout) -> Void)? = nil,
-        precomputedMetrics: HistoryRowMetrics? = nil
+        precomputedMetrics: HistoryRowMetrics? = nil,
+        showsRule: Bool = true
     ) {
         self.workout = workout
         self.onDeleted = onDeleted
         self.precomputedMetrics = precomputedMetrics
+        self.showsRule = showsRule
         _fallbackMetrics = State(initialValue: precomputedMetrics)
     }
 
@@ -1163,55 +1160,50 @@ struct WorkoutHistoryRow: View {
     }
 
     var body: some View {
+        let parts = SharedFormatters.workoutTitleParts(workout.name)
         NavigationLink(destination: WorkoutDetailView(workout: workout)) {
-            HStack(alignment: .top, spacing: Theme.Spacing.md) {
+            let layout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: Theme.Spacing.sm))
+                : AnyLayout(HStackLayout(alignment: .center, spacing: Theme.Spacing.md))
+            layout {
                 WorkoutDateBadge(date: workout.date)
 
-                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                    Text(workout.name)
-                        .font(Theme.Typography.bodyBold)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(parts.title)
+                        .font(Theme.Typography.headline)
                         .foregroundStyle(Theme.Colors.textPrimary)
-                        .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    InlineStat(
-                        icon: "clock",
-                        value: metricsLine,
-                        tint: Theme.Colors.accentSecondary
-                    )
-
-                    if let gymName = metrics?.gymName {
-                        InlineStat(
-                            icon: metrics?.gymIsDeleted == true
-                                ? "exclamationmark.triangle.fill"
-                                : "mappin.and.ellipse",
-                            value: gymName,
-                            tint: metrics?.gymIsDeleted == true
-                                ? Theme.Colors.warning
-                                : Theme.Colors.accent
-                        )
-                    }
+                    Text(placeLine(fallbackPlace: parts.place))
+                        .font(Theme.Typography.subheadline)
+                        .foregroundStyle(metrics?.gymIsDeleted == true ? Theme.Colors.warning : Theme.Colors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
 
                     if let healthData = healthManager.getHealthData(for: workout.id) {
                         HealthDataSummaryView(healthData: healthData)
+                            .padding(.top, 2)
                     }
                 }
 
-                Spacer(minLength: Theme.Spacing.xs)
+                if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: Theme.Spacing.xs) }
 
-                Image(systemName: "chevron.right")
-                    .font(Theme.Typography.captionBold)
-                    .foregroundStyle(Theme.Colors.textTertiary)
-                    .padding(.top, Theme.Spacing.md)
+                VStack(alignment: dynamicTypeSize.isAccessibilitySize ? .leading : .trailing, spacing: 1) {
+                    Text(SharedFormatters.durationMinutes(Double(workout.estimatedDurationMinutes())))
+                        .font(Theme.Typography.numberSmall)
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                    if let metrics, metrics.volume > 0 {
+                        Text(SharedFormatters.volumeWithUnit(metrics.volume))
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Colors.textSecondary)
+                    }
+                }
             }
-            .contentShape(Rectangle())
+            .ledgerRow(showsRule: showsRule)
             .accessibilityElement(children: .combine)
             .accessibilityLabel(accessibilityLabel)
             .accessibilityHint(accessibilityHint)
         }
         .buttonStyle(PressableCardButtonStyle())
-        .padding(Theme.Spacing.md)
-        .softCard(elevation: 1)
         .accessibilityAction(named: "Repeat workout") {
             repeatThisWorkout()
         }
@@ -1235,15 +1227,17 @@ struct WorkoutHistoryRow: View {
                     Haptics.selection()
                     showingDeleteAlert = true
                 } label: {
-                    Label("Delete Workout", systemImage: "trash")
+                    Label("Delete workout", systemImage: "trash")
                 }
             }
         }
-        .alert("Delete Workout?", isPresented: $showingDeleteAlert) {
+        .alert("Delete workout?", isPresented: $showingDeleteAlert) {
             Button("Delete", role: .destructive) { deleteLoggedWorkout() }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This permanently deletes this logged workout.")
+            Text(onDeleted == nil
+                ? "This permanently deletes \(workout.name) from your history."
+                : "This deletes \(workout.name) from your history. You can undo right after.")
         }
         .alert(
             "Replace active session?",
@@ -1276,6 +1270,19 @@ struct WorkoutHistoryRow: View {
         }
     }
 
+    /// Where and when, then how much: "Aspen Glen Club, 6:09 PM, 6 exercises".
+    private func placeLine(fallbackPlace: String?) -> String {
+        var values: [String] = []
+        if let place = metrics?.gymName ?? fallbackPlace {
+            values.append(place)
+        }
+        values.append(workout.date.formatted(date: .omitted, time: .shortened))
+        if let metrics {
+            values.append(SharedFormatters.count(metrics.exerciseCount, "exercise"))
+        }
+        return values.joined(separator: ", ")
+    }
+
     private var metricsLine: String {
         var values = [
             workout.date.formatted(date: .omitted, time: .shortened),
@@ -1287,7 +1294,7 @@ struct WorkoutHistoryRow: View {
                 values.append(SharedFormatters.volumeWithUnit(metrics.volume))
             }
         }
-        return values.joined(separator: " · ")
+        return values.joined(separator: ", ")
     }
 
     private var accessibilityLabel: String {
@@ -1295,7 +1302,7 @@ struct WorkoutHistoryRow: View {
     }
 
     private var accessibilityHint: String {
-        "Double tap for details. Touch and hold for repeat and more actions."
+        "Opens workout details. Touch and hold for repeat and more actions."
     }
 
     private func repeatThisWorkout() {

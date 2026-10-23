@@ -1,8 +1,7 @@
 import SwiftUI
 
-/// Unified empty-state card used throughout the app.
-/// Two display modes: icon variant (with colored icon box) and simple variant (text only).
-/// Uses brand typography for a polished, intentional look.
+/// Unified empty-state panel: what is missing and what to do about it, left aligned
+/// like the rest of the log. An optional symbol sits above the title.
 struct EmptyStateCard: View {
     let title: String
     let message: String
@@ -41,52 +40,29 @@ struct EmptyStateCard: View {
     }
 
     var body: some View {
-        Group {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             if let icon {
-                VStack(spacing: Theme.Spacing.lg) {
-                    ZStack {
-                        Circle()
-                            .fill(
-                                RadialGradient(
-                                    colors: [tint.opacity(0.16), tint.opacity(0.02)],
-                                    center: .center,
-                                    startRadius: 4,
-                                    endRadius: 46
-                                )
-                            )
-                            .frame(width: 88, height: 88)
-                        Circle()
-                            .strokeBorder(tint.opacity(0.18), lineWidth: 1)
-                            .frame(width: 64, height: 64)
-                        Image(systemName: icon)
-                            .font(Theme.Iconography.title2Strong)
-                            .foregroundStyle(tint)
-                            .symbolRenderingMode(.hierarchical)
-                    }
+                Image(systemName: icon)
+                    .font(Theme.Iconography.title2)
+                    .foregroundStyle(tint)
                     .accessibilityHidden(true)
-
-                    textContent
-                        .multilineTextAlignment(.center)
-                }
-                .frame(maxWidth: .infinity)
-            } else {
-                textContent
+            }
+            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                Text(title)
+                    .font(Theme.Typography.sectionHeader2)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityAddTraits(.isHeader)
+                Text(message)
+                    .font(Theme.Typography.body)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .lineSpacing(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Theme.Spacing.xl)
         .softCard(elevation: elevation)
         .accessibilityElement(children: .combine)
-    }
-
-    private var textContent: some View {
-        VStack(alignment: icon != nil ? .center : .leading, spacing: Theme.Spacing.sm) {
-            Text(title)
-                .font(Theme.Typography.sectionHeader2)
-                .foregroundStyle(Theme.Colors.textPrimary)
-            Text(message)
-                .font(Theme.Typography.body)
-                .foregroundStyle(Theme.Colors.textSecondary)
-                .lineSpacing(2)
-        }
     }
 }

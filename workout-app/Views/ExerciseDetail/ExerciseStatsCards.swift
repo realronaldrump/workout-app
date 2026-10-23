@@ -5,6 +5,7 @@ struct ExerciseStatsCards: View {
     let sessions: [ExerciseHistorySession]
     let scope: ExerciseAnalysisScope
     var showsPerformanceStats: Bool = true
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @EnvironmentObject private var dataManager: WorkoutDataManager
     @ObservedObject private var metadataManager = ExerciseMetadataManager.shared
     @ObservedObject private var metricManager = ExerciseMetricManager.shared
@@ -179,7 +180,12 @@ struct ExerciseStatsCards: View {
     }
 
     var body: some View {
-        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
+        LazyVGrid(
+            columns: dynamicTypeSize.isAccessibilitySize
+                ? [GridItem(.flexible())]
+                : [GridItem(.flexible()), GridItem(.flexible())],
+            spacing: Theme.Spacing.md
+        ) {
             if isCardio {
                 let cardio = cardioStats
 
@@ -193,7 +199,7 @@ struct ExerciseStatsCards: View {
 
                 if cardio.totalDistance > 0 {
                     StatCard(
-                        title: "Total Distance",
+                        title: "Total distance",
                         value: WorkoutValueFormatter.distanceText(cardio.totalDistance),
                         subtitle: "dist",
                         icon: "location.fill",
@@ -204,7 +210,7 @@ struct ExerciseStatsCards: View {
 
                 if cardio.totalSeconds > 0 {
                     StatCard(
-                        title: "Total Time",
+                        title: "Total time",
                         value: WorkoutValueFormatter.durationText(seconds: cardio.totalSeconds),
                         icon: "clock.fill",
                         color: Theme.Colors.cardio,
@@ -228,7 +234,7 @@ struct ExerciseStatsCards: View {
                     case .distance:
                         if cardio.bestDistance > 0 {
                             StatCard(
-                                title: "Best Distance",
+                                title: "Best distance",
                                 value: WorkoutValueFormatter.distanceText(cardio.bestDistance),
                                 subtitle: "dist",
                                 icon: "trophy.fill",
@@ -239,7 +245,7 @@ struct ExerciseStatsCards: View {
                     case .duration:
                         if cardio.bestSeconds > 0 {
                             StatCard(
-                                title: "Best Time",
+                                title: "Best time",
                                 value: WorkoutValueFormatter.durationText(seconds: cardio.bestSeconds),
                                 icon: "trophy.fill",
                                 color: Theme.Colors.gold,
@@ -263,7 +269,7 @@ struct ExerciseStatsCards: View {
                 let series = derived.series
 
                 ExerciseStatTile(
-                    title: "Total Sets",
+                    title: "Total sets",
                     value: "\(stats.totalSets)",
                     icon: "number",
                     color: Theme.Colors.accent,
@@ -299,7 +305,7 @@ struct ExerciseStatsCards: View {
                 }
 
                 ExerciseStatTile(
-                    title: "Avg Reps",
+                    title: "Average reps",
                     value: String(format: "%.1f", stats.avgReps),
                     icon: "repeat",
                     color: Theme.Colors.accentTertiary,
@@ -310,7 +316,7 @@ struct ExerciseStatsCards: View {
 
                 if !isAssisted {
                     ExerciseStatTile(
-                        title: "Max Volume",
+                        title: "Best session volume",
                         value: SharedFormatters.volumeWithUnit(stats.maxVolume),
                         icon: "chart.bar.fill",
                         color: Theme.Colors.success,
@@ -355,6 +361,7 @@ struct ExerciseStatsCards: View {
 /// "is this going anywhere". The shape and the recent-versus-earlier delta answer
 /// the second question without needing a tap.
 private struct ExerciseStatTile: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let title: String
     let value: String
     let icon: String
@@ -375,14 +382,7 @@ private struct ExerciseStatTile: View {
     }
 
     private var content: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            // The wrapping tile button draws its own chevron in the trailing corner,
-            // so nothing else may sit on that row.
-            Image(systemName: icon)
-                .font(Theme.Iconography.mediumStrong)
-                .foregroundStyle(color)
-                .accessibilityHidden(true)
-
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
             Text(value)
                 .font(Theme.Typography.number)
                 .foregroundStyle(Theme.Colors.textPrimary)
@@ -390,19 +390,27 @@ private struct ExerciseStatTile: View {
                 .minimumScaleFactor(0.7)
                 .allowsTightening(true)
                 .contentTransition(.numericText())
+                // The wrapping tile button draws its own chevron in the trailing corner.
+                .padding(.trailing, Theme.Spacing.lg)
 
             // The delta rides with the label rather than the value, so a wide value
             // like "10.2k lbs" keeps the full width it needs.
-            HStack(spacing: Theme.Spacing.xs) {
-                Text(title)
-                    .font(Theme.Typography.metricLabel)
-                    .foregroundStyle(Theme.Colors.textSecondary)
-                    .textCase(.uppercase)
-                    .tracking(0.8)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+            (dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: Theme.Spacing.xs))
+                : AnyLayout(HStackLayout(spacing: Theme.Spacing.xs))) {
+                HStack(spacing: 6) {
+                    RoundedRectangle(cornerRadius: 1, style: .continuous)
+                        .fill(color)
+                        .frame(width: 3, height: 12)
+                        .accessibilityHidden(true)
+                    Text(title)
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
 
-                Spacer(minLength: 0)
+                if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 0) }
 
                 if let delta, !delta.isFlat {
                     DeltaTag(delta: delta)
@@ -413,30 +421,24 @@ private struct ExerciseStatTile: View {
             // height whether or not they have a series behind them.
             Group {
                 if sparkline.count >= 2 {
-                    Sparkline(values: sparkline, tint: color)
+                    Sparkline(values: sparkline, tint: Theme.Colors.textPrimary, areaFill: false)
                 } else {
                     Color.clear
                 }
             }
             .frame(height: 26)
+            .padding(.top, Theme.Spacing.xs)
 
             Text(footnote ?? " ")
                 .font(Theme.Typography.caption2)
                 .foregroundStyle(Theme.Colors.textTertiary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .padding(.horizontal, Theme.Spacing.lg)
+        .padding(.horizontal, Theme.Spacing.md)
         .padding(.vertical, Theme.Spacing.md)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
-                .fill(color.opacity(0.07))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
-                .strokeBorder(color.opacity(0.16), lineWidth: 1)
-        )
+        .softCard(cornerRadius: Theme.CornerRadius.large)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabel)
     }

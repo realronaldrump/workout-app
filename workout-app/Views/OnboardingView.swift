@@ -8,22 +8,28 @@ struct OnboardingView: View {
     @EnvironmentObject var healthManager: HealthKitManager
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var step = 0
     @State private var showingImportWizard = false
     @State private var welcomeVisible = false
-    @State private var welcomeFloating = false
     @State private var isRequestingHealth = false
     @State private var healthErrorMessage: String?
 
     private let totalSteps = 3
-    private let onboardingPrimaryText = Color.white
-    private let onboardingSecondaryText = Color.white.opacity(0.82)
-    private let onboardingTertiaryText = Color.white.opacity(0.68)
+    private let stepTitles = ["Welcome", "Your workouts", "Apple Health"]
+    private let healthReadItems = [
+        "Sleep duration and stages",
+        "Resting and workout heart rate",
+        "Heart rate variability",
+        "Active energy and steps",
+        "Body weight and composition",
+        "VO2 max and respiratory rate"
+    ]
 
     var body: some View {
         ZStack {
-            SplashBackground()
+            AdaptiveBackground()
 
             VStack(spacing: Theme.Spacing.lg) {
                 topBar
@@ -37,9 +43,10 @@ struct OnboardingView: View {
 
                 footer
             }
-            .padding(.vertical, Theme.Spacing.xl)
+            .padding(.vertical, Theme.Spacing.lg)
             .contentColumn(maxWidth: 640, alignment: .center)
         }
+        .interactiveDismissDisabled(isRequestingHealth)
         .analyticsScreen("Onboarding")
         .onAppear {
             AppAnalytics.shared.track(AnalyticsSignal.onboardingStarted)
@@ -82,8 +89,22 @@ struct OnboardingView: View {
     }
 
     private var topBar: some View {
-        VStack(spacing: Theme.Spacing.sm) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             HStack {
+                if step > 0 {
+                    Button {
+                        withAnimation(reduceMotion ? nil : Theme.Animation.smooth) {
+                            step -= 1
+                        }
+                    } label: {
+                        Label("Back", systemImage: "chevron.left")
+                            .font(Theme.Typography.subheadlineStrong)
+                            .foregroundStyle(Theme.Colors.textPrimary)
+                            .frame(minHeight: Theme.Layout.minimumTapTarget)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isRequestingHealth)
+                }
                 Spacer()
 
                 Button("Skip") {
@@ -94,517 +115,259 @@ struct OnboardingView: View {
                     completeOnboarding()
                 }
                 .font(Theme.Typography.subheadline)
-                .foregroundStyle(onboardingSecondaryText)
-                .padding(.horizontal, Theme.Spacing.lg)
-                .frame(minHeight: 44)
+                .foregroundStyle(Theme.Colors.textSecondary)
+                .frame(minHeight: Theme.Layout.minimumTapTarget)
                 .buttonStyle(.plain)
+                .disabled(isRequestingHealth)
+                .accessibilityHint("Finishes setup now. You can import data and connect Apple Health later in Settings.")
             }
 
-            HStack(spacing: 8) {
-                ForEach(0..<totalSteps, id: \.self) { index in
-                    Capsule()
-                        .fill(index <= step ? Color.white : Color.white.opacity(0.20))
-                        .frame(width: index == step ? 24 : 8, height: 4)
-                        .animation(reduceMotion ? .easeOut(duration: 0.2) : .spring(response: 0.4, dampingFraction: 0.75), value: step)
-                }
+            HStack(alignment: .center, spacing: Theme.Spacing.md) {
+                OnboardingStepPlates(current: step, total: totalSteps)
+                Text("Step \(step + 1) of \(totalSteps), \(stepTitles[min(step, stepTitles.count - 1)].lowercased())")
+                    .font(Theme.Typography.subheadline)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .accessibilityAddTraits(.isHeader)
             }
-            .padding(.horizontal, Theme.Spacing.xl)
         }
+        .padding(.horizontal, Theme.Layout.screenGutter)
     }
 
     private var footer: some View {
-        VStack(spacing: Theme.Spacing.md) {
+        VStack(spacing: Theme.Spacing.xs) {
             if let primary = primaryButtonTitle {
                 Button(action: handlePrimaryAction) {
                     HStack(spacing: Theme.Spacing.sm) {
                         if isRequestingHealth {
                             ProgressView()
-                                .tint(Theme.Colors.accent)
+                                .tint(Theme.Colors.onAccent)
                         }
                         Text(primary)
                             .font(Theme.Typography.headline)
-                            .foregroundStyle(Theme.Colors.accent)
+                            .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, Theme.Spacing.md)
-                        .frame(minHeight: 52)
-                        .background(
-                            AnyShapeStyle(Theme.Colors.surface)
-                        )
-                        .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge))
-                        .shadow(color: Color.black.opacity(0.15), radius: 8, y: 4)
-                        .shadow(color: Color.black.opacity(0.08), radius: 16, y: 8)
+                    .frame(maxWidth: .infinity, minHeight: Theme.Layout.primaryControlHeight)
                 }
+                .buttonStyle(BrandPrimaryButtonStyle())
                 .disabled(isRequestingHealth)
             }
 
             if let secondary = secondaryButtonTitle {
                 Button(action: handleSecondaryAction) {
                     Text(secondary)
-                        .font(Theme.Typography.subheadline)
-                        .foregroundStyle(onboardingSecondaryText)
-                        .frame(minHeight: 44)
+                        .font(Theme.Typography.subheadlineStrong)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                        .frame(maxWidth: .infinity, minHeight: Theme.Layout.minimumTapTarget)
                 }
                 .buttonStyle(.plain)
+                .disabled(isRequestingHealth)
             }
         }
-        .padding(.horizontal, Theme.Spacing.xl)
+        .padding(.horizontal, Theme.Layout.screenGutter)
     }
 
-    private var welcomeStep: some View {
-        ZStack {
-            splashHeroBackdrop
+    // MARK: - Welcome
 
-            ViewThatFits(in: .vertical) {
-                welcomeHeroLayout(compact: false)
-                welcomeHeroLayout(compact: true)
+    private var welcomeStep: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
+                WordmarkLockup(showTagline: false, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .opacity(welcomeVisible ? 1 : 0)
+                    .offset(y: welcomeVisible || reduceMotion ? 0 : 8)
+                    .animation(reduceMotion ? .easeOut(duration: 0.25) : .spring(response: 0.55, dampingFraction: 0.82), value: welcomeVisible)
+
+                VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+                    Text("Log every set. See what's working.")
+                        .font(Theme.Typography.title2)
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    BarbellLoadView(plates: Self.samplePlates, goal: 4, plateHeight: 72, showsDayLabels: false)
+                        .accessibilityHidden(true)
+
+                    Text("Each workout loads a plate on this week's bar. Hit your weekly goal and the bar is full.")
+                        .font(Theme.Typography.subheadline)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                VStack(spacing: 0) {
+                    welcomeRow(title: "Workouts", detail: "Log sets fast, with last time's numbers ready.", showsRule: false)
+                    welcomeRow(title: "Progress", detail: "Records, trends, and how each lift is moving.")
+                    welcomeRow(title: "Apple Health", detail: "Sleep, heart rate, and body weight beside your training.")
+                }
             }
-            .padding(.horizontal, Theme.Spacing.xl)
+            .padding(.horizontal, Theme.Layout.screenGutter)
+            .padding(.vertical, Theme.Spacing.md)
         }
         .onAppear {
             startWelcomeAnimation()
         }
     }
 
-    private func welcomeHeroLayout(compact: Bool) -> some View {
-        VStack(alignment: .leading, spacing: compact ? Theme.Spacing.lg : Theme.Spacing.xl) {
-            Spacer(minLength: compact ? 0 : Theme.Spacing.sm)
-
-            VStack(alignment: .leading, spacing: compact ? Theme.Spacing.md : Theme.Spacing.lg) {
-                if !compact {
-                    splashEyebrow
-                }
-
-                WordmarkLockup(
-                    showTagline: false,
-                    isOnSplash: true,
-                    alignment: .leading
-                )
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .opacity(welcomeVisible ? 1 : 0)
-                .scaleEffect(
-                    compact ? 0.84 : (welcomeVisible || reduceMotion ? 1 : 0.98),
-                    anchor: .leading
-                )
-                .offset(y: welcomeFloating ? -4 : 0)
-                .animation(reduceMotion ? .easeOut(duration: 0.25) : .spring(response: 0.55, dampingFraction: 0.82), value: welcomeVisible)
-                .animation(reduceMotion ? nil : .easeInOut(duration: 2.4).repeatForever(autoreverses: true), value: welcomeFloating)
-
-                if compact {
-                    Text("Performance, recovery, and momentum in one focused briefing.")
-                        .font(Theme.Typography.subheadlineStrong)
-                        .foregroundStyle(Color.white.opacity(0.84))
-                        .fixedSize(horizontal: false, vertical: true)
-                } else {
-                    VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                        Text("Know what changed, what is working, and what to do next.")
-                            .font(Theme.Typography.heroTitle)
-                            .foregroundStyle(.white)
-                            .fixedSize(horizontal: false, vertical: true)
-
-                        Text("Performance, recovery, and momentum in one focused briefing instead of a wall of charts.")
-                            .font(Theme.Typography.body)
-                            .foregroundStyle(Color.white.opacity(0.82))
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-
-                    splashPillRow
-                }
-            }
-
-            splashPreviewPanel(compact: compact)
-
-            Spacer(minLength: 0)
+    /// Three sessions of a four-session week, to show the bar before there is any data.
+    private static let samplePlates: [LoadedPlate] = {
+        let start = Calendar.current.startOfDay(for: .now)
+        return [PlateCategory.push, .pull, .legs].enumerated().map { index, category in
+            LoadedPlate(id: UUID(), date: start.addingTimeInterval(Double(index) * 86_400), category: category)
         }
-    }
+    }()
 
-    private var splashHeroBackdrop: some View {
-        ZStack {
-            Circle()
-                .fill(Color.white.opacity(0.08))
-                .frame(width: 220, height: 220)
-                .blur(radius: 10)
-                .offset(x: 120, y: -130)
-
-            RoundedRectangle(cornerRadius: 42, style: .continuous)
-                .fill(Color.white.opacity(0.05))
-                .frame(width: 220, height: 220)
-                .rotationEffect(.degrees(18))
-                .offset(x: 135, y: 180)
-
-            RoundedRectangle(cornerRadius: 36, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
-                .frame(width: 180, height: 180)
-                .rotationEffect(.degrees(-14))
-                .offset(x: -110, y: 220)
-        }
-        .allowsHitTesting(false)
-    }
-
-    private var splashEyebrow: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "waveform.path.ecg")
-                .font(Theme.Typography.captionBold)
-            Text("PERFORMANCE INTELLIGENCE")
-                .font(Theme.Typography.captionBold)
-                .tracking(0.8)
-        }
-        .foregroundStyle(Color.white.opacity(0.88))
-        .padding(.horizontal, Theme.Spacing.md)
-        .padding(.vertical, Theme.Spacing.xs)
-        .background(
-            Capsule()
-                .fill(Color.white.opacity(0.12))
-        )
-        .overlay(
-            Capsule()
-                .strokeBorder(Color.white.opacity(0.16), lineWidth: 1)
-        )
-    }
-
-    private var splashPillRow: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: Theme.Spacing.sm) {
-                splashMiniPill(title: "Trends", systemImage: "chart.line.uptrend.xyaxis")
-                splashMiniPill(title: "Recovery", systemImage: "heart.text.square")
-                splashMiniPill(title: "Momentum", systemImage: "figure.run")
-            }
-
-            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                HStack(spacing: Theme.Spacing.sm) {
-                    splashMiniPill(title: "Trends", systemImage: "chart.line.uptrend.xyaxis")
-                    splashMiniPill(title: "Recovery", systemImage: "heart.text.square")
-                }
-                splashMiniPill(title: "Momentum", systemImage: "figure.run")
-            }
-        }
-    }
-
-    private func splashMiniPill(title: String, systemImage: String) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: systemImage)
-                .font(Theme.Typography.captionBold)
+    private func welcomeRow(title: String, detail: String, showsRule: Bool = true) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
             Text(title)
-                .font(Theme.Typography.captionBold)
+                .font(Theme.Typography.headline)
+                .foregroundStyle(Theme.Colors.textPrimary)
+            Text(detail)
+                .font(Theme.Typography.subheadline)
+                .foregroundStyle(Theme.Colors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .foregroundStyle(Color.white.opacity(0.88))
-        .padding(.horizontal, Theme.Spacing.md)
-        .padding(.vertical, Theme.Spacing.xs)
-        .background(
-            Capsule()
-                .fill(Color.white.opacity(0.10))
-        )
-        .overlay(
-            Capsule()
-                .strokeBorder(Color.white.opacity(0.14), lineWidth: 1)
-        )
+        .ledgerRow(showsRule: showsRule, verticalPadding: Theme.Spacing.sm)
+        .accessibilityElement(children: .combine)
     }
 
-    private func splashPreviewPanel(compact: Bool) -> some View {
-        VStack(alignment: .leading, spacing: compact ? Theme.Spacing.md : Theme.Spacing.lg) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("TODAY")
-                    .font(Theme.Typography.captionBold)
-                    .foregroundStyle(Color.white.opacity(0.72))
-                    .tracking(1.0)
-
-                Spacer()
-
-                Text("CLEAR NEXT STEP")
-                    .font(Theme.Typography.captionBold)
-                    .foregroundStyle(Color.white.opacity(0.88))
-                    .padding(.horizontal, Theme.Spacing.sm)
-                    .padding(.vertical, 6)
-                    .background(
-                        Capsule()
-                            .fill(Color.white.opacity(0.12))
-                    )
-            }
-
-            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                Text("One focused briefing before you train.")
-                    .font(Theme.Typography.cardHeader)
-                    .foregroundStyle(.white)
-
-                Text("Spot workload shifts, recovery context, and the muscles that actually need attention.")
-                    .font(compact ? Theme.Typography.caption : Theme.Typography.subheadline)
-                    .foregroundStyle(Color.white.opacity(0.76))
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            VStack(alignment: .leading, spacing: compact ? Theme.Spacing.sm : Theme.Spacing.md) {
-                splashSignalRow(
-                    systemImage: "chart.bar.doc.horizontal",
-                    title: "See what moved",
-                    detail: "Volume, frequency, and exercise trends"
-                )
-                splashSignalRow(
-                    systemImage: "bolt.heart",
-                    title: "Train with context",
-                    detail: "Sleep and recovery alongside your sessions"
-                )
-                if !compact {
-                    splashSignalRow(
-                        systemImage: "target",
-                        title: "Get one next move",
-                        detail: "Know where to push instead of guessing"
-                    )
-                }
-            }
-        }
-        .padding(compact ? Theme.Spacing.lg : Theme.Spacing.xl)
-        .background(
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .fill(Color.white.opacity(0.14))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 28, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.18), lineWidth: 1)
-                )
-                .shadow(color: Color.black.opacity(0.12), radius: 22, y: 12)
-        )
-        .overlay(alignment: .bottomTrailing) {
-            HStack(spacing: 10) {
-                Image(systemName: "flame.fill")
-                    .font(Theme.Typography.captionBold)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("4x / week")
-                        .font(Theme.Typography.captionBold)
-                    Text("Momentum goal")
-                        .font(Theme.Typography.caption2)
-                }
-            }
-            .foregroundStyle(Theme.Colors.textPrimary)
-            .padding(.horizontal, Theme.Spacing.md)
-            .padding(.vertical, Theme.Spacing.sm)
-            .background(
-                Capsule()
-                    .fill(Theme.Colors.surface)
-            )
-            .overlay(
-                Capsule()
-                    .strokeBorder(Color.white.opacity(0.45), lineWidth: 1)
-            )
-            .offset(x: -18, y: compact ? 14 : 18)
-        }
-    }
-
-    private func splashSignalRow(systemImage: String, title: String, detail: String) -> some View {
-        HStack(alignment: .top, spacing: Theme.Spacing.md) {
-            Image(systemName: systemImage)
-                .font(Theme.Typography.calloutBold)
-                .foregroundStyle(.white)
-                .frame(width: 28, height: 28)
-                .background(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color.white.opacity(0.10))
-                )
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(Theme.Typography.subheadlineBold)
-                    .foregroundStyle(.white)
-
-                Text(detail)
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Color.white.opacity(0.74))
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-    }
+    // MARK: - Get started
 
     private var getStartedStep: some View {
         ScrollView(showsIndicators: false) {
-            VStack(spacing: Theme.Spacing.xl) {
-                VStack(spacing: Theme.Spacing.sm) {
-                Text("HOW DO YOU WANT TO START?")
-                    .font(Theme.Typography.sectionHeader)
-                    .foregroundStyle(onboardingPrimaryText)
-                    .tracking(1.0)
-                    .multilineTextAlignment(.center)
+            VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                    Text("How do you want to start?")
+                        .font(Theme.Typography.sectionHeader)
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityAddTraits(.isHeader)
 
-                Text("Import your history or jump right in.")
-                    .font(Theme.Typography.body)
-                    .foregroundStyle(onboardingSecondaryText)
-                    .multilineTextAlignment(.center)
-            }
-                .padding(.horizontal, Theme.Spacing.xl)
-
-                VStack(spacing: Theme.Spacing.md) {
-                // Import saved data option
-                Button {
-                    Haptics.selection()
-                    AppAnalytics.shared.track(AnalyticsSignal.onboardingImportSelected)
-                    showingImportWizard = true
-                } label: {
-                    HStack(spacing: Theme.Spacing.lg) {
-                        Image(systemName: "square.and.arrow.down.on.square")
-                            .font(Theme.Iconography.prominent)
-                            .foregroundStyle(Theme.Colors.accent)
-                            .frame(width: 48, height: 48)
-                            .background(
-                                Circle()
-                                    .fill(Theme.Colors.accentTint)
-                            )
-
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Import Data")
-                                .font(Theme.Typography.bodyBold)
-                                .foregroundStyle(Theme.Colors.textPrimary)
-                            Text("Bring a Strong CSV or app backup")
-                                .font(Theme.Typography.caption)
-                                .foregroundStyle(Theme.Colors.textSecondary)
-                        }
-
-                        Spacer()
-
-                        Image(systemName: "chevron.right")
-                            .font(Theme.Typography.caption2Bold)
-                            .foregroundStyle(Theme.Colors.textTertiary)
-                    }
-                    .padding(Theme.Spacing.lg)
-                    .background(
-                        RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
-                            .fill(Theme.Colors.surfaceRaised)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
-                            .strokeBorder(Theme.Colors.accent.opacity(0.25), lineWidth: 1)
-                    )
+                    Text("Bring your history from Strong, or log your first workout.")
+                        .font(Theme.Typography.body)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .buttonStyle(.plain)
 
-                // Start fresh option
-                Button {
-                    Haptics.selection()
-                    AppAnalytics.shared.track(AnalyticsSignal.onboardingStartFreshSelected)
-                    withAnimation(reduceMotion ? .easeOut(duration: 0.2) : Theme.Animation.spring) {
-                        step = 2
+                VStack(spacing: 0) {
+                    startChoice(
+                        title: "Import from Strong",
+                        detail: "A Strong CSV export, or a backup from this app.",
+                        systemImage: "square.and.arrow.down",
+                        showsRule: false
+                    ) {
+                        Haptics.selection()
+                        AppAnalytics.shared.track(AnalyticsSignal.onboardingImportSelected)
+                        showingImportWizard = true
                     }
-                } label: {
-                    HStack(spacing: Theme.Spacing.lg) {
-                        Image(systemName: "figure.strengthtraining.traditional")
-                            .font(Theme.Iconography.prominent)
-                            .foregroundStyle(Theme.Colors.success)
-                            .frame(width: 48, height: 48)
-                            .background(
-                                Circle()
-                                    .fill(Theme.Colors.success.opacity(0.08))
-                            )
 
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Start Fresh")
-                                .font(Theme.Typography.bodyBold)
-                                .foregroundStyle(Theme.Colors.textPrimary)
-                            Text("Jump right in and log your first workout")
-                                .font(Theme.Typography.caption)
-                                .foregroundStyle(Theme.Colors.textSecondary)
+                    startChoice(
+                        title: "Start fresh",
+                        detail: "Log your first workout from Today.",
+                        systemImage: "plus"
+                    ) {
+                        Haptics.selection()
+                        AppAnalytics.shared.track(AnalyticsSignal.onboardingStartFreshSelected)
+                        withAnimation(reduceMotion ? .easeOut(duration: 0.2) : Theme.Animation.spring) {
+                            step = 2
                         }
-
-                        Spacer()
-
-                        Image(systemName: "chevron.right")
-                            .font(Theme.Typography.caption2Bold)
-                            .foregroundStyle(Theme.Colors.textTertiary)
                     }
-                    .padding(Theme.Spacing.lg)
-                    .background(
-                        RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
-                            .fill(Theme.Colors.surfaceRaised)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
-                            .strokeBorder(Theme.Colors.border.opacity(0.35), lineWidth: 1)
-                    )
                 }
-                .buttonStyle(.plain)
             }
-                .padding(.horizontal, Theme.Spacing.xl)
-            }
-            .padding(.vertical, Theme.Spacing.xl)
+            .padding(.horizontal, Theme.Layout.screenGutter)
+            .padding(.vertical, Theme.Spacing.md)
         }
     }
+
+    private func startChoice(
+        title: String,
+        detail: String,
+        systemImage: String,
+        showsRule: Bool = true,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(alignment: .center, spacing: Theme.Spacing.md) {
+                Image(systemName: systemImage)
+                    .font(Theme.Typography.title4)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                    .frame(width: 28)
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(Theme.Typography.title4)
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                    Text(detail)
+                        .font(Theme.Typography.subheadline)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: Theme.Spacing.sm)
+
+                Image(systemName: "chevron.right")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.textTertiary)
+                    .accessibilityHidden(true)
+            }
+            .ledgerRow(showsRule: showsRule, verticalPadding: Theme.Spacing.lg)
+            .contentShape(.rect)
+        }
+        .buttonStyle(PressableCardButtonStyle())
+    }
+
+    // MARK: - Apple Health
 
     private var healthStep: some View {
         ScrollView(showsIndicators: false) {
-            VStack(spacing: Theme.Spacing.lg) {
-                Image(systemName: "heart.fill")
-                    .font(Theme.Iconography.featureLarge)
-                    .foregroundStyle(Theme.Colors.error)
-                    .frame(width: 100, height: 100)
-                    .background(
-                        Circle()
-                            .fill(Theme.Colors.error.opacity(0.08))
-                    )
-                    .overlay(
-                        Circle()
-                            .strokeBorder(Theme.Colors.error.opacity(0.15), lineWidth: 1)
-                    )
-                    .shadow(color: Theme.Colors.error.opacity(0.12), radius: 12, y: 4)
-
-                VStack(spacing: Theme.Spacing.sm) {
-                    Text("Add recovery context.")
+            VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                    Text("Connect Apple Health")
                         .font(Theme.Typography.sectionHeader)
-                        .foregroundStyle(onboardingPrimaryText)
-                        .tracking(1.0)
-                        .multilineTextAlignment(.center)
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                        .accessibilityAddTraits(.isHeader)
 
-                    Text("Connect Apple Health to see sleep and recovery alongside your training. You can change access at any time.")
+                    Text("See sleep, heart rate, and body weight next to your workouts. You choose what to share and can change it anytime.")
                         .font(Theme.Typography.body)
-                        .foregroundStyle(onboardingSecondaryText)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, Theme.Spacing.xl)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
-                DisclosureGroup("What health data do we read?") {
-                    VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                        learnMoreBullet("Sleep duration & stages")
-                        learnMoreBullet("Resting & workout heart rate")
-                        learnMoreBullet("Heart rate variability (HRV)")
-                        learnMoreBullet("Active energy & step count")
-                        learnMoreBullet("Body weight & composition")
-                        learnMoreBullet("VO₂ Max & respiratory rate")
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("What the app reads")
+                        .font(Theme.Typography.subheadlineStrong)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                        .padding(.bottom, Theme.Spacing.xs)
+
+                    ForEach(Array(healthReadItems.enumerated()), id: \.offset) { index, item in
+                        Text(item)
+                            .font(Theme.Typography.callout)
+                            .foregroundStyle(Theme.Colors.textPrimary)
+                            .ledgerRow(verticalPadding: Theme.Spacing.sm)
                     }
-                    .padding(.top, Theme.Spacing.sm)
                 }
-                .font(Theme.Typography.subheadline)
-                .foregroundStyle(onboardingSecondaryText)
-                .tint(onboardingTertiaryText)
-                .padding(.horizontal, Theme.Spacing.lg)
-                .padding(.vertical, Theme.Spacing.md)
-                .background(
-                    RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
-                        .fill(Color.white.opacity(0.10))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.16), lineWidth: 1)
-                )
-                .padding(.horizontal, Theme.Spacing.xl)
 
-                healthStatusPill
+                healthStatusLine
 
                 if let healthErrorMessage {
                     Text(healthErrorMessage)
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Color.white)
-                        .multilineTextAlignment(.center)
-                        .padding(Theme.Spacing.md)
-                        .background(Color.red.opacity(0.28), in: RoundedRectangle(cornerRadius: Theme.CornerRadius.medium))
-                        .padding(.horizontal, Theme.Spacing.xl)
+                        .font(Theme.Typography.subheadline)
+                        .foregroundStyle(Theme.Colors.error)
+                        .fixedSize(horizontal: false, vertical: true)
                         .accessibilityLabel("Apple Health error: \(healthErrorMessage)")
                 }
             }
-            .padding(.vertical, Theme.Spacing.xl)
+            .padding(.horizontal, Theme.Layout.screenGutter)
+            .padding(.vertical, Theme.Spacing.md)
         }
     }
 
-    private var healthStatusPill: some View {
+    private var healthStatusLine: some View {
         let statusText: String = {
             switch healthManager.authorizationStatus {
             case .authorized:
                 return "Connected"
             case .unavailable:
-                return "Unavailable"
+                return "Apple Health isn't available on this device"
             default:
                 return "Not connected"
             }
@@ -617,7 +380,7 @@ struct OnboardingView: View {
             case .unavailable:
                 return Theme.Colors.textTertiary
             default:
-                return Theme.Colors.warning
+                return Theme.Colors.decorativeSubtle
             }
         }()
 
@@ -625,31 +388,12 @@ struct OnboardingView: View {
             Circle()
                 .fill(tint)
                 .frame(width: 8, height: 8)
+                .accessibilityHidden(true)
             Text(statusText)
-                .font(Theme.Typography.captionBold)
-                .foregroundStyle(onboardingSecondaryText)
+                .font(Theme.Typography.subheadlineStrong)
+                .foregroundStyle(Theme.Colors.textSecondary)
         }
-        .padding(.horizontal, Theme.Spacing.lg)
-        .padding(.vertical, Theme.Spacing.sm)
-        .background(
-            Capsule()
-                .fill(Color.white.opacity(0.10))
-        )
-        .overlay(
-            Capsule()
-                .strokeBorder(Color.white.opacity(0.16), lineWidth: 1)
-        )
-        .padding(.top, Theme.Spacing.sm)
-    }
-
-    private func learnMoreBullet(_ text: String) -> some View {
-        HStack(alignment: .top, spacing: Theme.Spacing.sm) {
-            Text("•")
-                .foregroundStyle(onboardingTertiaryText)
-            Text(text)
-                .foregroundStyle(onboardingSecondaryText)
-        }
-        .font(Theme.Typography.subheadline)
+        .accessibilityElement(children: .combine)
     }
 
     private var primaryButtonTitle: String? {
@@ -662,7 +406,7 @@ struct OnboardingView: View {
             if isRequestingHealth { return "Connecting…" }
             return healthManager.authorizationStatus == .authorized
                 || healthManager.authorizationStatus == .unavailable
-                ? "Finish Setup"
+                ? "Finish setup"
                 : "Connect Apple Health"
         }
     }
@@ -672,7 +416,8 @@ struct OnboardingView: View {
         case 0, 1:
             return nil
         default:
-            return "Not now"
+            return healthManager.authorizationStatus == .authorized
+                || healthManager.authorizationStatus == .unavailable ? nil : "Not now"
         }
     }
 
@@ -725,14 +470,6 @@ struct OnboardingView: View {
 
     private func startWelcomeAnimation() {
         welcomeVisible = true
-        welcomeFloating = false
-        guard !reduceMotion else { return }
-
-        Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 650_000_000)
-            // Mirror the returning-user splash's gentle float to keep the brand moment consistent.
-            welcomeFloating = true
-        }
     }
 }
 
@@ -744,4 +481,29 @@ struct OnboardingView: View {
         hasSeenOnboarding: .constant(false)
     )
     .environmentObject(HealthKitManager())
+}
+
+/// Setup progress as plates on a bar: one plate per step, loaded as you go.
+private struct OnboardingStepPlates: View {
+    let current: Int
+    let total: Int
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        HStack(spacing: 3) {
+            ForEach(0..<total, id: \.self) { index in
+                let shape = RoundedRectangle(cornerRadius: 2, style: .continuous)
+                Group {
+                    if index <= current {
+                        shape.fill(Theme.Colors.ink)
+                    } else {
+                        shape.strokeBorder(Theme.Colors.decorativeSubtle, style: StrokeStyle(lineWidth: 1, dash: [2, 2]))
+                    }
+                }
+                .frame(width: 7, height: 22)
+            }
+        }
+        .animation(reduceMotion ? nil : Theme.Animation.quick, value: current)
+        .accessibilityHidden(true)
+    }
 }

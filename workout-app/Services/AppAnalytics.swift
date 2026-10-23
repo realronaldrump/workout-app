@@ -97,7 +97,7 @@ final class AppAnalytics {
             if remoteConfiguration != nil {
                 return collectionEnabled ? "Anonymous analytics on" : "Anonymous analytics off"
             }
-            return "Add TelemetryDeck keys to enable uploads"
+            return "Uploads are off in this build"
         }
     }
 

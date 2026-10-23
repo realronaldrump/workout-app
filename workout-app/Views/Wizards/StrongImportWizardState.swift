@@ -11,7 +11,7 @@ enum ImportPhase: Double {
     var message: String {
         switch self {
         case .idle:
-            return "Awaiting file"
+            return "Waiting for file"
         case .reading:
             return "Reading file"
         case .parsing:

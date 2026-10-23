@@ -28,6 +28,7 @@ private struct HealthCacheViewSnapshot {
 
 struct HealthDataSettingsView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @EnvironmentObject private var healthManager: HealthKitManager
     let workouts: [Workout]
 
@@ -116,7 +117,7 @@ struct HealthDataSettingsView: View {
                 .contentColumn()
             }
         }
-        .navigationTitle("Health Data")
+        .navigationTitle("Health data")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showingSyncCustomRange) {
             HealthCustomRangeSheet(range: $syncCustomRange) {
@@ -204,19 +205,22 @@ struct HealthDataSettingsView: View {
                 .tint(Theme.Colors.accent)
             }
 
-            HStack(spacing: Theme.Spacing.sm) {
+            let statisticsLayout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(spacing: Theme.Spacing.sm))
+                : AnyLayout(HStackLayout(spacing: Theme.Spacing.sm))
+            statisticsLayout {
                 overviewPill(
                     label: "Workouts",
                     value: "\(cacheSnapshot.workoutCount)",
                     tint: Theme.Colors.error
                 )
                 overviewPill(
-                    label: "Daily",
+                    label: "Daily records",
                     value: "\(cacheSnapshot.dailyCount)",
                     tint: Theme.Colors.accent
                 )
                 overviewPill(
-                    label: "Days",
+                    label: "Days covered",
                     value: "\(cacheSnapshot.coverageCount)",
                     tint: Theme.Colors.accentSecondary
                 )
@@ -234,10 +238,8 @@ struct HealthDataSettingsView: View {
         } else {
             Image(systemName: healthManager.authorizationStatus == .authorized ? "heart.fill" : "heart.slash")
                 .font(Theme.Iconography.title3Strong)
-                .foregroundStyle(.white)
+                .foregroundStyle(healthManager.authorizationStatus == .authorized ? Theme.Colors.success : Theme.Colors.textTertiary)
                 .frame(width: 36, height: 36)
-                .background(healthManager.authorizationStatus == .authorized ? Theme.Colors.success : Theme.Colors.textTertiary)
-                .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
         }
     }
 
@@ -255,7 +257,7 @@ struct HealthDataSettingsView: View {
         if let date = healthManager.lastDailySyncDate {
             return "Last synced \(SettingsDateFormatters.mediumDateTime.string(from: date))"
         }
-        return "Connected — no history synced yet"
+        return "Connected. No history synced yet."
     }
 
     private var overviewDetail: String {
@@ -278,28 +280,29 @@ struct HealthDataSettingsView: View {
         .padding(.vertical, Theme.Spacing.sm)
         .background(tint.opacity(0.06))
         .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.medium))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(value) \(label.lowercased())")
     }
 
     // MARK: - Sync Section
 
     private var syncSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            sectionHeader("Sync History", icon: "clock.arrow.trianglehead.counterclockwise.rotate.90")
+            sectionHeader(
+                "Sync history", icon: "clock.arrow.trianglehead.counterclockwise.rotate.90",
+                help: "Downloads older readings from Apple Health for the selected period."
+            )
 
             if healthManager.authorizationStatus != .authorized {
                 unauthorizedCard
             } else {
-                Text("Download older health data from Apple Health.")
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textSecondary)
-
                 FlowLayout(spacing: Theme.Spacing.sm) {
-                    syncPill("Last 2 Years") {
+                    syncPill("Last 2 years") {
                         await syncDailyHistory(range: relativeSyncRange(yearsBack: 2), label: "Last 2 years")
                     }
 
                     if let date = earliestWorkoutDate {
-                        syncPill("Since First Workout") {
+                        syncPill("Since first workout") {
                             await syncDailyHistory(
                                 range: DateInterval(start: Calendar.current.startOfDay(for: date), end: syncEndDate),
                                 label: "Since first workout"
@@ -307,7 +310,7 @@ struct HealthDataSettingsView: View {
                         }
                     }
 
-                    syncPill("All Available") {
+                    syncPill("All available") {
                         await syncAllAvailableDailyHistory()
                     }
 
@@ -342,17 +345,14 @@ struct HealthDataSettingsView: View {
             Button {
                 Task { await requestAuthorization() }
             } label: {
-                HStack {
-                    if isAuthorizing { ProgressView().tint(.white) }
+                HStack(spacing: Theme.Spacing.sm) {
+                    if isAuthorizing { ProgressView().tint(Theme.Colors.onAccent) }
                     Text("Connect Apple Health")
                         .font(Theme.Typography.headline)
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
                 }
-                .padding(.vertical, Theme.Spacing.md)
-                .surfaceButtonChrome(fill: Theme.Colors.accent, cornerRadius: Theme.CornerRadius.large)
+                .frame(maxWidth: .infinity, minHeight: Theme.Layout.primaryControlHeight)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(BrandPrimaryButtonStyle())
             .disabled(isAuthorizing)
         }
         .padding()
@@ -377,7 +377,6 @@ struct HealthDataSettingsView: View {
             .padding(.vertical, Theme.Spacing.sm)
             .background(Theme.Colors.surface)
             .clipShape(Capsule())
-            .shadow(color: .black.opacity(0.04), radius: 2, y: 1)
             .frame(minHeight: Theme.Layout.minimumTapTarget)
         }
         .buttonStyle(.plain)
@@ -389,15 +388,14 @@ struct HealthDataSettingsView: View {
 
     private var manageSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            sectionHeader("Manage Data", icon: "externaldrive.badge.minus")
-
-            Text("Your workouts and Apple Health stay untouched — this only affects cached data in the app.")
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Colors.textSecondary)
+            sectionHeader(
+                "Manage data", icon: "externaldrive.badge.minus",
+                help: "These actions only affect Health data stored in this app. Workouts and the original readings in Apple Health are not changed."
+            )
 
             // Primary actions
             primaryActionButton(
-                title: "Refresh All Health Data",
+                title: "Refresh all Health data",
                 subtitle: healthManager.authorizationStatus == .authorized
                     ? "Clear and re-download everything"
                     : "Connect Apple Health first to re-download",
@@ -409,7 +407,7 @@ struct HealthDataSettingsView: View {
             }
 
             primaryActionButton(
-                title: "Clear All Cached Data",
+                title: "Clear all cached data",
                 subtitle: "Remove all health data stored in the app",
                 icon: "trash",
                 tint: Theme.Colors.error
@@ -431,7 +429,7 @@ struct HealthDataSettingsView: View {
                 }
             } label: {
                 HStack(spacing: Theme.Spacing.sm) {
-                    Text("Advanced Options")
+                    Text("Advanced options")
                         .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.Colors.textSecondary)
                     Spacer()
@@ -447,14 +445,10 @@ struct HealthDataSettingsView: View {
             if showAdvancedCache {
                 VStack(alignment: .leading, spacing: Theme.Spacing.md) {
                     // Range picker
-                    Text("Select a date range, then choose an action.")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-
                     FlowLayout(spacing: Theme.Spacing.sm) {
-                        rangePill("Last 90 Days") { cacheRange = relativeCacheRange(daysBack: 90) }
-                        rangePill("Last Year") { cacheRange = relativeCacheRange(yearsBack: 1) }
-                        rangePill("All Cached") { cacheRange = allCachedRange() }
+                        rangePill("Last 90 days") { cacheRange = relativeCacheRange(daysBack: 90) }
+                        rangePill("Last year") { cacheRange = relativeCacheRange(yearsBack: 1) }
+                        rangePill("All cached") { cacheRange = allCachedRange() }
 
                         Button {
                             showingCacheCustomRange = true
@@ -479,7 +473,12 @@ struct HealthDataSettingsView: View {
                             .font(Theme.Typography.bodyBold)
                             .foregroundStyle(Theme.Colors.textPrimary)
 
-                        Text("\(cachedWorkoutEntriesInRange) workout record\(cachedWorkoutEntriesInRange == 1 ? "" : "s"), \(cachedDailyEntriesInRange) daily entr\(cachedDailyEntriesInRange == 1 ? "y" : "ies") in range")
+                        Text(
+                            """
+                            \(cachedWorkoutEntriesInRange) workout record\(cachedWorkoutEntriesInRange == 1 ? "" : "s"), \
+                            \(cachedDailyEntriesInRange) daily entr\(cachedDailyEntriesInRange == 1 ? "y" : "ies") in range
+                            """
+                        )
                             .font(Theme.Typography.caption)
                             .foregroundStyle(Theme.Colors.textSecondary)
                     }
@@ -502,7 +501,7 @@ struct HealthDataSettingsView: View {
                         ) { pendingAction = .clearDailyRange }
 
                         advancedActionRow(
-                            title: "Clear & re-sync range",
+                            title: "Clear and re-sync range",
                             icon: "arrow.clockwise",
                             tint: Theme.Colors.success,
                             isEnabled: healthManager.authorizationStatus == .authorized
@@ -515,7 +514,7 @@ struct HealthDataSettingsView: View {
                         ) { pendingAction = .clearWorkoutAll }
 
                         advancedActionRow(
-                            title: "Clear all daily history",
+                            title: "Clear all daily data",
                             icon: "calendar.circle",
                             tint: Theme.Colors.accentSecondary
                         ) { pendingAction = .clearDailyAll }
@@ -561,7 +560,7 @@ struct HealthDataSettingsView: View {
 
     // MARK: - Reusable Components
 
-    private func sectionHeader(_ title: String, icon: String) -> some View {
+    private func sectionHeader(_ title: String, icon: String, help: String? = nil) -> some View {
         HStack(spacing: Theme.Spacing.sm) {
             Image(systemName: icon)
                 .font(Theme.Iconography.mediumStrong)
@@ -569,6 +568,10 @@ struct HealthDataSettingsView: View {
             Text(title)
                 .font(Theme.Typography.bodyBold)
                 .foregroundStyle(Theme.Colors.textPrimary)
+            if let help {
+                Spacer()
+                AppHelpButton(title: title, message: help)
+            }
         }
     }
 
@@ -584,10 +587,8 @@ struct HealthDataSettingsView: View {
             HStack(spacing: Theme.Spacing.sm) {
                 Image(systemName: icon)
                     .font(Theme.Typography.subheadlineStrong)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(tint)
                     .frame(width: 32, height: 32)
-                    .background(tint)
-                    .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
@@ -654,8 +655,7 @@ struct HealthDataSettingsView: View {
                 .padding(.vertical, Theme.Spacing.sm)
                 .background(Theme.Colors.surface)
                 .clipShape(Capsule())
-                .shadow(color: .black.opacity(0.04), radius: 2, y: 1)
-                .frame(minHeight: Theme.Layout.minimumTapTarget)
+                    .frame(minHeight: Theme.Layout.minimumTapTarget)
         }
         .buttonStyle(.plain)
         .disabled(isBusy)
@@ -691,7 +691,7 @@ struct HealthDataSettingsView: View {
         do {
             try await healthManager.syncDailyHealthData(range: range)
             syncNote = nil
-            statusMessage = "\(label) synced successfully."
+            statusMessage = "\(label) synced."
         } catch {
             syncNote = nil
             errorMessage = error.localizedDescription
@@ -791,17 +791,17 @@ struct HealthDataSettingsView: View {
         guard let pendingAction else { return "" }
         switch pendingAction {
         case .clearWorkoutRange:
-            return "Remove workout health data between \(formattedDate(boundedCacheRange.start)) and \(formattedDate(boundedCacheRange.end)). Your workouts themselves stay."
+            return "Remove workout health data between \(formattedDate(boundedCacheRange.start)) and \(formattedDate(boundedCacheRange.end)). Your workouts stay."
         case .clearDailyRange:
-            return "Remove daily health entries for the selected range. They'll be re-downloaded next time you sync."
+            return "Remove daily health entries for the selected range. Sync again to restore them."
         case .clearBothRange:
             return "Remove all cached health data for the selected range. Your workouts and Apple Health data are untouched."
         case .clearWorkoutAll:
-            return "Remove all cached workout health data from this app. Your workouts themselves stay."
+            return "Remove all cached workout health data from this app. Your workouts stay."
         case .clearDailyAll:
             return "Remove all cached daily health history from this app."
         case .clearAndResyncRange:
-            return "Clear and re-download health data for the selected range. This may take a moment."
+            return "Clear and re-download health data for the selected range."
         case .clearAndResyncAll:
             return "Clear all cached health data and re-download everything. This may take a few minutes."
         }
@@ -809,13 +809,13 @@ struct HealthDataSettingsView: View {
 
     private func confirmationButtonLabel(for action: HealthCacheAction) -> String {
         switch action {
-        case .clearWorkoutRange: return "Clear Workout Data"
-        case .clearDailyRange: return "Clear Daily Data"
-        case .clearBothRange: return "Clear All Data"
-        case .clearWorkoutAll: return "Clear All Workout Data"
-        case .clearDailyAll: return "Clear All Daily Data"
-        case .clearAndResyncRange: return "Clear & Re-Sync"
-        case .clearAndResyncAll: return "Refresh Everything"
+        case .clearWorkoutRange: return "Clear workout data"
+        case .clearDailyRange: return "Clear daily data"
+        case .clearBothRange: return "Clear all data"
+        case .clearWorkoutAll: return "Clear all workout data"
+        case .clearDailyAll: return "Clear all daily data"
+        case .clearAndResyncRange: return "Clear and re-sync"
+        case .clearAndResyncAll: return "Refresh all Health data"
         }
     }
 
@@ -860,7 +860,7 @@ struct HealthDataSettingsView: View {
                     includeDailyData: false
                 )
                 try await healthManager.waitForPendingCachePersistence()
-                statusMessage = workoutResultMessage(from: result, scope: "all cached workouts")
+                statusMessage = workoutResultMessage(from: result, scope: "app")
 
             case .clearDailyAll:
                 let result = healthManager.clearCachedHealthData(
@@ -868,7 +868,7 @@ struct HealthDataSettingsView: View {
                     includeDailyData: true
                 )
                 try await healthManager.waitForPendingCachePersistence()
-                statusMessage = dailyResultMessage(from: result, scope: "all cached daily history")
+                statusMessage = dailyResultMessage(from: result, scope: "app")
 
             case .clearAndResyncRange:
                 guard healthManager.authorizationStatus == .authorized else {
@@ -914,14 +914,20 @@ struct HealthDataSettingsView: View {
         if result.removedDailyEntries == 0 && result.removedCoveredDays == 0 {
             return "No cached daily data found in the \(scope)."
         }
-        return "Removed \(result.removedDailyEntries) daily entr\(result.removedDailyEntries == 1 ? "y" : "ies") and \(result.removedCoveredDays) scanned day\(result.removedCoveredDays == 1 ? "" : "s") from the \(scope)."
+        return """
+        Removed \(result.removedDailyEntries) daily entr\(result.removedDailyEntries == 1 ? "y" : "ies") and \
+        \(result.removedCoveredDays) scanned day\(result.removedCoveredDays == 1 ? "" : "s") from the \(scope).
+        """
     }
 
     private func combinedResultMessage(from result: HealthCacheClearResult, scope: String) -> String {
         if !result.removedAnything {
             return "No cached data found in the \(scope)."
         }
-        return "Cleared \(result.removedWorkoutEntries) workout record\(result.removedWorkoutEntries == 1 ? "" : "s") and \(result.removedDailyEntries) daily entr\(result.removedDailyEntries == 1 ? "y" : "ies") from the \(scope)."
+        return """
+        Cleared \(result.removedWorkoutEntries) workout record\(result.removedWorkoutEntries == 1 ? "" : "s") and \
+        \(result.removedDailyEntries) daily entr\(result.removedDailyEntries == 1 ? "y" : "ies") from the \(scope).
+        """
     }
 }
 
@@ -987,40 +993,22 @@ struct SleepSourceSettingsView: View {
 
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
-                    VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                        Text("Sleep Source")
-                            .font(Theme.Typography.screenTitle)
-                            .foregroundStyle(Theme.Colors.textPrimary)
-
-                        Text("Use one Apple Health source per night so duplicated providers do not inflate your sleep totals.")
-                            .font(Theme.Typography.body)
-                            .foregroundStyle(Theme.Colors.textSecondary)
-                    }
-
-                    VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                        Text(
-                            "If you pick a preferred source, the app uses it first. " +
-                            "When that source misses a night or has less than 15 minutes of asleep-stage data, " +
-                            "the app falls back to the strongest other Apple Health source for that night " +
-                            "and labels the result in sleep details."
-                        )
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                    }
-                    .padding()
-                    .softCard(elevation: 1)
+                    SectionHeading(
+                        title: "Sleep source",
+                        help: "One source is used per night to avoid counting duplicate sleep records. Auto picks the source with the most time asleep. "
+                            + "A preferred source is used first. If it has no usable data or under 15 minutes of sleep, "
+                            + "another source is used and identified in sleep details."
+                    )
 
                     VStack(alignment: .leading, spacing: Theme.Spacing.md) {
                         sleepSourceRow(
                             title: "Auto",
-                            subtitle: "Always pick the strongest available source for each night",
                             key: ""
                         )
 
                         ForEach(availableSources) { source in
                             sleepSourceRow(
                                 title: source.name,
-                                subtitle: source.bundleIdentifier ?? "Apple Health source",
                                 key: source.key
                             )
                         }
@@ -1040,12 +1028,9 @@ struct SleepSourceSettingsView: View {
                             ProgressView()
                                 .tint(Theme.Colors.accent)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("Updating Sleep Source…")
+                                Text("Updating sleep source…")
                                     .font(Theme.Typography.bodyBold)
                                     .foregroundStyle(Theme.Colors.textPrimary)
-                                Text("Rebuilding cached sleep history and workout summaries. You can stay on this screen.")
-                                    .font(Theme.Typography.caption)
-                                    .foregroundStyle(Theme.Colors.textSecondary)
                             }
                         }
                         .padding()
@@ -1068,13 +1053,13 @@ struct SleepSourceSettingsView: View {
                     }
 
                     if healthManager.authorizationStatus != .authorized {
-                        Text("Connect Apple Health to discover source apps. Auto remains available even before Health access is granted.")
+                        Text("Connect Apple Health to see available sources.")
                             .font(Theme.Typography.caption)
                             .foregroundStyle(Theme.Colors.textTertiary)
                     }
 
                     if !preferredSleepSourceName.isEmpty {
-                        Text("Current preference: \(preferredSleepSourceName). Missing nights can still fall back to another source.")
+                        Text("Selected: \(preferredSleepSourceName)")
                             .font(Theme.Typography.caption)
                             .foregroundStyle(Theme.Colors.textTertiary)
                     }
@@ -1083,14 +1068,14 @@ struct SleepSourceSettingsView: View {
                 .contentColumn()
             }
         }
-        .navigationTitle("Sleep Source")
+        .navigationTitle("Sleep source")
         .navigationBarTitleDisplayMode(.inline)
         .task {
             await loadSourcesIfNeeded()
         }
     }
 
-    private func sleepSourceRow(title: String, subtitle: String, key: String) -> some View {
+    private func sleepSourceRow(title: String, key: String) -> some View {
         Button {
             Task {
                 await applySelection(key: key, name: key.isEmpty ? "" : title)
@@ -1101,13 +1086,9 @@ struct SleepSourceSettingsView: View {
                     Text(title)
                         .font(Theme.Typography.body)
                         .foregroundStyle(Theme.Colors.textPrimary)
-                    Text(subtitle)
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                        .lineLimit(2)
                 }
 
-                Spacer()
+                Spacer(minLength: Theme.Spacing.xs)
 
                 if isSelected(key: key) {
                     Image(systemName: "checkmark.circle.fill")
@@ -1121,6 +1102,10 @@ struct SleepSourceSettingsView: View {
         }
         .buttonStyle(.plain)
         .disabled(isApplying)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+        .accessibilityValue(isSelected(key: key) ? "Selected" : "Not selected")
+        .accessibilityAddTraits(isSelected(key: key) ? .isSelected : [])
     }
 
     private func isSelected(key: String) -> Bool {
@@ -1165,6 +1150,6 @@ struct SleepSourceSettingsView: View {
         preferredSleepSourceKey = key
         preferredSleepSourceName = name
         let selectedName = name.isEmpty ? "Auto" : name
-        statusMessage = "Sleep source set to \(selectedName). Cached history was refreshed where available."
+        statusMessage = "Sleep source set to \(selectedName). Daily history was cleared so sleep can be read again. Health resyncs the last week on open; sync older days from Health data."
     }
 }

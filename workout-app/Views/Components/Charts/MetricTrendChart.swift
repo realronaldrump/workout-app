@@ -20,8 +20,24 @@ struct MetricTrendChart: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var revealProgress: CGFloat = 0
 
-    private var render: MetricChartRenderModel {
-        MetricChartRenderModel(analysis: analysis, domain: domain)
+    private let render: MetricChartRenderModel
+
+    init(
+        metric: HealthMetric,
+        analysis: MetricSeriesAnalysis,
+        domain: ClosedRange<Date>,
+        height: CGFloat = 220,
+        showsBestDayMarker: Bool = true,
+        selectedDate: Binding<Date?>,
+        render: MetricChartRenderModel? = nil
+    ) {
+        self.metric = metric
+        self.analysis = analysis
+        self.domain = domain
+        self.height = height
+        self.showsBestDayMarker = showsBestDayMarker
+        _selectedDate = selectedDate
+        self.render = render ?? MetricChartRenderModel(analysis: analysis, domain: domain)
     }
 
     private var selectedPoint: MetricChartRenderModel.Point? {
@@ -89,10 +105,6 @@ struct MetricTrendChart: View {
                         Text("Typical \(metric.formatDisplay(range.lowerBound))–\(metric.formatWithUnit(range.upperBound))")
                             .font(Theme.Typography.footnoteStrong)
                             .foregroundStyle(Theme.Colors.textSecondary)
-                    } else {
-                        Text("Drag across the chart to inspect a \(metric.dailyNoun)")
-                            .font(Theme.Typography.footnote)
-                            .foregroundStyle(Theme.Colors.textSecondary)
                     }
                 }
             }
@@ -114,7 +126,7 @@ struct MetricTrendChart: View {
         guard let median = analysis.median, median != 0 else { return nil }
         if point.isPartial { return "so far today" }
         let change = (point.value - median) / abs(median) * 100
-        guard abs(change) >= 1 else { return "right at your median" }
+        guard abs(change) >= 1 else { return "at median" }
         let direction = change > 0 ? "above" : "below"
         return "\(Int(abs(change).rounded()))% \(direction) median"
     }
@@ -249,7 +261,7 @@ struct MetricTrendChart: View {
             )
             .foregroundStyle(
                 LinearGradient(
-                    colors: [metric.accentColor.opacity(0.28), metric.accentColor.opacity(0.01)],
+                    colors: [metric.accentColor.opacity(0.12), metric.accentColor.opacity(0.12)],
                     startPoint: .top,
                     endPoint: .bottom
                 )
@@ -436,9 +448,18 @@ struct MetricChartRenderModel {
     }
 
     func closestPoint(to date: Date) -> Point? {
-        points.min { lhs, rhs in
-            abs(lhs.date.timeIntervalSince(date)) < abs(rhs.date.timeIntervalSince(date))
+        guard !points.isEmpty else { return nil }
+        var lower = 0
+        var upper = points.count
+        while lower < upper {
+            let middle = lower + (upper - lower) / 2
+            if points[middle].date < date { lower = middle + 1 } else { upper = middle }
         }
+        if lower == 0 { return points[0] }
+        if lower == points.count { return points[points.count - 1] }
+        let before = points[lower - 1]
+        let after = points[lower]
+        return date.timeIntervalSince(before.date) <= after.date.timeIntervalSince(date) ? before : after
     }
 
     private static func limited(_ samples: [MetricDaySample], to limit: Int) -> [MetricDaySample] {

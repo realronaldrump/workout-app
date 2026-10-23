@@ -223,8 +223,6 @@ struct InteractiveTimeSeriesChart: View {
             }
             .font(Theme.Typography.caption)
             .foregroundStyle(Theme.Colors.textSecondary)
-            .textCase(.uppercase)
-            .tracking(0.8)
             .buttonStyle(.plain)
             .disabled(requestedZoomLength == nil)
             .accessibilityLabel("Reset zoom")
@@ -423,7 +421,7 @@ private struct InteractiveChartCanvas: View {
                             yEnd: .value("Value", point.value)
                         )
                         .foregroundStyle(color.opacity(0.18))
-                        .interpolationMethod(.catmullRom)
+                        .interpolationMethod(.monotone)
                     }
                 }
 
@@ -434,7 +432,7 @@ private struct InteractiveChartCanvas: View {
                     )
                     .foregroundStyle(color)
                     .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round))
-                    .interpolationMethod(.catmullRom)
+                    .interpolationMethod(.monotone)
                 }
 
                 if showsAverageLine, let average = averageLineValue ?? data.averageValue {
@@ -594,11 +592,11 @@ enum HealthChartPointSampler {
         sampled(points, limit: limit, value: \.value)
     }
 
-    static func sampled(_ points: [TimeSeriesPoint], limit: Int) -> [TimeSeriesPoint] {
+    nonisolated static func sampled(_ points: [TimeSeriesPoint], limit: Int) -> [TimeSeriesPoint] {
         sampled(points, limit: limit, value: \.value)
     }
 
-    private static func sampled<Point>(
+    nonisolated private static func sampled<Point>(
         _ points: [Point],
         limit: Int,
         value: (Point) -> Double

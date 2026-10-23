@@ -1,73 +1,36 @@
 import SwiftUI
 
 struct DailyHealthDetailView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let day: DailyHealthData
-    private let maxContentWidth: CGFloat = 760
-    private var overviewColumns: [GridItem] {
-        [GridItem(.adaptive(minimum: 132, maximum: 210), spacing: Theme.Spacing.md)]
-    }
 
-    private var dayEyebrow: String {
+    private var dayLead: String {
         if Calendar.current.isDateInToday(day.dayStart) { return "Today" }
         if Calendar.current.isDateInYesterday(day.dayStart) { return "Yesterday" }
-        return "Daily summary"
+        return day.dayStart.formatted(.dateTime.weekday(.wide))
     }
 
     private var dayTitle: String {
-        day.dayStart.formatted(.dateTime.weekday(.wide).month(.abbreviated).day())
+        let sameYear = Calendar.current.isDate(day.dayStart, equalTo: .now, toGranularity: .year)
+        return sameYear
+            ? day.dayStart.formatted(.dateTime.month(.wide).day())
+            : day.dayStart.formatted(.dateTime.month(.wide).day().year())
     }
 
     private var overviewItems: [DailyOverviewItem] {
         var items: [DailyOverviewItem] = []
-
         if let steps = day.steps {
-            items.append(
-                DailyOverviewItem(
-                    title: "Steps",
-                    value: "\(Int(steps))",
-                    unit: "steps",
-                    icon: "figure.walk",
-                    tint: Theme.Colors.warning
-                )
-            )
+            items.append(DailyOverviewItem(label: "steps", value: Int(steps).formatted()))
         }
-
         if let sleep = day.sleepSummary?.totalHours {
-            items.append(
-                DailyOverviewItem(
-                    title: "Sleep",
-                    value: String(format: "%.1f", sleep),
-                    unit: "h",
-                    icon: "moon.zzz.fill",
-                    tint: Theme.Colors.accentSecondary
-                )
-            )
+            items.append(DailyOverviewItem(label: "h asleep", value: String(format: "%.1f", sleep)))
         }
-
         if let activeEnergy = day.activeEnergy {
-            items.append(
-                DailyOverviewItem(
-                    title: "Energy",
-                    value: "\(Int(activeEnergy))",
-                    unit: "cal",
-                    icon: "flame.fill",
-                    tint: Theme.Colors.warning
-                )
-            )
+            items.append(DailyOverviewItem(label: "active cal", value: Int(activeEnergy).formatted()))
         }
-
         if let restingHeartRate = day.restingHeartRate {
-            items.append(
-                DailyOverviewItem(
-                    title: "Resting HR",
-                    value: "\(Int(restingHeartRate))",
-                    unit: "bpm",
-                    icon: "heart",
-                    tint: Theme.Colors.error
-                )
-            )
+            items.append(DailyOverviewItem(label: "resting bpm", value: "\(Int(restingHeartRate))"))
         }
-
         return items
     }
 
@@ -76,11 +39,13 @@ struct DailyHealthDetailView: View {
             AdaptiveBackground()
 
             ScrollView(showsIndicators: false) {
-                LazyVStack(alignment: .leading, spacing: Theme.Spacing.xl) {
-                    headerSection
+                VStack(alignment: .leading, spacing: Theme.Spacing.section) {
+                    VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
+                        headerSection
 
-                    if !overviewItems.isEmpty {
-                        overviewSection
+                        if !overviewItems.isEmpty {
+                            overviewSection
+                        }
                     }
 
                     if let sleepSummary = day.sleepSummary {
@@ -93,32 +58,43 @@ struct DailyHealthDetailView: View {
                     metricsSection(title: "Cardio", metrics: HealthMetric.metrics(for: .cardio))
                     metricsSection(title: "Body", metrics: HealthMetric.metrics(for: .body))
                 }
-                .padding(.vertical, Theme.Spacing.xxl)
-                .padding(.horizontal, Theme.Spacing.lg)
-                .frame(maxWidth: maxContentWidth, alignment: .leading)
-                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.horizontal, Theme.Layout.screenGutter)
+                .padding(.top, Theme.Spacing.md)
+                .padding(.bottom, Theme.Spacing.xxl)
+                .contentColumn()
             }
         }
-        .navigationTitle("Daily Summary")
+        .navigationTitle(dayTitle)
         .navigationBarTitleDisplayMode(.inline)
         .accessibilityIdentifier("health-day-detail")
     }
 
     private var headerSection: some View {
-        StatsPageHeader(
-            eyebrow: dayEyebrow,
-            title: dayTitle,
-            subtitle: "Everything Apple Health recorded for this day.",
-            systemImage: "calendar"
-        )
+        VStack(alignment: .leading, spacing: 2) {
+            Text(dayLead)
+                .font(Theme.Typography.subheadlineStrong)
+                .foregroundStyle(Theme.Colors.textSecondary)
+            Text(dayTitle)
+                .font(Theme.Typography.screenTitle)
+                .foregroundStyle(Theme.Colors.textPrimary)
+                .accessibilityAddTraits(.isHeader)
+        }
+        .accessibilityElement(children: .combine)
     }
 
     private var overviewSection: some View {
-        LazyVGrid(columns: overviewColumns, spacing: Theme.Spacing.md) {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: Theme.Spacing.md))
+            : AnyLayout(StatColumns())
+        return layout {
             ForEach(overviewItems) { item in
-                DailyOverviewCard(item: item)
+                DisplayStat(value: item.value, label: item.label, valueFont: Theme.Typography.number)
             }
         }
+        .padding(.vertical, Theme.Spacing.lg)
+        .padding(.horizontal, Theme.Spacing.lg)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .softCard()
     }
 
     @ViewBuilder
@@ -128,19 +104,17 @@ struct DailyHealthDetailView: View {
         }
 
         if !availableMetrics.isEmpty {
-            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                Text(title)
-                    .font(Theme.Typography.title3)
-                    .foregroundStyle(Theme.Colors.textPrimary)
+            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                SectionHeading(title: title)
 
-                VStack(spacing: Theme.Spacing.sm) {
-                    ForEach(availableMetrics) { metric in
+                VStack(spacing: 0) {
+                    ForEach(Array(availableMetrics.enumerated()), id: \.element) { index, metric in
                         NavigationLink {
                             HealthMetricDetailView(metric: metric)
                         } label: {
-                            DailyMetricRow(metric: metric, value: day.value(for: metric))
+                            DailyMetricRow(metric: metric, value: day.value(for: metric), showsRule: index > 0)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(PressableCardButtonStyle())
                     }
                 }
             }
@@ -148,40 +122,55 @@ struct DailyHealthDetailView: View {
     }
 
     private func sleepSummarySection(summary: SleepSummary) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Sleep")
-                .font(Theme.Typography.title3)
-                .foregroundStyle(Theme.Colors.textPrimary)
+        let stages = SleepStage.allCases
+            .filter { $0 != .unknown && $0 != .inBed }
+            .compactMap { stage in summary.stageDurations[stage].map { (stage: stage, duration: $0) } }
+            .filter { $0.duration > 0 }
+        let stageTotal = stages.reduce(0) { $0 + $1.duration }
 
-            VStack(alignment: .leading, spacing: 2) {
+        return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            SectionHeading(title: "Sleep")
+
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Text(String(format: "%.1f", summary.totalHours))
-                    .font(Theme.Typography.number)
+                    .font(Theme.Typography.metric)
                     .foregroundStyle(Theme.Colors.textPrimary)
-                Text("h asleep")
-                    .font(Theme.Typography.caption)
+                Text("hours asleep")
+                    .font(Theme.Typography.subheadline)
                     .foregroundStyle(Theme.Colors.textSecondary)
             }
+            .accessibilityElement(children: .combine)
 
-            VStack(spacing: Theme.Spacing.xs) {
-                ForEach(SleepStage.allCases.filter { $0 != .unknown }, id: \.self) { stage in
-                    if let duration = summary.stageDurations[stage] {
-                        HStack {
-                            Text(stage.label)
-                                .font(Theme.Typography.subheadline)
-                                .foregroundStyle(Theme.Colors.textSecondary)
-                            Spacer()
-                            Text(String(format: "%.1f h", duration / 3600))
-                                .font(Theme.Typography.subheadline)
+            if stageTotal > 0 {
+                SleepStageBar(stages: stages.map { ($0.stage, $0.duration / stageTotal) })
+                    .frame(height: 18)
+
+                VStack(spacing: 0) {
+                    ForEach(Array(stages.enumerated()), id: \.element.stage) { index, item in
+                        HStack(spacing: Theme.Spacing.sm) {
+                            TintMark(tint: item.stage.tint)
+                            Text(item.stage.label)
+                                .font(Theme.Typography.callout)
                                 .foregroundStyle(Theme.Colors.textPrimary)
+                            Spacer(minLength: Theme.Spacing.sm)
+                            Text(formatDuration(item.duration))
+                                .font(Theme.Typography.callout)
+                                .monospacedDigit()
+                                .foregroundStyle(Theme.Colors.textPrimary)
+                            Text("\(Int((item.duration / stageTotal * 100).rounded()))%")
+                                .font(Theme.Typography.subheadline)
+                                .monospacedDigit()
+                                .foregroundStyle(Theme.Colors.textSecondary)
+                                .frame(minWidth: 40, alignment: .trailing)
                         }
+                        .ledgerRow(showsRule: index > 0, verticalPadding: Theme.Spacing.sm)
+                        .accessibilityElement(children: .combine)
                     }
                 }
             }
 
             SleepSourceAttributionView(summary: summary)
         }
-        .padding(Theme.Spacing.lg)
-        .softCard(elevation: 1)
     }
 
     private func formatDuration(_ duration: TimeInterval) -> String {
@@ -195,81 +184,70 @@ struct DailyHealthDetailView: View {
 }
 
 private struct DailyOverviewItem: Identifiable {
-    let title: String
+    let label: String
     let value: String
-    let unit: String
-    let icon: String
-    let tint: Color
 
-    var id: String { title }
+    var id: String { label }
 }
 
-private struct DailyOverviewCard: View {
-    let item: DailyOverviewItem
+/// The night as one bar, each stage's share in its step of the sleep hue.
+private struct SleepStageBar: View {
+    let stages: [(stage: SleepStage, share: Double)]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            HStack(spacing: Theme.Spacing.xs) {
-                Image(systemName: item.icon)
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(item.tint)
-                Text(item.title)
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textSecondary)
-            }
-
-            HStack(alignment: .lastTextBaseline, spacing: 4) {
-                Text(item.value)
-                    .font(Theme.Typography.numberSmall)
-                    .foregroundStyle(Theme.Colors.textPrimary)
-                if !item.unit.isEmpty {
-                    Text(item.unit)
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textTertiary)
+        GeometryReader { proxy in
+            let spacing: CGFloat = 2
+            let available = max(proxy.size.width - spacing * CGFloat(max(stages.count - 1, 0)), 0)
+            HStack(spacing: spacing) {
+                ForEach(stages, id: \.stage) { item in
+                    Rectangle()
+                        .fill(item.stage.tint)
+                        .frame(width: max(available * item.share, 2))
                 }
             }
+            .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
         }
-        .padding(Theme.Spacing.md)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .softCard(elevation: 1)
+        .accessibilityHidden(true)
     }
 }
 
 private struct DailyMetricRow: View {
     let metric: HealthMetric
     let value: Double?
+    var showsRule = true
 
     var body: some View {
-        HStack {
-            HStack(spacing: Theme.Spacing.xs) {
-                Image(systemName: metric.icon)
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(metric.chartColor)
-                Text(metric.title)
-                    .font(Theme.Typography.subheadline)
-                    .foregroundStyle(Theme.Colors.textPrimary)
-            }
+        HStack(spacing: Theme.Spacing.sm) {
+            TintMark(tint: metric.chartColor)
+            Text(metric.title)
+                .font(Theme.Typography.callout)
+                .foregroundStyle(Theme.Colors.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
 
-            Spacer()
+            Spacer(minLength: Theme.Spacing.sm)
 
             if let value {
-                Text(metric.format(value))
-                    .font(Theme.Typography.subheadline)
-                    .foregroundStyle(Theme.Colors.textPrimary)
-                Text(metric.displayUnit)
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textTertiary)
+                HStack(alignment: .firstTextBaseline, spacing: 3) {
+                    Text(metric.format(value))
+                        .font(Theme.Typography.numberSmall)
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                    Text(metric.displayUnit)
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                }
             } else {
-                Text("--")
+                Text("No reading")
                     .font(Theme.Typography.subheadline)
                     .foregroundStyle(Theme.Colors.textTertiary)
             }
 
             Image(systemName: "chevron.right")
-                .font(Theme.Typography.caption2Bold)
+                .font(Theme.Typography.caption)
                 .foregroundStyle(Theme.Colors.textTertiary)
+                .accessibilityHidden(true)
         }
-        .padding(Theme.Spacing.md)
-        .softCard(elevation: 1)
+        .ledgerRow(showsRule: showsRule, verticalPadding: Theme.Spacing.sm)
+        .contentShape(.rect)
+        .accessibilityElement(children: .combine)
     }
 }

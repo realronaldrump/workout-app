@@ -25,7 +25,7 @@ final class ExerciseRelationshipTests: XCTestCase {
         let fixture = makeIsolatedRelationshipManager()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
 
-        XCTAssertEqual(fixture.manager.relationships.count, 50)
+        XCTAssertEqual(fixture.manager.relationships.count, DefaultExerciseCatalog.relationships.count)
         XCTAssertEqual(
             fixture.manager.relationship(for: "Bayesian Curl - Left"),
             ExerciseRelationship(
@@ -38,6 +38,110 @@ final class ExerciseRelationshipTests: XCTestCase {
             fixture.manager.relationship(for: "Single Leg Seated Leg Curl (Right)")?.parentName,
             "Seated Leg Curl (Machine)"
         )
+    }
+
+    func testPersistedCatalogGainsNewCSVSideRelationshipsOnUpgrade() throws {
+        let fixture = makeIsolatedRelationshipManager()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let addedIDs = Set(addedCSVRelationships.map(\.id))
+        let previousRelationships = DefaultExerciseCatalog.relationships.filter { !addedIDs.contains($0.id) }
+        fixture.defaults.set(
+            try JSONEncoder().encode(previousRelationships),
+            forKey: "ExerciseRelationships"
+        )
+
+        let upgraded = retainedRelationshipManager(userDefaults: fixture.defaults)
+
+        XCTAssertEqual(upgraded.relationships.count, DefaultExerciseCatalog.relationships.count)
+        for expected in addedCSVRelationships + previousRelationships {
+            XCTAssertEqual(
+                upgraded.relationship(for: expected.exerciseName),
+                expected,
+                "Incorrect relationship after catalog upgrade: \(expected.exerciseName)"
+            )
+        }
+    }
+
+    func testCatalogUpgradePreservesCustomRelationshipOccupyingANewDefaultSide() throws {
+        let fixture = makeIsolatedRelationshipManager()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let addedIDs = Set(addedCSVRelationships.map(\.id))
+        let previousRelationships = DefaultExerciseCatalog.relationships.filter { !addedIDs.contains($0.id) }
+        let custom = ExerciseRelationship(
+            exerciseName: "My Seated Row - Left",
+            parentName: "Seated Row (Machine)",
+            laterality: .left
+        )
+        fixture.defaults.set(
+            try JSONEncoder().encode(previousRelationships + [custom]),
+            forKey: "ExerciseRelationships"
+        )
+
+        let upgraded = retainedRelationshipManager(userDefaults: fixture.defaults)
+
+        XCTAssertEqual(upgraded.relationship(for: custom.exerciseName), custom)
+        XCTAssertNil(upgraded.relationship(for: "Seated Row (Machine) - Left"))
+        for expected in addedCSVRelationships where expected.exerciseName != "Seated Row (Machine) - Left" {
+            XCTAssertEqual(upgraded.relationship(for: expected.exerciseName), expected)
+        }
+        XCTAssertEqual(upgraded.children(of: "Seated Row (Machine)").map(\.laterality), [.left, .right])
+    }
+
+    func testCatalogUpgradeAndReloadPreserveSuppressedDefaultSides() throws {
+        let fixture = makeIsolatedRelationshipManager()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let oldSuppressedName = "Bayesian Curl - Left"
+        let addedIDs = Set(addedCSVRelationships.map(\.id))
+        let previousRelationships = DefaultExerciseCatalog.relationships.filter {
+            !addedIDs.contains($0.id) && $0.exerciseName != oldSuppressedName
+        }
+        fixture.defaults.set(
+            try JSONEncoder().encode(previousRelationships),
+            forKey: "ExerciseRelationships"
+        )
+        fixture.defaults.set(
+            [ExerciseIdentityResolver.normalizedName(oldSuppressedName)],
+            forKey: "ExerciseRelationshipSuppressedDefaults"
+        )
+
+        let upgraded = retainedRelationshipManager(userDefaults: fixture.defaults)
+        XCTAssertNil(upgraded.relationship(for: oldSuppressedName))
+        for expected in addedCSVRelationships {
+            XCTAssertEqual(upgraded.relationship(for: expected.exerciseName), expected)
+        }
+
+        let newSuppressedName = "Reverse Fly Cable - Left"
+        upgraded.removeRelationship(for: newSuppressedName)
+        let reloaded = retainedRelationshipManager(userDefaults: fixture.defaults)
+
+        XCTAssertNil(reloaded.relationship(for: oldSuppressedName))
+        XCTAssertNil(reloaded.relationship(for: newSuppressedName))
+        XCTAssertEqual(
+            Set(reloaded.suppressedDefaultExerciseNames),
+            [oldSuppressedName, newSuppressedName]
+        )
+        XCTAssertEqual(
+            reloaded.relationship(for: "Reverse Fly Cable - Right")?.parentName,
+            "Reverse Fly (Cable)"
+        )
+    }
+
+    func testCatalogRelationshipsHaveExistingParentsAndUniqueSides() {
+        let catalogNames = Set(DefaultExerciseCatalog.entries.map {
+            ExerciseIdentityResolver.normalizedName($0.name)
+        })
+        var relationshipIDs = Set<String>()
+        var parentSides = Set<String>()
+
+        for relationship in DefaultExerciseCatalog.relationships {
+            let parentID = ExerciseIdentityResolver.normalizedName(relationship.parentName)
+            XCTAssertTrue(catalogNames.contains(parentID), "Missing parent: \(relationship.parentName)")
+            XCTAssertTrue(relationshipIDs.insert(relationship.id).inserted, "Duplicate child: \(relationship.exerciseName)")
+            XCTAssertTrue(
+                parentSides.insert("\(parentID)|\(relationship.laterality.rawValue)").inserted,
+                "Duplicate \(relationship.laterality.rawValue) side for: \(relationship.parentName)"
+            )
+        }
     }
 
     func testTransientFixtureRelationshipsDoNotWriteUserDefaults() {
@@ -762,6 +866,24 @@ final class ExerciseRelationshipTests: XCTestCase {
         let manager: ExerciseRelationshipManager
         let defaults: UserDefaults
         let suiteName: String
+    }
+
+    /// Exact Strong export names intentionally differ from their canonical parent for cable reverse flies.
+    private var addedCSVRelationships: [ExerciseRelationship] {
+        [
+            ("Lateral Lunge - Left", "Lateral Lunge", ExerciseLaterality.left),
+            ("Lateral Lunge - Right", "Lateral Lunge", .right),
+            ("Supported Split Squat - Left", "Supported Split Squat", .left),
+            ("Supported Split Squat - Right", "Supported Split Squat", .right),
+            ("Reverse Fly Cable - Left", "Reverse Fly (Cable)", .left),
+            ("Reverse Fly Cable - Right", "Reverse Fly (Cable)", .right),
+            ("Seated Leg Press (Machine) - Left", "Seated Leg Press (Machine)", .left),
+            ("Seated Leg Press (Machine) - Right", "Seated Leg Press (Machine)", .right),
+            ("Seated Row (Machine) - Left", "Seated Row (Machine)", .left),
+            ("Seated Row (Machine) - Right", "Seated Row (Machine)", .right)
+        ].map { exerciseName, parentName, laterality in
+            ExerciseRelationship(exerciseName: exerciseName, parentName: parentName, laterality: laterality)
+        }
     }
 
     private func makeIsolatedRelationshipManager() -> IsolatedRelationshipManagerFixture {

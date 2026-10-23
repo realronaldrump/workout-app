@@ -81,6 +81,58 @@ final class WorkoutRepositoryPerformanceStoreTests: XCTestCase {
         XCTAssertTrue(try database.loadLoggedWorkouts().isEmpty)
     }
 
+    @MainActor
+    func testLiveWorkoutSaveReloadAndHistoryKeepStableIdentityAndSeconds() async throws {
+        let database = AppDatabase(inMemory: true)
+        let legacyURL = FileManager.default.temporaryDirectory.appendingPathComponent("unused-legacy-\(UUID()).json")
+        let logStore = WorkoutLogStore(database: database, legacyFileURL: legacyURL)
+        let start = makeDate(hour: 10)
+        let set = LoggedSet(order: 1, weight: 0, reps: 0, distance: 2.5, seconds: 900)
+        let exercise = LoggedExercise(name: "Running", sets: [set])
+        let workout = LoggedWorkout(
+            startedAt: start,
+            endedAt: start.addingTimeInterval(1_801),
+            name: "Live session",
+            gymProfileId: UUID(),
+            exercises: [exercise]
+        )
+        try await logStore.save(workout)
+
+        let reloaded = WorkoutLogStore(database: database, legacyFileURL: legacyURL)
+        await reloaded.load()
+        let saved = try XCTUnwrap(reloaded.workout(id: workout.id))
+        XCTAssertEqual(saved.startedAt, workout.startedAt)
+        XCTAssertEqual(saved.endedAt, workout.endedAt)
+        XCTAssertEqual(saved.gymProfileId, workout.gymProfileId)
+        XCTAssertEqual(saved.exercises, workout.exercises)
+        XCTAssertNil(reloaded.persistenceError)
+
+        let repository = WorkoutRepository(database: database)
+        let detail = try await repository.workoutDetail(id: workout.id)
+        let exerciseHistory = try database.loadWorkouts(containingExerciseNamed: "Running")
+        for projection in [saved.analyticsWorkout, detail.workout] + exerciseHistory {
+            XCTAssertEqual(projection.exercises.first?.id, exercise.id)
+            XCTAssertEqual(projection.exercises.first?.sets.first?.id, set.id)
+            XCTAssertEqual(projection.exercises.first?.sets.first?.distance, 2.5)
+            XCTAssertEqual(WorkoutExportDocument.durationSeconds(projection.duration), 1_801)
+        }
+    }
+
+    func testUnreadableStrongImportPreservesExistingHistory() async throws {
+        let database = AppDatabase(inMemory: true)
+        let repository = WorkoutRepository(database: database)
+        let workout = Workout(date: makeDate(hour: 10), name: "Keep me", duration: "30m", exercises: [])
+        try database.saveImportedWorkouts([workout])
+
+        do {
+            try await repository.importStrongCSV(Data("Name,Value\nNot a workout,1".utf8), sourceSignature: nil)
+            XCTFail("Unsupported imports must fail")
+        } catch CSVParserError.noWorkoutSets {
+            // Import rejection happens before any persistence mutation.
+        }
+        XCTAssertEqual(try database.loadImportedWorkouts().map(\.id), [workout.id])
+    }
+
     func testRepositoryStrongCSVImportBuildsCleanStoreWorkouts() async throws {
         let database = AppDatabase(inMemory: true)
         let repository = WorkoutRepository(database: database)

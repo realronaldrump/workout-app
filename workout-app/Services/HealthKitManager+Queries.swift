@@ -22,24 +22,21 @@ private struct SleepSourceSelection {
 extension HealthKitManager {
     func fetchHeartRateSamples(from start: Date, to end: Date) async throws -> [HeartRateSample] {
         let unit = HKUnit(from: "count/min")
-        let samples = try await fetchQuantitySamples(type: .heartRate, from: start, to: end)
-        return samples.map { sample in
+        return try await fetchMappedQuantitySamples(type: .heartRate, from: start, to: end) { sample in
             HeartRateSample(timestamp: sample.startDate, value: sample.quantity.doubleValue(for: unit))
         }
     }
 
     func fetchHRVSamples(from start: Date, to end: Date) async throws -> [HRVSample] {
         let unit = HKUnit.secondUnit(with: .milli)
-        let samples = try await fetchQuantitySamples(type: .heartRateVariabilitySDNN, from: start, to: end)
-        return samples.map { sample in
+        return try await fetchMappedQuantitySamples(type: .heartRateVariabilitySDNN, from: start, to: end) { sample in
             HRVSample(timestamp: sample.startDate, value: sample.quantity.doubleValue(for: unit))
         }
     }
 
     func fetchBloodOxygenSamples(from start: Date, to end: Date) async throws -> [BloodOxygenSample] {
         let unit = HKUnit.percent()
-        let samples = try await fetchQuantitySamples(type: .oxygenSaturation, from: start, to: end)
-        return samples.map { sample in
+        return try await fetchMappedQuantitySamples(type: .oxygenSaturation, from: start, to: end) { sample in
             let percentage = sample.quantity.doubleValue(for: unit) * 100
             return BloodOxygenSample(timestamp: sample.startDate, value: percentage)
         }
@@ -47,8 +44,7 @@ extension HealthKitManager {
 
     func fetchRespiratoryRateSamples(from start: Date, to end: Date) async throws -> [RespiratoryRateSample] {
         let unit = HKUnit(from: "count/min")
-        let samples = try await fetchQuantitySamples(type: .respiratoryRate, from: start, to: end)
-        return samples.map { sample in
+        return try await fetchMappedQuantitySamples(type: .respiratoryRate, from: start, to: end) { sample in
             RespiratoryRateSample(timestamp: sample.startDate, value: sample.quantity.doubleValue(for: unit))
         }
     }
@@ -634,6 +630,25 @@ extension HealthKitManager {
         limit: Int = HKObjectQueryNoLimit,
         ascending: Bool = true
     ) async throws -> [HKQuantitySample] {
+        try await fetchMappedQuantitySamples(
+            type: type,
+            from: start,
+            to: end,
+            limit: limit,
+            ascending: ascending
+        ) { $0 }
+    }
+
+    /// Transform large sample collections on HealthKit's callback queue before resuming
+    /// the MainActor caller. Metric details can contain years of raw measurements.
+    func fetchMappedQuantitySamples<Value: Sendable>(
+        type: HKQuantityTypeIdentifier,
+        from start: Date,
+        to end: Date,
+        limit: Int = HKObjectQueryNoLimit,
+        ascending: Bool = true,
+        transform: @escaping @Sendable (HKQuantitySample) -> Value
+    ) async throws -> [Value] {
         guard let healthStore = healthStore else {
             throw HealthKitError.notAvailable
         }
@@ -667,7 +682,8 @@ extension HealthKitManager {
                     return
                 }
 
-                continuation.resume(returning: samples as? [HKQuantitySample] ?? [])
+                let quantities = samples as? [HKQuantitySample] ?? []
+                continuation.resume(returning: quantities.map(transform))
             }
             healthStore.execute(query)
         }
@@ -1257,7 +1273,7 @@ extension HealthKitManager {
         if nsError.code == HKError.Code.errorAuthorizationNotDetermined.rawValue {
             return (
                 status: .notDetermined,
-                error: .authorizationFailed("Authorization not determined. Please authorize Apple Health access.")
+                error: .authorizationFailed("Access hasn't been requested yet. Connect Apple Health first.")
             )
         }
 

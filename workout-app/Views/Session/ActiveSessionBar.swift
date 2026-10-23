@@ -1,51 +1,75 @@
 import SwiftUI
 
 struct ActiveSessionBar: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @EnvironmentObject private var sessionManager: WorkoutSessionManager
     @State private var showingDiscardAlert = false
 
     var body: some View {
         if let session = sessionManager.activeSession {
             let exerciseCount = session.exercises.count
-            let setCount = session.exercises.reduce(0) { $0 + $1.sets.count }
+            let setCount = session.exercises.reduce(0) { $0 + $1.sets.filter(\.isCompleted).count }
 
             Button {
                 sessionManager.isPresentingSessionUI = true
                 Haptics.selection()
             } label: {
-                ViewThatFits(in: .horizontal) {
-                    expandedLabel(
-                        for: session,
-                        exerciseCount: exerciseCount,
-                        setCount: setCount
-                    )
-                    compactLabel(
-                        for: session,
-                        exerciseCount: exerciseCount,
-                        setCount: setCount
-                    )
+                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                    if case .failed = sessionManager.draftSaveState {
+                        Text("Save needs attention")
+                            .font(Theme.Typography.captionBold)
+                            .foregroundStyle(Theme.Colors.plateYellow)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    if dynamicTypeSize.isAccessibilitySize {
+                        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                            Text("Resume workout")
+                                .font(Theme.Typography.subheadlineBold)
+                                .foregroundStyle(Theme.Colors.onAccent.opacity(0.7))
+                            Text(session.name)
+                                .font(Theme.Typography.bodyBold)
+                                .foregroundStyle(Theme.Colors.onAccent)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Text(SharedFormatters.count(setCount, "set") + " logged")
+                                .font(Theme.Typography.caption)
+                                .foregroundStyle(Theme.Colors.onAccent.opacity(0.7))
+                        }
+                    } else {
+                        ViewThatFits(in: .horizontal) {
+                            expandedLabel(
+                                for: session,
+                                exerciseCount: exerciseCount,
+                                setCount: setCount
+                            )
+                            compactLabel(
+                                for: session,
+                                exerciseCount: exerciseCount,
+                                setCount: setCount
+                            )
+                        }
+                    }
                 }
                 .padding(.horizontal, Theme.Spacing.lg)
                 .padding(.vertical, Theme.Spacing.sm)
-                .frame(maxWidth: .infinity, minHeight: Theme.Layout.minimumTapTarget)
+                .frame(maxWidth: .infinity, minHeight: 56)
                 .contentShape(.rect)
-                .glassBackground(
-                    opacity: 0.22,
-                    cornerRadius: Theme.CornerRadius.xlarge,
-                    elevation: 1,
-                    interactive: true
+                .background(
+                    RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
+                        .fill(Theme.Colors.ink)
                 )
             }
             .buttonStyle(.plain)
+            .disabled(sessionManager.isFinishing)
             .contextMenu {
-                Button("Discard Session", systemImage: "trash", role: .destructive) {
+                Button("Discard workout", systemImage: "trash", role: .destructive) {
                     showingDiscardAlert = true
                 }
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel("Active session, \(session.name)")
+            .accessibilityValue("\(setCount) sets logged\(saveWarning)")
             .accessibilityHint("Resumes the workout. Touch and hold to discard it.")
-            .alert("Discard Session?", isPresented: $showingDiscardAlert) {
+            .alert("Discard session?", isPresented: $showingDiscardAlert) {
                 Button("Cancel", role: .cancel) {}
                 Button("Discard", role: .destructive) {
                     Task { await sessionManager.discardDraft() }
@@ -56,47 +80,42 @@ struct ActiveSessionBar: View {
         }
     }
 
+    private var saveWarning: String {
+        if case .failed = sessionManager.draftSaveState { return ", save needs attention" }
+        return ""
+    }
+
     private func expandedLabel(
         for session: ActiveWorkoutSession,
         exerciseCount: Int,
         setCount: Int
     ) -> some View {
         HStack(spacing: Theme.Spacing.md) {
-            statusIcon
+            LivePulseDot(color: Theme.Colors.success, size: 7)
+                .frame(width: 16, height: 16)
 
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 1) {
                 Text(session.name)
-                    .font(Theme.Typography.bodyBold)
-                    .foregroundStyle(Theme.Colors.textPrimary)
+                    .font(Theme.Typography.headline)
+                    .foregroundStyle(Theme.Colors.onAccent)
                     .lineLimit(1)
 
-                HStack(spacing: Theme.Spacing.xs) {
-                    elapsedTimer(from: session.startedAt)
-                    Text("\u{2022}")
-                        .accessibilityHidden(true)
-                    Text(SharedFormatters.count(exerciseCount, "exercise"))
-                    Text("\u{2022}")
-                        .accessibilityHidden(true)
-                    Text(SharedFormatters.count(setCount, "set"))
-                }
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Colors.textSecondary)
-                .lineLimit(1)
+                Text("\(SharedFormatters.count(exerciseCount, "exercise")), \(setCount) logged")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.onAccent.opacity(0.7))
+                    .lineLimit(1)
             }
 
             Spacer(minLength: Theme.Spacing.sm)
 
-            HStack(spacing: 4) {
-                Text("Resume")
-                Image(systemName: "chevron.up")
-                    .font(Theme.Typography.caption2Bold)
-            }
-            .font(Theme.Typography.subheadlineBold)
-            .foregroundStyle(.white)
-            .padding(.horizontal, Theme.Spacing.md)
-            .padding(.vertical, 8)
-            .background(Capsule().fill(Theme.accentGradient))
-            .shadow(color: Theme.Colors.accent.opacity(0.3), radius: 6, x: 0, y: 3)
+            elapsedTimer(from: session.startedAt)
+                .font(Theme.Typography.title4Bold)
+                .foregroundStyle(Theme.Colors.onAccent)
+
+            Image(systemName: "chevron.up")
+                .font(Theme.Typography.captionBold)
+                .foregroundStyle(Theme.Colors.onAccent.opacity(0.7))
+                .accessibilityHidden(true)
         }
     }
 
@@ -106,51 +125,31 @@ struct ActiveSessionBar: View {
         setCount: Int
     ) -> some View {
         HStack(spacing: Theme.Spacing.sm) {
-            statusIcon
+            LivePulseDot(color: Theme.Colors.success, size: 7)
+                .frame(width: 16, height: 16)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(session.name)
-                    .font(Theme.Typography.bodyBold)
-                    .foregroundStyle(Theme.Colors.textPrimary)
-                    .lineLimit(1)
-
-                HStack(spacing: Theme.Spacing.xs) {
-                    elapsedTimer(from: session.startedAt)
-                    Text("\(exerciseCount) ex \u{2022} \(SharedFormatters.count(setCount, "set"))")
-                }
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Colors.textSecondary)
+            Text(session.name)
+                .font(Theme.Typography.headline)
+                .foregroundStyle(Theme.Colors.onAccent)
                 .lineLimit(1)
-            }
 
             Spacer(minLength: 0)
 
+            elapsedTimer(from: session.startedAt)
+                .font(Theme.Typography.headline)
+                .foregroundStyle(Theme.Colors.onAccent)
+
             Image(systemName: "chevron.up")
                 .font(Theme.Typography.captionBold)
-                .foregroundStyle(.white)
-                .frame(width: 32, height: 32)
-                .background(Circle().fill(Theme.accentGradient))
+                .foregroundStyle(Theme.Colors.onAccent.opacity(0.7))
                 .accessibilityHidden(true)
         }
-    }
-
-    private var statusIcon: some View {
-        Image(systemName: "bolt.fill")
-            .font(Theme.Typography.captionBold)
-            .foregroundStyle(Theme.Colors.accent)
-            .frame(width: 36, height: 36)
-            .background(Theme.Colors.accentTint, in: Circle())
-            .overlay(alignment: .topTrailing) {
-                // Live indicator so a minimized workout reads as "still running".
-                LivePulseDot(color: Theme.Colors.success, size: 7)
-                    .offset(x: 6, y: -6)
-            }
-            .accessibilityHidden(true)
     }
 
     private func elapsedTimer(from startDate: Date) -> some View {
         Text(startDate, style: .timer)
             .monospacedDigit()
             .accessibilityLabel("Elapsed time")
+            .accessibilityValue(Text(startDate, style: .timer))
     }
 }

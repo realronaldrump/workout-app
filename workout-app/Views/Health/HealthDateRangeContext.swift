@@ -110,10 +110,12 @@ struct HealthDateRangeSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            FilterRowLabel(
-                title: title,
-                detail: showsResolvedLabel ? dateRangeContext.rangeLabel(earliest: earliestDate) : nil
-            )
+            if showsResolvedLabel {
+                FilterRowLabel(
+                    title: title,
+                    detail: dateRangeContext.rangeLabel(earliest: earliestDate)
+                )
+            }
 
             TimeRangePillPicker(
                 options: HealthDateRangeContext.pickerOptions,
@@ -163,7 +165,7 @@ struct HealthDateRangeToolbarMenu: View {
             if dateRangeContext.selectedRange == .custom {
                 Divider()
 
-                Button("Edit Custom Range") {
+                Button("Edit custom range") {
                     showingCustomRange = true
                     Haptics.selection()
                 }
@@ -197,4 +199,30 @@ private enum HealthDateRangeFormatters {
         formatter.timeStyle = .none
         return formatter
     }()
+}
+
+/// Recovery actions shared by Health screens when a selected range has no samples.
+struct HealthEmptyStateActions: View {
+    @EnvironmentObject private var dateRangeContext: HealthDateRangeContext
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            if dateRangeContext.selectedRange != .allTime {
+                Button("View all time", systemImage: "calendar") {
+                    dateRangeContext.selectedRange = .allTime
+                    Haptics.selection()
+                }
+                .font(Theme.Typography.bodyBold)
+                .frame(minHeight: Theme.Layout.minimumTapTarget)
+            }
+
+            NavigationLink {
+                HealthPermissionAuditView()
+            } label: {
+                Label("Review Health access", systemImage: "heart.text.square")
+                    .font(Theme.Typography.captionBold)
+                    .frame(minHeight: Theme.Layout.minimumTapTarget)
+            }
+        }
+    }
 }

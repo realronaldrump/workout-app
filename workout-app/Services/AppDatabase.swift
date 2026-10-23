@@ -99,7 +99,7 @@ nonisolated final class AppDatabase: @unchecked Sendable {
     private let container: NSPersistentContainer
     private let inMemory: Bool
 
-    init(inMemory: Bool = false) {
+    init(inMemory: Bool = false, storeURL: URL? = nil) {
         self.inMemory = inMemory
 
         let model = Self.makeModel()
@@ -110,9 +110,12 @@ nonisolated final class AppDatabase: @unchecked Sendable {
             description = NSPersistentStoreDescription()
             description.type = NSInMemoryStoreType
         } else {
-            let directory = Self.storeDirectory()
-            try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            description = NSPersistentStoreDescription(url: directory.appendingPathComponent(Self.sqliteFileName))
+            let resolvedURL = storeURL ?? Self.storeDirectory().appendingPathComponent(Self.sqliteFileName)
+            try? FileManager.default.createDirectory(
+                at: resolvedURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            description = NSPersistentStoreDescription(url: resolvedURL)
         }
 
         description.shouldAddStoreAsynchronously = false
@@ -698,7 +701,7 @@ nonisolated final class AppDatabase: @unchecked Sendable {
         _ workout: LoggedWorkout,
         in context: NSManagedObjectContext
     ) throws {
-        let duration = Self.formatDuration(start: workout.startedAt, end: workout.endedAt)
+        let duration = workout.durationText
         let workoutObject = NSEntityDescription.insertNewObject(forEntityName: EntityName.workout, into: context)
         workoutObject.setValue(workout.id.uuidString, forKey: "workoutId")
         workoutObject.setValue(WorkoutStoreSource.logged.rawValue, forKey: "source")
@@ -951,7 +954,10 @@ nonisolated final class AppDatabase: @unchecked Sendable {
     }
 
     private nonisolated static func workout(from snapshot: WorkoutSnapshot) -> Workout {
-        Workout(
+        if let logged = loggedWorkout(from: snapshot) {
+            return logged.analyticsWorkout
+        }
+        return Workout(
             id: snapshot.id,
             date: snapshot.date,
             name: snapshot.name,
@@ -1194,17 +1200,6 @@ nonisolated final class AppDatabase: @unchecked Sendable {
 
     private nonisolated static func normalizedName(_ name: String) -> String {
         name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    }
-
-    private nonisolated static func formatDuration(start: Date, end: Date) -> String {
-        let seconds = max(0, end.timeIntervalSince(start))
-        let minutes = Int(ceil(seconds / 60.0))
-        if minutes >= 60 {
-            let hours = minutes / 60
-            let minutesRemainder = minutes % 60
-            return minutesRemainder == 0 ? "\(hours)h" : "\(hours)h \(minutesRemainder)m"
-        }
-        return "\(minutes)m"
     }
 
     private nonisolated static func storeDirectory() -> URL {

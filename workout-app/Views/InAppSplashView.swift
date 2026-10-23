@@ -27,7 +27,7 @@ struct InAppSplashView: View {
                 if let statusText {
                     Text(statusText)
                         .font(Theme.Typography.caption)
-                        .foregroundStyle(Color.white.opacity(0.72))
+                        .foregroundStyle(Theme.Colors.textSecondary)
                         .padding(.bottom, Theme.Spacing.xl)
                 } else {
                     // Keep spacing consistent so the lockup doesn't jump when status is used elsewhere.

@@ -108,10 +108,13 @@ struct MuscleHeatmapView: View {
     }
 
     private var muscleBalanceTitle: some View {
-        Text("Effective Sets")
-            .font(Theme.Typography.sectionHeader2)
-            .foregroundColor(Theme.Colors.textPrimary)
-            .accessibilityAddTraits(.isHeader)
+        HStack {
+            Text("Muscle sets")
+                .font(Theme.Typography.sectionHeader2)
+                .foregroundColor(Theme.Colors.textPrimary)
+                .accessibilityAddTraits(.isHeader)
+            AppHelpButton(title: "Muscle sets", message: "Primary muscles count as one set. Secondary muscles count as half a set.")
+        }
     }
 
     private var dateRangeText: some View {

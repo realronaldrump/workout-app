@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Interaction primitives for the analytics drill-down features.
-/// Presentation uses the existing Warm Precision card and button treatments.
+/// Presentation uses the flat panel and an ink outline for the selected tile.
 enum MetricInteractionRole: String, Hashable {
     case navigate
     case focus
@@ -59,13 +59,9 @@ struct AnalysisTile<Content: View>: View {
         .buttonStyle(AppInteractionButtonStyle())
         .softCard(cornerRadius: radius, elevation: 1)
         .overlay {
-            if isSelected || tint != nil {
-                let resolvedTint = tint ?? Theme.Colors.accent
+            if isSelected {
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .strokeBorder(
-                        isSelected ? resolvedTint : resolvedTint.opacity(0.35),
-                        lineWidth: isSelected ? 2 : 1
-                    )
+                    .strokeBorder(Theme.Colors.ink, lineWidth: 2)
             }
         }
         .accessibilityElement(children: .combine)

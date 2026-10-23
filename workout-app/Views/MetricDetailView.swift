@@ -49,7 +49,7 @@ struct MetricDetailView: View {
             detailBackground
 
             ScrollView(showsIndicators: false) {
-                LazyVStack(alignment: .leading, spacing: Theme.Spacing.xl) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
                     heroCard
 
                     switch kind {
@@ -108,7 +108,13 @@ struct MetricDetailView: View {
 
     private var heroCard: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            BrandBandLabel(text: title, systemImage: "chart.bar.xaxis")
+            HStack {
+                BrandBandLabel(text: title, systemImage: "chart.bar.xaxis")
+                if let heroHelp {
+                    Spacer()
+                    AppHelpButton(title: title, message: heroHelp)
+                }
+            }
 
             Text(heroHeadline)
                 .font(Theme.Typography.metricLarge)
@@ -118,11 +124,6 @@ struct MetricDetailView: View {
                 .minimumScaleFactor(dynamicTypeSize.isAccessibilitySize ? 1 : 0.65)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Text(heroSubtitle)
-                .font(Theme.Typography.caption)
-                .foregroundColor(Theme.Colors.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-
             LazyVGrid(
                 columns: summaryGridColumns,
                 spacing: Theme.Spacing.sm
@@ -130,27 +131,27 @@ struct MetricDetailView: View {
                 switch kind {
                 case .sessions:
                     HeroChip(title: "Sessions", value: "\(workouts.count)", tint: Theme.Colors.accent)
-                    HeroChip(title: "Active Days", value: "\(uniqueWorkoutDayCount)", tint: Theme.Colors.success)
-                    HeroChip(title: "Typical Window", value: preferredSessionWindow?.compactTitle ?? "--", tint: Theme.Colors.accentSecondary)
-                    HeroChip(title: "Longest Break", value: longestSessionBreakLabel, tint: Theme.Colors.warning)
+                    HeroChip(title: "Active days", value: "\(uniqueWorkoutDayCount)", tint: Theme.Colors.success)
+                    HeroChip(title: "Usual time", value: preferredSessionWindow?.compactTitle ?? "--", tint: Theme.Colors.accentSecondary)
+                    HeroChip(title: "Longest break", value: longestSessionBreakLabel, tint: Theme.Colors.warning)
                 case .streak:
                     HeroChip(title: "Current", value: "\(currentStreakRun?.workoutDayCount ?? 0)d", tint: Theme.Colors.accent)
                     HeroChip(title: "Best", value: "\(streakRunsByLength.first?.workoutDayCount ?? 0)d", tint: Theme.Colors.success)
-                    HeroChip(title: "Runs", value: "\(streakRuns.count)", tint: Theme.Colors.accentSecondary)
-                    HeroChip(title: "Break Allowance", value: "\(max(0, intentionalRestDays))d", tint: Theme.Colors.warning)
+                    HeroChip(title: "Streaks", value: "\(streakRuns.count)", tint: Theme.Colors.accentSecondary)
+                    HeroChip(title: "Break allowance", value: "\(max(0, intentionalRestDays))d", tint: Theme.Colors.warning)
                 case .totalVolume:
                     HeroChip(title: "Total", value: SharedFormatters.volumeCompact(totalVolume), tint: Theme.Colors.accent)
-                    HeroChip(title: "Avg / Session", value: SharedFormatters.volumePrecise(avgVolumePerSession), tint: Theme.Colors.success)
+                    HeroChip(title: "Avg / session", value: SharedFormatters.volumePrecise(avgVolumePerSession), tint: Theme.Colors.success)
                     HeroChip(
-                        title: "Peak Session",
+                        title: "Peak session",
                         value: SharedFormatters.volumePrecise(peakVolumeSession.map { normalizedVolume(for: $0) } ?? 0),
                         tint: Theme.Colors.accentSecondary
                     )
                     HeroChip(title: "Sessions", value: "\(workouts.count)", tint: Theme.Colors.warning)
                 case .totalSets:
                     HeroChip(title: "Total", value: "\(totalSetCount)", tint: Theme.Colors.accent)
-                    HeroChip(title: "Avg / Session", value: formattedSetAverage, tint: Theme.Colors.success)
-                    HeroChip(title: "Peak Session", value: "\(peakSetCount)", tint: Theme.Colors.accentTertiary)
+                    HeroChip(title: "Avg / session", value: formattedSetAverage, tint: Theme.Colors.success)
+                    HeroChip(title: "Peak session", value: "\(peakSetCount)", tint: Theme.Colors.accentTertiary)
                     HeroChip(title: "Sessions", value: "\(workouts.count)", tint: Theme.Colors.warning)
                 case .averageDuration:
                     HeroChip(title: "Average", value: formattedAverageDuration, tint: Theme.Colors.accent)
@@ -158,35 +159,20 @@ struct MetricDetailView: View {
                     HeroChip(title: "Longest", value: formattedLongestDuration, tint: Theme.Colors.accentTertiary)
                     HeroChip(title: "Sessions", value: "\(workouts.count)", tint: Theme.Colors.warning)
                 case .averageFrequency:
-                    HeroChip(title: "Average / Week", value: formattedAverageFrequency, tint: Theme.Colors.accent)
-                    HeroChip(title: "Active Weeks", value: "\(activeFrequencyWeekCount)", tint: Theme.Colors.success)
-                    HeroChip(title: "Peak Week", value: "\(peakFrequencyWeekCount)", tint: Theme.Colors.accentTertiary)
+                    HeroChip(title: "Average / week", value: formattedAverageFrequency, tint: Theme.Colors.accent)
+                    HeroChip(title: "Active weeks", value: "\(activeFrequencyWeekCount)", tint: Theme.Colors.success)
+                    HeroChip(title: "Peak week", value: "\(peakFrequencyWeekCount)", tint: Theme.Colors.accentTertiary)
                     HeroChip(title: "Sessions", value: "\(workouts.count)", tint: Theme.Colors.warning)
                 }
             }
         }
         .padding(Theme.Spacing.lg)
-        .background(alignment: .topTrailing) {
-            // A soft brand wash in the corner marks this as the page's headline card.
-            RadialGradient(
-                colors: [Theme.Colors.accent.opacity(0.14), Theme.Colors.accent.opacity(0)],
-                center: .topTrailing,
-                startRadius: 0,
-                endRadius: 260
-            )
-            .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge, style: .continuous))
-        }
         .softCard(cornerRadius: Theme.CornerRadius.xlarge, elevation: 2)
     }
 
     private var sessionsSection: some View {
         LazyVStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-            sectionHeader(
-                title: "Session Cadence",
-                subtitle: "This week reads better as rhythm and timing than stacked counts. Tap an active day to focus the feed."
-            )
-
-            sessionCadenceSummaryCard
+            sectionHeader(title: "Workout schedule")
 
             sessionFlowCard
 
@@ -198,77 +184,6 @@ struct MetricDetailView: View {
         .softCard(elevation: 2)
     }
 
-    private var sessionCadenceSummaryCard: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            HStack(alignment: .top, spacing: Theme.Spacing.md) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Cadence Snapshot")
-                        .font(Theme.Typography.title3)
-                        .foregroundColor(Theme.Colors.textPrimary)
-
-                    Text(sessionCadenceHeadline)
-                        .font(Theme.Typography.bodyBold)
-                        .foregroundColor(Theme.Colors.textPrimary)
-
-                    Text(sessionCadenceNarrative)
-                        .font(Theme.Typography.caption)
-                        .foregroundColor(Theme.Colors.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Spacer(minLength: 0)
-
-                if !workouts.isEmpty {
-                    HStack(spacing: 6) {
-                        Image(systemName: stackedSessionDayCount == 0 ? "checkmark.circle.fill" : "square.stack.3d.up.fill")
-                            .font(Theme.Typography.captionStrong)
-                        Text(stackedSessionDayCount == 0 ? "One per day" : "\(stackedSessionDayCount) stacked")
-                            .font(Theme.Typography.captionBold)
-                    }
-                    .foregroundColor(stackedSessionDayCount == 0 ? Theme.Colors.success : Theme.Colors.accentSecondary)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(
-                        Capsule()
-                            .fill(
-                                stackedSessionDayCount == 0
-                                    ? Theme.Colors.success.opacity(0.12)
-                                    : Theme.Colors.accentSecondary.opacity(0.12)
-                            )
-                    )
-                }
-            }
-
-            LazyVGrid(
-                columns: summaryGridColumns,
-                spacing: Theme.Spacing.sm
-            ) {
-                SessionInsightTile(
-                    label: "Day Coverage",
-                    value: "\(uniqueWorkoutDayCount)/\(max(sessionDisplayDays.count, 1))",
-                    tint: Theme.Colors.accent
-                )
-                SessionInsightTile(
-                    label: "Rest Days",
-                    value: "\(max(sessionDisplayDays.count - uniqueWorkoutDayCount, 0))",
-                    tint: Theme.Colors.warning
-                )
-                SessionInsightTile(
-                    label: "Typical Window",
-                    value: preferredSessionWindow?.compactTitle ?? "--",
-                    tint: Theme.Colors.success
-                )
-                SessionInsightTile(
-                    label: "Longest Break",
-                    value: longestSessionBreakLabel,
-                    tint: Theme.Colors.accentSecondary
-                )
-            }
-        }
-        .padding(Theme.Spacing.md)
-        .softCard(cornerRadius: Theme.CornerRadius.medium, elevation: 1)
-    }
-
     private var sessionFlowCard: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             HStack(alignment: .firstTextBaseline) {
@@ -276,9 +191,11 @@ struct MetricDetailView: View {
                     Text(sessionFlowTitle)
                         .font(Theme.Typography.title3)
                         .foregroundColor(Theme.Colors.textPrimary)
-                    Text(sessionFlowSubtitle)
-                        .font(Theme.Typography.caption)
-                        .foregroundColor(Theme.Colors.textSecondary)
+                    if !isCurrentWeekContext {
+                        Text("Last \(sessionDisplayDays.count) days")
+                            .font(Theme.Typography.caption)
+                            .foregroundColor(Theme.Colors.textSecondary)
+                    }
                 }
 
                 Spacer()
@@ -290,7 +207,7 @@ struct MetricDetailView: View {
                         }
                         Haptics.selection()
                     } label: {
-                        Text("Show All")
+                        Text("Show all")
                             .font(Theme.Typography.captionBold)
                             .foregroundColor(Theme.Colors.accent)
                             .padding(.horizontal, Theme.Spacing.md)
@@ -346,9 +263,6 @@ struct MetricDetailView: View {
                 }
             }
 
-            Text(sessionSelectionHint)
-                .font(Theme.Typography.caption)
-                .foregroundColor(Theme.Colors.textSecondary)
         }
         .padding(Theme.Spacing.md)
         .softCard(cornerRadius: Theme.CornerRadius.medium, elevation: 1)
@@ -356,7 +270,7 @@ struct MetricDetailView: View {
 
     private var sessionTimingCard: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Training Window")
+            Text("Workout times")
                 .font(Theme.Typography.title3)
                 .foregroundColor(Theme.Colors.textPrimary)
 
@@ -387,7 +301,7 @@ struct MetricDetailView: View {
     private var sessionsListCard: some View {
         LazyVStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             HStack(alignment: .firstTextBaseline) {
-                Text(selectedSessionDay == nil ? "Session Feed" : "Sessions On \(selectedSessionDayLabel)")
+                Text(selectedSessionDay == nil ? "Workouts" : "Sessions on \(selectedSessionDayLabel)")
                     .font(Theme.Typography.title3)
                     .foregroundColor(Theme.Colors.textPrimary)
 
@@ -411,7 +325,7 @@ struct MetricDetailView: View {
                     NavigationLink(destination: WorkoutDetailView(workout: workout)) {
                         MetricWorkoutRow(
                             workout: workout,
-                            subtitle: "\(workout.date.formatted(date: .abbreviated, time: .shortened)) | \(timeOfDayLabel(for: workout.date))",
+                            subtitle: "\(workout.date.formatted(date: .abbreviated, time: .shortened)), \(timeOfDayLabel(for: workout.date))",
                             exerciseCount: exerciseCount(for: workout),
                             highlight: selectedSessionDay != nil
                         )
@@ -426,7 +340,7 @@ struct MetricDetailView: View {
 
     private var streakSection: some View {
         LazyVStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-            sectionHeader(title: "Streak Explorer", subtitle: "Workout-day streaks that respect your rest allowance and saved break dates.")
+            sectionHeader(title: "Streaks")
 
             CachedLongestStreaksSection(
                 runs: streakRunsByLength,
@@ -447,7 +361,7 @@ struct MetricDetailView: View {
             if let run = selectedStreakRun {
                 VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                     HStack {
-                        Text("\(run.workoutDayCount)-day selected run")
+                        Text("\(run.workoutDayCount)-day streak")
                             .font(Theme.Typography.title3)
                             .foregroundColor(Theme.Colors.textPrimary)
                         Spacer()
@@ -465,16 +379,15 @@ struct MetricDetailView: View {
                 .softCard(cornerRadius: Theme.CornerRadius.medium, elevation: 1)
 
                 VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                    Text("Sessions In Selected Run")
+                    Text("Workouts in streak")
                         .font(Theme.Typography.metricLabel)
                         .foregroundColor(Theme.Colors.textTertiary)
-                        .tracking(0.8)
 
                     ForEach(selectedStreakWorkouts.prefix(8)) { workout in
                         NavigationLink(destination: WorkoutDetailView(workout: workout)) {
                             MetricWorkoutRow(
                                 workout: workout,
-                                subtitle: "\(workout.date.formatted(date: .abbreviated, time: .shortened)) | \(timeOfDayLabel(for: workout.date))",
+                                subtitle: "\(workout.date.formatted(date: .abbreviated, time: .shortened)), \(timeOfDayLabel(for: workout.date))",
                                 exerciseCount: exerciseCount(for: workout),
                                 highlight: false
                             )
@@ -492,12 +405,12 @@ struct MetricDetailView: View {
 
     private var streakTimelineCard: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text("Recent Run Lengths")
+            Text("Recent streaks")
                 .font(Theme.Typography.title3)
                 .foregroundColor(Theme.Colors.textPrimary)
 
             if streakRunsByRecency.isEmpty {
-                EmptyStateTile(message: "No streak runs to visualize yet.")
+                EmptyStateTile(message: "No streaks to chart yet.")
             } else {
                 let chartRuns = Array(streakRunsByRecency.prefix(12).reversed())
                 Chart(chartRuns) { run in
@@ -534,7 +447,7 @@ struct MetricDetailView: View {
                 .frame(height: Theme.ChartHeight.standard)
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("Recent streak lengths")
-                .accessibilityValue("\(chartRuns.count) runs. Longest \(chartRuns.map(\.workoutDayCount).max() ?? 0) days.")
+                .accessibilityValue("\(chartRuns.count) streaks. Longest \(chartRuns.map(\.workoutDayCount).max() ?? 0) days.")
             }
         }
         .padding(Theme.Spacing.md)
@@ -543,7 +456,7 @@ struct MetricDetailView: View {
 
     private var totalVolumeSection: some View {
         LazyVStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-            sectionHeader(title: "Volume Explorer", subtitle: "Inspect trend, spotlight top sessions, and drill into top exercises.")
+            sectionHeader(title: "Training volume")
 
             volumeChartCard
 
@@ -559,7 +472,7 @@ struct MetricDetailView: View {
 
     private var volumeChartCard: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text("Volume Trend")
+            Text("Volume trend")
                 .font(Theme.Typography.title3)
                 .foregroundColor(Theme.Colors.textPrimary)
 
@@ -572,14 +485,14 @@ struct MetricDetailView: View {
                         y: .value("Volume", point.value)
                     )
                     .foregroundStyle(Theme.Colors.accent)
-                    .interpolationMethod(.catmullRom)
+                    .interpolationMethod(.monotone)
 
                     AreaMark(
                         x: .value("Date", point.date),
                         y: .value("Volume", point.value)
                     )
                     .foregroundStyle(Theme.Colors.accent.opacity(0.16))
-                    .interpolationMethod(.catmullRom)
+                    .interpolationMethod(.monotone)
 
                     if point.id == selectedVolumeWorkoutId {
                         PointMark(
@@ -627,10 +540,9 @@ struct MetricDetailView: View {
 
     private var topVolumeSessionPicker: some View {
         LazyVStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text("Peak Sessions")
+            Text("Highest-volume workouts")
                 .font(Theme.Typography.metricLabel)
                 .foregroundColor(Theme.Colors.textTertiary)
-                .tracking(0.8)
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: Theme.Spacing.sm) {
@@ -667,7 +579,7 @@ struct MetricDetailView: View {
 
     private var volumeSessionList: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text(selectedVolumeWorkoutId == nil ? "All Sessions" : "Focused Session")
+            Text(selectedVolumeWorkoutId == nil ? "All sessions" : "Focused session")
                 .font(Theme.Typography.title3)
                 .foregroundColor(Theme.Colors.textPrimary)
 
@@ -678,7 +590,7 @@ struct MetricDetailView: View {
                     NavigationLink(destination: WorkoutDetailView(workout: workout)) {
                         MetricWorkoutRow(
                             workout: workout,
-                            subtitle: "\(SharedFormatters.volumeCompact(normalizedVolume(for: workout))) volume | \(timeOfDayLabel(for: workout.date))",
+                            subtitle: "\(SharedFormatters.volumeCompact(normalizedVolume(for: workout))) volume, \(timeOfDayLabel(for: workout.date))",
                             exerciseCount: exerciseCount(for: workout),
                             highlight: selectedVolumeWorkoutId == workout.id
                         )
@@ -695,7 +607,7 @@ struct MetricDetailView: View {
         let exerciseTotals = topExerciseTotals
 
         return LazyVStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text("Top Exercises By Volume")
+            Text("Top exercises by volume")
                 .font(Theme.Typography.title3)
                 .foregroundColor(Theme.Colors.textPrimary)
 
@@ -742,12 +654,7 @@ struct MetricDetailView: View {
 
     private var workoutValueSection: some View {
         LazyVStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-            sectionHeader(
-                title: kind == .totalSets ? "Set History" : "Session Duration",
-                subtitle: kind == .totalSets
-                    ? "Sets logged in each workout"
-                    : "Elapsed minutes for each workout"
-            )
+            sectionHeader(title: kind == .totalSets ? "Sets per workout" : "Workout duration")
 
             VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                 if let selectedValueObservation {
@@ -787,10 +694,7 @@ struct MetricDetailView: View {
             .padding(Theme.Spacing.lg)
             .softCard(elevation: 1)
 
-            sectionHeader(
-                title: "Top Sessions",
-                subtitle: "Highest values in this range"
-            )
+            sectionHeader(title: kind == .totalSets ? "Most sets" : "Longest workouts")
 
             ForEach(Array(topWorkoutValueObservations.enumerated()), id: \.element.id) { index, observation in
                 AnalysisTile(
@@ -826,10 +730,7 @@ struct MetricDetailView: View {
 
     private var averageFrequencySection: some View {
         LazyVStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-            sectionHeader(
-                title: "Weekly Frequency",
-                subtitle: "Sessions logged in each week of the selected range"
-            )
+            sectionHeader(title: "Weekly frequency")
 
             VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                 PerformanceWeeklyChart(
@@ -851,7 +752,7 @@ struct MetricDetailView: View {
 
                         Spacer()
 
-                        Button("Show All") {
+                        Button("Show all") {
                             selectedFrequencyWeek = nil
                             Haptics.selection()
                         }
@@ -1017,7 +918,7 @@ struct MetricDetailView: View {
         }
     }
 
-    private func sectionHeader(title: String, subtitle: String) -> some View {
+    private func sectionHeader(title: String, subtitle: String? = nil) -> some View {
         SectionHeading(title: title, subtitle: subtitle)
     }
 
@@ -1025,10 +926,10 @@ struct MetricDetailView: View {
         switch kind {
         case .sessions: return "Sessions"
         case .streak: return "Streak"
-        case .totalVolume: return "Total Volume"
-        case .totalSets: return "Total Sets"
-        case .averageDuration: return "Average Duration"
-        case .averageFrequency: return "Average Per Week"
+        case .totalVolume: return "Total volume"
+        case .totalSets: return "Total sets"
+        case .averageDuration: return "Average duration"
+        case .averageFrequency: return "Average per week"
         }
     }
 
@@ -1055,26 +956,14 @@ struct MetricDetailView: View {
         }
     }
 
-    private var heroSubtitle: String {
+    private var heroHelp: String? {
         switch kind {
-        case .sessions:
-            if workouts.isEmpty {
-                return "This view will map your training rhythm and preferred window as soon as you log a session."
-            }
-            if stackedSessionDayCount == 0 {
-                return "Each active day held a single workout, so this screen focuses on rhythm, spacing, and timing."
-            }
-            return "See which days carried sessions, where they cluster, and when you usually train."
         case .streak:
-            return "Streaks honor your rest allowance plus any saved intentional break dates."
+            return "Streaks allow your saved breaks and the rest days set in Settings."
         case .totalVolume:
-            return "Track progression, inspect outliers, and identify top-contributing exercises."
-        case .totalSets:
-            return "Inspect how much work each session contained."
-        case .averageDuration:
-            return "Compare session length without treating longer as automatically better."
-        case .averageFrequency:
-            return "See how consistently sessions were distributed across the selected range."
+            return "Volume adds weight × reps across your logged sets."
+        default:
+            return nil
         }
     }
 
@@ -1155,69 +1044,7 @@ struct MetricDetailView: View {
     }
 
     private var sessionFlowTitle: String {
-        isCurrentWeekContext ? "Week Flow" : "Recent Flow"
-    }
-
-    private var sessionFlowSubtitle: String {
-        if isCurrentWeekContext {
-            return "Tap an active day to zero in on this week's session list."
-        }
-        return "Showing the latest \(sessionDisplayDays.count) days from this range."
-    }
-
-    private var sessionCadenceHeadline: String {
-        if workouts.isEmpty {
-            return "No sessions logged in this range."
-        }
-        if uniqueWorkoutDayCount == sessionDisplayDays.count {
-            return "You trained every day in view."
-        }
-        if stackedSessionDayCount == 0 {
-            return "Single-session days are your normal pattern."
-        }
-        return "\(stackedSessionDayCount) days carried stacked sessions."
-    }
-
-    private var sessionCadenceNarrative: String {
-        guard !workouts.isEmpty else {
-            return "Once you log a workout, this screen will show which days were active, when sessions usually happen, and how evenly they are spaced."
-        }
-
-        var parts = ["\(uniqueWorkoutDayCount) of \(max(sessionDisplayDays.count, 1)) days were active"]
-
-        if let preferredSessionWindow {
-            parts.append("most sessions started in the \(preferredSessionWindow.title.lowercased())")
-        }
-
-        if let averageSessionSpacingDays {
-            if averageSessionSpacingDays <= 1.2 {
-                parts.append("workouts landed on back-to-back days")
-            } else {
-                parts.append("workouts landed about every \(roundedDayLabel(for: averageSessionSpacingDays))")
-            }
-        }
-
-        if stackedSessionDayCount == 0 {
-            parts.append("each active day held a single session")
-        }
-
-        return parts.joined(separator: " • ")
-    }
-
-    private var sessionSelectionHint: String {
-        guard let selectedSessionDay,
-              let selectedDay = sessionDisplayDays.first(where: { sundayCalendar.isDate($0.date, inSameDayAs: selectedSessionDay) }) else {
-            return isCurrentWeekContext
-                ? "Tap an active day to focus the feed without losing the shape of the week."
-                : "Tap an active day to focus the feed or scan the strip for recent rhythm."
-        }
-
-        let label = selectedDay.date.formatted(Date.FormatStyle().weekday(.wide).month(.abbreviated).day())
-        if let workout = selectedDay.workouts.first, selectedDay.count == 1 {
-            let window = selectedDay.primaryWindow?.title.lowercased() ?? timeOfDayLabel(for: workout.date).lowercased()
-            return "\(label) had 1 session: \(workout.name) in the \(window)."
-        }
-        return "\(label) had \(selectedDay.count) sessions."
+        isCurrentWeekContext ? "This week" : "Recent days"
     }
 
     private var averageSessionSpacingDays: Double? {
@@ -1652,10 +1479,6 @@ private struct CachedLongestStreaksSection: View {
                     .font(Theme.Typography.caption)
                     .foregroundColor(Theme.Colors.textTertiary)
             } else {
-                Text("Tap a streak to inspect it below")
-                    .font(Theme.Typography.caption)
-                    .foregroundColor(Theme.Colors.textTertiary)
-
                 VStack(spacing: Theme.Spacing.sm) {
                     ForEach(Array(displayRuns.enumerated()), id: \.element.id) { index, run in
                         Button {
@@ -1706,7 +1529,7 @@ private struct CachedLongestStreaksSection: View {
 
     private var header: some View {
         HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.sm) {
-            Text("Longest Streaks")
+            Text("Longest streaks")
                 .font(Theme.Typography.cardHeader)
                 .foregroundColor(Theme.Colors.textPrimary)
 
@@ -1723,8 +1546,6 @@ private struct CachedLongestStreaksSection: View {
                         Text(isExpanded ? "Less" : "More")
                             .font(Theme.Typography.metricLabel)
                             .foregroundColor(Theme.Colors.accent)
-                            .textCase(.uppercase)
-                            .tracking(0.8)
                         Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                             .font(Theme.Typography.captionBold)
                             .foregroundColor(Theme.Colors.accent)
@@ -1773,8 +1594,6 @@ private struct HeroChip: View {
             Text(title)
                 .font(Theme.Typography.metricLabel)
                 .foregroundColor(Theme.Colors.textTertiary)
-                .textCase(.uppercase)
-                .tracking(0.7)
 
             Text(value)
                 .font(Theme.Typography.monoSmall)
@@ -1904,7 +1723,6 @@ private struct SessionInsightTile: View {
             Text(label)
                 .font(Theme.Typography.metricLabel)
                 .foregroundColor(Theme.Colors.textTertiary)
-                .tracking(0.7)
 
             Text(value)
                 .font(Theme.Typography.monoMedium)
@@ -1977,12 +1795,6 @@ private struct SessionDayTile: View {
                                 : (day.hasSessions ? Theme.Colors.border.opacity(0.18) : Theme.Colors.border.opacity(0.55)),
                             lineWidth: 1
                         )
-                )
-                .shadow(
-                    color: day.hasSessions ? Theme.Colors.accent.opacity(isSelected ? 0.18 : 0.08) : .clear,
-                    radius: isSelected ? 10 : 5,
-                    x: 0,
-                    y: isSelected ? 5 : 3
                 )
             }
             .frame(maxWidth: .infinity, alignment: .top)
@@ -2152,8 +1964,8 @@ private enum SessionTimeWindow: String, CaseIterable, Identifiable {
         case .morning:
             return LinearGradient(
                 colors: [
-                    Theme.Colors.warning,
-                    Theme.Colors.accentSecondary
+                    Theme.Colors.plateYellow,
+                    Theme.Colors.plateYellow
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
@@ -2161,8 +1973,8 @@ private enum SessionTimeWindow: String, CaseIterable, Identifiable {
         case .afternoon:
             return LinearGradient(
                 colors: [
-                    Theme.Colors.accentSecondary,
-                    Theme.Colors.warning
+                    Theme.Colors.plateRed,
+                    Theme.Colors.plateRed
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
@@ -2172,8 +1984,8 @@ private enum SessionTimeWindow: String, CaseIterable, Identifiable {
         case .late:
             return LinearGradient(
                 colors: [
-                    Theme.Colors.accentTertiary,
-                    Theme.Colors.accent
+                    Theme.Colors.ink,
+                    Theme.Colors.ink
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing

@@ -1,6 +1,6 @@
 import Foundation
 
-enum BodyCompositionMetricKind: String, CaseIterable, Identifiable {
+nonisolated enum BodyCompositionMetricKind: String, CaseIterable, Identifiable, Sendable {
     case weight
     case bodyFat
 
@@ -28,7 +28,7 @@ enum BodyCompositionMetricKind: String, CaseIterable, Identifiable {
     }
 }
 
-struct BodyRawSample: Identifiable, Codable, Equatable {
+nonisolated struct BodyRawSample: Sendable, Identifiable, Codable, Equatable {
     let id: UUID
     let timestamp: Date
     /// Display units (lb for weight, % for body fat).
@@ -41,7 +41,7 @@ struct BodyRawSample: Identifiable, Codable, Equatable {
     }
 }
 
-struct TimeSeriesPoint: Identifiable, Equatable {
+nonisolated struct TimeSeriesPoint: Sendable, Identifiable, Equatable {
     let date: Date
     let value: Double
     var id: Date { date }
@@ -52,15 +52,48 @@ struct TimeSeriesPoint: Identifiable, Equatable {
     }
 }
 
-struct LinearRegressionResult: Equatable {
+nonisolated struct LinearRegressionResult: Sendable, Equatable {
     let slopePerDay: Double
     let intercept: Double
     let rSquared: Double?
     let residualStdDev: Double?
     let pointCount: Int
+    let observedSpanDays: Int
+    let meanDay: Double
+    let sumSquaredDayOffsets: Double
+    let latestDayOffset: Double
+
+    init(
+        slopePerDay: Double,
+        intercept: Double,
+        rSquared: Double?,
+        residualStdDev: Double?,
+        pointCount: Int,
+        observedSpanDays: Int = 0,
+        meanDay: Double = 0,
+        sumSquaredDayOffsets: Double = 0,
+        latestDayOffset: Double = 0
+    ) {
+        self.slopePerDay = slopePerDay
+        self.intercept = intercept
+        self.rSquared = rSquared
+        self.residualStdDev = residualStdDev
+        self.pointCount = pointCount
+        self.observedSpanDays = observedSpanDays
+        self.meanDay = meanDay
+        self.sumSquaredDayOffsets = sumSquaredDayOffsets
+        self.latestDayOffset = latestDayOffset
+    }
 }
 
-struct BodyLogbookDay: Identifiable {
+nonisolated struct RollingWindowStatistics: Sendable, Equatable {
+    let average: Double
+    let measuredDayCount: Int
+    let observedSpanDays: Int
+    let windowDays: Int
+}
+
+nonisolated struct BodyLogbookDay: Sendable, Identifiable {
     let dayStart: Date
     let representativeTimestamp: Date
     let representative: Double
@@ -74,22 +107,27 @@ struct BodyLogbookDay: Identifiable {
     var id: Date { dayStart }
 }
 
-struct IntervalDelta: Identifiable {
+nonisolated struct IntervalDelta: Sendable, Identifiable {
     let id: String
     let label: String
     let delta: Double
     let baselineDate: Date?
 }
 
-struct ForecastPoint: Identifiable {
+nonisolated struct ForecastPoint: Sendable, Identifiable {
     let id: String
     let horizonDays: Int
     let date: Date
     let predicted: Double
     let sigma: Double?
+    /// Two-sided 95% Student-t multiplier; sigma includes new-observation uncertainty.
+    var predictionIntervalMultiplier: Double = 1.96
+
+    var lowerBound: Double? { sigma.map { predicted - predictionIntervalMultiplier * $0 } }
+    var upperBound: Double? { sigma.map { predicted + predictionIntervalMultiplier * $0 } }
 }
 
-struct TrendSummary {
+nonisolated struct TrendSummary: Sendable {
     let slopePerDay: Double
     let intercept: Double
     let pacePerWeek: Double
@@ -98,9 +136,13 @@ struct TrendSummary {
     let windowStart: Date
     let windowEnd: Date
     let pointCount: Int
+    var observedSpanDays: Int = 0
+    var fittedValueAtEnd: Double = 0
+    var endpointPredictionSigma: Double?
+    var predictionIntervalMultiplier: Double = 1.96
 }
 
-enum ReportGranularity: String, CaseIterable, Identifiable {
+nonisolated enum ReportGranularity: String, CaseIterable, Identifiable, Sendable {
     case weekly
     case monthly
     case yearly
@@ -116,7 +158,7 @@ enum ReportGranularity: String, CaseIterable, Identifiable {
     }
 }
 
-struct ReportBucket: Identifiable {
+nonisolated struct ReportBucket: Sendable, Identifiable {
     let keyDate: Date
     let label: String
     let average: Double
@@ -130,8 +172,8 @@ struct ReportBucket: Identifiable {
     var id: Date { keyDate }
 }
 
-enum BodyCompositionAnalytics {
-    struct DailyRepresentative: Identifiable, Equatable {
+nonisolated enum BodyCompositionAnalytics {
+    nonisolated struct DailyRepresentative: Sendable, Identifiable, Equatable {
         let dayStart: Date
         let timestamp: Date
         let value: Double
@@ -140,27 +182,45 @@ enum BodyCompositionAnalytics {
         var id: Date { dayStart }
     }
 
-    static func bufferedAnalysisRange(for displayRange: DateInterval, bufferDays: Int = 35) -> DateInterval {
-        let calendar = Calendar.current
-        let start = calendar.date(byAdding: .day, value: -bufferDays, to: displayRange.start) ?? displayRange.start
+    static func bufferedAnalysisRange(
+        for displayRange: DateInterval,
+        bufferDays: Int = 35,
+        calendar: Calendar = .current
+    ) -> DateInterval {
+        let start = calendar.date(byAdding: .day, value: -max(0, bufferDays), to: displayRange.start) ?? displayRange.start
         return DateInterval(start: start, end: displayRange.end)
     }
 
-    static func dailyRepresentatives(from samples: [BodyRawSample], calendar: Calendar = .current) -> [DailyRepresentative] {
-        guard !samples.isEmpty else { return [] }
+    static func isValidSampleValue(_ value: Double, metricKind: BodyCompositionMetricKind? = nil) -> Bool {
+        guard value.isFinite, value > 0 else { return false }
+        return metricKind != .bodyFat || value <= 100
+    }
 
-        let grouped = Dictionary(grouping: samples) { sample in
+    /// Keep one earliest valid reading per day so repeated weigh-ins do not receive extra weight.
+    /// All distinct readings are retained for the logbook; "first" does not imply a morning reading.
+    static func dailyRepresentatives(
+        from samples: [BodyRawSample],
+        metricKind: BodyCompositionMetricKind? = nil,
+        calendar: Calendar = .current
+    ) -> [DailyRepresentative] {
+        var seenIDs: Set<UUID> = []
+        let validSamples = samples.filter {
+            isValidSampleValue($0.value, metricKind: metricKind)
+                && $0.timestamp.timeIntervalSinceReferenceDate.isFinite
+        }.sorted { sampleOrder($0, $1) }.filter { seenIDs.insert($0.id).inserted }
+
+        let grouped = Dictionary(grouping: validSamples) { sample in
             calendar.startOfDay(for: sample.timestamp)
         }
 
         let reps: [DailyRepresentative] = grouped.compactMap { dayStart, daySamples in
-            let sorted = daySamples.sorted { $0.timestamp < $1.timestamp }
-            guard let first = sorted.first else { return nil }
+            // Dictionary grouping preserves the globally sorted sample order.
+            guard let first = daySamples.first else { return nil }
             return DailyRepresentative(
                 dayStart: dayStart,
                 timestamp: first.timestamp,
                 value: first.value,
-                samples: sorted
+                samples: daySamples
             )
         }
 
@@ -172,10 +232,21 @@ enum BodyCompositionAnalytics {
         windowDays: Int,
         calendar: Calendar = .current
     ) -> [Date: Double] {
+        trailingWindowStatistics(representatives: representatives, windowDays: windowDays, calendar: calendar)
+            .mapValues(\.average)
+    }
+
+    /// Calendar windows average measured days only. Missing days are never filled with zero or carried forward.
+    static func trailingWindowStatistics(
+        representatives: [DailyRepresentative],
+        windowDays: Int,
+        calendar: Calendar = .current
+    ) -> [Date: RollingWindowStatistics] {
         guard windowDays > 0 else { return [:] }
+        let representatives = normalizedRepresentatives(representatives)
         guard !representatives.isEmpty else { return [:] }
 
-        var result: [Date: Double] = [:]
+        var result: [Date: RollingWindowStatistics] = [:]
         var startIndex = 0
         var runningSum = 0.0
 
@@ -196,7 +267,14 @@ enum BodyCompositionAnalytics {
             }
 
             let count = (index - startIndex) + 1
-            result[currentDay] = runningSum / Double(count)
+            let average = runningSum / Double(count)
+            guard average.isFinite else { continue }
+            result[currentDay] = RollingWindowStatistics(
+                average: average,
+                measuredDayCount: count,
+                observedSpanDays: daysBetween(representatives[startIndex].dayStart, currentDay, calendar: calendar),
+                windowDays: windowDays
+            )
         }
 
         return result
@@ -208,9 +286,15 @@ enum BodyCompositionAnalytics {
         calendar: Calendar = .current
     ) -> [Date: LinearRegressionResult] {
         guard windowDays > 0 else { return [:] }
-        guard representatives.count >= 2 else { return [:] }
+        let representatives = normalizedRepresentatives(representatives)
+        guard representatives.count >= 6 else { return [:] }
 
+        // Calendar conversion dominates long histories. Convert each measured day
+        // once, then reuse exact calendar-day offsets in each trailing window.
+        let anchor = representatives[0].dayStart
+        let dayOffsets = representatives.map { daysBetween(anchor, $0.dayStart, calendar: calendar) }
         var results: [Date: LinearRegressionResult] = [:]
+        results.reserveCapacity(representatives.count)
         var startIndex = 0
 
         for index in representatives.indices {
@@ -221,12 +305,11 @@ enum BodyCompositionAnalytics {
                 startIndex += 1
             }
 
-            let window = Array(representatives[startIndex...index])
-            guard window.count >= 2 else { continue }
-
-            let pairs: [(Double, Double)] = window.map { rep in
-                let x = Double(daysBetween(windowStart, rep.dayStart, calendar: calendar))
-                return (x, rep.value)
+            guard index - startIndex + 1 >= 6,
+                  dayOffsets[index] - dayOffsets[startIndex] >= 7 else { continue }
+            let windowOffset = dayOffsets[index] - daysBetween(windowStart, endDay, calendar: calendar)
+            let pairs: [(Double, Double)] = (startIndex...index).map { sampleIndex in
+                (Double(dayOffsets[sampleIndex] - windowOffset), representatives[sampleIndex].value)
             }
 
             if let computed = linearRegression(pairs: pairs) {
@@ -245,7 +328,7 @@ enum BodyCompositionAnalytics {
         var runningMax: Double?
         var seenFirst = false
 
-        for rep in representatives.sorted(by: { $0.dayStart < $1.dayStart }) {
+        for rep in normalizedRepresentatives(representatives) {
             let value = rep.value
             let isLow: Bool
             let isHigh: Bool
@@ -274,17 +357,14 @@ enum BodyCompositionAnalytics {
         displayRangeStart: Date,
         calendar: Calendar = .current
     ) -> [IntervalDelta] {
-        guard let latest = points.max(by: { $0.date < $1.date }) else { return [] }
-        let sorted = points.sorted { $0.date < $1.date }
-
-        func baseline(onOrBefore target: Date) -> TimeSeriesPoint? {
-            sorted.last(where: { $0.date <= target })
-        }
+        let sorted = normalizedPoints(points)
+        guard let latest = sorted.last else { return [] }
 
         var deltas: [IntervalDelta] = []
 
         // Since range start
-        if let firstInRange = sorted.first(where: { $0.date >= calendar.startOfDay(for: displayRangeStart) }) {
+        if let firstInRange = sorted.first(where: { $0.date >= calendar.startOfDay(for: displayRangeStart) }),
+           firstInRange.date < latest.date {
             deltas.append(
                 IntervalDelta(
                     id: "sinceStart",
@@ -307,11 +387,27 @@ enum BodyCompositionAnalytics {
 
         for days in intervalDays {
             let target = calendar.date(byAdding: .day, value: -days, to: latest.date) ?? latest.date
-            if let base = baseline(onOrBefore: target) {
+            // A nearby real reading is more honest than an arbitrarily stale baseline or interpolation.
+            // A one-week comparison allows one day of tolerance; longer comparisons allow at most three.
+            let tolerance = max(1, min(3, days / 7))
+            let targetDay = calendar.startOfDay(for: target)
+            let firstDay = calendar.date(byAdding: .day, value: -tolerance, to: targetDay) ?? targetDay
+            let afterLastDay = calendar.date(byAdding: .day, value: tolerance + 1, to: targetDay) ?? targetDay
+            let firstIndex = lowerBound(in: sorted, date: firstDay)
+            let endIndex = lowerBound(in: sorted, date: min(afterLastDay, latest.date))
+            let candidates = sorted[firstIndex..<max(firstIndex, endIndex)]
+            let base = candidates.min { lhs, rhs in
+                let lhsDistance = calendarDayDistance(lhs.date, target, calendar: calendar)
+                let rhsDistance = calendarDayDistance(rhs.date, target, calendar: calendar)
+                return lhsDistance == rhsDistance ? lhs.date < rhs.date : lhsDistance < rhsDistance
+            }
+            if let base {
+                let elapsedDays = daysBetween(base.date, latest.date, calendar: calendar)
+                guard elapsedDays > 0 else { continue }
                 deltas.append(
                     IntervalDelta(
                         id: "\(days)d",
-                        label: "\(days)d",
+                        label: "\(elapsedDays)d",
                         delta: latest.value - base.value,
                         baselineDate: base.date
                     )
@@ -327,13 +423,14 @@ enum BodyCompositionAnalytics {
         windowDays: Int,
         calendar: Calendar = .current
     ) -> TrendSummary? {
-        guard let latest = representatives.max(by: { $0.dayStart < $1.dayStart }) else { return nil }
-        guard representatives.count >= 2 else { return nil }
+        guard windowDays > 0 else { return nil }
+        let representatives = normalizedRepresentatives(representatives)
+        guard let latest = representatives.last else { return nil }
 
         let windowEnd = latest.dayStart
         let windowStart = calendar.date(byAdding: .day, value: -(windowDays - 1), to: windowEnd) ?? windowEnd
         let window = representatives.filter { $0.dayStart >= windowStart && $0.dayStart <= windowEnd }
-        guard window.count >= 2 else { return nil }
+        guard hasEnoughTrendHistory(window, calendar: calendar) else { return nil }
 
         let pairs: [(Double, Double)] = window.map { rep in
             let x = Double(daysBetween(windowStart, rep.dayStart, calendar: calendar))
@@ -349,7 +446,11 @@ enum BodyCompositionAnalytics {
             residualStdDev: reg.residualStdDev,
             windowStart: windowStart,
             windowEnd: windowEnd,
-            pointCount: reg.pointCount
+            pointCount: reg.pointCount,
+            observedSpanDays: reg.observedSpanDays,
+            fittedValueAtEnd: reg.intercept + reg.slopePerDay * reg.latestDayOffset,
+            endpointPredictionSigma: predictionSigma(regression: reg, dayOffset: reg.latestDayOffset),
+            predictionIntervalMultiplier: predictionIntervalMultiplier(pointCount: reg.pointCount)
         )
     }
 
@@ -357,20 +458,34 @@ enum BodyCompositionAnalytics {
         latestDay: Date,
         currentValue: Double,
         regression: LinearRegressionResult,
-        horizons: [Int] = [7, 30, 90],
+        horizons: [Int] = [7, 14, 30],
+        metricKind: BodyCompositionMetricKind? = nil,
         calendar: Calendar = .current
     ) -> [ForecastPoint] {
-        // Use the regression slope, but anchor to the current value so the forecast starts from
-        // "where you are today" instead of potentially jumping to the regression line.
-        horizons.map { days in
-            let date = calendar.date(byAdding: .day, value: days, to: latestDay) ?? latestDay
-            let predicted = currentValue + (regression.slopePerDay * Double(days))
+        guard isValidSampleValue(currentValue, metricKind: metricKind),
+              regression.pointCount >= 6,
+              regression.observedSpanDays >= 7,
+              regression.slopePerDay.isFinite,
+              regression.intercept.isFinite,
+              regression.sumSquaredDayOffsets > 0 else { return [] }
+
+        let maximumHorizon = min(30, regression.observedSpanDays)
+        // Extend the fitted line, rather than amplifying the latest reading's temporary fluctuation.
+        // These conditional projections do not claim that the recent pattern will continue.
+        return Set(horizons).sorted().compactMap { days in
+            guard days > 0, days <= maximumHorizon,
+                  let date = calendar.date(byAdding: .day, value: days, to: latestDay) else { return nil }
+            let dayOffset = regression.latestDayOffset + Double(days)
+            let predicted = regression.intercept + regression.slopePerDay * dayOffset
+            guard isValidSampleValue(predicted, metricKind: metricKind),
+                  let sigma = predictionSigma(regression: regression, dayOffset: dayOffset) else { return nil }
             return ForecastPoint(
                 id: "\(days)d",
                 horizonDays: days,
                 date: date,
                 predicted: predicted,
-                sigma: regression.residualStdDev
+                sigma: sigma,
+                predictionIntervalMultiplier: predictionIntervalMultiplier(pointCount: regression.pointCount)
             )
         }
     }
@@ -380,7 +495,7 @@ enum BodyCompositionAnalytics {
         granularity: ReportGranularity,
         calendar: Calendar = .current
     ) -> [ReportBucket] {
-        let sorted = points.sorted { $0.date < $1.date }
+        let sorted = normalizedPoints(points)
         guard !sorted.isEmpty else { return [] }
 
         let groups: [Date: [TimeSeriesPoint]] = Dictionary(grouping: sorted) { point in
@@ -394,7 +509,7 @@ enum BodyCompositionAnalytics {
                   let first = bucketPoints.first,
                   let last = bucketPoints.last else { return nil }
 
-            let avg = values.reduce(0, +) / Double(values.count)
+            let avg = values.reduce(0) { $0 + $1 / Double(values.count) }
             let label = bucketLabel(for: keyDate, granularity: granularity, calendar: calendar)
 
             return ReportBucket(
@@ -415,23 +530,79 @@ enum BodyCompositionAnalytics {
 
     // MARK: - Helpers
 
+    private static func sampleOrder(_ lhs: BodyRawSample, _ rhs: BodyRawSample) -> Bool {
+        if lhs.timestamp != rhs.timestamp { return lhs.timestamp < rhs.timestamp }
+        if lhs.id != rhs.id { return lhs.id.uuidString < rhs.id.uuidString }
+        return lhs.value < rhs.value
+    }
+
+    private static func normalizedRepresentatives(_ representatives: [DailyRepresentative]) -> [DailyRepresentative] {
+        var seenDays: Set<Date> = []
+        return representatives.filter {
+            isValidSampleValue($0.value) && $0.dayStart.timeIntervalSinceReferenceDate.isFinite
+        }.sorted {
+            $0.dayStart == $1.dayStart ? $0.timestamp < $1.timestamp : $0.dayStart < $1.dayStart
+        }.filter { seenDays.insert($0.dayStart).inserted }
+    }
+
+    private static func normalizedPoints(_ points: [TimeSeriesPoint]) -> [TimeSeriesPoint] {
+        var seenDates: Set<Date> = []
+        return points.filter {
+            isValidSampleValue($0.value) && $0.date.timeIntervalSinceReferenceDate.isFinite
+        }.sorted { $0.date < $1.date }.filter { seenDates.insert($0.date).inserted }
+    }
+
+    private static func hasEnoughTrendHistory(_ window: [DailyRepresentative], calendar: Calendar) -> Bool {
+        guard window.count >= 6, let first = window.first, let last = window.last else { return false }
+        return daysBetween(first.dayStart, last.dayStart, calendar: calendar) >= 7
+    }
+
+    private static func predictionSigma(regression: LinearRegressionResult, dayOffset: Double) -> Double? {
+        guard let residual = regression.residualStdDev,
+              residual.isFinite, residual >= 0,
+              regression.pointCount > 2,
+              regression.sumSquaredDayOffsets > 0 else { return nil }
+        let offset = dayOffset - regression.meanDay
+        // Individual-observation prediction error includes residual variability and fit uncertainty.
+        // https://www.itl.nist.gov/div898/handbook/pmd/section5/pmd512.htm
+        let varianceFactor = 1 + 1 / Double(regression.pointCount)
+            + offset * offset / regression.sumSquaredDayOffsets
+        let sigma = residual * sqrt(varianceFactor)
+        return sigma.isFinite ? sigma : nil
+    }
+
+    private static func predictionIntervalMultiplier(pointCount: Int) -> Double {
+        // Two-sided 95% critical values for n - 2 fitted-line degrees of freedom.
+        // https://www.itl.nist.gov/div898/handbook/eda/section3/eda3672.htm
+        let criticalValues: [Double] = [
+            12.706, 4.303, 3.182, 2.776, 2.571, 2.447, 2.365, 2.306, 2.262, 2.228,
+            2.201, 2.179, 2.160, 2.145, 2.131, 2.120, 2.110, 2.101, 2.093, 2.086,
+            2.080, 2.074, 2.069, 2.064, 2.060, 2.056, 2.052, 2.048, 2.045, 2.042
+        ]
+        let degreesOfFreedom = max(1, pointCount - 2)
+        if degreesOfFreedom <= criticalValues.count { return criticalValues[degreesOfFreedom - 1] }
+        // Conservatively use the nearest lower tabulated degrees of freedom for longer windows.
+        if degreesOfFreedom < 40 { return 2.042 }
+        if degreesOfFreedom < 60 { return 2.021 }
+        if degreesOfFreedom < 100 { return 2.000 }
+        return 1.984
+    }
+
     private static func linearRegression(pairs: [(Double, Double)]) -> LinearRegressionResult? {
-        let n = pairs.count
-        guard n >= 2 else { return nil }
+        let pairs = pairs.filter { $0.0.isFinite && $0.1.isFinite }
+        let sampleCount = pairs.count
+        guard sampleCount >= 2 else { return nil }
 
-        let count = Double(n)
-        let sumX = pairs.reduce(0.0) { $0 + $1.0 }
-        let sumY = pairs.reduce(0.0) { $0 + $1.1 }
-        let sumXX = pairs.reduce(0.0) { $0 + ($1.0 * $1.0) }
-        let sumXY = pairs.reduce(0.0) { $0 + ($1.0 * $1.1) }
+        let count = Double(sampleCount)
+        let meanX = pairs.reduce(0.0) { $0 + $1.0 / count }
+        let meanY = pairs.reduce(0.0) { $0 + $1.1 / count }
+        let sumSquaredDayOffsets = pairs.reduce(0.0) { $0 + pow($1.0 - meanX, 2) }
+        let covariance = pairs.reduce(0.0) { $0 + ($1.0 - meanX) * ($1.1 - meanY) }
+        guard sumSquaredDayOffsets.isFinite, sumSquaredDayOffsets > 1e-9 else { return nil }
 
-        let denom = count * sumXX - sumX * sumX
-        guard abs(denom) > 1e-9 else { return nil }
-
-        let slope = (count * sumXY - sumX * sumY) / denom
-        let intercept = (sumY - slope * sumX) / count
-
-        let meanY = sumY / count
+        let slope = covariance / sumSquaredDayOffsets
+        let intercept = meanY - slope * meanX
+        guard slope.isFinite, intercept.isFinite else { return nil }
         var ssTot = 0.0
         var ssRes = 0.0
         for (x, y) in pairs {
@@ -442,14 +613,15 @@ enum BodyCompositionAnalytics {
 
         let r2: Double?
         if ssTot > 1e-9 {
-            r2 = 1 - (ssRes / ssTot)
+            r2 = min(1, max(0, 1 - (ssRes / ssTot)))
         } else {
             r2 = nil
         }
 
         let sigma: Double?
-        if n >= 3 {
-            sigma = sqrt(ssRes / Double(max(1, n - 2)))
+        if sampleCount >= 3 {
+            let residual = sqrt(ssRes / Double(sampleCount - 2))
+            sigma = residual.isFinite ? residual : nil
         } else {
             sigma = nil
         }
@@ -459,7 +631,11 @@ enum BodyCompositionAnalytics {
             intercept: intercept,
             rSquared: r2,
             residualStdDev: sigma,
-            pointCount: n
+            pointCount: sampleCount,
+            observedSpanDays: Int((pairs.map(\.0).max() ?? 0) - (pairs.map(\.0).min() ?? 0)),
+            meanDay: meanX,
+            sumSquaredDayOffsets: sumSquaredDayOffsets,
+            latestDayOffset: pairs.map(\.0).max() ?? 0
         )
     }
 
@@ -492,5 +668,19 @@ enum BodyCompositionAnalytics {
 
     private static func daysBetween(_ start: Date, _ end: Date, calendar: Calendar) -> Int {
         max(0, calendar.dateComponents([.day], from: calendar.startOfDay(for: start), to: calendar.startOfDay(for: end)).day ?? 0)
+    }
+
+    private static func lowerBound(in points: [TimeSeriesPoint], date: Date) -> Int {
+        var lower = 0
+        var upper = points.count
+        while lower < upper {
+            let middle = lower + (upper - lower) / 2
+            if points[middle].date < date { lower = middle + 1 } else { upper = middle }
+        }
+        return lower
+    }
+
+    private static func calendarDayDistance(_ lhs: Date, _ rhs: Date, calendar: Calendar) -> Int {
+        daysBetween(min(lhs, rhs), max(lhs, rhs), calendar: calendar)
     }
 }

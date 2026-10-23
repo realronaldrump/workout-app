@@ -3,8 +3,8 @@ import XCTest
 
 final class ExerciseMetadataManagerTests: XCTestCase {
     func testCatalogIsFullyIntegratedIntoDefaults() {
-        XCTAssertEqual(DefaultExerciseCatalog.entries.count, 215)
-        XCTAssertEqual(Set(DefaultExerciseCatalog.entries.map(\.name)).count, 215)
+        XCTAssertEqual(DefaultExerciseCatalog.entries.count, 237)
+        XCTAssertEqual(Set(DefaultExerciseCatalog.entries.map(\.name)).count, 237)
 
         let pickerNames = Set(ExerciseMetadataManager.defaultExerciseNames)
         for entry in DefaultExerciseCatalog.entries {
@@ -33,7 +33,7 @@ final class ExerciseMetadataManagerTests: XCTestCase {
             uniqueKeysWithValues: DefaultExerciseCatalog.entries.map { ($0.name, $0) }
         )
 
-        XCTAssertEqual(DefaultExerciseCatalog.relationships.count, 50)
+        XCTAssertEqual(DefaultExerciseCatalog.relationships.count, 60)
         for child in DefaultExerciseCatalog.entries where child.parentName != nil {
             guard let parentName = child.parentName, let parent = entriesByName[parentName] else {
                 XCTFail("Missing parent for \(child.name)")
@@ -155,11 +155,11 @@ final class ExerciseMetadataManagerTests: XCTestCase {
         XCTAssertTrue(pickerNames.contains("Cossack Squat"))
         XCTAssertTrue(pickerNames.contains("Glute Kickback (Cable)"))
         XCTAssertTrue(pickerNames.contains("Single-arm cable pressdown"))
-        XCTAssertFalse(pickerNames.contains("Hallow Hold"))
+        XCTAssertTrue(pickerNames.contains("Hallow Hold"))
         XCTAssertFalse(pickerNames.contains("Kneeling Bilateral Lat Pulldown - Kinesis Machind"))
         XCTAssertFalse(pickerNames.contains("Single Arm Tricep Extension (dumbell)"))
 
-        for (name, groups) in expectedMappings where !name.contains("Machind") && name != "Hallow Hold" && name != "Single Arm Tricep Extension (dumbell)" {
+        for (name, groups) in expectedMappings where !name.contains("Machind") && name != "Single Arm Tricep Extension (dumbell)" {
             XCTAssertTrue(pickerNames.contains(name), "Missing default exercise: \(name)")
             XCTAssertEqual(defaultGroups(for: name), groups, "Incorrect default tags for: \(name)")
         }

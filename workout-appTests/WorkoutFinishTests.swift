@@ -159,6 +159,63 @@ final class WorkoutFinishTests: XCTestCase {
         XCTAssertEqual(manager.activeSession?.id, originalID)
     }
 
+    func testTimerChangesDuringSaveDoNotConflictWithWorkoutContent() async throws {
+        let (manager, _) = makeManager()
+        manager.startRestTimer()
+        let finished = try await manager.finish { _ in
+            manager.cancelRestTimer()
+        }
+        XCTAssertFalse(finished.exercises.isEmpty)
+        XCTAssertNil(manager.activeSession)
+    }
+
+    func testFinishPreservesExerciseAndSetIdentityAcrossRetries() async throws {
+        let (manager, _) = makeManager()
+        let exerciseID = manager.activeSession?.exercises.first?.id
+        let setID = manager.activeSession?.exercises.first?.sets.first?.id
+        do {
+            _ = try await manager.finish { workout in
+                XCTAssertEqual(workout.exercises.first?.id, exerciseID)
+                XCTAssertEqual(workout.exercises.first?.sets.first?.id, setID)
+                throw PersistenceFailure()
+            }
+        } catch is PersistenceFailure {}
+        let finished = try await manager.finish { _ in }
+        XCTAssertEqual(finished.exercises.first?.id, exerciseID)
+        XCTAssertEqual(finished.exercises.first?.sets.first?.id, setID)
+    }
+
+    func testFinishRejectsNonfiniteCompletedSetBeforePersisting() async throws {
+        let (manager, _) = makeManager()
+        manager.activeSession?.exercises[0].sets[0].weight = .infinity
+        var didPersist = false
+        do {
+            _ = try await manager.finish { _ in didPersist = true }
+            XCTFail("Expected finite-number validation")
+        } catch WorkoutSessionError.completedSetMissingFields {}
+        XCTAssertFalse(didPersist)
+        XCTAssertNotNil(manager.activeSession)
+    }
+
+    func testFailedDraftCleanupKeepsSessionForSafeFinishRetry() async throws {
+        let (manager, draftURL) = makeManager()
+        let sessionID = manager.activeSession?.id
+        var writes = 0
+        do {
+            _ = try await manager.finish { _ in
+                writes += 1
+                try Data("invalid draft identity".utf8).write(to: draftURL)
+            }
+            XCTFail("Expected an explicit cleanup failure")
+        } catch WorkoutSessionError.savedWorkoutDraftCleanupFailed {}
+        XCTAssertEqual(manager.activeSession?.id, sessionID)
+        XCTAssertFalse(manager.isFinishing)
+        let finished = try await manager.finish { _ in writes += 1 }
+        XCTAssertEqual(finished.id, sessionID)
+        XCTAssertEqual(writes, 2)
+        XCTAssertNil(manager.activeSession)
+    }
+
     private func makeManager() -> (WorkoutSessionManager, URL) {
         let draftURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("WorkoutFinishTests-\(UUID().uuidString).json")

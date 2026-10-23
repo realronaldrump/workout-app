@@ -8,64 +8,27 @@ struct GuideHeroSection: View {
     let title: String
     let subtitle: String
 
-    @State private var appeared = false
-    @State private var iconPulse = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
     var body: some View {
-        VStack(spacing: Theme.Spacing.xl) {
-            ZStack {
-                // Outer glow ring
-                Circle()
-                    .fill(iconColor.opacity(0.06))
-                    .frame(width: 140, height: 140)
-                    .scaleEffect(iconPulse ? 1.08 : 1.0)
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            Image(systemName: icon)
+                .font(Theme.Typography.title3)
+                .foregroundStyle(Theme.Colors.textPrimary)
+                .accessibilityHidden(true)
 
-                // Inner circle
-                Circle()
-                    .fill(iconColor.opacity(0.1))
-                    .frame(width: 100, height: 100)
+            Text(title)
+                .font(Theme.Typography.screenTitle)
+                .foregroundStyle(Theme.Colors.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
 
-                Circle()
-                    .strokeBorder(iconColor.opacity(0.2), lineWidth: 1)
-                    .frame(width: 100, height: 100)
-
-                Image(systemName: icon)
-                    .font(Theme.Iconography.featureLarge)
-                    .foregroundStyle(iconColor)
-                    .scaleEffect(appeared ? 1.0 : 0.6)
-            }
-            .shadow(color: iconColor.opacity(0.15), radius: 20, y: 8)
-
-            VStack(spacing: Theme.Spacing.sm) {
-                Text(title)
-                    .font(Theme.Typography.screenTitle)
-                    .foregroundStyle(Theme.Colors.textPrimary)
-                    .tracking(1.5)
-                    .multilineTextAlignment(.center)
-
-                Text(subtitle)
-                    .font(Theme.Typography.body)
-                    .foregroundStyle(Theme.Colors.textSecondary)
-                    .multilineTextAlignment(.center)
-                    .lineSpacing(4)
-            }
-            .padding(.horizontal, Theme.Spacing.lg)
+            Text(subtitle)
+                .font(Theme.Typography.body)
+                .foregroundStyle(Theme.Colors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.vertical, Theme.Spacing.xxl)
-        .frame(maxWidth: .infinity)
-        .opacity(appeared ? 1 : 0)
-        .offset(y: appeared ? 0 : 20)
-        .onAppear {
-            withAnimation(reduceMotion ? .easeOut(duration: 0.2) : .spring(response: 0.7, dampingFraction: 0.8)) {
-                appeared = true
-            }
-            if !reduceMotion {
-                withAnimation(.easeInOut(duration: 2.5).repeatForever(autoreverses: true)) {
-                    iconPulse = true
-                }
-            }
-        }
+        .padding(.top, Theme.Spacing.lg)
+        .padding(.bottom, Theme.Spacing.sm)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -75,20 +38,13 @@ struct GuideSectionHeader: View {
     let title: String
 
     var body: some View {
-        HStack(spacing: Theme.Spacing.md) {
-            Rectangle()
-                .fill(Theme.Colors.accent)
-                .frame(width: 3, height: 20)
-                .clipShape(RoundedRectangle(cornerRadius: 2))
-
-            Text(title)
-                .font(Theme.Typography.sectionHeader)
-                .foregroundStyle(Theme.Colors.textPrimary)
-                .tracking(0.8)
-
-            Spacer()
-        }
-        .padding(.top, Theme.Spacing.xl)
+        Text(title)
+            .font(Theme.Typography.sectionHeader2)
+            .foregroundStyle(Theme.Colors.textPrimary)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityAddTraits(.isHeader)
+            .padding(.top, Theme.Spacing.xl)
     }
 }
 
@@ -118,10 +74,8 @@ struct GuideFeatureCard: View {
         HStack(alignment: .top, spacing: Theme.Spacing.md) {
             Image(systemName: icon)
                 .font(Theme.Typography.footnoteStrong)
-                .foregroundStyle(.white)
+                .foregroundStyle(color)
                 .frame(width: 36, height: 36)
-                .background(color)
-                .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
 
             VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                 Text(title)
@@ -205,7 +159,7 @@ struct GuideStepsList: View {
 
                             Text("\(step.number)")
                                 .font(Theme.Typography.captionBold)
-                                .foregroundStyle(.white)
+                                .foregroundStyle(Theme.Colors.onAccent)
                         }
 
                         if index < steps.count - 1 {
@@ -284,17 +238,14 @@ struct GuideAnnotatedMockup: View {
             Text(mockup.title)
                 .font(Theme.Typography.cardHeader)
                 .foregroundStyle(Theme.Colors.textPrimary)
-                .tracking(0.5)
 
             VStack(spacing: Theme.Spacing.sm) {
                 ForEach(mockup.items) { item in
                     HStack(spacing: Theme.Spacing.md) {
                         Image(systemName: item.icon)
                             .font(Theme.Typography.footnoteStrong)
-                            .foregroundStyle(.white)
+                            .foregroundStyle(item.color)
                             .frame(width: 32, height: 32)
-                            .background(item.color)
-                            .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
 
                         VStack(alignment: .leading, spacing: 2) {
                             Text(item.label)
@@ -338,12 +289,11 @@ struct DemoSetLogger: View {
         VStack(spacing: Theme.Spacing.md) {
             // Header
             HStack {
-                Text("TRY IT")
-                    .font(Theme.Typography.metricLabel)
-                    .foregroundStyle(Theme.Colors.accent)
-                    .tracking(1.0)
+                Text("Try it")
+                    .font(Theme.Typography.subheadlineStrong)
+                    .foregroundStyle(Theme.Colors.textPrimary)
                 Spacer()
-                Text("Interactive Demo")
+                Text("Interactive demo")
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Colors.textTertiary)
             }
@@ -356,7 +306,6 @@ struct DemoSetLogger: View {
                 Text("Bench Press")
                     .font(Theme.Typography.cardHeader)
                     .foregroundStyle(Theme.Colors.textPrimary)
-                    .tracking(0.5)
                 Spacer()
             }
 
@@ -364,10 +313,9 @@ struct DemoSetLogger: View {
             HStack(spacing: Theme.Spacing.lg) {
                 // Weight control
                 VStack(spacing: Theme.Spacing.xs) {
-                    Text("WEIGHT")
+                    Text("Weight")
                         .font(Theme.Typography.metricLabel)
                         .foregroundStyle(Theme.Colors.textTertiary)
-                        .tracking(0.8)
 
                     HStack(spacing: Theme.Spacing.sm) {
                         Button {
@@ -417,10 +365,9 @@ struct DemoSetLogger: View {
 
                 // Reps control
                 VStack(spacing: Theme.Spacing.xs) {
-                    Text("REPS")
+                    Text("Reps")
                         .font(Theme.Typography.metricLabel)
                         .foregroundStyle(Theme.Colors.textTertiary)
-                        .tracking(0.8)
 
                     HStack(spacing: Theme.Spacing.sm) {
                         Button {
@@ -480,15 +427,14 @@ struct DemoSetLogger: View {
                 HStack(spacing: Theme.Spacing.sm) {
                     Image(systemName: justLogged ? "checkmark" : "plus.circle.fill")
                         .contentTransition(.symbolEffect(.replace))
-                    Text(justLogged ? "Logged!" : "Log Set")
+                    Text(justLogged ? "Logged" : "Log set")
                         .font(Theme.Typography.bodyBold)
                 }
-                .foregroundStyle(.white)
+                .foregroundStyle(Theme.Colors.onAccent)
                 .frame(maxWidth: .infinity)
                 .frame(minHeight: Theme.Layout.minimumTapTarget)
-                .padding(.vertical, Theme.Spacing.md)
-                .background(justLogged ? Theme.Colors.success : Theme.Colors.accent)
-                .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.medium))
+                .padding(.vertical, Theme.Spacing.sm)
+                .background(Capsule(style: .continuous).fill(justLogged ? Theme.Colors.success : Theme.Colors.accent))
             }
             .buttonStyle(.plain)
 
@@ -525,21 +471,39 @@ struct DemoSetLogger: View {
 struct DemoRecoverySignals: View {
     @State private var expandedSignal: String?
 
-    private let signals: [(icon: String, name: String, value: String, unit: String, delta: String, positive: Bool, explanation: String)] = [
-        ("moon.zzz.fill", "Sleep", "7.2", "hrs", "+8%", true, "Your 7-day average is 8% above your 30-day baseline — you're sleeping more than usual."),
-        ("waveform.path.ecg", "HRV", "42", "ms", "-5%", false, "Heart rate variability is slightly below baseline, which may indicate accumulated fatigue."),
-        ("heart.fill", "Resting HR", "58", "bpm", "+2%", false, "A slight increase in resting heart rate can indicate your body is still recovering."),
+    private struct Signal {
+        let icon: String
+        let name: String
+        let value: String
+        let unit: String
+        let delta: String
+        let positive: Bool
+        let explanation: String
+    }
+
+    private let signals: [Signal] = [
+        Signal(
+            icon: "moon.zzz.fill", name: "Sleep", value: "7.2", unit: "hrs", delta: "+8%", positive: true,
+            explanation: "Your 7-day average is 8% above your 30-day baseline. You're sleeping more than usual."
+        ),
+        Signal(
+            icon: "waveform.path.ecg", name: "HRV", value: "42", unit: "ms", delta: "-5%", positive: false,
+            explanation: "Heart rate variability is 5% below baseline. A drop can point to built-up fatigue."
+        ),
+        Signal(
+            icon: "heart.fill", name: "Resting HR", value: "58", unit: "bpm", delta: "+2%", positive: false,
+            explanation: "Resting heart rate is 2% above baseline. A rise can mean you are still recovering."
+        )
     ]
 
     var body: some View {
         VStack(spacing: Theme.Spacing.md) {
             HStack {
-                Text("TRY IT")
-                    .font(Theme.Typography.metricLabel)
-                    .foregroundStyle(Theme.Colors.accent)
-                    .tracking(1.0)
+                Text("Try it")
+                    .font(Theme.Typography.subheadlineStrong)
+                    .foregroundStyle(Theme.Colors.textPrimary)
                 Spacer()
-                Text("Tap a signal to learn more")
+                Text("Tap a signal")
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Colors.textTertiary)
             }
@@ -632,18 +596,17 @@ struct DemoRecoverySignals: View {
 
 /// Mock chart type switcher
 struct DemoChartSwitcher: View {
-    @State private var selectedChart = "Max Weight"
-    private let chartTypes = ["Max Weight", "Volume", "Est. 1RM", "Reps"]
+    @State private var selectedChart = "Max weight"
+    private let chartTypes = ["Max weight", "Volume", "Est. 1RM", "Reps"]
 
     @State private var animateBars = false
 
     var body: some View {
         VStack(spacing: Theme.Spacing.md) {
             HStack {
-                Text("TRY IT")
-                    .font(Theme.Typography.metricLabel)
-                    .foregroundStyle(Theme.Colors.accent)
-                    .tracking(1.0)
+                Text("Try it")
+                    .font(Theme.Typography.subheadlineStrong)
+                    .foregroundStyle(Theme.Colors.textPrimary)
                 Spacer()
                 Text("Switch chart views")
                     .font(Theme.Typography.caption)
@@ -668,7 +631,7 @@ struct DemoChartSwitcher: View {
                         } label: {
                             Text(type)
                                 .font(Theme.Typography.captionBold)
-                                .foregroundStyle(selectedChart == type ? .white : Theme.Colors.textSecondary)
+                                .foregroundStyle(selectedChart == type ? Theme.Colors.onAccent : Theme.Colors.textSecondary)
                                 .padding(.horizontal, Theme.Spacing.md)
                                 .frame(minHeight: Theme.Layout.minimumTapTarget)
                                 .background(
@@ -695,7 +658,6 @@ struct DemoChartSwitcher: View {
                 Text(selectedChart)
                     .font(Theme.Typography.cardHeader)
                     .foregroundStyle(Theme.Colors.textPrimary)
-                    .tracking(0.5)
 
                 HStack(alignment: .bottom, spacing: Theme.Spacing.sm) {
                     ForEach(0..<8, id: \.self) { index in
@@ -703,7 +665,7 @@ struct DemoChartSwitcher: View {
                         RoundedRectangle(cornerRadius: 3)
                             .fill(
                                 LinearGradient(
-                                    colors: [Theme.Colors.accent, Theme.Colors.accent.opacity(0.6)],
+                                    colors: [Theme.Colors.accent, Theme.Colors.accent],
                                     startPoint: .top,
                                     endPoint: .bottom
                                 )
@@ -744,12 +706,12 @@ struct DemoChartSwitcher: View {
 
     private func barHeight(for chart: String, index: Int) -> CGFloat {
         let patterns: [String: [CGFloat]] = [
-            "Max Weight":  [50, 55, 60, 58, 65, 70, 72, 80],
+            "Max weight":  [50, 55, 60, 58, 65, 70, 72, 80],
             "Volume":      [70, 60, 80, 75, 90, 85, 95, 100],
             "Est. 1RM":    [45, 50, 52, 55, 58, 62, 65, 75],
             "Reps":        [80, 85, 75, 90, 70, 95, 85, 90],
         ]
-        let values = patterns[chart] ?? patterns["Max Weight"]!
+        let values = patterns[chart] ?? patterns["Max weight"]!
         return values[index] * 1.2
     }
 }
@@ -759,24 +721,30 @@ struct DemoHealthCategories: View {
     @State private var selectedCategory: String?
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    private let categories: [(icon: String, name: String, color: Color, metrics: String)] = [
-        ("flame.fill", "Activity", Theme.Colors.warning, "Steps, Active Energy, Move Ring"),
-        ("moon.zzz.fill", "Sleep", Theme.Colors.accentSecondary, "Duration, Stages, Consistency"),
-        ("heart.fill", "Heart", Theme.Colors.error, "Resting HR, Walking HR, Recovery"),
-        ("waveform.path.ecg", "Vitals", Theme.Colors.accent, "HRV, Blood Oxygen, Respiratory"),
-        ("figure.run", "Cardio", Theme.Colors.success, "VO2 Max, Cardio Fitness"),
-        ("scalemass", "Body", Theme.Colors.accentTertiary, "Weight, Body Fat, BMI"),
+    private struct Category {
+        let icon: String
+        let name: String
+        let color: Color
+        let metrics: String
+    }
+
+    private let categories: [Category] = [
+        Category(icon: "flame.fill", name: "Activity", color: Theme.Colors.warning, metrics: "Steps, active energy, move ring"),
+        Category(icon: "moon.zzz.fill", name: "Sleep", color: Theme.Colors.accentSecondary, metrics: "Duration, stages, consistency"),
+        Category(icon: "heart.fill", name: "Heart", color: Theme.Colors.error, metrics: "Resting HR, walking HR, recovery"),
+        Category(icon: "waveform.path.ecg", name: "Vitals", color: Theme.Colors.accent, metrics: "HRV, blood oxygen, respiratory rate"),
+        Category(icon: "figure.run", name: "Cardio", color: Theme.Colors.success, metrics: "VO2 max, cardio fitness"),
+        Category(icon: "scalemass", name: "Body", color: Theme.Colors.accentTertiary, metrics: "Weight, body fat, BMI")
     ]
 
     var body: some View {
         VStack(spacing: Theme.Spacing.md) {
             HStack {
-                Text("TRY IT")
-                    .font(Theme.Typography.metricLabel)
-                    .foregroundStyle(Theme.Colors.accent)
-                    .tracking(1.0)
+                Text("Try it")
+                    .font(Theme.Typography.subheadlineStrong)
+                    .foregroundStyle(Theme.Colors.textPrimary)
                 Spacer()
-                Text("Tap to explore")
+                Text("Tap a category")
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Colors.textTertiary)
             }
@@ -874,10 +842,9 @@ struct DemoTimeRange: View {
     var body: some View {
         VStack(spacing: Theme.Spacing.md) {
             HStack {
-                Text("TRY IT")
-                    .font(Theme.Typography.metricLabel)
-                    .foregroundStyle(Theme.Colors.accent)
-                    .tracking(1.0)
+                Text("Try it")
+                    .font(Theme.Typography.subheadlineStrong)
+                    .foregroundStyle(Theme.Colors.textPrimary)
                 Spacer()
                 Text("Select a time range")
                     .font(Theme.Typography.caption)
@@ -895,7 +862,7 @@ struct DemoTimeRange: View {
                     } label: {
                         Text(range)
                             .font(Theme.Typography.captionBold)
-                            .foregroundStyle(selectedRange == range ? .white : Theme.Colors.textSecondary)
+                            .foregroundStyle(selectedRange == range ? Theme.Colors.onAccent : Theme.Colors.textSecondary)
                             .frame(maxWidth: .infinity)
                             .frame(minHeight: Theme.Layout.minimumTapTarget)
                             .background(
@@ -955,13 +922,13 @@ struct DemoTimeRange: View {
     private func rangeExplanation(_ range: String) -> String {
         switch range {
         case "2W":
-            return "The last 2 weeks vs the 2 weeks before that. Great for spotting short-term changes."
+            return "The last 2 weeks compared with the previous 2 weeks."
         case "4W":
-            return "The last 4 weeks vs the prior 4 weeks. The default — balances signal and noise."
+            return "The last 4 weeks compared with the previous 4 weeks."
         case "8W":
-            return "The last 8 weeks vs the prior 8 weeks. Useful for seeing mesocycle-level trends."
+            return "The last 8 weeks compared with the previous 8 weeks."
         case "12W":
-            return "The last 12 weeks vs the prior 12 weeks. Best for assessing long-term progression."
+            return "The last 12 weeks compared with the previous 12 weeks."
         default:
             return ""
         }
@@ -977,10 +944,9 @@ struct DemoSessionBar: View {
     var body: some View {
         VStack(spacing: Theme.Spacing.md) {
             HStack {
-                Text("TRY IT")
-                    .font(Theme.Typography.metricLabel)
-                    .foregroundStyle(Theme.Colors.accent)
-                    .tracking(1.0)
+                Text("Try it")
+                    .font(Theme.Typography.subheadlineStrong)
+                    .foregroundStyle(Theme.Colors.textPrimary)
                 Spacer()
                 Text("Tap the bar")
                     .font(Theme.Typography.caption)
@@ -1012,13 +978,7 @@ struct DemoSessionBar: View {
                             .font(Theme.Typography.bodyBold)
                             .foregroundStyle(Theme.Colors.textPrimary)
 
-                        HStack(spacing: Theme.Spacing.sm) {
-                            Text("23:45")
-                            Text("·")
-                            Text("4 exercises")
-                            Text("·")
-                            Text("12 sets")
-                        }
+                        Text("23:45, 4 exercises, 12 sets")
                         .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.Colors.textSecondary)
                     }
@@ -1047,7 +1007,7 @@ struct DemoSessionBar: View {
                 HStack(spacing: Theme.Spacing.sm) {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(Theme.Colors.success)
-                    Text("This would open your active session!")
+                    Text("This opens your active session.")
                         .font(Theme.Typography.callout)
                         .foregroundStyle(Theme.Colors.textSecondary)
                 }
@@ -1069,27 +1029,9 @@ struct DemoSessionBar: View {
     }
 }
 
-// MARK: - Scroll-Triggered Appearance
-
-struct ScrollRevealModifier: ViewModifier {
-    let index: Int
-    @State private var appeared = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    func body(content: Content) -> some View {
-        content
-            .opacity(appeared ? 1 : 0)
-            .offset(y: appeared || reduceMotion ? 0 : 24)
-            .animation(
-                reduceMotion ? .easeOut(duration: 0.15) : .spring(response: 0.55, dampingFraction: 0.85).delay(Double(index) * 0.03),
-                value: appeared
-            )
-            .onAppear { appeared = true }
-    }
-}
-
 extension View {
+    /// Guide sections used to slide in one by one; they now sit still like the rest of the app.
     func scrollReveal(index: Int) -> some View {
-        modifier(ScrollRevealModifier(index: index))
+        self
     }
 }

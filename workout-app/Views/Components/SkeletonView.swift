@@ -8,8 +8,8 @@ struct SkeletonRect: View {
     var cornerRadius: CGFloat = Theme.CornerRadius.small
 
     var body: some View {
-        RoundedRectangle(cornerRadius: cornerRadius)
-            .fill(Theme.Colors.border.opacity(0.35))
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .fill(Theme.Colors.panelStrong)
             .frame(width: width, height: height)
             .skeleton()
     }
@@ -33,8 +33,8 @@ struct SkeletonChart: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             SkeletonRect(width: 100, height: 14)
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                .fill(Theme.Colors.border.opacity(0.2))
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
+                .fill(Theme.Colors.panelInset)
                 .frame(height: height - 40)
                 .skeleton()
         }

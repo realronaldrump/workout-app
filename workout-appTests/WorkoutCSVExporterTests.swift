@@ -261,6 +261,40 @@ final class WorkoutCSVExporterTests: XCTestCase {
         XCTAssertEqual(lines[1], "Leg Extension (Machine) - Right,Quads,Leg Extension (Machine),Right")
     }
 
+    func testLiveWorkoutExportKeepsPersistedIDsCardioAndDurationSeconds() throws {
+        let start = date(year: 2026, month: 4, day: 10, hour: 8)
+        let set = LoggedSet(order: 1, weight: 0, reps: 0, distance: 2.75, seconds: 903)
+        let exercise = LoggedExercise(name: "Run, easy", sets: [set])
+        let workout = LoggedWorkout(
+            startedAt: start,
+            endedAt: start.addingTimeInterval(3_661),
+            name: "Live workout",
+            exercises: [exercise]
+        )
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let firstURL = try WorkoutCSVExporter.exportLoggedWorkout(workout, to: directory, calendar: calendar)
+        let secondURL = try WorkoutCSVExporter.exportLoggedWorkout(workout, to: directory, calendar: calendar)
+        let first = try String(contentsOf: firstURL, encoding: .utf8)
+        let second = try String(contentsOf: secondURL, encoding: .utf8)
+        XCTAssertNotEqual(firstURL, secondURL)
+        XCTAssertEqual(first, second)
+        XCTAssertTrue(first.contains(workout.id.uuidString))
+        XCTAssertTrue(first.contains(exercise.id.uuidString))
+        XCTAssertTrue(first.contains(set.id.uuidString))
+        XCTAssertTrue(first.contains("3661,1h 1m 1s"))
+        XCTAssertTrue(first.contains("2.75,903"))
+
+        let jsonURL = try WorkoutCSVExporter.exportLoggedWorkout(workout, to: directory, format: .json, calendar: calendar)
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: jsonURL)) as? [String: Any])
+        let records = try XCTUnwrap(object["records"] as? [[String: Any]])
+        XCTAssertEqual(records.first?["set_id"] as? String, set.id.uuidString)
+        XCTAssertEqual(records.first?["workout_duration_seconds"] as? Double, 3_661)
+        XCTAssertEqual(records.first?["distance"] as? Double, 2.75)
+        XCTAssertEqual(records.first?["set_duration_seconds"] as? Double, 903)
+    }
+
     private var calendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "America/Denver") ?? .current

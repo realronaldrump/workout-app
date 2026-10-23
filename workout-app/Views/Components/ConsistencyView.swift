@@ -27,10 +27,7 @@ struct ConsistencyView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-            Text("Consistency")
-                .font(Theme.Typography.sectionHeader)
-                .foregroundColor(Theme.Colors.textPrimary)
-                .tracking(1.0)
+            SectionHeading(title: "Consistency", help: "Saved breaks lower weekly goals. Streaks allow the rest days set in Settings.")
 
             Group {
                 if let onTap {
@@ -49,9 +46,6 @@ struct ConsistencyView: View {
                     .font(Theme.Typography.bodyBold)
                     .foregroundColor(Theme.Colors.textPrimary)
 
-                Text("Each bar is one week. Break days automatically lower the weekly goal.")
-                    .font(Theme.Typography.caption)
-                    .foregroundColor(Theme.Colors.textTertiary)
             }
 
             LazyVGrid(
@@ -62,20 +56,20 @@ struct ConsistencyView: View {
                 spacing: Theme.Spacing.sm
             ) {
                 ConsistencyMetricPill(
-                    label: "Avg Sessions/Wk",
+                    label: "Avg sessions/wk",
                     value: String(format: "%.1f", averageSessionsPerWeek)
                 )
                 ConsistencyMetricPill(
-                    label: "This Week",
+                    label: "This week",
                     value: "\(thisWeekSessions)/\(targetSessionsPerWeek)"
                 )
                 ConsistencyMetricPill(
-                    label: "Current Streak",
+                    label: "Current streak",
                     value: "\(stats.currentStreak)d",
                     highlight: stats.currentStreak > 0
                 )
                 ConsistencyMetricPill(
-                    label: "Longest Streak",
+                    label: "Longest streak",
                     value: "\(stats.longestStreak)d"
                 )
             }
@@ -290,8 +284,6 @@ private struct ConsistencyMetricPill: View {
             Text(label)
                 .font(Theme.Typography.metricLabel)
                 .foregroundColor(Theme.Colors.textTertiary)
-                .textCase(.uppercase)
-                .tracking(0.8)
 
             Text(value)
                 .font(Theme.Typography.subheadline)
@@ -320,11 +312,9 @@ private struct WeeklyConsistencyGraph: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text("Weekly Sessions")
+            Text("Weekly sessions")
                 .font(Theme.Typography.metricLabel)
                 .foregroundColor(Theme.Colors.textTertiary)
-                .textCase(.uppercase)
-                .tracking(0.8)
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(alignment: .bottom, spacing: Theme.Spacing.sm) {

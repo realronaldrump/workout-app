@@ -6,8 +6,8 @@ struct WordmarkLockup: View {
     var isOnSplash: Bool = false
     var alignment: HorizontalAlignment = .center
 
-    private var primaryText: Color { isOnSplash ? .white : Theme.Colors.textPrimary }
-    private var secondaryText: Color { isOnSplash ? Color.white.opacity(0.86) : Theme.Colors.textSecondary }
+    private var primaryText: Color { Theme.Colors.textPrimary }
+    private var secondaryText: Color { Theme.Colors.textSecondary }
     private var textAlignment: TextAlignment {
         switch alignment {
         case .leading:
@@ -22,10 +22,8 @@ struct WordmarkLockup: View {
     var body: some View {
         VStack(alignment: alignment, spacing: 10) {
             Text("Davis's")
-                .font(Theme.Typography.eyebrowRounded)
+                .font(Theme.Typography.title4)
                 .foregroundStyle(secondaryText)
-                .textCase(.uppercase)
-                .tracking(2.0)
 
             // Mirrors the app icon: BIG / BEAUTIFUL on a band / WORKOUT APP.
             VStack(alignment: alignment, spacing: 4) {
@@ -36,7 +34,6 @@ struct WordmarkLockup: View {
                     Text("BIG")
                         .font(Theme.Typography.wordmarkHugeCompact)
                 }
-                .tracking(1.5)
                 .foregroundStyle(primaryText)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
@@ -53,7 +50,6 @@ struct WordmarkLockup: View {
                     Text("WORKOUT APP")
                         .font(Theme.Typography.wordmarkBigCompact)
                 }
-                .tracking(1.0)
                 .foregroundStyle(primaryText)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
@@ -71,18 +67,19 @@ struct WordmarkLockup: View {
         .accessibilityLabel("Davis's Big Beautiful Workout App. \(tagline)")
     }
 
+    /// The icon's blue band, set in the 20 kg plate blue: the one place the brand
+    /// color appears outside of data.
     private func bandWord(font: Font) -> some View {
         Text("BEAUTIFUL")
             .font(font)
-            .tracking(1.5)
-            .foregroundStyle(isOnSplash ? Theme.Colors.onHeroAccent : Color.white)
+            .foregroundStyle(Color.white)
             .lineLimit(1)
             .minimumScaleFactor(0.75)
             .padding(.horizontal, 10)
             .padding(.vertical, 2)
             .background(
                 Rectangle()
-                    .fill(isOnSplash ? Color.white : Theme.Colors.brandBand)
+                    .fill(Theme.Colors.plateBlue)
             )
     }
 }

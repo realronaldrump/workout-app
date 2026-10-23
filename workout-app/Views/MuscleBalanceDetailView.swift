@@ -13,8 +13,7 @@ struct MuscleBalanceDetailView: View {
                 LazyVStack(alignment: .leading, spacing: Theme.Spacing.xxl) {
                     StatsPageHeader(
                         eyebrow: rangeLabel ?? "Muscles",
-                        title: "Muscle Balance",
-                        subtitle: "How your training load spreads across muscle groups.",
+                        title: "Muscle balance",
                         systemImage: "figure.strengthtraining.traditional"
                     )
 
@@ -29,7 +28,6 @@ struct MuscleBalanceDetailView: View {
                 .contentColumn()
             }
         }
-        .navigationTitle("Muscle Balance")
-        .navigationBarTitleDisplayMode(.inline)
+        .collapsingTitle("Muscle balance")
     }
 }

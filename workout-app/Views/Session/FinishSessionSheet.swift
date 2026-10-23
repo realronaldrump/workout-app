@@ -7,7 +7,7 @@ struct FinishSessionSummary: Hashable {
     let strengthVolume: Double
     let cardioDistance: Double
     let cardioSeconds: Double
-    let cardioCount: Int
+    let cardioCount: Double
     /// Set once the workout is saved so the summary shows a fixed duration instead of a live timer.
     var endedAt: Date? = nil
 }
@@ -15,6 +15,7 @@ struct FinishSessionSummary: Hashable {
 struct FinishSessionSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     let isFinishing: Bool
     let didSave: Bool
@@ -23,6 +24,15 @@ struct FinishSessionSheet: View {
     let onFinish: () -> Void
     let onDismissError: () -> Void
     let onDone: () -> Void
+    var savedWorkout: LoggedWorkout? = nil
+    var gymName: String? = nil
+    /// This week's sessions, including the one just saved, for the plate moment.
+    var weekPlates: [LoadedPlate] = []
+    var weeklyGoal: Int = 4
+
+    @State private var exportURL: URL?
+    @State private var showingShareSheet = false
+    @State private var exportError: String?
 
     @AccessibilityFocusState private var successTitleFocused: Bool
     @State private var confettiTrigger = 0
@@ -48,71 +58,112 @@ struct FinishSessionSheet: View {
                 confettiTrigger += 1
             }
         }
+        .sheet(isPresented: $showingShareSheet) {
+            if let exportURL { ShareSheet(items: [exportURL]) }
+        }
+        .alert("Export couldn't be created", isPresented: Binding(
+            get: { exportError != nil },
+            set: { if !$0 { exportError = nil } }
+        )) {
+            Button("OK", role: .cancel) { exportError = nil }
+        } message: {
+            Text(exportError ?? "Your workout is saved. Try exporting again.")
+        }
         .accessibilityAddTraits(.isModal)
     }
 
     private var successContent: some View {
         ScrollView {
-            VStack(spacing: Theme.Spacing.lg) {
-                ZStack {
-                    Circle()
-                        .fill(
-                            RadialGradient(
-                                colors: [Theme.Colors.success.opacity(0.28), Theme.Colors.success.opacity(0)],
-                                center: .center,
-                                startRadius: 10,
-                                endRadius: 80
-                            )
-                        )
-                        .frame(width: 150, height: 150)
-                    Image(systemName: "checkmark.seal.fill")
-                        .font(.system(size: 68, weight: .semibold))
-                        .symbolRenderingMode(.palette)
-                        .foregroundStyle(Color.white, Theme.Colors.success)
-                        .symbolEffect(.bounce, value: reduceMotion ? false : didSave)
-                }
-                .accessibilityHidden(true)
-
-                VStack(spacing: Theme.Spacing.sm) {
-                    BrandBandLabel(text: "Workout saved", systemImage: "checkmark")
-
-                    Text("Big. Beautiful.")
+            VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                    Text("Plate loaded.")
                         .font(Theme.Typography.displayHero)
                         .foregroundStyle(Theme.Colors.textPrimary)
-                        .multilineTextAlignment(.center)
                         .accessibilityLabel("Workout saved")
                         .accessibilityFocused($successTitleFocused)
+
+                    Text(weekLine)
+                        .font(Theme.Typography.bodyLarge)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
-                Text("History and insights are up to date. If Apple Health is connected, its sync continues in the background.")
-                    .font(Theme.Typography.subheadline)
-                    .foregroundStyle(Theme.Colors.textSecondary)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
+                if !weekPlates.isEmpty {
+                    BarbellLoadView(
+                        plates: weekPlates,
+                        goal: max(weeklyGoal, 1),
+                        animatesFromIndex: weekPlates.count - 1
+                    )
+                }
 
                 statGrid
 
-                AppPrimaryButton(title: "Done", systemImage: "checkmark") {
+                if savedWorkout != nil {
+                    HStack(spacing: Theme.Spacing.sm) {
+                        Menu {
+                            Button("Spreadsheet (.csv)", systemImage: "tablecells") { exportWorkout(format: .csv) }
+                            Button("Structured data (.json)", systemImage: "curlybraces") { exportWorkout(format: .json) }
+                        } label: {
+                            TextLinkLabel(title: "Export this workout")
+                        }
+                        AppHelpButton(
+                            title: "Workout export",
+                            message: "Exports this workout only. To back up all app data, use Settings, then Export, then Backup."
+                        )
+                    }
+                }
+
+                AppPrimaryButton(title: "Done") {
                     onDone()
                 }
-                .padding(.top, Theme.Spacing.sm)
             }
-            .padding(Theme.Spacing.xl)
-            .contentColumn(maxWidth: 640, alignment: .center)
+            .padding(.horizontal, Theme.Layout.screenGutter)
+            .padding(.vertical, Theme.Spacing.xl)
+            .contentColumn(maxWidth: 640)
+        }
+    }
+
+    private var weekLine: String {
+        let count = weekPlates.count
+        let goal = max(weeklyGoal, 1)
+        guard count > 0 else { return "Saved to your history." }
+        if count < goal {
+            return "\(count) of \(goal) sessions this week. \(goal - count) to go."
+        }
+        if count == goal {
+            return "\(count) of \(goal) sessions. That's the week's goal."
+        }
+        return "\(count) sessions this week, \(count - goal) past your goal."
+    }
+
+    private func exportWorkout(format: WorkoutExportFormat) {
+        guard let savedWorkout else { return }
+        do {
+            exportURL = try WorkoutCSVExporter.exportLoggedWorkout(
+                savedWorkout,
+                to: FileManager.default.temporaryDirectory.appendingPathComponent("WorkoutShares", isDirectory: true),
+                format: format,
+                gymName: gymName
+            )
+            showingShareSheet = true
+            Haptics.selection()
+        } catch {
+            exportError = "Your workout is saved. \(error.localizedDescription)"
         }
     }
 
     private var confirmationContent: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                        BrandBandLabel(text: "Wrap it up", systemImage: "flag.checkered")
-                        Text("Finish Workout?")
+                        Text("Finish workout?")
                             .font(Theme.Typography.displayHeroCompact)
                             .foregroundStyle(Theme.Colors.textPrimary)
-                        Text("Only completed sets will be saved.")
-                            .font(Theme.Typography.subheadline)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityAddTraits(.isHeader)
+                        Text("Only checked-off sets are saved.")
+                            .font(Theme.Typography.callout)
                             .foregroundStyle(Theme.Colors.textSecondary)
                     }
 
@@ -142,12 +193,13 @@ struct FinishSessionSheet: View {
 
                         Button("Dismiss") { onDismissError() }
                             .font(Theme.Typography.captionBold)
+                            .frame(minWidth: Theme.Layout.minimumTapTarget, minHeight: Theme.Layout.minimumTapTarget)
                     }
-                    .font(Theme.Typography.caption)
+                    .font(Theme.Typography.subheadline)
                     .foregroundStyle(Theme.Colors.error)
                     .padding(Theme.Spacing.lg)
-                    .background(Theme.Colors.error.opacity(0.08), in: RoundedRectangle(cornerRadius: Theme.CornerRadius.large))
-                    .accessibilityElement(children: .combine)
+                    .tintedSection(Theme.Colors.error, cornerRadius: Theme.CornerRadius.large)
+                    .accessibilityElement(children: .contain)
                 }
 
                 if isFinishing {
@@ -162,128 +214,69 @@ struct FinishSessionSheet: View {
                 }
 
                 AppPrimaryButton(
-                    title: isFinishing ? "Saving…" : "Finish & Save",
-                    systemImage: "checkmark.circle.fill",
+                    title: isFinishing ? "Saving…" : "Finish and save",
                     isEnabled: !isFinishing
                 ) {
                     onFinish()
                 }
             }
-            .padding(Theme.Spacing.xl)
+            .padding(.horizontal, Theme.Layout.screenGutter)
+            .padding(.vertical, Theme.Spacing.xl)
             .contentColumn(maxWidth: 640)
         }
     }
 
     private var statGrid: some View {
         LazyVGrid(
-            columns: [
-                GridItem(.flexible(), spacing: Theme.Spacing.sm),
-                GridItem(.flexible(), spacing: Theme.Spacing.sm)
-            ],
-            spacing: Theme.Spacing.sm
+            columns: Array(
+                repeating: GridItem(.flexible(), spacing: Theme.Spacing.md, alignment: .leading),
+                count: dynamicTypeSize.isAccessibilitySize ? 1 : 2
+            ),
+            alignment: .leading,
+            spacing: Theme.Spacing.lg
         ) {
             durationTile
 
-            statTile(
-                title: "Sets",
-                value: "\(summary.completedSetCount)",
-                icon: "checkmark.circle.fill",
-                tint: Theme.Colors.success
-            )
-            statTile(
-                title: "Exercises",
-                value: "\(summary.exerciseCount)",
-                icon: "dumbbell.fill",
-                tint: Theme.Colors.accentSecondary
-            )
+            statTile(title: summary.completedSetCount == 1 ? "set" : "sets", value: "\(summary.completedSetCount)")
+            statTile(title: summary.exerciseCount == 1 ? "exercise" : "exercises", value: "\(summary.exerciseCount)")
 
             if summary.strengthVolume > 0 {
-                statTile(
-                    title: "Volume",
-                    value: SharedFormatters.volumeWithUnit(summary.strengthVolume),
-                    icon: "scalemass.fill",
-                    tint: Theme.Colors.accentTertiary
-                )
+                statTile(title: "lbs lifted", value: SharedFormatters.volumeCompact(summary.strengthVolume))
             }
             if summary.cardioDistance > 0 {
-                statTile(
-                    title: "Distance",
-                    value: WorkoutValueFormatter.distanceText(summary.cardioDistance),
-                    icon: "point.topleft.down.to.point.bottomright.curvepath.fill",
-                    tint: Theme.Colors.cardio
-                )
+                statTile(title: "distance", value: WorkoutValueFormatter.distanceText(summary.cardioDistance))
             }
             if summary.cardioSeconds > 0 {
-                statTile(
-                    title: "Cardio time",
-                    value: WorkoutValueFormatter.durationText(seconds: summary.cardioSeconds),
-                    icon: "stopwatch.fill",
-                    tint: Theme.Colors.cardio
-                )
+                statTile(title: "cardio time", value: WorkoutValueFormatter.durationText(seconds: summary.cardioSeconds))
             }
             if summary.cardioCount > 0 {
-                statTile(
-                    title: "Count",
-                    value: "\(summary.cardioCount)",
-                    icon: "number",
-                    tint: Theme.Colors.cardio
-                )
+                statTile(title: "count", value: WorkoutValueFormatter.numberText(summary.cardioCount, decimals: 0))
             }
         }
+        .padding(Theme.Spacing.lg)
+        .softCard()
     }
 
     @ViewBuilder
     private var durationTile: some View {
         if let endedAt = summary.endedAt {
-            statTile(
-                title: "Duration",
-                value: SharedFormatters.elapsed(endedAt.timeIntervalSince(summary.startedAt)),
-                icon: "clock.fill",
-                tint: Theme.Colors.accent
-            )
+            statTile(title: "time", value: SharedFormatters.elapsed(endedAt.timeIntervalSince(summary.startedAt)))
         } else {
-            tileChrome(title: "Elapsed", icon: "clock.fill", tint: Theme.Colors.accent) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(summary.startedAt, style: .timer)
+                    .font(Theme.Typography.timerSmall)
                     .monospacedDigit()
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                    .frame(minHeight: 34, alignment: .bottomLeading)
+                Text("elapsed")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.textSecondary)
             }
+            .accessibilityElement(children: .combine)
         }
     }
 
-    private func statTile(title: String, value: String, icon: String, tint: Color) -> some View {
-        tileChrome(title: title, icon: icon, tint: tint) {
-            Text(value)
-        }
-    }
-
-    private func tileChrome<Value: View>(
-        title: String,
-        icon: String,
-        tint: Color,
-        @ViewBuilder value: () -> Value
-    ) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            HStack(spacing: 6) {
-                Image(systemName: icon)
-                    .font(Theme.Typography.caption2Bold)
-                    .foregroundStyle(tint)
-                    .accessibilityHidden(true)
-                Text(title)
-                    .sectionHeaderStyle()
-                    .lineLimit(1)
-            }
-            value()
-                .font(Theme.Typography.title2)
-                .foregroundStyle(Theme.Colors.textPrimary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.65)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(Theme.Spacing.md)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
-                .fill(tint.opacity(Theme.Opacity.subtleFill))
-        )
-        .softCard(elevation: 1)
-        .accessibilityElement(children: .combine)
+    private func statTile(title: String, value: String) -> some View {
+        DisplayStat(value: value, label: title)
     }
 }
