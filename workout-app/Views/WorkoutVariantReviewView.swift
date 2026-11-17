@@ -92,6 +92,7 @@ struct WorkoutVariantReviewView: View {
 
             ForEach(standoutPatterns) { pattern in
                 MetricTileButton(
+                    chevronPlacement: .bottomTrailing,
                     action: { selectedWorkout = pattern.representativeWorkout },
                     content: {
                         WorkoutVariantPatternCard(pattern: pattern)
@@ -109,6 +110,7 @@ struct WorkoutVariantReviewView: View {
 
             ForEach(recentReviews) { review in
                 MetricTileButton(
+                    chevronPlacement: .bottomTrailing,
                     action: { selectedWorkout = review.workout },
                     content: {
                         WorkoutVariantSummaryCard(review: review, maxDifferences: 1)

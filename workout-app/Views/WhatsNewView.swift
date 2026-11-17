@@ -43,7 +43,7 @@ struct WhatsNewSheetView: View {
                 .frame(maxWidth: .infinity)
                 .frame(minHeight: 52)
                 .background(Theme.accentGradient)
-                .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.medium))
+                .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous))
             }
             .buttonStyle(AppInteractionButtonStyle())
             .accessibilityHint("Dismisses this update and does not show it again")
@@ -70,8 +70,7 @@ struct ChangelogHistoryView: View {
 
     var body: some View {
         WhatsNewContent(entries: ChangelogCatalog.entries, style: .history)
-            .navigationTitle("What's new")
-            .navigationBarTitleDisplayMode(.inline)
+            .collapsingTitle("What's new")
             .analyticsScreen("ChangelogHistory")
             .onAppear {
                 changelogStore.markCurrentVersionSeen()
@@ -114,39 +113,9 @@ private struct WhatsNewContent: View {
     }
 
     private var hero: some View {
-        VStack(spacing: Theme.Spacing.md) {
-            ZStack {
-                Circle()
-                    .fill(Theme.Colors.accent.opacity(0.08))
-                    .frame(width: 104, height: 104)
-
-                Circle()
-                    .fill(Theme.Colors.accent)
-                    .frame(width: 76, height: 76)
-
-                Image(systemName: "clock.arrow.circlepath")
-                    .font(Theme.Iconography.hero)
-                    .foregroundStyle(Theme.Colors.onAccent)
-                    .accessibilityHidden(true)
-            }
-
-            VStack(spacing: Theme.Spacing.xs) {
-                Text("What's new")
-                    .font(Theme.Typography.screenTitle)
-                    .foregroundStyle(Theme.Colors.textPrimary)
-                    .multilineTextAlignment(.center)
-
-                Text(heroSubtitle)
-                    .font(Theme.Typography.body)
-                    .foregroundStyle(Theme.Colors.textSecondary)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, Theme.Spacing.lg)
-        .animateOnAppear()
-        .accessibilityElement(children: .combine)
+        ScreenHeader(title: "What's new", subtitle: heroSubtitle)
+            .pageTitleAnchor()
+            .padding(.bottom, Theme.Spacing.sm)
     }
 
     private var heroSubtitle: String {
@@ -167,7 +136,7 @@ private struct ChangelogEntryCard: View {
     let animationDelay: Double
 
     private var tint: Color {
-        isNewest ? Theme.Colors.accent : Theme.Colors.accentSecondary
+        Theme.Colors.textPrimary
     }
 
     var body: some View {
@@ -185,15 +154,7 @@ private struct ChangelogEntryCard: View {
                 }
             }
         }
-        .padding(Theme.Spacing.lg)
-        .overlay(alignment: .top) {
-            Capsule()
-                .fill(tint)
-                .frame(width: 48, height: 4)
-                .padding(.top, Theme.Spacing.sm)
-        }
-        .softCard(elevation: isNewest ? 2 : 1)
-        .animateOnAppear(delay: animationDelay)
+        .ledgerRow(verticalPadding: Theme.Spacing.lg)
     }
 
     private var releaseHeader: some View {
@@ -237,9 +198,7 @@ private struct ChangelogHighlightRow: View {
             Image(systemName: highlight.systemImage)
                 .font(Theme.Typography.subheadlineStrong)
                 .foregroundStyle(tint)
-                .frame(width: 36, height: 36)
-                .background(tint.opacity(0.08))
-                .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
+                .frame(width: 28, height: 28)
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 3) {

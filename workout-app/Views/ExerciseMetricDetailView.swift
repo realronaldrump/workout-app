@@ -122,18 +122,20 @@ struct ExerciseMetricDetailView: View {
     }
 
     private var rangePicker: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            Text("Range")
-                .sectionHeaderStyle()
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: Theme.Spacing.xs) {
-                    ForEach(AppTimeRange.exercisePresets + [.custom]) { range in
-                        rangeChip(range)
-                    }
-                }
+        TimeRangePillPicker(
+            options: AppTimeRange.exercisePresets + [.custom],
+            selected: Binding(get: { selectedRange }, set: { range in
+                selectedRange = range
+                selectedHistoryDate = nil
+                selectedRecordDate = nil
+            }),
+            onCustomTap: {
+                selectedRange = .custom
+                selectedHistoryDate = nil
+                selectedRecordDate = nil
+                showingCustomRange = true
             }
-        }
+        )
     }
 
     private var recordProgression: some View {
@@ -147,37 +149,6 @@ struct ExerciseMetricDetailView: View {
             ),
             selectedDate: $selectedRecordDate
         )
-    }
-
-    private func rangeChip(_ range: AppTimeRange) -> some View {
-        Button {
-            selectedRange = range
-            selectedHistoryDate = nil
-            selectedRecordDate = nil
-            if range == .custom {
-                showingCustomRange = true
-            }
-            Haptics.selection()
-        } label: {
-            HStack(spacing: Theme.Spacing.xs) {
-                if selectedRange == range {
-                    Image(systemName: "checkmark")
-                }
-                Text(range.shortLabel)
-                    .lineLimit(1)
-            }
-            .font(Theme.Typography.metricLabel)
-            .foregroundStyle(Theme.Colors.textPrimary)
-            .padding(.horizontal, Theme.Spacing.sm)
-            .padding(.vertical, Theme.Spacing.xs)
-            .surfaceButtonChrome(
-                fill: selectedRange == range ? Theme.Colors.accentTint : Theme.Colors.surface,
-                border: selectedRange == range ? Theme.Colors.accent : Theme.Colors.border,
-                cornerRadius: Theme.CornerRadius.pill
-            )
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(selectedRange == range ? [.isButton, .isSelected] : .isButton)
     }
 
     @ViewBuilder

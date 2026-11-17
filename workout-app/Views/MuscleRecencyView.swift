@@ -30,7 +30,7 @@ struct MuscleRecencyView: View {
                 LazyVStack(alignment: .leading, spacing: Theme.Spacing.xl) {
                     StatsPageHeader(
                         eyebrow: "Recency",
-                        title: "Muscle recency",
+                        title: "Muscles",
                         systemImage: "clock.arrow.circlepath",
                         help: "A muscle counts as trained after one effective set: a primary set counts as one, a secondary set as half."
                     )
@@ -38,22 +38,11 @@ struct MuscleRecencyView: View {
                     ForEach(RecencyBucket.allCases, id: \.self) { bucket in
                         let rows = recencyRows.filter { RecencyBucket(daysSince: $0.daysSince) == bucket }
                         if !rows.isEmpty {
-                            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                                HStack(spacing: Theme.Spacing.sm) {
-                                    Text(bucket.title)
-                                        .sectionHeaderStyle()
-                                    Text("\(rows.count)")
-                                        .font(Theme.Typography.caption2Bold)
-                                        .foregroundStyle(Theme.Colors.textSecondary)
-                                        .padding(.horizontal, 6)
-                                        .padding(.vertical, 2)
-                                        .background(Capsule().fill(Theme.Colors.border.opacity(0.4)))
-                                }
-                                .accessibilityElement(children: .combine)
-                                .accessibilityAddTraits(.isHeader)
+                            VStack(alignment: .leading, spacing: 0) {
+                                LoadedListHeader(title: bucket.title, detail: SharedFormatters.count(rows.count, "group"))
 
-                                ForEach(rows) { row in
-                                    recencyRow(row)
+                                ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+                                    recencyRow(row, showsRule: index > 0)
                                 }
                             }
                         }
@@ -64,7 +53,7 @@ struct MuscleRecencyView: View {
                 .contentColumn()
             }
         }
-        .collapsingTitle("Muscle recency")
+        .collapsingTitle("Muscles")
         .onAppear(perform: refreshRecencyRows)
         .onReceive(
             dataManager.$workouts
@@ -82,28 +71,24 @@ struct MuscleRecencyView: View {
         }
     }
 
-    private func recencyRow(_ row: MuscleGroupRecency) -> some View {
+    private func recencyRow(_ row: MuscleGroupRecency, showsRule: Bool) -> some View {
         // Full when trained today, empty at two weeks: freshness at a glance.
         let freshness = row.daysSince.map { max(0, 1 - Double($0) / 14) } ?? 0
 
         return HStack(alignment: .center, spacing: Theme.Spacing.md) {
-            Capsule()
-                .fill(row.group.color)
-                .frame(width: 4, height: 44)
-                .accessibilityHidden(true)
+            TintMark(tint: row.group.color, height: 44)
 
             VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .firstTextBaseline) {
                     Text(row.group.displayName)
-                        .font(Theme.Typography.bodyBold)
+                        .font(Theme.Typography.headline)
                         .foregroundColor(Theme.Colors.textPrimary)
 
                     Spacer(minLength: Theme.Spacing.sm)
 
                     Text(row.daysSince.map { $0 == 0 ? "Today" : "\($0)d" } ?? "Never")
-                        .font(Theme.Typography.title3)
+                        .font(Theme.Typography.numberSmall)
                         .foregroundStyle(row.lastTrained == nil ? Theme.Colors.textTertiary : Theme.Colors.textPrimary)
-                        .monospacedDigit()
                 }
 
                 HStack(alignment: .firstTextBaseline) {
@@ -122,7 +107,7 @@ struct MuscleRecencyView: View {
                 GeometryReader { proxy in
                     ZStack(alignment: .leading) {
                         Capsule()
-                            .fill(Theme.Colors.border.opacity(0.35))
+                            .fill(Theme.Colors.panelStrong)
                         Capsule()
                             .fill(row.group.color.opacity(0.85))
                             .frame(width: proxy.size.width * CGFloat(freshness))
@@ -132,8 +117,7 @@ struct MuscleRecencyView: View {
                 .accessibilityHidden(true)
             }
         }
-        .padding(Theme.Spacing.md)
-        .softCard(elevation: 1)
+        .ledgerRow(showsRule: showsRule)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(row.group.displayName), \(lastWorkedLabel(for: row)), \(lastWorkedDateLabel(for: row))")
     }

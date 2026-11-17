@@ -37,6 +37,7 @@ struct PerformanceLabVariantSection: View {
                 VStack(spacing: Theme.Spacing.md) {
                     ForEach(patterns) { pattern in
                         MetricTileButton(
+                            chevronPlacement: .bottomTrailing,
                             action: { onSelectWorkout(pattern.representativeWorkout) },
                             content: {
                                 WorkoutVariantPatternCard(pattern: pattern, maxEvidence: 1)

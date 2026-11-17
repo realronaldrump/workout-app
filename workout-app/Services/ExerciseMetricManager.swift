@@ -57,6 +57,15 @@ final class ExerciseMetricManager: ObservableObject {
         )
     }
 
+    /// Count-based cardio shares the reps storage field. Preserve custom meanings
+    /// such as floors, steps, or calories when preparing an analytical export.
+    func exportCountLabels(for exerciseNames: Set<String>) -> [String: String] {
+        Dictionary(uniqueKeysWithValues: exerciseNames.compactMap { name in
+            let label = preferences(for: name).countLabel
+            return label == ExerciseCardioMetricPreferences.default.countLabel ? nil : (name, label)
+        })
+    }
+
     // MARK: - Persistence
 
     private func setPreferences(for exerciseName: String, to prefs: ExerciseCardioMetricPreferences) {

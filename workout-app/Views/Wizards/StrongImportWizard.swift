@@ -209,14 +209,14 @@ struct StrongImportWizard: View {
                                 .frame(maxWidth: .infinity, minHeight: 160)
                                 .padding(Theme.Spacing.xl)
                                 .background(
-                                    RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
+                                    RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
                                         .stroke(style: StrokeStyle(lineWidth: 2, dash: [10]))
                                         .fill(Theme.Colors.accent.opacity(0.5))
                                 )
                             }
                         )
                         .buttonStyle(.plain)
-                        .contentShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large))
+                        .contentShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous))
 
                         if let error = importError {
                             Label(error, systemImage: "exclamationmark.triangle.fill")

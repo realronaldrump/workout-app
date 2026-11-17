@@ -2,7 +2,7 @@ import SwiftUI
 
 // MARK: - Empty State
 
-/// First run: an empty bar waiting for its first plate.
+/// First run: an empty weekly ledger waiting for its first session.
 struct HomeEmptyState: View {
     var weeklyGoal: Int = 4
 
@@ -13,13 +13,13 @@ struct HomeEmptyState: View {
                     .font(Theme.Typography.displayHero)
                     .foregroundStyle(Theme.Colors.textPrimary)
                     .accessibilityAddTraits(.isHeader)
-                Text("Every session you log loads a plate on this week's bar. Start a workout, or bring in your history from Strong.")
+                Text("Every session counts toward your weekly goal. Start a workout, or bring in your history from Strong.")
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Colors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            BarbellLoadView(plates: [], goal: weeklyGoal, showsDayLabels: false)
+            WeeklySessionProgress(plates: [], goal: weeklyGoal)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -49,8 +49,8 @@ struct TodayLoadingHero: View {
 
 // MARK: - Today Hero
 
-/// The one bold moment on Today: the week's count at poster scale over a barbell
-/// loaded with this week's sessions, then the actions that load the next plate.
+/// The week's count at poster scale, with an explicitly labeled session ledger
+/// and the actions to start or repeat the next workout.
 struct TodayHero: View {
     let sessionsThisWeek: Int
     let weeklyGoal: Int
@@ -84,7 +84,7 @@ struct TodayHero: View {
                             .contentTransition(.numericText(value: Double(sessionsThisWeek)))
                             .animation(reduceMotion ? nil : Theme.Animation.spring, value: sessionsThisWeek)
                         Text("/\(goal)")
-                            .foregroundStyle(Theme.Colors.decorativeSubtle)
+                            .foregroundStyle(Theme.Colors.textSecondary)
                     }
                     .font(Theme.Typography.posterNumber)
                     .lineLimit(1)
@@ -96,8 +96,8 @@ struct TodayHero: View {
                         .foregroundStyle(Theme.Colors.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    BarbellLoadView(plates: plates, goal: goal)
-                        .padding(.top, Theme.Spacing.lg)
+                    WeeklySessionProgress(plates: plates, goal: goal)
+                        .padding(.top, Theme.Spacing.md)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(.rect)
@@ -162,6 +162,7 @@ struct TodayHero: View {
         .buttonStyle(BrandPrimaryButtonStyle())
         .accessibilityLabel(activeSession.map { "Resume \($0.name)" } ?? "Start workout")
         .accessibilityHint(activeSession == nil ? "Begins a workout session" : "Returns to the active workout")
+        .accessibilityIdentifier("today-start-workout")
     }
 
     private func repeatButton(_ workout: Workout) -> some View {
@@ -174,15 +175,21 @@ struct TodayHero: View {
                 Image(systemName: "arrow.counterclockwise")
                     .font(Theme.Typography.captionBold)
                     .accessibilityHidden(true)
-                Text("Repeat \(parts.title)")
-                    .font(Theme.Typography.headline)
-                    .lineLimit(1)
-                Spacer(minLength: Theme.Spacing.sm)
-                Text(workout.date.formatted(.relative(presentation: .named)))
-                    .font(Theme.Typography.subheadline)
-                    .foregroundStyle(Theme.Colors.textSecondary)
-                    .lineLimit(1)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Repeat last workout")
+                        .font(Theme.Typography.headline)
+                    Text(parts.title)
+                        .font(Theme.Typography.subheadline)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: "arrow.up.right")
+                    .font(Theme.Iconography.small)
+                    .accessibilityHidden(true)
             }
+            .padding(.vertical, Theme.Spacing.sm)
             .frame(maxWidth: .infinity, minHeight: 52)
         }
         .buttonStyle(BrandSecondaryButtonStyle())
@@ -201,6 +208,54 @@ struct TodayHero: View {
 private extension String {
     var capitalizedFirst: String {
         prefix(1).uppercased() + dropFirst()
+    }
+}
+
+// MARK: - Weekly Session Ledger
+
+/// A small training punch card: completed sessions carry a date and checkmark;
+/// remaining sessions keep their ordinal. Every state is labeled in plain language.
+struct WeeklySessionProgress: View {
+    let plates: [LoadedPlate]
+    let goal: Int
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        let count = max(goal, plates.count, 1)
+        LazyVGrid(
+            columns: [GridItem(.adaptive(minimum: dynamicTypeSize.isAccessibilitySize ? 130 : 68), spacing: Theme.Spacing.sm)],
+            alignment: .leading,
+            spacing: Theme.Spacing.sm
+        ) {
+            ForEach(0..<count, id: \.self) { index in
+                let plate = index < plates.count ? plates[index] : nil
+                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                    HStack {
+                        Text(String(format: "%02d", index + 1))
+                            .font(Theme.Typography.caption2Bold)
+                        Spacer(minLength: 0)
+                        if plate != nil {
+                            Image(systemName: "checkmark")
+                                .font(Theme.Iconography.small)
+                        }
+                    }
+                    .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(plate.map { $0.date.formatted(.dateTime.weekday(.abbreviated)) } ?? "—")
+                            .font(Theme.Typography.title3)
+                        Text(plate == nil ? "To go" : "Logged")
+                            .font(Theme.Typography.caption)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .padding(Theme.Spacing.sm)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .foregroundStyle(plate == nil ? Theme.Colors.textSecondary : Theme.Colors.onAccent)
+                .background(plate == nil ? Theme.Colors.panelStrong : Theme.Colors.ink, in: RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(plate.map { "Session \(index + 1), logged \($0.date.formatted(.dateTime.weekday(.wide)))" } ?? "Session \(index + 1), remaining")
+            }
+        }
     }
 }
 

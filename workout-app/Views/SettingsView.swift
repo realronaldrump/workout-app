@@ -35,7 +35,10 @@ struct SettingsView: View {
             AdaptiveBackground()
 
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: Theme.Spacing.section) {
+                // Settings has a small, bounded row count. Keeping navigation rows
+                // mounted avoids lazy-layout churn when a pushed Health screen changes
+                // authorization and inserts/removes rows on this offscreen page.
+                VStack(alignment: .leading, spacing: Theme.Spacing.section) {
                     trainingSection
                     healthSection
                     dataSection
@@ -52,7 +55,7 @@ struct SettingsView: View {
                     }
                 }
                 .padding(.horizontal, Theme.Layout.screenGutter)
-                .padding(.top, Theme.Spacing.sm)
+                .padding(.top, Theme.Spacing.lg)
                 .padding(.bottom, Theme.Spacing.xxl)
                 .contentColumn()
             }
@@ -115,7 +118,12 @@ struct SettingsView: View {
 
     private var trainingSection: some View {
         SettingsGroup(title: "Training") {
-            SettingsPickerRow(title: "Weekly goal", subtitle: "Sessions that fill the bar each week", showsRule: false) {
+            SettingsPickerRow(
+                title: "Weekly goal",
+                subtitle: "Workouts to aim for each week",
+                value: "\(sessionsPerWeekGoal) per week",
+                showsRule: false
+            ) {
                 Picker("Sessions per week goal", selection: $sessionsPerWeekGoal) {
                     ForEach(1...14, id: \.self) { sessions in
                         Text("\(sessions) per week").tag(sessions)
@@ -123,7 +131,11 @@ struct SettingsView: View {
                 }
             }
 
-            SettingsPickerRow(title: "Weight increment", subtitle: "Step size when you adjust a weight") {
+            SettingsPickerRow(
+                title: "Weight increment",
+                subtitle: "Step size when you adjust a weight",
+                value: incrementLabel(weightIncrement)
+            ) {
                 Picker("Weight increment", selection: $weightIncrement) {
                     ForEach(incrementOptions, id: \.self) { option in
                         Text(incrementLabel(option)).tag(option)
@@ -131,7 +143,11 @@ struct SettingsView: View {
                 }
             }
 
-            SettingsPickerRow(title: "Rest timer", subtitle: "Starts after each completed set") {
+            SettingsPickerRow(
+                title: "Rest timer",
+                subtitle: "Starts after each completed set",
+                value: restTimerLabel(restTimerDuration)
+            ) {
                 Picker("Rest timer", selection: $restTimerDuration) {
                     ForEach(restTimerOptions, id: \.self) { seconds in
                         Text(restTimerLabel(seconds)).tag(seconds)
@@ -141,7 +157,8 @@ struct SettingsView: View {
 
             SettingsPickerRow(
                 title: "Rest days",
-                subtitle: "Days off allowed before a streak breaks"
+                subtitle: "Days off allowed before a streak breaks",
+                value: "\(intentionalRestDays) day\(intentionalRestDays == 1 ? "" : "s")"
             ) {
                 Picker("Rest days", selection: $intentionalRestDays) {
                     ForEach(0...30, id: \.self) { days in
@@ -223,7 +240,7 @@ struct SettingsView: View {
             .buttonStyle(PressableCardButtonStyle())
 
             NavigationLink(destination: ExportWorkoutsView(dataManager: dataManager, iCloudManager: iCloudManager)) {
-                SettingsLinkRow(title: "Export", subtitle: "Backups, CSV, and PDF reports")
+                SettingsLinkRow(title: "Export", subtitle: "CSV, PDF, a compact log for AI, and backups")
             }
             .buttonStyle(PressableCardButtonStyle())
 
@@ -411,6 +428,8 @@ private struct SettingsPickerRow<Control: View>: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let title: String
     let subtitle: String
+    /// The current choice, set in the interface face rather than the system menu font.
+    let value: String
     var showsRule = true
     @ViewBuilder let control: () -> Control
 
@@ -430,12 +449,28 @@ private struct SettingsPickerRow<Control: View>: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            control()
-                .labelsHidden()
-                .pickerStyle(.menu)
-                .tint(Theme.Colors.textPrimary)
-                .fixedSize(horizontal: true, vertical: false)
+            Menu {
+                control()
+                    .labelsHidden()
+                    .pickerStyle(.inline)
+            } label: {
+                HStack(spacing: 6) {
+                    Text(value)
+                        .font(Theme.Typography.subheadlineStrong)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(Theme.Typography.microLabel)
+                        .accessibilityHidden(true)
+                }
+                .foregroundStyle(Theme.Colors.textPrimary)
+                .padding(.horizontal, Theme.Spacing.md)
+                .frame(minHeight: 36)
+                .background(Capsule(style: .continuous).fill(Theme.Colors.panelStrong))
                 .frame(minHeight: Theme.Layout.minimumTapTarget)
+                .contentShape(.rect)
+            }
+            .fixedSize(horizontal: true, vertical: false)
+            .accessibilityLabel(title)
+            .accessibilityValue(value)
         }
         .ledgerRow(showsRule: showsRule)
     }

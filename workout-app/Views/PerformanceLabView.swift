@@ -299,7 +299,7 @@ struct PerformanceLabView: View {
     private var header: some View {
         StatsPageHeader(
             eyebrow: "Performance",
-            title: "Training progress",
+            title: "Performance",
             subtitle: headerSubtitle,
             systemImage: "chart.line.uptrend.xyaxis"
         )
@@ -385,11 +385,11 @@ struct PerformanceLabView: View {
             .padding(.horizontal, Theme.Spacing.md)
             .frame(maxWidth: .infinity, minHeight: Theme.Layout.minimumTapTarget, alignment: .leading)
             .background(
-                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                     .fill(Theme.Colors.surface)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                     .strokeBorder(Theme.Colors.border.opacity(0.6), lineWidth: 1)
             )
             .onChange(of: selectedTimeFilter) { _, _ in
@@ -462,33 +462,22 @@ struct PerformanceLabView: View {
         let changes = derivedAnalytics.changeMetrics
 
         return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Trending")
-                .font(Theme.Typography.sectionHeader2)
-                .foregroundColor(Theme.Colors.textPrimary)
-                .accessibilityAddTraits(.isHeader)
-
-            if let window {
-                Text(window.label)
-                    .font(Theme.Typography.caption)
-                    .foregroundColor(Theme.Colors.textSecondary)
-            }
+            SectionHeading(title: "Trending", subtitle: window?.label)
 
             if changes.isEmpty {
                 Text("Need more workouts to compare periods.")
                     .font(Theme.Typography.body)
                     .foregroundColor(Theme.Colors.textSecondary)
-                    .padding(Theme.Spacing.lg)
-                    .softCard(elevation: 2)
+                    .ledgerRow()
             } else {
-                VStack(spacing: Theme.Spacing.md) {
-                    ForEach(changes) { metric in
+                VStack(spacing: 0) {
+                    ForEach(Array(changes.enumerated()), id: \.element.id) { index, metric in
                         MetricTileButton(
-                            chevronPlacement: .topTrailing,
+                            chevronPlacement: .none,
                             action: { selectedChangeMetric = metric },
                             content: {
                                 PerformanceComparisonRow(metric: metric)
-                                    .padding(Theme.Spacing.lg)
-                                    .softCard(elevation: 1)
+                                    .ledgerRow(showsRule: index > 0)
                             }
                         )
                     }
@@ -1059,20 +1048,24 @@ private struct PerformanceComparisonRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            HStack(alignment: .firstTextBaseline) {
+            HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.sm) {
                 Text(displayTitle)
-                    .font(Theme.Typography.captionBold)
-                    .foregroundColor(Theme.Colors.textSecondary)
-                Spacer()
+                    .font(Theme.Typography.headline)
+                    .foregroundColor(Theme.Colors.textPrimary)
+                Spacer(minLength: Theme.Spacing.sm)
                 Text(changeLabel)
-                    .font(Theme.Typography.captionBold)
+                    .font(Theme.Typography.numberSmall)
                     .foregroundColor(changeTint)
+                Image(systemName: "chevron.right")
+                    .font(Theme.Typography.caption)
+                    .foregroundColor(Theme.Colors.textTertiary)
+                    .accessibilityHidden(true)
             }
 
             // Visual progress bar comparing the two periods
             GeometryReader { geo in
                 let maxVal = max(metric.current, metric.previous, 1)
-                let barSpace = geo.size.width - 100
+                let barSpace = max(geo.size.width - 138, 20)
                 let currentWidth = max((metric.current / maxVal) * barSpace, 4)
                 let previousWidth = max((metric.previous / maxVal) * barSpace, 4)
 
@@ -1083,17 +1076,19 @@ private struct PerformanceComparisonRow: View {
                             .foregroundColor(Theme.Colors.textTertiary)
                             .frame(width: 42, alignment: .trailing)
                         ZStack(alignment: .leading) {
-                            RoundedRectangle(cornerRadius: 3)
-                                .fill(Theme.Colors.accent.opacity(0.12))
+                            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                .fill(Theme.Colors.panelStrong)
                                 .frame(height: 14)
-                            RoundedRectangle(cornerRadius: 3)
+                            RoundedRectangle(cornerRadius: 3, style: .continuous)
                                 .fill(Theme.Colors.accent)
                                 .frame(width: currentWidth, height: 14)
                         }
                         Text(formatValue(metric.current))
                             .font(Theme.Typography.captionBold)
                             .foregroundColor(Theme.Colors.textPrimary)
-                            .frame(minWidth: 40, alignment: .leading)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                            .frame(width: 80, alignment: .leading)
                     }
 
                     HStack(spacing: Theme.Spacing.sm) {
@@ -1102,17 +1097,19 @@ private struct PerformanceComparisonRow: View {
                             .foregroundColor(Theme.Colors.textTertiary)
                             .frame(width: 42, alignment: .trailing)
                         ZStack(alignment: .leading) {
-                            RoundedRectangle(cornerRadius: 3)
-                                .fill(Theme.Colors.textTertiary.opacity(0.12))
+                            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                .fill(Theme.Colors.panelStrong)
                                 .frame(height: 14)
-                            RoundedRectangle(cornerRadius: 3)
-                                .fill(Theme.Colors.textTertiary.opacity(0.4))
+                            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                .fill(Theme.Colors.decorativeSubtle)
                                 .frame(width: previousWidth, height: 14)
                         }
                         Text(formatValue(metric.previous))
                             .font(Theme.Typography.caption)
-                            .foregroundColor(Theme.Colors.textTertiary)
-                            .frame(minWidth: 40, alignment: .leading)
+                            .foregroundColor(Theme.Colors.textSecondary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                            .frame(width: 80, alignment: .leading)
                     }
                 }
             }

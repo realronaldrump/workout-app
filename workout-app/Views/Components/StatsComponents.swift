@@ -208,7 +208,7 @@ struct SectionJumpBar: View {
 }
 
 /// Tracks which jump-bar sections are on screen and resolves the active one.
-struct StatsSectionTracker {
+struct StatsSectionTracker: Equatable {
     private(set) var visible: Set<String> = []
 
     mutating func update(_ id: String, isVisible: Bool) {
@@ -231,7 +231,12 @@ extension View {
         self
             .id(id)
             .onScrollVisibilityChange(threshold: 0.01) { isVisible in
-                tracker.wrappedValue.update(id, isVisible: isVisible)
+                // Lazy sections can repeat a visibility notification while their
+                // estimated heights settle. Do not invalidate the page for a no-op.
+                var next = tracker.wrappedValue
+                guard next.visible.contains(id) != isVisible else { return }
+                next.update(id, isVisible: isVisible)
+                tracker.wrappedValue = next
             }
     }
 }

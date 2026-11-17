@@ -1,54 +1,55 @@
 import SwiftUI
 
+/// A ledger row that opens a selection sheet: what is being chosen, how many are
+/// chosen, and the first few names underneath.
 struct ExportSelectionButton: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let title: String
     let summary: String
     var previewText: String?
+    var showsRule = true
     let action: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            Button(action: action) {
-                HStack(spacing: Theme.Spacing.md) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(title)
-                            .font(Theme.Typography.caption)
+        Button(action: action) {
+            let layout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: Theme.Spacing.sm))
+                : AnyLayout(HStackLayout(spacing: Theme.Spacing.md))
+            layout {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(Theme.Typography.headline)
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                    if let previewText, !previewText.isEmpty {
+                        Text(previewText)
+                            .font(Theme.Typography.subheadline)
                             .foregroundStyle(Theme.Colors.textSecondary)
-
-                        Text(summary)
-                            .font(Theme.Typography.captionBold)
-                            .foregroundStyle(Theme.Colors.textPrimary)
-                            .fixedSize(horizontal: false, vertical: true)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.leading)
                     }
-
-                    Spacer(minLength: Theme.Spacing.xs)
-
-                    Image(systemName: "chevron.right")
-                        .font(Theme.Typography.captionStrong)
-                        .foregroundStyle(Theme.Colors.textTertiary)
                 }
-                .padding(Theme.Spacing.md)
-                .frame(minHeight: Theme.Layout.minimumTapTarget)
-                .background(Theme.Colors.elevated)
-                .overlay(
-                    RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
-                        .strokeBorder(Theme.Colors.border, lineWidth: 2)
-                )
-                .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large))
-            }
-            .buttonStyle(.plain)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(title)
-            .accessibilityValue(summary)
-            .accessibilityHint("Opens a selection sheet")
 
-            if let previewText, !previewText.isEmpty {
-                Text(previewText)
-                    .font(Theme.Typography.caption)
+                if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: Theme.Spacing.sm) }
+
+                Text(summary)
+                    .font(Theme.Typography.subheadlineStrong)
                     .foregroundStyle(Theme.Colors.textSecondary)
-                    .lineLimit(2)
+                    .multilineTextAlignment(.trailing)
+
+                Image(systemName: "chevron.right")
+                    .font(Theme.Typography.captionBold)
+                    .foregroundStyle(Theme.Colors.textTertiary)
+                    .accessibilityHidden(true)
             }
+            .ledgerRow(showsRule: showsRule)
         }
+        .buttonStyle(PressableCardButtonStyle())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+        .accessibilityValue(summary)
+        .accessibilityHint("Opens a selection sheet")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityIdentifier("export-select-\(title)")
     }
 }
 
@@ -92,7 +93,7 @@ struct ExportSelectionToolbar: View {
                 .disabled(selectedCount == 0)
             }
             .font(Theme.Typography.captionBold)
-            .buttonStyle(.plain)
+            .buttonStyle(AppInteractionButtonStyle())
             .fixedSize(horizontal: !dynamicTypeSize.isAccessibilitySize, vertical: false)
         }
         .padding(.horizontal, Theme.Spacing.md)
@@ -133,14 +134,12 @@ struct ExportSelectableRow<Content: View>: View {
             .padding(.horizontal, Theme.Spacing.md)
             .padding(.vertical, Theme.Spacing.sm)
             .frame(minHeight: Theme.Layout.minimumTapTarget)
-            .background(isSelected ? Theme.Colors.accent.opacity(0.07) : Theme.Colors.surface)
-            .overlay(
-                RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
-                    .strokeBorder(isSelected ? Theme.Colors.accent.opacity(0.4) : Theme.Colors.border.opacity(0.4), lineWidth: 1)
+            .background(
+                isSelected ? Theme.Colors.panelStrong : Theme.Colors.panel,
+                in: RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
             )
-            .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(AppInteractionButtonStyle())
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityValue(isSelected ? "Selected" : "Not selected")
@@ -149,33 +148,51 @@ struct ExportSelectableRow<Content: View>: View {
     }
 }
 
+/// The action that produces a file. One per section is primary (ink); companions
+/// such as "Copy to clipboard" use the outlined secondary style.
 struct ExportPrimaryButton: View {
     let title: String
+    var systemImage = "arrow.up.doc"
     let isRunning: Bool
     let isEnabled: Bool
+    var isSecondary = false
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: Theme.Spacing.sm) {
-                if isRunning {
-                    ProgressView()
-                        .tint(Theme.Colors.onAccent)
-                } else {
-                    Image(systemName: "arrow.up.doc.fill")
-                }
-
-                Text(isRunning ? "Exporting…" : title)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .font(Theme.Typography.headline)
-            .padding(.vertical, Theme.Spacing.sm)
-            .frame(maxWidth: .infinity, minHeight: Theme.Layout.primaryControlHeight)
+        if isSecondary {
+            Button(action: action) { label }
+                .buttonStyle(BrandSecondaryButtonStyle())
+                .disabled(!isEnabled || isRunning)
+                .opacity(isEnabled ? 1 : 0.5)
+                .accessibilityLabel(isRunning ? "Exporting" : title)
+        } else {
+            Button(action: action) { label }
+                .buttonStyle(BrandPrimaryButtonStyle())
+                .disabled(!isEnabled || isRunning)
+                .accessibilityLabel(isRunning ? "Exporting" : title)
         }
-        .buttonStyle(BrandPrimaryButtonStyle())
-        .disabled(!isEnabled || isRunning)
-        .accessibilityLabel(isRunning ? "Exporting" : title)
+    }
+
+    private var label: some View {
+        HStack(spacing: Theme.Spacing.sm) {
+            if isRunning {
+                ProgressView()
+                    .tint(isSecondary ? Theme.Colors.textPrimary : Theme.Colors.onAccent)
+            } else {
+                Image(systemName: systemImage)
+                    .accessibilityHidden(true)
+            }
+
+            Text(isRunning ? "Exporting…" : title)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .font(Theme.Typography.headline)
+        .padding(.vertical, Theme.Spacing.sm)
+        .frame(
+            maxWidth: .infinity,
+            minHeight: isSecondary ? Theme.Layout.minimumTapTarget + 6 : Theme.Layout.primaryControlHeight
+        )
     }
 }
 
@@ -191,14 +208,19 @@ struct ExportModeOption<Value: Hashable>: Identifiable {
 }
 
 struct ExportModeChipPicker<Value: Hashable>: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let options: [ExportModeOption<Value>]
     @Binding var selection: Value
     var tint: Color = Theme.Colors.accent
 
     var body: some View {
-        VStack(spacing: 0) {
-            ForEach(Array(options.enumerated()), id: \.element.id) { index, option in
-                row(for: option, showsRule: index > 0)
+        if dynamicTypeSize.isAccessibilitySize {
+            AppSegmentedPicker(title: "Include", selection: $selection, options: options.map { (label: $0.title, value: $0.value) })
+        } else {
+            VStack(spacing: 0) {
+                ForEach(Array(options.enumerated()), id: \.element.id) { index, option in
+                    row(for: option, showsRule: index > 0)
+                }
             }
         }
     }
@@ -234,7 +256,7 @@ struct ExportModeChipPicker<Value: Hashable>: View {
             .ledgerRow(showsRule: showsRule, verticalPadding: Theme.Spacing.sm)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(AppInteractionButtonStyle())
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(option.title), \(option.subtitle)")
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
@@ -290,64 +312,35 @@ struct ExportLastFileFooter: View {
 
     var body: some View {
         if let fileName, let url {
-            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                let layout = dynamicTypeSize.isAccessibilitySize
-                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: Theme.Spacing.sm))
-                    : AnyLayout(HStackLayout(spacing: Theme.Spacing.sm))
-                layout {
-                    Image(systemName: "checkmark.seal.fill")
-                        .font(Theme.Typography.subheadlineStrong)
-                        .foregroundStyle(Theme.Colors.success)
-
+            let layout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: Theme.Spacing.xs))
+                : AnyLayout(HStackLayout(alignment: .center, spacing: Theme.Spacing.md))
+            layout {
+                HStack(alignment: .top, spacing: Theme.Spacing.sm) {
+                    TintMark(tint: Theme.Colors.success, height: 34)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Last export")
-                            .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.Colors.textTertiary)
-                        Text(fileName)
-                            .font(Theme.Typography.captionBold)
+                        Text(statusMessage ?? "Saved.")
+                            .font(Theme.Typography.subheadlineStrong)
                             .foregroundStyle(Theme.Colors.textPrimary)
-                            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text(fileName)
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Colors.textSecondary)
+                            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                             .truncationMode(.middle)
                     }
-
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                    Button {
-                        onShare(url)
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: "square.and.arrow.up")
-                            Text("Share")
-                        }
-                        .font(Theme.Typography.captionBold)
-                        .foregroundStyle(Theme.Colors.accent)
-                        .padding(.horizontal, Theme.Spacing.md)
-                        .padding(.vertical, Theme.Spacing.sm)
-                        .frame(minHeight: Theme.Layout.minimumTapTarget)
-                        .background(
-                            Capsule()
-                                .fill(Theme.Colors.accent.opacity(0.12))
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Share last export")
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
 
-                if let statusMessage {
-                    Text(statusMessage)
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textSecondary)
+                Button {
+                    onShare(url)
+                } label: {
+                    TextLinkLabel(title: "Share", showsChevron: false)
                 }
+                .buttonStyle(AppInteractionButtonStyle())
+                .accessibilityLabel("Share last export")
             }
-            .padding(Theme.Spacing.md)
-            .background(
-                RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
-                    .fill(Theme.Colors.success.opacity(0.06))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
-                    .strokeBorder(Theme.Colors.success.opacity(0.18), lineWidth: 1)
-            )
+            .ledgerRow(verticalPadding: Theme.Spacing.sm)
         }
     }
 }
@@ -355,34 +348,24 @@ struct ExportLastFileFooter: View {
 // MARK: - Backup Inventory Row
 
 struct ExportInventoryRow: View {
-    let icon: String
     let title: String
     let value: String
-    var tint: Color = Theme.Colors.accent
+    var showsRule = true
 
     var body: some View {
-        HStack(spacing: Theme.Spacing.md) {
-            Image(systemName: icon)
-                .font(Theme.Typography.subheadlineStrong)
-                .foregroundStyle(tint)
-                .frame(width: 28, height: 28)
-                .background(
-                    RoundedRectangle(cornerRadius: Theme.CornerRadius.small, style: .continuous)
-                        .fill(tint.opacity(0.12))
-                )
-
+        HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.md) {
             Text(title)
-                .font(Theme.Typography.callout)
+                .font(Theme.Typography.body)
                 .foregroundStyle(Theme.Colors.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
 
-            Spacer()
+            Spacer(minLength: Theme.Spacing.sm)
 
             Text(value)
-                .font(Theme.Typography.calloutStrong)
+                .font(Theme.Typography.numberSmall)
                 .foregroundStyle(Theme.Colors.textPrimary)
-                .monospacedDigit()
         }
-        .padding(.vertical, 6)
+        .ledgerRow(showsRule: showsRule, verticalPadding: Theme.Spacing.sm)
         .accessibilityElement(children: .combine)
     }
 }

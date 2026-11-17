@@ -149,11 +149,11 @@ struct HealthPermissionAuditView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Theme.Spacing.md)
         .background(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                 .fill(Theme.Colors.surfaceRaised)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                 .strokeBorder(Theme.Colors.border.opacity(0.45), lineWidth: 1)
         )
     }
@@ -227,11 +227,11 @@ struct HealthPermissionAuditView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(Theme.Spacing.md)
             .background(
-                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                     .fill(tint.opacity(0.08))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                     .strokeBorder(tint.opacity(0.18), lineWidth: 1)
             )
     }

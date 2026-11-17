@@ -48,10 +48,12 @@ private struct HistoryTabView: View {
 
 private struct HealthTabRoot: View {
     @ObservedObject var healthStore: HealthViewStore
+    let sessionManager: WorkoutSessionManager
 
     var body: some View {
         NavigationStack {
             HealthHubView()
+                .modifier(ActiveSessionDock(sessionManager: sessionManager))
         }
         .environmentObject(healthStore)
     }
@@ -86,7 +88,7 @@ private struct ActiveSessionInset: View {
                         .frame(minHeight: Theme.Layout.minimumTapTarget)
                     }
                     .padding(Theme.Spacing.lg)
-                    .background(Theme.Colors.surfaceRaised, in: RoundedRectangle(cornerRadius: Theme.CornerRadius.large))
+                    .background(Theme.Colors.surfaceRaised, in: RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous))
                 }
                 if sessionManager.activeSession != nil {
                     ActiveSessionBar()
@@ -95,8 +97,20 @@ private struct ActiveSessionInset: View {
                 }
             }
             .padding(.horizontal, Theme.Spacing.lg)
-            .padding(.bottom, Theme.Spacing.lg)
+            .padding(.vertical, Theme.Spacing.sm)
             .zIndex(9)
+        }
+    }
+}
+
+/// The session dock belongs to each tab root, above the tab bar.
+/// Pushed screens own their own actions; keeping the dock at the root avoids overlapping safe-area action bars.
+private struct ActiveSessionDock: ViewModifier {
+    let sessionManager: WorkoutSessionManager
+
+    func body(content: Content) -> some View {
+        content.safeAreaInset(edge: .bottom, spacing: 0) {
+            ActiveSessionInset(sessionManager: sessionManager, isVisible: true)
         }
     }
 }
@@ -208,13 +222,14 @@ struct MainTabView: View {
 
                 NavigationStack {
                     BodyView(isTabRoot: true)
+                        .modifier(ActiveSessionDock(sessionManager: sessionManager))
                 }
                 .tabItem {
                     Label("Body", systemImage: "scalemass.fill")
                 }
                 .tag(AppTab.body)
 
-                HealthTabRoot(healthStore: healthStore)
+                HealthTabRoot(healthStore: healthStore, sessionManager: sessionManager)
                 .tabItem {
                     Label("Health", systemImage: "heart.fill")
                 }
@@ -222,6 +237,7 @@ struct MainTabView: View {
 
                 NavigationStack {
                     HistoryTabView(dataManager: dataManager)
+                        .modifier(ActiveSessionDock(sessionManager: sessionManager))
                 }
                 .tabItem {
                     Label("History", systemImage: "clock.arrow.circlepath")
@@ -234,6 +250,7 @@ struct MainTabView: View {
                         iCloudManager: iCloudManager,
                         selectedTab: $selectedTab
                     )
+                    .modifier(ActiveSessionDock(sessionManager: sessionManager))
                 }
                 .tabItem {
                     Label("More", systemImage: "person.crop.circle.fill")
@@ -358,12 +375,6 @@ struct MainTabView: View {
             if !isPresented {
                 presentChangelogIfReady()
             }
-        }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            ActiveSessionInset(
-                sessionManager: sessionManager,
-                isVisible: selectedTab != .today
-            )
         }
     }
 

@@ -218,12 +218,10 @@ struct HistoryLocationBreakdownSheet: View {
                             }
                             .accessibilityElement(children: .combine)
                             .padding(.vertical, Theme.Spacing.xs)
-                            .listRowBackground(Theme.Colors.elevated)
-                            .listRowSeparatorTint(Theme.Colors.border)
+                            .loadedListRow()
                         }
                     }
-                    .listStyle(.plain)
-                    .scrollContentBackground(.hidden)
+                    .loadedListStyle()
                 }
             }
             .navigationTitle("Locations")

@@ -293,8 +293,8 @@ struct HomeView: View {
                     .foregroundStyle(Theme.Colors.textPrimary)
                 Text(
                     count == 1
-                        ? "exercise has no muscle roles yet, so it can't color your plates or count toward muscle recency."
-                        : "exercises have no muscle roles yet, so they can't color your plates or count toward muscle recency."
+                        ? "exercise has no muscle roles yet, so it doesn't yet count toward muscle recency."
+                        : "exercises have no muscle roles yet, so they don't yet count toward muscle recency."
                 )
                     .font(Theme.Typography.subheadline)
                     .foregroundStyle(Theme.Colors.textSecondary)

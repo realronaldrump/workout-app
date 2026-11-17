@@ -1268,11 +1268,11 @@ private struct SessionDeltaBadge: View {
         .padding(.horizontal, Theme.Spacing.md)
         .padding(.vertical, Theme.Spacing.sm)
         .background(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                 .fill(tint.opacity(0.10))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                 .strokeBorder(tint.opacity(0.22), lineWidth: 1)
         )
     }
@@ -1315,11 +1315,11 @@ private struct SessionWindowSummaryCard: View {
         .padding(Theme.Spacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                 .fill(Theme.Colors.surface.opacity(0.88))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                 .strokeBorder(tint.opacity(0.22), lineWidth: 1)
         )
     }
@@ -1481,7 +1481,7 @@ private struct SessionMixRow: View {
         .padding(.horizontal, Theme.Spacing.md)
         .padding(.vertical, Theme.Spacing.sm)
         .background(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                 .fill(Theme.Colors.surfaceRaised)
         )
     }
@@ -1557,11 +1557,11 @@ private struct SessionWorkoutCard: View {
         .padding(.horizontal, Theme.Spacing.md)
         .padding(.vertical, Theme.Spacing.sm)
         .background(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                 .fill(Theme.Colors.surfaceRaised)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                 .strokeBorder(tint.opacity(0.18), lineWidth: 1)
         )
     }
@@ -1599,7 +1599,7 @@ private struct EmptyStateTile: View {
             .padding(Theme.Spacing.md)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                     .fill(Theme.Colors.surfaceRaised)
             )
     }

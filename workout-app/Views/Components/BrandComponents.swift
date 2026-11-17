@@ -301,11 +301,12 @@ extension SectionHeading where Accessory == EmptyView {
 
 /// Press feedback for large tappable surfaces: a quick dim and a small settle.
 struct PressableCardButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .opacity(configuration.isPressed ? 0.72 : 1)
+            .opacity(isEnabled ? (configuration.isPressed ? 0.72 : 1) : 0.45)
             .scaleEffect(configuration.isPressed && !reduceMotion ? 0.985 : 1)
             .animation(reduceMotion ? nil : Theme.Animation.quick, value: configuration.isPressed)
     }

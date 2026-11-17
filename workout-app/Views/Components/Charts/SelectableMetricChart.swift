@@ -2,6 +2,7 @@ import Charts
 import SwiftUI
 
 struct SelectableMetricChart: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     enum Style {
         case bars
         case line
@@ -81,12 +82,19 @@ struct SelectableMetricChart: View {
         .chartScrollableAxes(isScrollable ? .horizontal : [])
         .chartXVisibleDomain(length: visibleDomainLength)
         .chartYScale(domain: yDomain)
+        .chartXScale(range: .plotDimension(padding: 16))
         .chartXAxis {
-            AxisMarks(values: .automatic(desiredCount: 5)) { _ in
+            AxisMarks(values: .automatic(desiredCount: dynamicTypeSize.isAccessibilitySize ? 2 : 4)) { value in
                 AxisGridLine()
                     .foregroundStyle(Theme.Colors.border)
-                AxisValueLabel(format: .dateTime.month(.abbreviated).day())
-                    .foregroundStyle(Theme.Colors.textTertiary)
+                AxisValueLabel {
+                    if let date = value.as(Date.self) {
+                        Text(date.formatted(.dateTime.month(.abbreviated).day()))
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Colors.textTertiary)
+                            .fixedSize(horizontal: true, vertical: false)
+                    }
+                }
             }
         }
         .chartYAxis {

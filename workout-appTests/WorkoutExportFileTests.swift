@@ -12,8 +12,8 @@ final class WorkoutExportFileTests: XCTestCase {
         try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
         let exports = ["workout_export_20260901.html", "exercise_history_2_20260901.json",
                        "muscle_group_export_1_20260901.html", "workout_dates_1_20260901.json", "strong_workouts_1.csv",
-                       "workout_export_20260901.pdf"]
-        let unrelated = ["notes.json", "index.html", "strong_workouts_fake.json", "notes.pdf"]
+                       "workout_export_20260901.pdf", "workout_export_20260901.txt"]
+        let unrelated = ["notes.json", "index.html", "strong_workouts_fake.json", "notes.pdf", "notes.txt"]
         for name in exports + unrelated {
             try Data(name.utf8).write(to: source.appendingPathComponent(name))
         }

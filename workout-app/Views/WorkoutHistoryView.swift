@@ -1125,6 +1125,7 @@ struct WorkoutHistoryRow: View {
     @ObservedObject private var relationshipManager = ExerciseRelationshipManager.shared
     @AppStorage("weightIncrement") private var weightIncrement = 2.5
     @State private var showingDeleteAlert = false
+    @State private var plateCategory: PlateCategory?
     @State private var fallbackMetrics: HistoryRowMetrics?
     @State private var pendingRepeatWorkout: Workout?
 
@@ -1166,6 +1167,10 @@ struct WorkoutHistoryRow: View {
                 ? AnyLayout(VStackLayout(alignment: .leading, spacing: Theme.Spacing.sm))
                 : AnyLayout(HStackLayout(alignment: .center, spacing: Theme.Spacing.md))
             layout {
+                if !dynamicTypeSize.isAccessibilitySize {
+                    PlateMark(category: plateCategory ?? .fullBody, height: 30)
+                        .opacity(plateCategory == nil ? 0 : 1)
+                }
                 WorkoutDateBadge(date: workout.date)
 
                 VStack(alignment: .leading, spacing: 3) {
@@ -1253,6 +1258,13 @@ struct WorkoutHistoryRow: View {
             }
         } message: { _ in
             Text("This will discard your current in-progress session and repeat this workout.")
+        }
+        .task(id: workout.id) {
+            let names = Set(workout.exercises.map(\.name))
+            let assignments = Dictionary(uniqueKeysWithValues: names.map {
+                ($0, ExerciseMetadataManager.shared.resolvedAssignments(for: $0))
+            })
+            plateCategory = PlateCategory.classify(workout, assignments: assignments)
         }
         .task(id: fallbackMetricsInput) {
             guard precomputedMetrics == nil else { return }

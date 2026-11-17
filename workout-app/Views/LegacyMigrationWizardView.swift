@@ -181,11 +181,11 @@ private struct MigrationPanel<Content: View>: View {
         }
         .padding(Theme.Spacing.xl)
         .background(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
                 .fill(Theme.Colors.surface)
         )
         .overlay {
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
                 .strokeBorder(Theme.Colors.border.opacity(0.6), lineWidth: 1)
         }
     }

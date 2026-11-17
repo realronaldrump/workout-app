@@ -1,6 +1,6 @@
 # Workout exports
 
-Workout history supports CSV, JSON, HTML, and PDF. All formats use the same date range, workout/exercise selection, field selection, record order, and saved-break selection. All fields are selected by default. Exercise lists and Apple Health exports remain CSV; a master backup remains the restore format.
+Workout history supports CSV, JSON, HTML, PDF, and an AI training log. All formats use the same date range, workout/exercise selection, and record order. CSV, JSON, HTML, and PDF honor field and saved-break selections; all fields are selected by default. The AI log always includes all analytical fields and overlapping saved breaks for the selected workouts. Exercise lists and Apple Health exports remain CSV; a master backup remains the restore format.
 
 ## CSV
 
@@ -55,7 +55,7 @@ The self-contained HTML report groups sets under workout and exercise headings, 
 
 The report hides all-zero distance/time columns within strength-exercise tables to keep them compact. The same complete selected JSON document is embedded in `<script type="application/json" id="workout-data">` for tools reading the report. This is inert data. HTML values and the embedded JSON are escaped separately so logged text cannot become markup or executable script.
 
-Generated CSV, JSON, HTML, and PDF files participate in the export inventory, iCloud migration, and file deletion. HTML, JSON, and PDF recognition is limited to workout-export filename prefixes so unrelated documents are excluded. They are not Strong imports and are not master backups.
+Generated CSV, JSON, HTML, PDF, and AI text files participate in the export inventory, iCloud migration, and file deletion. HTML, JSON, PDF, and text recognition is limited to workout-export filename prefixes so unrelated documents are excluded. They are not Strong imports and are not master backups.
 
 ## PDF
 
@@ -74,3 +74,36 @@ The visual sections adapt to available data:
 - Excluded fields do not reappear in charts. Missing or unrecognized values are not converted into assumed observations. Saved breaks, when selected, get their own paginated section.
 
 The core overview occupies one to three pages. Selected saved breaks and the optional journal add pages as needed. Empty datasets continue to return the export's existing no-data error. CSV and JSON remain the formats for complete structured analysis; the PDF presents labeled figures and readable, searchable tables.
+
+
+## AI training log (`.txt`, version 1)
+
+Choose **AI training log** in Export. The format choice is remembered. Export is accessible from More and Settings; the completed-workout sheet can also share a single AI log. **Copy** puts the complete file text on the clipboard. **Preview training log** shows up to 60 lines of the actual selection and explicitly labels a truncated preview. Preview limits never affect copy or file contents.
+
+The UI always includes every analytical field and overlapping saved breaks for the selected scope. Restricting CSV/PDF fields does not silently restrict the AI log. Workout dates, exercises, or muscle groups may still be deliberately filtered. Apple Health and restorable app backups remain separate exports.
+
+### Encoding contract
+
+- `TRAINING_LOG 1` identifies the grammar. Range, selection scope, export time zone, available units, and break inclusion are declared once. Partial exercise/muscle/date selections are explicitly identified so omitted data cannot be mistaken for inactivity; workout durations still describe whole sessions.
+- `C[...]` declares a workout-context lookup table. Its rows use local `c1`, `c2`, … references and deduplicate workout names and gyms. The entire table is omitted if its fields can all be declared as defaults.
+- `E[...]` declares an exercise lookup table. Its `e1`, `e2`, … rows deduplicate exact exercise names, parent/side relationships, legacy muscle-role text, structured muscle assignments, and custom cardio count labels. Assignments use `[name,role]` pairs, with roles such as `primary` and `secondary`. They describe the current exercise assignments, as in the JSON export.
+- When configured, `reps_label` preserves the meaning of count-based cardio stored in the reps field (for example, floors, steps, or calories). Missing custom labels use `reps`. This metadata is omitted when reps are excluded.
+- `W[...]` declares workout heading columns. Each `W` row starts a distinct workout, even when dates and all other heading values match. Date/time, numeric duration in seconds, and original logged duration appear at most once per workout. A bare numeric logged duration means minutes, following the app's import convention.
+- `S[...]` declares the set tuple columns. Under each workout, an `e` reference followed by set tuples represents one exercise occurrence. Repeated occurrences of the same exercise remain separate lines.
+- Table cells are separated by literal tabs. Text cells are JSON strings, preserving quotes, newlines, tabs, punctuation, Unicode, and significant whitespace. They must be decoded as JSON, not trimmed or sanitized. Numeric cells use a decimal point and preserve the source precision.
+- Semicolons separate set tuples. Commas separate tuple values. `3*(185,5)` means three consecutive identical tuples, according to the declared set columns. A single `()` means one set whose fields are all supplied by defaults. `3*()` means three such sets.
+- `defaults {...}` declares fields whose values are identical across the exported records. This can include zero, null, empty strings, or nonzero values. The declaration applies to every expanded record, including every repeat. Omitting a constant column does not omit its data.
+- Set numbers may be implicit **only** when every exercise occurrence has exactly `1..N` numbering. The file explicitly declares this rule; numbering restarts for each occurrence after expanding repeats. Nonsequential and duplicate set numbers remain explicit.
+- `null` means missing, unrecognized, or non-finite; it never means zero or “same as above.” Structured muscle assignments distinguish unavailable (`null`) from none assigned (`[]`). A zero load is not relabeled as bodyweight or as a failed rep.
+- Workout timestamps retain the shared export's ISO 8601 millisecond precision and UTC offsets, including daylight-saving transitions. A `set_timestamp` column is included when recorded set times differ from the workout start and dates are selected. These are recorded timestamps, not inferred rest intervals.
+- `B[start_date,end_date,name,days]` declares planned breaks. Dates are inclusive and clipped to the selected range; breaks are context, not workouts or sets.
+
+For native sessions, the AI export also uses the saved workout end time and exact elapsed duration, and preserves unlogged distance/time as null rather than the zero placeholders used by the history projection. Imported sessions retain their original logged values.
+
+Database UUIDs, generated-at timestamps, per-set field descriptions, derived totals, and repeated keys are excluded. No sets are sampled, rounded, or summarized away. References are local to the export and are not restore identifiers. The renderer itself honors a supplied document's selected fields; the app's AI export UI supplies the complete field set.
+
+### Size and verification
+
+The UI measures actual UTF-8 bytes against the same data in the existing JSON export. Token counts are approximate (character count divided by three), visibly labeled, and model-dependent; a byte reduction is not presented as an exact tokenizer result.
+
+`WorkoutCompactLogRendererTests` independently reads the grammar and compares expanded records with the source, including every individually selected field, unusual numbering, repeated exercise occurrences, nulls, non-finite values, decimals, escaping, daylight-saving offsets, and distinct set times. A 450-set synthetic mixed fixture produces about 13.6 KB versus 257.6 KB of minified JSON; the regression requires less than one third of minified JSON size rather than hardcoding these fixture-specific byte counts.

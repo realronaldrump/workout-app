@@ -27,7 +27,7 @@ struct GymSelectionSheet: View {
                 AdaptiveBackground()
 
                 ScrollView {
-                    VStack(spacing: Theme.Spacing.lg) {
+                    VStack(spacing: Theme.Spacing.sm) {
                         if showAllGyms {
                             optionRow(
                                 title: "All gyms",
@@ -62,10 +62,8 @@ struct GymSelectionSheet: View {
 
                         if !gyms.isEmpty {
                             VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                                Text("Gyms")
-                                    .font(Theme.Typography.captionBold)
-                                    .foregroundColor(Theme.Colors.textSecondary)
-                                    .padding(.horizontal, Theme.Spacing.sm)
+                                SectionHeading(title: "Gyms")
+                                    .padding(.top, Theme.Spacing.lg)
 
                                 ForEach(gyms) { gym in
                                     optionRow(
@@ -113,7 +111,7 @@ struct GymSelectionSheet: View {
                             .buttonStyle(.plain)
                         }
                     }
-                    .padding(Theme.Spacing.xl)
+                    .padding(Theme.Layout.screenGutter)
                     .contentColumn(maxWidth: 640)
                 }
             }
@@ -146,14 +144,11 @@ struct GymSelectionSheet: View {
             dismiss()
         } label: {
             HStack(spacing: Theme.Spacing.md) {
-                ZStack {
-                    Circle()
-                        .fill(tint.opacity(0.16))
-                        .frame(width: 36, height: 36)
-                    Image(systemName: icon)
-                        .font(Theme.Typography.bodyBold)
-                        .foregroundColor(tint)
-                }
+                Image(systemName: icon)
+                    .font(Theme.Iconography.title3)
+                    .foregroundStyle(tint)
+                    .frame(width: 30)
+                    .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(title)
@@ -174,9 +169,10 @@ struct GymSelectionSheet: View {
                         .foregroundColor(Theme.Colors.accent)
                 }
             }
-            .padding(Theme.Spacing.lg)
-            .softCard(elevation: 1)
+            .ledgerRow()
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableCardButtonStyle())
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(selected == selection ? .isSelected : [])
     }
 }

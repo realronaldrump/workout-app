@@ -86,7 +86,7 @@ struct WorkoutVariantDetailCard: View {
                     .foregroundStyle(Theme.Colors.accent)
                     .frame(width: 34, height: 34)
                     .background(Theme.Colors.accentTint)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(difference.kind.title)
@@ -139,7 +139,7 @@ struct WorkoutVariantDifferenceRow: View {
                 .foregroundStyle(Theme.Colors.accent)
                 .frame(width: 26, height: 26)
                 .background(Theme.Colors.accentTint)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(leadText(for: difference))
@@ -169,7 +169,7 @@ struct WorkoutVariantMetricRow: View {
                 .foregroundStyle(deltaTint)
                 .frame(width: 28, height: 28)
                 .background(deltaTint.opacity(0.10))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(friendlyMetricName(for: comparison))
@@ -197,10 +197,10 @@ struct WorkoutVariantMetricRow: View {
         .padding(Theme.Spacing.md)
         .background(Theme.Colors.surfaceRaised)
         .overlay(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
                 .strokeBorder(Theme.Colors.border.opacity(0.6), lineWidth: 1)
         )
-        .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large))
+        .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous))
     }
 
     private var deltaTint: Color {

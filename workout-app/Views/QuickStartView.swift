@@ -66,6 +66,7 @@ struct QuickStartView: View {
                             resumeCurrentSession()
                         }
                     }
+                    .accessibilityIdentifier("quick-start-confirm")
 
                     if sessionManager.activeSession != nil {
                         Button {

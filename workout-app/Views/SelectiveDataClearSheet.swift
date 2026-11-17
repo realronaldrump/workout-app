@@ -100,11 +100,11 @@ struct SelectiveDataClearSheet: View {
         }
         .padding()
         .background(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                 .fill(Theme.Colors.error.opacity(0.06))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                 .strokeBorder(Theme.Colors.error.opacity(0.15), lineWidth: 1)
         )
     }
@@ -433,7 +433,7 @@ private struct DataClearCategoryRow: View {
             .padding()
             .softCard(elevation: isSelected || isImplied ? 2 : 1)
             .overlay(
-                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                     .strokeBorder((isSelected || isImplied) ? Theme.Colors.error.opacity(0.25) : .clear, lineWidth: 1)
             )
         }
@@ -467,11 +467,11 @@ private struct DataClearPillButtonStyle: ButtonStyle {
             .padding(.vertical, Theme.Spacing.sm)
             .frame(minHeight: Theme.Layout.minimumTapTarget)
             .background(
-                RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.small, style: .continuous)
                     .fill(isActive ? Theme.Colors.destructiveFill : Theme.Colors.surface)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.small, style: .continuous)
                     .strokeBorder(Theme.Colors.border.opacity(isActive ? 0 : 0.7), lineWidth: 1)
             )
             .opacity(configuration.isPressed ? 0.75 : 1)

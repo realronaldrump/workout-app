@@ -414,7 +414,7 @@ struct ConsistencyDetailView: View {
                             .padding(.horizontal, Theme.Spacing.md)
                             .padding(.vertical, Theme.Spacing.sm)
                             .background(
-                                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                                     .fill(Theme.Colors.surfaceRaised)
                             )
                         }
@@ -474,7 +474,7 @@ struct ConsistencyDetailView: View {
                                 .padding(.horizontal, Theme.Spacing.md)
                                 .padding(.vertical, 9)
                                 .background(
-                                    RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                                    RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                                         .fill(Theme.Colors.surfaceRaised)
                                 )
                             }
@@ -559,7 +559,7 @@ struct ConsistencyDetailView: View {
                                 .padding(.horizontal, Theme.Spacing.md)
                                 .padding(.vertical, Theme.Spacing.sm)
                                 .background(
-                                    RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                                    RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                                         .fill(Theme.Colors.surfaceRaised)
                                 )
                             }
@@ -584,7 +584,7 @@ struct ConsistencyDetailView: View {
             .padding(Theme.Spacing.md)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                     .fill(Theme.Colors.surfaceRaised)
             )
     }
@@ -987,11 +987,11 @@ private struct ConsistencyWeekPillar: View {
         Button(action: onTap) {
             VStack(spacing: Theme.Spacing.xs) {
                 ZStack(alignment: .bottom) {
-                    RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                    RoundedRectangle(cornerRadius: Theme.CornerRadius.small, style: .continuous)
                         .fill(Theme.Colors.surface.opacity(0.7))
                         .frame(width: 24, height: barHeight)
 
-                RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.small, style: .continuous)
                     .fill(fillStyle)
                     .frame(width: 24, height: fillHeight)
 
@@ -1015,11 +1015,11 @@ private struct ConsistencyWeekPillar: View {
             .frame(width: 44)
             .padding(.vertical, 8)
             .background(
-                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                     .fill(isSelected ? Theme.Colors.accent.opacity(0.1) : Color.clear)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                     .strokeBorder(isSelected ? Theme.Colors.accent.opacity(0.35) : Color.clear, lineWidth: 1)
             )
             .scaleEffect(isSelected ? 1.02 : 1.0)
@@ -1108,11 +1108,11 @@ private struct WeekdayPatternRow: View {
             .padding(.horizontal, Theme.Spacing.sm)
             .padding(.vertical, Theme.Spacing.xs)
             .background(
-                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                     .fill(isSelected ? Theme.Colors.accent.opacity(0.09) : Color.clear)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                     .strokeBorder(isSelected ? Theme.Colors.accent.opacity(0.28) : Color.clear, lineWidth: 1)
             )
         }
@@ -1121,6 +1121,7 @@ private struct WeekdayPatternRow: View {
 }
 
 private struct StreakRunChip: View {
+    @ScaledMetric(relativeTo: .caption) private var chipWidth: CGFloat = 112
     let run: StreakRun
     let isSelected: Bool
     let onTap: () -> Void
@@ -1130,24 +1131,24 @@ private struct StreakRunChip: View {
             VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                 Text("\(run.workoutDayCount)d")
                     .font(Theme.Typography.monoMedium)
-                    .foregroundColor(isSelected ? .white : Theme.Colors.textPrimary)
+                    .foregroundColor(isSelected ? Theme.Colors.onAccent : Theme.Colors.textPrimary)
 
                 Text(run.start.formatted(Date.FormatStyle().month(.abbreviated).day()))
                     .font(Theme.Typography.caption)
-                    .foregroundColor(isSelected ? .white.opacity(0.85) : Theme.Colors.textSecondary)
+                    .foregroundColor(isSelected ? Theme.Colors.onAccent : Theme.Colors.textSecondary)
 
                 Text(run.end.formatted(Date.FormatStyle().month(.abbreviated).day().year()))
                     .font(Theme.Typography.caption)
-                    .foregroundColor(isSelected ? .white.opacity(0.85) : Theme.Colors.textSecondary)
+                    .foregroundColor(isSelected ? Theme.Colors.onAccent : Theme.Colors.textSecondary)
             }
-            .frame(width: 112, alignment: .leading)
+            .frame(width: chipWidth, alignment: .leading)
             .padding(Theme.Spacing.md)
             .background(
-                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                     .fill(isSelected ? AnyShapeStyle(Theme.accentGradient) : AnyShapeStyle(Theme.Colors.surfaceRaised))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                     .strokeBorder(isSelected ? Theme.Colors.accent.opacity(0.35) : Theme.Colors.border.opacity(0.5), lineWidth: 1)
             )
         }

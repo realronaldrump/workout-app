@@ -142,6 +142,8 @@ extension WorkoutExportDocument {
                 try handle.write(contentsOf: Data(WorkoutReportRenderer.render(self).utf8))
             case .pdf:
                 try WorkoutPDFRenderer.write(self, to: handle, includeJournal: includePDFJournal)
+            case .llm:
+                try handle.write(contentsOf: Data(WorkoutCompactLogRenderer.render(self).utf8))
             }
         }
     }

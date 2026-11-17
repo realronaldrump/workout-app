@@ -204,7 +204,7 @@ struct GuideDetailView: View {
                         .frame(maxWidth: 200)
                         .padding(.vertical, Theme.Spacing.md)
                         .background(Theme.accentGradient)
-                        .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.medium))
+                        .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous))
                 }
                 .buttonStyle(.plain)
             }

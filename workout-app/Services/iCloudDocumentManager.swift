@@ -286,11 +286,11 @@ final class iCloudDocumentManager: ObservableObject {
         }
     }
 
-    /// Recognize generated report/JSON names without treating unrelated documents as app exports.
+    /// Recognize generated report, JSON, and LLM log names without treating unrelated documents as app exports.
     nonisolated static func isExportOrBackupFile(_ url: URL) -> Bool {
         let ext = url.pathExtension.lowercased()
         if ext == "csv" || ext == AppBackupService.backupFileExtension { return true }
-        guard ext == "html" || ext == "json" || ext == "pdf" else { return false }
+        guard ext == "html" || ext == "json" || ext == "pdf" || ext == "txt" else { return false }
         let name = url.lastPathComponent.lowercased()
         return ["workout_export_", "exercise_history_", "muscle_group_export_", "workout_dates_"]
             .contains { name.hasPrefix($0) }

@@ -203,7 +203,7 @@ struct BackupFileSectionHeader: View {
                 .padding(.horizontal, 10)
                 .padding(.vertical, 4)
                 .background(Theme.Colors.elevated)
-                .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
+                .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small, style: .continuous))
         }
         .padding(.horizontal, Theme.Spacing.xs)
         .padding(.top, Theme.Spacing.sm)

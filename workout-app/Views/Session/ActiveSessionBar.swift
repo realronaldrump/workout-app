@@ -22,18 +22,18 @@ struct ActiveSessionBar: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     if dynamicTypeSize.isAccessibilitySize {
-                        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                        HStack(spacing: Theme.Spacing.sm) {
                             Text("Resume workout")
                                 .font(Theme.Typography.subheadlineBold)
-                                .foregroundStyle(Theme.Colors.onAccent.opacity(0.7))
-                            Text(session.name)
-                                .font(Theme.Typography.bodyBold)
                                 .foregroundStyle(Theme.Colors.onAccent)
                                 .fixedSize(horizontal: false, vertical: true)
-                            Text(SharedFormatters.count(setCount, "set") + " logged")
-                                .font(Theme.Typography.caption)
-                                .foregroundStyle(Theme.Colors.onAccent.opacity(0.7))
+                            Spacer(minLength: 0)
+                            Image(systemName: "chevron.up")
+                                .font(Theme.Iconography.mediumStrong)
+                                .foregroundStyle(Theme.Colors.onAccent)
+                                .accessibilityHidden(true)
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     } else {
                         ViewThatFits(in: .horizontal) {
                             expandedLabel(
@@ -58,7 +58,7 @@ struct ActiveSessionBar: View {
                         .fill(Theme.Colors.ink)
                 )
             }
-            .buttonStyle(.plain)
+            .buttonStyle(AppInteractionButtonStyle())
             .disabled(sessionManager.isFinishing)
             .contextMenu {
                 Button("Discard workout", systemImage: "trash", role: .destructive) {
@@ -69,6 +69,7 @@ struct ActiveSessionBar: View {
             .accessibilityLabel("Active session, \(session.name)")
             .accessibilityValue("\(setCount) sets logged\(saveWarning)")
             .accessibilityHint("Resumes the workout. Touch and hold to discard it.")
+            .accessibilityIdentifier("active-session-resume")
             .alert("Discard session?", isPresented: $showingDiscardAlert) {
                 Button("Cancel", role: .cancel) {}
                 Button("Discard", role: .destructive) {

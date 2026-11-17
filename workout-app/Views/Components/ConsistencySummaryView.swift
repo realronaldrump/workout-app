@@ -37,13 +37,15 @@ struct ConsistencySummaryView: View {
                         .cornerRadius(1)
                 }
                 .frame(height: 160)
+                .chartXScale(range: .plotDimension(padding: 16))
                 .chartXAxis {
-                    AxisMarks(values: .automatic(desiredCount: 3)) { value in
+                    AxisMarks(values: .automatic(desiredCount: dynamicTypeSize.isAccessibilitySize ? 2 : 3)) { value in
                         AxisValueLabel {
                             if let date = value.as(Date.self) {
                                 Text(date.formatted(weeks.count <= 13 ? .dateTime.month(.abbreviated).day() : .dateTime.month(.abbreviated).year(.twoDigits)))
                                     .font(Theme.Typography.caption2)
                                     .foregroundStyle(Theme.Colors.textSecondary)
+                                    .fixedSize(horizontal: true, vertical: false)
                             }
                         }
                     }

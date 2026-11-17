@@ -214,7 +214,7 @@ struct HealthDashboardView: View {
                             .padding(.vertical, Theme.Spacing.sm)
                             .frame(minHeight: 44)
                             .background(
-                                RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
+                                RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
                                     .fill(selectedCategory == category ? Theme.Colors.elevated : Theme.Colors.surface)
                             )
                         }
@@ -449,7 +449,7 @@ struct HealthDashboardView: View {
                     .padding(.vertical, Theme.Spacing.md)
                     .frame(minHeight: 44)
                     .background(
-                        RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
+                        RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
                             .fill(Theme.Colors.accent.opacity(Theme.Opacity.subtleFill))
                     )
                 }
@@ -1101,7 +1101,7 @@ private struct MetricSummaryCard: View {
                     .foregroundStyle(model.tint)
                     .frame(width: 30, height: 30)
                     .background(
-                        RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                        RoundedRectangle(cornerRadius: Theme.CornerRadius.small, style: .continuous)
                             .fill(model.tint.opacity(Theme.Opacity.subtleFill))
                     )
                 Spacer()

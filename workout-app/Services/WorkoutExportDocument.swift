@@ -5,23 +5,37 @@ nonisolated enum WorkoutExportFormat: String, CaseIterable, Identifiable, Sendab
     case json
     case report
     case pdf
+    /// A compact text log sized for a language model's context window.
+    case llm
 
     var id: String { rawValue }
-    var fileExtension: String { self == .report ? "html" : rawValue }
+    var fileExtension: String {
+        switch self {
+        case .report: return "html"
+        case .llm: return "txt"
+        default: return rawValue
+        }
+    }
     var title: String {
         switch self {
         case .csv: return "CSV"
         case .json: return "JSON"
         case .report: return "HTML"
         case .pdf: return "PDF"
+        case .llm: return "AI log"
         }
+    }
+    /// What the export button and file lists call a file of this format.
+    var fileNoun: String {
+        self == .llm ? "AI training log" : title
     }
     var subtitle: String {
         switch self {
         case .csv: return "A spreadsheet table with complete rows and consistent columns."
-        case .json: return "Structured data with field definitions for AI tools and analysis."
+        case .json: return "Structured data with field definitions, for scripts and analysis tools."
         case .report: return "A formatted workout journal you can read in a browser or print."
         case .pdf: return "A visual training report with charts and an optional workout journal."
+        case .llm: return "A compact training log for an AI coach. All your selected workout data, with repeated details written once."
         }
     }
     var systemImage: String {
@@ -30,6 +44,7 @@ nonisolated enum WorkoutExportFormat: String, CaseIterable, Identifiable, Sendab
         case .json: return "curlybraces"
         case .report: return "doc.richtext"
         case .pdf: return "chart.bar.doc.horizontal"
+        case .llm: return "text.alignleft"
         }
     }
 
@@ -99,6 +114,9 @@ nonisolated struct WorkoutExportRecord: Sendable {
     let startedAt: Date
     let values: [WorkoutExportColumn: WorkoutExportValue]
     let muscles: [WorkoutExportMuscle]?
+    var loggedAt: Date? = nil
+    var endedAt: Date? = nil
+    var countLabel: String? = nil
 
     func value(_ column: WorkoutExportColumn) -> WorkoutExportValue { values[column] ?? .empty }
 }
@@ -129,6 +147,7 @@ nonisolated struct WorkoutExportDocument: Sendable {
     let endDay: String
     let timeZone: String
     let weightUnit: String?
+    let selectionScope: String
 
     init(
         workouts: [Workout], startDate: Date, endDateInclusive: Date,
@@ -137,7 +156,10 @@ nonisolated struct WorkoutExportDocument: Sendable {
         gymNamesByWorkoutID: [UUID: String] = [:],
         selectedColumns: [WorkoutExportColumn] = WorkoutExportColumn.defaultColumns,
         intentionalBreaks: [IntentionalBreakRange] = [], includeIntentionalBreaks: Bool = false,
-        weightUnit: String? = nil, resolver: ExerciseIdentityResolver = .empty, calendar: Calendar = .current
+        weightUnit: String? = nil, resolver: ExerciseIdentityResolver = .empty, calendar: Calendar = .current,
+        nativeWorkouts: [LoggedWorkout] = [],
+        exerciseCountLabelsByName: [String: String] = [:],
+        selectionScope: String = "provided workouts"
     ) throws {
         var seen = Set<WorkoutExportColumn>()
         columns = selectedColumns.filter { seen.insert($0).inserted }
@@ -161,15 +183,28 @@ nonisolated struct WorkoutExportDocument: Sendable {
         let unit = weightUnit?.trimmingCharacters(in: .whitespacesAndNewlines)
         self.weightUnit = unit.flatMap { $0.isEmpty ? nil : $0 }
         includesBreaks = includeIntentionalBreaks
+        self.selectionScope = selectionScope
 
+        let nativeByID = Dictionary(nativeWorkouts.map { ($0.id, $0) }, uniquingKeysWith: { first, second in
+            first.updatedAt >= second.updatedAt ? first : second
+        })
         records = filtered.flatMap { workout in
-            workout.exercises.flatMap { exercise -> [WorkoutExportRecord] in
+            let native = nativeByID[workout.id]
+            let nativeSets = Dictionary((native?.exercises.flatMap(\.sets) ?? []).map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+            let durationValue: WorkoutExportValue
+            if let native {
+                let seconds = native.endedAt.timeIntervalSince(native.startedAt)
+                durationValue = seconds.isFinite && seconds >= 0 ? .number(seconds) : .empty
+            } else {
+                durationValue = Self.durationSeconds(workout.duration).map(WorkoutExportValue.number) ?? .empty
+            }
+            return workout.exercises.flatMap { exercise -> [WorkoutExportRecord] in
                 let identity = resolver.displayIdentity(for: exercise.name)
                 let context: [WorkoutExportColumn: WorkoutExportValue] = [
                     .workoutStart: .text(timestampFormatter.string(from: workout.date)),
                     .workoutName: .text(workout.name),
                     .gymName: Self.optionalText(gymNamesByWorkoutID[workout.id]),
-                    .duration: Self.durationSeconds(workout.duration).map(WorkoutExportValue.number) ?? .empty,
+                    .duration: durationValue,
                     .durationText: .text(workout.duration),
                     .exercise: .text(exercise.name),
                     .parentExercise: identity.isVariant ? .text(identity.aggregateName) : .empty,
@@ -181,13 +216,17 @@ nonisolated struct WorkoutExportDocument: Sendable {
                     if $0.date != $1.date { return $0.date < $1.date }
                     return $0.id.uuidString < $1.id.uuidString
                 }.map { set in
+                    let nativeSet = nativeSets[set.id]
+                    let distance: WorkoutExportValue = nativeSet.map { $0.distance.map(WorkoutExportValue.number) ?? .empty } ?? .number(set.distance)
+                    let seconds: WorkoutExportValue = nativeSet.map { $0.seconds.map(WorkoutExportValue.number) ?? .empty } ?? .number(set.seconds)
                     let values = context.merging([
                         .setNumber: .integer(set.setOrder), .weight: .number(set.weight),
-                        .reps: .integer(set.reps), .distance: .number(set.distance), .seconds: .number(set.seconds)
+                        .reps: .integer(set.reps), .distance: distance, .seconds: seconds
                     ]) { _, new in new }
                     return WorkoutExportRecord(
                         workoutID: workout.id, exerciseID: exercise.id, setID: set.id, startedAt: workout.date,
-                        values: values, muscles: exerciseMusclesByName[exercise.name]
+                        values: values, muscles: exerciseMusclesByName[exercise.name], loggedAt: set.date,
+                        endedAt: native?.endedAt, countLabel: exerciseCountLabelsByName[exercise.name]
                     )
                 }
             }

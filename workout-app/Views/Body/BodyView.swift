@@ -292,7 +292,7 @@ struct BodyView: View {
             }
             if weight.residualSigma != nil {
                 legendKey("Usual range") {
-                    RoundedRectangle(cornerRadius: 2).fill(BodyFormat.weightTint.opacity(0.18)).frame(width: 14, height: 9)
+                    RoundedRectangle(cornerRadius: 2, style: .continuous).fill(BodyFormat.weightTint.opacity(0.18)).frame(width: 14, height: 9)
                 }
             }
             legendKey("Workouts") {

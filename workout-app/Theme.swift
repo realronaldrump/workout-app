@@ -223,6 +223,8 @@ enum Theme {
         // the title faces and tint are branded.
         let navBar = UINavigationBar.appearance()
         navBar.tintColor = UIColors.accent
+        // Large titles sit on the same 20pt gutter as the content beneath them.
+        navBar.layoutMargins = UIEdgeInsets(top: 0, left: Layout.screenGutter, bottom: 0, right: Layout.screenGutter)
         navBar.largeTitleTextAttributes = [
             .font: Typography.uiKitDisplay(size: 44, textStyle: .largeTitle, weight: .extraBold),
             .foregroundColor: UIColors.textPrimary
@@ -284,7 +286,7 @@ enum Theme {
         /// proportional figures, so live timers use `timer`.
         static let heroNumber = display(.extraBold, size: 64, relativeTo: .largeTitle)
         /// The single poster-scale number on Today.
-        static let posterNumber = display(.black, size: 132, relativeTo: .largeTitle)
+        static let posterNumber = display(.black, size: 108, relativeTo: .largeTitle)
         /// The Body screen's trend weight: big enough to read across a room, smaller than the week poster.
         static let bodyHero = display(.black, size: 92, relativeTo: .largeTitle)
         static let ringNumber = display(.extraBold, size: 34, relativeTo: .title2)
@@ -389,7 +391,7 @@ enum Theme {
         static let xl: CGFloat = 28
         static let xxl: CGFloat = 44
         /// Vertical gap between major sections of a screen.
-        static let section: CGFloat = 40
+        static let section: CGFloat = 32
     }
 
     // MARK: - Corner Radius
@@ -464,6 +466,7 @@ struct SoftCardBackground: ViewModifier {
 
     private var fill: Color {
         if elevation <= 0 { return Theme.Colors.panelInset }
+        if elevation >= 2 { return Theme.Colors.elevated }
         return Theme.Colors.panel
     }
 

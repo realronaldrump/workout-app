@@ -21,7 +21,7 @@ struct SkeletonModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .opacity(0.72)
-            .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
+            .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small, style: .continuous))
             .accessibilityHidden(true)
     }
 }

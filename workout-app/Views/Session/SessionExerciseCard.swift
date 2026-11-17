@@ -697,7 +697,7 @@ private struct SessionSetRow: View {
                     .strokeBorder(set.isCompleted ? Theme.Colors.success : Theme.Colors.ink, lineWidth: 2)
                 Image(systemName: "checkmark")
                     .font(.system(size: 15, weight: .heavy))
-                    .foregroundStyle(set.isCompleted ? Color.white : Theme.Colors.textPrimary)
+                    .foregroundStyle(set.isCompleted ? Theme.Colors.onAccent : Theme.Colors.textPrimary)
                     .opacity(set.isCompleted ? 1 : 0.35)
             }
             .frame(width: 36, height: 36)

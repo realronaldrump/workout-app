@@ -51,55 +51,26 @@ struct GymProfilesView: View {
             AdaptiveBackground()
 
             ScrollView {
-                VStack(spacing: Theme.Spacing.xl) {
-                    HStack {
-                        Text("Saved gyms")
-                            .font(Theme.Typography.title3)
-                            .foregroundStyle(Theme.Colors.textPrimary)
-                        Spacer()
-                        AppHelpButton(
-                            title: "Gym profiles",
-                            message: "Assign workouts to a gym to filter your history and compare workouts on the same equipment."
-                        )
-                    }
-
+                VStack(alignment: .leading, spacing: Theme.Spacing.section) {
+                    StatsPageHeader(
+                        eyebrow: "Training",
+                        title: "Gyms",
+                        subtitle: "Compare workouts on the same equipment.",
+                        help: "Assign workouts to a gym to filter your history and compare workouts on the same equipment."
+                    )
                     NavigationLink(destination: GymBulkAssignView()) {
-                        HStack {
-                            Image(systemName: "square.stack.3d.up.fill")
-                                .foregroundStyle(Theme.Colors.onAccent)
-                                .frame(width: 30, height: 30)
-                                .background(Theme.Colors.brandBand)
-                                .cornerRadius(6)
-
-                            VStack(alignment: .leading) {
-                                Text("Bulk assign gyms")
-                                    .font(Theme.Typography.body)
-                                    .foregroundStyle(Theme.Colors.textPrimary)
-                                Text("Tag past workouts")
-                                    .font(Theme.Typography.caption)
-                                    .foregroundStyle(Theme.Colors.textSecondary)
-                            }
-
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(Theme.Typography.caption)
-                                .foregroundStyle(Theme.Colors.textTertiary)
-                        }
-                        .padding()
-                        .softCard(elevation: 1)
+                        ExploreRow(title: "Assign past workouts", subtitle: "Tag several sessions at once")
                     }
-                    .buttonStyle(PlainButtonStyle())
-
-                    discoverySection
+                    .buttonStyle(PressableCardButtonStyle())
 
                     if gymProfilesManager.gyms.isEmpty {
                         EmptyStateCard(
                             icon: "mappin.and.ellipse",
                             tint: Theme.Colors.accentSecondary,
                             title: "No gyms yet",
-                            message: "Add a gym with + to tag where you train."
+                            message: "Keep a record of where you train."
                         )
-                        .padding(.top, Theme.Spacing.xl)
+                        AppPrimaryButton(title: "Add your first gym", systemImage: "plus") { showingAddSheet = true }
                     } else {
                         VStack(spacing: Theme.Spacing.md) {
                             ForEach(gymProfilesManager.sortedGyms) { gym in
@@ -107,13 +78,13 @@ struct GymProfilesView: View {
                             }
                         }
                     }
+                    discoverySection
                 }
-                .padding(Theme.Spacing.xl)
+                .padding(Theme.Layout.screenGutter)
                 .contentColumn()
             }
         }
-        .navigationTitle("Gym profiles")
-        .navigationBarTitleDisplayMode(.inline)
+        .collapsingTitle("Gyms")
         .onDisappear {
             discoveryTask?.cancel()
             discoveryTask = nil

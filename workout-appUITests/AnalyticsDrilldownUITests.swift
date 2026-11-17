@@ -102,10 +102,10 @@ final class AnalyticsDrilldownUITests: XCTestCase {
     func testParentExerciseKeepsLeftAndRightPerformanceTracksSeparate() {
         openExercise(named: "Single Arm Row")
 
-        let left = app.staticTexts["Left"]
+        let left = app.staticTexts["Left"].firstMatch
         scrollUntilVisible(left)
         XCTAssertTrue(left.exists)
-        XCTAssertTrue(app.staticTexts["Right"].exists)
+        XCTAssertTrue(app.staticTexts["Right"].firstMatch.exists)
 
         let record = app.buttons["personal-record-maxLoad"].firstMatch
         scrollUntilVisible(record)

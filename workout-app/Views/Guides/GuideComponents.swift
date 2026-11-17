@@ -128,11 +128,11 @@ struct GuideFeatureGrid: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(Theme.Spacing.md)
                 .background(
-                    RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                    RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                         .fill(item.color.opacity(0.04))
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                    RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                         .strokeBorder(item.color.opacity(0.1), lineWidth: 1)
                 )
                 .staggeredAppear(index: index, baseDelay: 0.05)
@@ -218,11 +218,11 @@ struct GuideTipCallout: View {
         }
         .padding(Theme.Spacing.lg)
         .background(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
                 .fill(Theme.Colors.accentTint)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
                 .strokeBorder(Theme.Colors.accent.opacity(0.15), lineWidth: 1)
         )
     }
@@ -261,11 +261,11 @@ struct GuideAnnotatedMockup: View {
                     }
                     .padding(Theme.Spacing.md)
                     .background(
-                        RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                        RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                             .fill(Theme.Colors.surfaceRaised)
                     )
                     .overlay(
-                        RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                        RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                             .strokeBorder(Theme.Colors.border.opacity(0.3), lineWidth: 1)
                     )
                 }
@@ -300,7 +300,7 @@ struct DemoSetLogger: View {
 
             // Exercise name
             HStack(spacing: Theme.Spacing.sm) {
-                RoundedRectangle(cornerRadius: 2)
+                RoundedRectangle(cornerRadius: 2, style: .continuous)
                     .fill(Theme.Colors.chest)
                     .frame(width: 4, height: 20)
                 Text("Bench Press")
@@ -461,7 +461,7 @@ struct DemoSetLogger: View {
         .padding(Theme.Spacing.lg)
         .softCard()
         .overlay(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
                 .strokeBorder(Theme.Colors.accent.opacity(0.2), lineWidth: 1)
         )
     }
@@ -524,7 +524,7 @@ struct DemoRecoverySignals: View {
                                 .background(
                                     (signal.positive ? Theme.Colors.success : Theme.Colors.warning).opacity(0.1)
                                 )
-                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
 
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(signal.name)
@@ -569,11 +569,11 @@ struct DemoRecoverySignals: View {
                     .frame(minHeight: Theme.Layout.minimumTapTarget)
                     .padding(Theme.Spacing.md)
                     .background(
-                        RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                        RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                             .fill(Theme.Colors.surfaceRaised)
                     )
                     .overlay(
-                        RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                        RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                             .strokeBorder(
                                 expandedSignal == signal.name
                                     ? Theme.Colors.accent.opacity(0.3)
@@ -588,7 +588,7 @@ struct DemoRecoverySignals: View {
         .padding(Theme.Spacing.lg)
         .softCard()
         .overlay(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
                 .strokeBorder(Theme.Colors.accent.opacity(0.2), lineWidth: 1)
         )
     }
@@ -662,7 +662,7 @@ struct DemoChartSwitcher: View {
                 HStack(alignment: .bottom, spacing: Theme.Spacing.sm) {
                     ForEach(0..<8, id: \.self) { index in
                         let height = barHeight(for: selectedChart, index: index)
-                        RoundedRectangle(cornerRadius: 3)
+                        RoundedRectangle(cornerRadius: 3, style: .continuous)
                             .fill(
                                 LinearGradient(
                                     colors: [Theme.Colors.accent, Theme.Colors.accent],
@@ -692,7 +692,7 @@ struct DemoChartSwitcher: View {
         .padding(Theme.Spacing.lg)
         .softCard()
         .overlay(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
                 .strokeBorder(Theme.Colors.accent.opacity(0.2), lineWidth: 1)
         )
         .onAppear {
@@ -770,11 +770,11 @@ struct DemoHealthCategories: View {
                         .frame(minHeight: Theme.Layout.minimumTapTarget)
                         .padding(.vertical, Theme.Spacing.md)
                         .background(
-                            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                                 .fill(selectedCategory == cat.name ? cat.color.opacity(0.1) : Theme.Colors.surfaceRaised)
                         )
                         .overlay(
-                            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                                 .strokeBorder(
                                     selectedCategory == cat.name ? cat.color.opacity(0.4) : Theme.Colors.border.opacity(0.3),
                                     lineWidth: 1
@@ -808,11 +808,11 @@ struct DemoHealthCategories: View {
                 }
                 .padding(Theme.Spacing.md)
                 .background(
-                    RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                    RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                         .fill(cat.color.opacity(0.06))
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                    RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                         .strokeBorder(cat.color.opacity(0.15), lineWidth: 1)
                 )
                 .transition(.opacity.combined(with: .move(edge: .bottom)))
@@ -821,7 +821,7 @@ struct DemoHealthCategories: View {
         .padding(Theme.Spacing.lg)
         .softCard()
         .overlay(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
                 .strokeBorder(Theme.Colors.accent.opacity(0.2), lineWidth: 1)
         )
     }
@@ -870,9 +870,9 @@ struct DemoTimeRange: View {
                                     ? AnyShapeStyle(Theme.accentGradient)
                                     : AnyShapeStyle(Theme.Colors.surfaceRaised)
                             )
-                            .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
+                            .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small, style: .continuous))
                             .overlay(
-                                RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                                RoundedRectangle(cornerRadius: Theme.CornerRadius.small, style: .continuous)
                                     .strokeBorder(
                                         selectedRange == range ? Color.clear : Theme.Colors.border.opacity(0.3),
                                         lineWidth: 1
@@ -903,18 +903,18 @@ struct DemoTimeRange: View {
             }
             .padding(Theme.Spacing.md)
             .background(
-                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                     .fill(Theme.Colors.accentTint)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                     .strokeBorder(Theme.Colors.accent.opacity(0.12), lineWidth: 1)
             )
         }
         .padding(Theme.Spacing.lg)
         .softCard()
         .overlay(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
                 .strokeBorder(Theme.Colors.accent.opacity(0.2), lineWidth: 1)
         )
     }
@@ -997,7 +997,7 @@ struct DemoSessionBar: View {
                 .padding(Theme.Spacing.md)
                 .softCard()
                 .overlay(
-                    RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
+                    RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
                         .strokeBorder(Theme.Colors.accent.opacity(0.2), lineWidth: 1)
                 )
             }
@@ -1017,7 +1017,7 @@ struct DemoSessionBar: View {
         .padding(Theme.Spacing.lg)
         .softCard()
         .overlay(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
                 .strokeBorder(Theme.Colors.accent.opacity(0.2), lineWidth: 1)
         )
         .onAppear {

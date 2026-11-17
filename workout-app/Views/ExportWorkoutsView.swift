@@ -10,6 +10,7 @@ struct ExportWorkoutsView: View {
     @ObservedObject var iCloudManager: iCloudDocumentManager
     @ObservedObject private var exerciseMetadataManager = ExerciseMetadataManager.shared
     @ObservedObject private var exerciseRelationshipManager = ExerciseRelationshipManager.shared
+    @ObservedObject private var exerciseMetricManager = ExerciseMetricManager.shared
     @EnvironmentObject private var healthManager: HealthKitManager
     @EnvironmentObject private var logStore: WorkoutLogStore
     @EnvironmentObject private var annotationsManager: WorkoutAnnotationsManager
@@ -30,7 +31,7 @@ struct ExportWorkoutsView: View {
 
     // Workouts category
     @State private var includePDFJournal = false
-    @State private var workoutExportFormat: WorkoutExportFormat = .csv
+    @AppStorage("workoutExportFormat") private var workoutExportFormat: WorkoutExportFormat = .csv
     @State private var workoutMode: WorkoutExportMode = .allWorkouts
     @State private var selectedWorkoutColumns: Set<WorkoutExportColumn> = Set(WorkoutExportColumn.defaultColumns)
     @State private var includeBreakRangesInWorkoutExport = false
@@ -42,6 +43,11 @@ struct ExportWorkoutsView: View {
     @State private var isExportingWorkouts = false
     @State private var workoutExportStatusMessage: String?
     @State private var workoutExportFileURL: URL?
+    @State private var workoutCopyMessage: String?
+    @State private var llmEstimate: LLMExportEstimate?
+    @State private var showingLogPreview = false
+    @State private var llmPreviewError: String?
+    @State private var isCopyingWorkoutLog = false
 
     @State private var isExportingExercises = false
     @State private var exerciseExportStatusMessage: String?
@@ -92,10 +98,22 @@ struct ExportWorkoutsView: View {
                 .animation(reduceMotion ? nil : Theme.Animation.smooth, value: healthExportMode)
             }
         }
-        .navigationTitle("Export")
-        .navigationBarTitleDisplayMode(.inline)
+        .safeAreaInset(edge: .bottom) {
+            if selectedCategory == .workouts, !dataManager.workouts.isEmpty {
+                workoutActionBar
+            }
+        }
+        .collapsingTitle("Export")
         .analyticsScreen("ExportWorkouts")
+        .task(id: llmEstimateKey) {
+            await refreshLLMEstimate()
+        }
         .sheet(item: $activeSheet, content: sheetView(for:))
+        .sheet(isPresented: $showingLogPreview) {
+            if let llmEstimate {
+                WorkoutLogPreviewSheet(text: llmEstimate.preview, totalLines: llmEstimate.lineCount)
+            }
+        }
         .sheet(item: $shareItem) { item in
             ShareSheet(items: [item.url])
         }
@@ -113,9 +131,10 @@ struct ExportWorkoutsView: View {
             initializeDefaultRangesIfNeeded()
             pruneSelections()
         }
-        .onChange(of: dataManager.workouts.count) { _, _ in
+        .onChange(of: dataManager.datasetRevision) { _, _ in
             initializeDefaultRangesIfNeeded()
             pruneSelections()
+            clearWorkoutExportState()
         }
         .onChange(of: selectedRange) { _, _ in
             clearAllExportState()
@@ -164,10 +183,11 @@ struct ExportWorkoutsView: View {
 private extension ExportWorkoutsView {
     var heroHeader: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            Text("Export and backup")
-                .font(Theme.Typography.screenTitle)
+            Text("Export")
+                .font(Theme.Typography.displayHeroCompact)
                 .foregroundStyle(Theme.Colors.textPrimary)
                 .accessibilityAddTraits(.isHeader)
+                .pageTitleAnchor()
             Text("Save workouts, Apple Health data, or a full backup as files.")
                 .font(Theme.Typography.subheadline)
                 .foregroundStyle(Theme.Colors.textSecondary)
@@ -219,24 +239,15 @@ private extension ExportWorkoutsView {
 
 private extension ExportWorkoutsView {
     var workoutsPanel: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-            workoutsScopeCard
-            workoutsActionCard
-            exerciseListCard
+        VStack(alignment: .leading, spacing: Theme.Spacing.section) {
+            rangeSection { workoutScopeStats }.disabled(isExportingWorkouts)
+            workoutSelectionSection.disabled(isExportingWorkouts)
+            workoutFormatSection.disabled(isExportingWorkouts)
+            exerciseListSection
         }
     }
 
-    var workoutsScopeCard: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-            cardEyebrow(text: "Step 1", title: "Time range", systemImage: "calendar.badge.clock", tint: ExportCategory.workouts.tint)
-            timeRangePills
-            scopeStats
-        }
-        .padding(Theme.Spacing.lg)
-        .softCard(elevation: 2)
-    }
-
-    var workoutsActionCard: some View {
+    var workoutSelectionSection: some View {
         let modeOptions: [ExportModeOption<WorkoutExportMode>] = WorkoutExportMode.allCases.map { mode in
             ExportModeOption(
                 value: mode,
@@ -246,85 +257,85 @@ private extension ExportWorkoutsView {
             )
         }
 
-        return VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-            cardEyebrow(
-                text: "Step 2",
-                title: "Workout export",
-                systemImage: workoutExportFormat.systemImage,
-                tint: ExportCategory.workouts.tint
-            )
-
-            ExportFieldGroup(label: "What to export") {
-                ExportModeChipPicker(
-                    options: modeOptions,
-                    selection: $workoutMode,
-                    tint: ExportCategory.workouts.tint
-                )
-            }
-
-            ExportFieldGroup(label: "Format", help: workoutExportFormat.subtitle) {
-                Picker("Format", selection: $workoutExportFormat) {
-                    ForEach(WorkoutExportFormat.allCases) { format in
-                        Text(format.title).tag(format)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .accessibilityIdentifier("workoutExportFormat")
-
-            }
-
-            Button {
-                selectedCategory = .backup
-            } label: {
-                Label("Create a full backup", systemImage: "archivebox")
-                    .font(Theme.Typography.caption)
-                    .multilineTextAlignment(.leading)
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(Theme.Colors.accent)
-            .accessibilityIdentifier("workoutExportBackupShortcut")
-
-            if workoutExportFormat == .pdf {
-                Toggle(isOn: $includePDFJournal) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("Include all selected sets")
-                            .font(Theme.Typography.captionBold)
-                    }
-                }
-                .tint(ExportCategory.workouts.tint)
-                .accessibilityIdentifier("includePDFJournal")
-            }
-
+        return VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            SectionHeading(title: "Workouts")
+            ExportModeChipPicker(options: modeOptions, selection: $workoutMode)
             workoutModeDetail
+        }
+    }
 
-            ExportFieldGroup(
-                label: "Fields",
-                trailing: "\(selectedWorkoutColumns.count) of \(WorkoutExportColumn.allCases.count)"
-            ) {
-                ExportSelectionButton(
-                    title: "Fields",
-                    summary: selectedWorkoutColumns.isEmpty ? "Choose fields" : "\(selectedWorkoutColumns.count) selected",
-                    previewText: selectedWorkoutColumnPreviewText,
-                    action: { openSheet(.workoutColumns) }
-                )
+    var workoutFormatSection: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            SectionHeading(title: "Format")
+
+            ExportFormatPicker(selection: $workoutExportFormat)
+
+            Text(workoutExportFormat.subtitle)
+                .font(Theme.Typography.subheadline)
+                .foregroundStyle(Theme.Colors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if workoutExportFormat == .llm {
+                if let llmEstimate {
+                    llmSizePanel(llmEstimate)
+                    Button { showingLogPreview = true } label: {
+                        TextLinkLabel(title: "Preview training log")
+                    }
+                    .buttonStyle(PressableCardButtonStyle())
+                    .accessibilityIdentifier("workoutExportPreview")
+                } else if let llmPreviewError {
+                    Text(llmPreviewError)
+                        .font(Theme.Typography.subheadline)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                } else if workoutExportButtonEnabled {
+                    ProgressView("Preparing preview…")
+                        .font(Theme.Typography.subheadline)
+                        .tint(Theme.Colors.textSecondary)
+                }
             }
 
-            workoutBreakRangeToggle
+            VStack(spacing: 0) {
+                if workoutExportFormat == .pdf {
+                    LedgerToggleRow(
+                        title: "Include every set",
+                        subtitle: "Adds a full workout journal after the charts.",
+                        isOn: $includePDFJournal
+                    )
+                    .accessibilityIdentifier("includePDFJournal")
+                }
 
-            VStack(spacing: Theme.Spacing.md) {
-                ExportPrimaryButton(
-                    title: "Export \(workoutExportFormat.title)",
-                    isRunning: isExportingWorkouts,
-                    isEnabled: workoutExportButtonEnabled,
-                    action: startWorkoutExport
-                )
-
-                if !workoutExportButtonEnabled, !isExportingWorkouts {
-                    Text(workoutExportDisabledReason)
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                        .multilineTextAlignment(.center)
-                        .frame(maxWidth: .infinity)
+                if workoutExportFormat == .llm {
+                    Label {
+                        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                            Text("Complete training data")
+                                .font(Theme.Typography.headline)
+                            Text("Every field for the workouts you select, including muscle roles and saved breaks. Original values and set order, without sampling.")
+                                .font(Theme.Typography.subheadline)
+                                .foregroundStyle(Theme.Colors.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    } icon: {
+                        Image(systemName: "checkmark.seal")
+                            .foregroundStyle(Theme.Colors.success)
+                    }
+                    .ledgerRow()
+                } else {
+                    ExportSelectionButton(
+                        title: "Fields",
+                        summary: selectedWorkoutColumns.isEmpty
+                            ? "Choose fields"
+                            : "\(selectedWorkoutColumns.count) of \(WorkoutExportColumn.allCases.count)",
+                        previewText: selectedWorkoutColumnPreviewText,
+                        action: { openSheet(.workoutColumns) }
+                    )
+                    if !breakRangesInSelection.isEmpty {
+                        LedgerToggleRow(
+                            title: "Include saved breaks",
+                            subtitle: workoutBreakRangeSummaryText,
+                            isOn: $includeBreakRangesInWorkoutExport
+                        )
+                        .accessibilityHint("Adds saved break ranges that overlap the export range")
+                    }
                 }
             }
 
@@ -334,9 +345,87 @@ private extension ExportWorkoutsView {
                 url: workoutExportFileURL,
                 onShare: presentShare
             )
+
+            Button {
+                selectedCategory = .backup
+            } label: {
+                TextLinkLabel(title: "Back up everything instead")
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("workoutExportBackupShortcut")
+        }
+    }
+
+    var workoutActionBar: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            if let workoutCopyMessage {
+                Label(workoutCopyMessage, systemImage: "checkmark")
+                    .foregroundStyle(Theme.Colors.success)
+                    .font(Theme.Typography.caption)
+                    .accessibilityIdentifier("workoutExportCopyStatus")
+            } else if !workoutExportButtonEnabled, !isExportingWorkouts {
+                Text(workoutExportDisabledReason)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .font(Theme.Typography.caption)
+            }
+            let layout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(spacing: Theme.Spacing.sm))
+                : AnyLayout(HStackLayout(spacing: Theme.Spacing.sm))
+            layout {
+                ExportPrimaryButton(
+                    title: dynamicTypeSize.isAccessibilitySize ? "Export" : "Export \(workoutExportFormat.title)",
+                    isRunning: isExportingWorkouts && !isCopyingWorkoutLog,
+                    isEnabled: workoutExportButtonEnabled,
+                    action: startWorkoutExport
+                )
+                .accessibilityLabel("Export \(workoutExportFormat.fileNoun)")
+                .accessibilityIdentifier("workoutExportSave")
+                if workoutExportFormat == .llm {
+                    Button(action: copyWorkoutLog) {
+                        HStack(spacing: Theme.Spacing.sm) {
+                            if isCopyingWorkoutLog { ProgressView().tint(Theme.Colors.textPrimary) }
+                            else { Image(systemName: "doc.on.doc") }
+                            Text(isCopyingWorkoutLog ? "Copying…" : "Copy")
+                                .font(Theme.Typography.headline)
+                        }
+                        .padding(.horizontal, Theme.Spacing.md)
+                        .frame(minHeight: Theme.Layout.primaryControlHeight)
+                        .frame(maxWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : nil)
+                    }
+                    .buttonStyle(BrandSecondaryButtonStyle())
+                    .disabled(!workoutExportButtonEnabled)
+                    .accessibilityLabel("Copy training log")
+                    .accessibilityIdentifier("workoutExportCopy")
+                }
+            }
+        }
+        .padding(.horizontal, Theme.Layout.screenGutter)
+        .padding(.vertical, Theme.Spacing.sm)
+        .contentColumn()
+        .background(Theme.Colors.ground)
+        .overlay(alignment: .top) { Rectangle().fill(Theme.Colors.rule).frame(height: 1) }
+    }
+
+    /// Byte reduction is measured; token count is explicitly a model-dependent estimate.
+    func llmSizePanel(_ estimate: LLMExportEstimate) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            let layout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: Theme.Spacing.md))
+                : AnyLayout(StatColumns())
+            layout {
+                DisplayStat(value: "~" + compactCount(estimate.tokens), label: "estimated tokens")
+                DisplayStat(value: ByteCountFormatter.string(fromByteCount: Int64(estimate.bytes), countStyle: .file), label: "text file")
+                DisplayStat(value: "\(estimate.savingsPercent)%", label: "less data than JSON", tint: Theme.Colors.success)
+            }
+            Text("Token counts vary by AI model. Size compares the same data in the JSON export.")
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.Colors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(Theme.Spacing.lg)
-        .softCard(elevation: 2)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .softCard()
+        .accessibilityElement(children: .combine)
     }
 
     @ViewBuilder
@@ -345,92 +434,46 @@ private extension ExportWorkoutsView {
         case .allWorkouts:
             EmptyView()
         case .byExercise:
-            ExportFieldGroup(
-                label: "Exercises",
-                trailing: availableExerciseNames.isEmpty ? nil : "\(availableExerciseNames.count) in range"
-            ) {
-                ExportSelectionButton(
-                    title: "Exercises",
-                    summary: selectedExerciseNamesInRange.isEmpty ? "Choose exercises" : "\(selectedExerciseNamesInRange.count) selected",
-                    previewText: selectedExercisePreviewText,
-                    action: { openSheet(.exerciseHistory) }
-                )
-            }
+            ExportSelectionButton(
+                title: "Exercises",
+                summary: selectedExerciseNamesInRange.isEmpty
+                    ? "Choose from \(availableExerciseNames.count)"
+                    : "\(selectedExerciseNamesInRange.count) of \(availableExerciseNames.count)",
+                previewText: selectedExercisePreviewText,
+                action: { openSheet(.exerciseHistory) }
+            )
         case .byMuscle:
-            ExportFieldGroup(
-                label: "Muscle groups",
-                trailing: availableMuscleTags.isEmpty ? nil : "\(availableMuscleTags.count) in range"
-            ) {
-                ExportSelectionButton(
-                    title: "Muscle groups",
-                    summary: selectedMuscleTagIdsInRange.isEmpty ? "Choose muscle groups" : "\(selectedMuscleTagIdsInRange.count) selected",
-                    previewText: selectedMuscleTagPreviewText,
-                    action: { openSheet(.muscleGroups) }
-                )
-            }
+            ExportSelectionButton(
+                title: "Muscle groups",
+                summary: selectedMuscleTagIdsInRange.isEmpty
+                    ? "Choose from \(availableMuscleTags.count)"
+                    : "\(selectedMuscleTagIdsInRange.count) of \(availableMuscleTags.count)",
+                previewText: selectedMuscleTagPreviewText,
+                action: { openSheet(.muscleGroups) }
+            )
         case .byDate:
-            ExportFieldGroup(
-                label: "Workout dates",
-                trailing: workoutDateOptions.isEmpty ? nil : "\(workoutDateOptions.count) in range"
-            ) {
-                ExportSelectionButton(
-                    title: "Workout dates",
-                    summary: selectedWorkoutDateIdsInRange.isEmpty ? "Choose dates" : "\(selectedWorkoutDateIdsInRange.count) selected",
-                    previewText: selectedWorkoutDatePreviewText,
-                    action: { openSheet(.workoutDates) }
-                )
-            }
+            ExportSelectionButton(
+                title: "Workout dates",
+                summary: selectedWorkoutDateIdsInRange.isEmpty
+                    ? "Choose from \(workoutDateOptions.count)"
+                    : "\(selectedWorkoutDateIdsInRange.count) of \(workoutDateOptions.count)",
+                previewText: selectedWorkoutDatePreviewText,
+                action: { openSheet(.workoutDates) }
+            )
         }
     }
 
-    @ViewBuilder
-    var workoutBreakRangeToggle: some View {
-        if !breakRangesInSelection.isEmpty {
-            Toggle(isOn: $includeBreakRangesInWorkoutExport) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Include saved break ranges")
-                        .font(Theme.Typography.captionBold)
-                        .foregroundStyle(Theme.Colors.textPrimary)
-                    Text(workoutBreakRangeSummaryText)
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                }
-            }
-            .tint(ExportCategory.workouts.tint)
-            .padding(Theme.Spacing.md)
-            .background(
-                RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
-                    .fill(Theme.Colors.surfaceRaised)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
-                    .strokeBorder(Theme.Colors.border.opacity(0.4), lineWidth: 1)
-            )
-            .accessibilityHint("Adds saved break ranges that overlap the export range")
-        }
-    }
+    var exerciseListSection: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            SectionHeading(title: "Exercise list", subtitle: "Each exercise in this range, once, as a CSV.")
 
-    var exerciseListCard: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            cardEyebrow(
-                text: "Companion",
-                title: "Exercise list",
-                systemImage: "list.bullet.rectangle.portrait",
-                tint: ExportCategory.workouts.tint.opacity(0.85),
-                help: "Exports each exercise in this range once. You can include its muscle roles."
-            )
-
-            Toggle(isOn: $includeExerciseTags) {
-                Text("Include muscle roles")
-                    .font(Theme.Typography.captionBold)
-                    .foregroundStyle(Theme.Colors.textPrimary)
-            }
-            .tint(ExportCategory.workouts.tint)
+            LedgerToggleRow(title: "Include muscle roles", isOn: $includeExerciseTags, showsRule: false)
 
             ExportPrimaryButton(
                 title: "Export exercise list",
                 isRunning: isExportingExercises,
                 isEnabled: exerciseExportButtonEnabled,
+                isSecondary: true,
                 action: startExerciseExport
             )
 
@@ -441,12 +484,10 @@ private extension ExportWorkoutsView {
                 onShare: presentShare
             )
         }
-        .padding(Theme.Spacing.lg)
-        .softCard(elevation: 1)
     }
 
     var workoutExportDisabledReason: String {
-        if selectedWorkoutColumns.isEmpty {
+        if orderedSelectedWorkoutColumns.isEmpty {
             return "Select at least one field."
         }
         switch workoutMode {
@@ -478,34 +519,25 @@ private extension ExportWorkoutsView {
         } else if healthManager.authorizationStatus != .authorized {
             healthAccessCard
         } else {
-            VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-                healthScopeCard
-                healthActionCard
+            VStack(alignment: .leading, spacing: Theme.Spacing.section) {
+                rangeSection { healthScopeStats }
+                healthActionSection
             }
         }
     }
 
-    var healthScopeCard: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-            cardEyebrow(text: "Step 1", title: "Time range", systemImage: "calendar.badge.clock", tint: ExportCategory.health.tint)
-            timeRangePills
-            let range = effectiveDayRange
-            let cachedDays = healthManager.dailyHealthStore.keys.filter {
-                $0 >= range.start && Calendar.current.startOfDay(for: $0) <= range.endInclusive
-            }.count
-            let layout = dynamicTypeSize.isAccessibilitySize
-                ? AnyLayout(VStackLayout(spacing: Theme.Spacing.sm))
-                : AnyLayout(HStackLayout(spacing: Theme.Spacing.sm))
-            layout {
-                scopeStatTile(label: "Daily records", value: "\(cachedDays)")
-                scopeStatTile(label: "Workouts", value: "\(workoutsInSelection.count)")
-            }
-        }
-        .padding(Theme.Spacing.lg)
-        .softCard(elevation: 2)
+    @ViewBuilder
+    var healthScopeStats: some View {
+        let range = effectiveDayRange
+        let cachedDays = healthManager.dailyHealthStore.keys.filter {
+            $0 >= range.start && Calendar.current.startOfDay(for: $0) <= range.endInclusive
+        }.count
+        let workoutCount = workoutsInSelection.count
+        DisplayStat(value: cachedDays.formatted(), label: cachedDays == 1 ? "daily record" : "daily records")
+        DisplayStat(value: workoutCount.formatted(), label: workoutCount == 1 ? "workout" : "workouts")
     }
 
-    var healthActionCard: some View {
+    var healthActionSection: some View {
         let modeOptions: [ExportModeOption<HealthExportMode>] = HealthExportMode.allCases.map { mode in
             ExportModeOption(
                 value: mode,
@@ -515,26 +547,15 @@ private extension ExportWorkoutsView {
             )
         }
 
-        return VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-            cardEyebrow(
-                text: "Step 2",
-                title: "Apple Health CSV",
-                systemImage: "heart.text.square.fill",
-                tint: ExportCategory.health.tint,
-                help: healthExportMode.footnote
-            )
+        return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            SectionHeading(title: "Apple Health CSV", help: healthExportMode.footnote)
 
-            ExportFieldGroup(label: "Export type") {
-                ExportModeChipPicker(
-                    options: modeOptions,
-                    selection: $healthExportMode,
-                    tint: ExportCategory.health.tint
-                )
+            VStack(spacing: 0) {
+                ExportModeChipPicker(options: modeOptions, selection: $healthExportMode)
+                healthModeDetail
             }
 
-            healthModeDetail
-
-            VStack(spacing: Theme.Spacing.md) {
+            VStack(spacing: Theme.Spacing.sm) {
                 ExportPrimaryButton(
                     title: healthExportMode.exportButtonTitle,
                     isRunning: isExportingHealth,
@@ -546,8 +567,7 @@ private extension ExportWorkoutsView {
                     Text(healthExportDisabledReason)
                         .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.Colors.textSecondary)
-                        .multilineTextAlignment(.center)
-                        .frame(maxWidth: .infinity)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
 
@@ -557,65 +577,36 @@ private extension ExportWorkoutsView {
                 url: healthExportFileURL,
                 onShare: presentShare
             )
-
         }
-        .padding(Theme.Spacing.lg)
-        .softCard(elevation: 2)
     }
 
     @ViewBuilder
     var healthModeDetail: some View {
         switch healthExportMode {
         case .dailySummary:
-            ExportFieldGroup(
-                label: "Daily metrics",
-                trailing: "\(selectedHealthSummaryMetrics.count) of \(availableHealthSummaryMetrics.count)"
-            ) {
-                ExportSelectionButton(
-                    title: "Daily metrics",
-                    summary: selectedHealthSummaryMetrics.isEmpty ? "Choose metrics" : "\(selectedHealthSummaryMetrics.count) selected",
-                    previewText: selectedHealthSummaryPreviewText,
-                    action: { openSheet(.healthDailyMetrics) }
-                )
-            }
+            ExportSelectionButton(
+                title: "Daily metrics",
+                summary: selectedHealthSummaryMetrics.isEmpty
+                    ? "Choose metrics"
+                    : "\(selectedHealthSummaryMetrics.count) of \(availableHealthSummaryMetrics.count)",
+                previewText: selectedHealthSummaryPreviewText,
+                action: { openSheet(.healthDailyMetrics) }
+            )
         case .workoutSummary:
-            ExportFieldGroup(
-                label: "Workouts",
-                trailing: "\(workoutsInSelection.count) in range"
-            ) {
-                Toggle(isOn: $includeHealthWorkoutLocations) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Include location data")
-                            .font(Theme.Typography.captionBold)
-                            .foregroundStyle(Theme.Colors.textPrimary)
-                        Text("Adds workout and route coordinates to the CSV.")
-                            .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.Colors.textSecondary)
-                    }
-                }
-                .tint(ExportCategory.health.tint)
-                .padding(Theme.Spacing.md)
-                .background(
-                    RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
-                        .fill(Theme.Colors.surfaceRaised)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
-                        .strokeBorder(Theme.Colors.border.opacity(0.4), lineWidth: 1)
-                )
-            }
+            LedgerToggleRow(
+                title: "Include location data",
+                subtitle: "Adds workout and route coordinates to the CSV.",
+                isOn: $includeHealthWorkoutLocations
+            )
         case .metricSamples:
-            ExportFieldGroup(
-                label: "Sample metrics",
-                trailing: "\(selectedHealthSampleMetrics.count) of \(availableHealthSampleMetrics.count)"
-            ) {
-                ExportSelectionButton(
-                    title: "Sample metrics",
-                    summary: selectedHealthSampleMetrics.isEmpty ? "Choose metrics" : "\(selectedHealthSampleMetrics.count) selected",
-                    previewText: selectedHealthSamplePreviewText,
-                    action: { openSheet(.healthSampleMetrics) }
-                )
-            }
+            ExportSelectionButton(
+                title: "Sample metrics",
+                summary: selectedHealthSampleMetrics.isEmpty
+                    ? "Choose metrics"
+                    : "\(selectedHealthSampleMetrics.count) of \(availableHealthSampleMetrics.count)",
+                previewText: selectedHealthSamplePreviewText,
+                action: { openSheet(.healthSampleMetrics) }
+            )
         }
     }
 
@@ -637,50 +628,33 @@ private extension ExportWorkoutsView {
     }
 
     var healthUnavailableCard: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            HStack(alignment: .top, spacing: Theme.Spacing.md) {
-                Image(systemName: "heart.slash.fill")
-                    .font(Theme.Typography.title3)
-                    .foregroundStyle(Theme.Colors.textTertiary)
-                    .frame(width: 38, height: 38)
-                    .background(Theme.Colors.surfaceRaised)
-                    .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous))
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Apple Health unavailable")
-                        .font(Theme.Typography.headline)
-                        .foregroundStyle(Theme.Colors.textPrimary)
-                    Text("Health exports need Apple Health on a supported device.")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            Text("Apple Health isn't available")
+                .font(Theme.Typography.sectionHeader2)
+                .foregroundStyle(Theme.Colors.textPrimary)
+                .accessibilityAddTraits(.isHeader)
+            Text("Health exports need Apple Health on a supported device.")
+                .font(Theme.Typography.body)
+                .foregroundStyle(Theme.Colors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(Theme.Spacing.lg)
-        .softCard(elevation: 2)
     }
 
     var healthAccessCard: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            HStack(alignment: .top, spacing: Theme.Spacing.md) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Connect Apple Health")
-                        .font(Theme.Typography.headline)
-                        .foregroundStyle(Theme.Colors.textPrimary)
-                    Text("Allow read access to export your Health data.")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-
-            if healthManager.authorizationStatus == .denied {
-                Text("Health access is denied. Allow it in Settings to export.")
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                Text("Connect Apple Health")
+                    .font(Theme.Typography.sectionHeader2)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                    .accessibilityAddTraits(.isHeader)
+                Text(
+                    healthManager.authorizationStatus == .denied
+                        ? "Health access is off. Allow it in the Settings app, then try again."
+                        : "Allow read access to export your Health data."
+                )
+                .font(Theme.Typography.body)
+                .foregroundStyle(Theme.Colors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
             }
 
             ExportPrimaryButton(
@@ -690,8 +664,6 @@ private extension ExportWorkoutsView {
                 action: requestHealthAuthorization
             )
         }
-        .padding(Theme.Spacing.lg)
-        .softCard(elevation: 2)
     }
 }
 
@@ -699,70 +671,42 @@ private extension ExportWorkoutsView {
 
 private extension ExportWorkoutsView {
     var backupPanel: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-            backupHeroCard
-            backupInventoryCard
-        }
-    }
+        VStack(alignment: .leading, spacing: Theme.Spacing.section) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+                SectionHeading(
+                    title: "Full backup",
+                    subtitle: "Everything listed below, in one file. Restore it from Settings, then Import."
+                )
 
-    var backupHeroCard: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-            HStack(alignment: .top, spacing: Theme.Spacing.md) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Full backup")
-                        .font(Theme.Typography.title3)
-                        .foregroundStyle(Theme.Colors.textPrimary)
-                    Text("Everything listed below, in one file. Restore it from Settings > Import.")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                ExportPrimaryButton(
+                    title: "Export full backup",
+                    isRunning: isExportingFullBackup,
+                    isEnabled: !isExportingFullBackup,
+                    action: startFullBackupExport
+                )
+
+                ExportLastFileFooter(
+                    fileName: fullBackupFileURL?.lastPathComponent,
+                    statusMessage: fullBackupStatusMessage,
+                    url: fullBackupFileURL,
+                    onShare: presentShare
+                )
+
+                Text("Leaves out earlier export files and unfinished workout drafts.")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
-            ExportPrimaryButton(
-                title: "Export full backup",
-                isRunning: isExportingFullBackup,
-                isEnabled: !isExportingFullBackup,
-                action: startFullBackupExport
-            )
-
-            ExportLastFileFooter(
-                fileName: fullBackupFileURL?.lastPathComponent,
-                statusMessage: fullBackupStatusMessage,
-                url: fullBackupFileURL,
-                onShare: presentShare
-            )
-
-            Text("Excludes previous export files and unfinished workout drafts.")
-                .font(Theme.Typography.microcopy)
-                .foregroundStyle(Theme.Colors.textTertiary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(Theme.Spacing.lg)
-        .softCard(elevation: 2)
-    }
-
-    var backupInventoryCard: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            cardEyebrow(text: "Included", title: "What's in this backup", systemImage: "checklist", tint: ExportCategory.backup.tint)
-
-            VStack(spacing: 0) {
-                ForEach(backupInventoryItems) { item in
-                    if item.id != backupInventoryItems.first?.id {
-                        Divider()
-                            .background(Theme.Colors.border.opacity(0.4))
+            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                SectionHeading(title: "What's included")
+                VStack(spacing: 0) {
+                    ForEach(Array(backupInventoryItems.enumerated()), id: \.element.id) { index, item in
+                        ExportInventoryRow(title: item.title, value: item.value, showsRule: index > 0)
                     }
-                    ExportInventoryRow(
-                        icon: item.icon,
-                        title: item.title,
-                        value: item.value,
-                        tint: ExportCategory.backup.tint
-                    )
                 }
             }
         }
-        .padding(Theme.Spacing.lg)
-        .softCard(elevation: 1)
     }
 
     var backupInventoryItems: [BackupInventoryItem] {
@@ -778,16 +722,16 @@ private extension ExportWorkoutsView {
         let relationships = exerciseRelationshipManager.relationships.count
 
         return [
-            BackupInventoryItem(id: "workouts", icon: "figure.strengthtraining.traditional", title: "Workouts", value: "\(workouts)"),
-            BackupInventoryItem(id: "logged", icon: "doc.append.fill", title: "Logged sessions", value: "\(logged)"),
-            BackupInventoryItem(id: "gyms", icon: "mappin.and.ellipse", title: "Gym profiles", value: "\(gyms)"),
-            BackupInventoryItem(id: "breaks", icon: "pause.circle.fill", title: "Break ranges", value: "\(breaks)"),
-            BackupInventoryItem(id: "workoutHealth", icon: "heart.circle.fill", title: "Workout health snapshots", value: "\(workoutHealth)"),
-            BackupInventoryItem(id: "dailyHealth", icon: "calendar.badge.heart", title: "Daily health entries", value: "\(dailyHealth)"),
-            BackupInventoryItem(id: "annotations", icon: "note.text", title: "Workout annotations", value: "\(annotations)"),
-            BackupInventoryItem(id: "tagOverrides", icon: "tag.fill", title: "Exercise muscle-role overrides", value: "\(tagOverrides)"),
-            BackupInventoryItem(id: "relationships", icon: "rectangle.stack.fill", title: "Exercise relationships", value: "\(relationships)"),
-            BackupInventoryItem(id: "metricPrefs", icon: "slider.horizontal.3", title: "Metric preferences", value: "\(metricPrefs)")
+            BackupInventoryItem(id: "workouts", title: "Workouts", value: "\(workouts)"),
+            BackupInventoryItem(id: "logged", title: "Logged sessions", value: "\(logged)"),
+            BackupInventoryItem(id: "gyms", title: "Gym profiles", value: "\(gyms)"),
+            BackupInventoryItem(id: "breaks", title: "Break ranges", value: "\(breaks)"),
+            BackupInventoryItem(id: "workoutHealth", title: "Workout health snapshots", value: "\(workoutHealth)"),
+            BackupInventoryItem(id: "dailyHealth", title: "Daily health entries", value: "\(dailyHealth)"),
+            BackupInventoryItem(id: "annotations", title: "Workout annotations", value: "\(annotations)"),
+            BackupInventoryItem(id: "tagOverrides", title: "Exercise muscle-role overrides", value: "\(tagOverrides)"),
+            BackupInventoryItem(id: "relationships", title: "Exercise relationships", value: "\(relationships)"),
+            BackupInventoryItem(id: "metricPrefs", title: "Metric preferences", value: "\(metricPrefs)")
         ]
     }
 }
@@ -795,8 +739,24 @@ private extension ExportWorkoutsView {
 // MARK: - Shared Scope (Range + Stats)
 
 private extension ExportWorkoutsView {
-    var timeRangePills: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+    /// The range picker with what that range holds, shown as a stat strip.
+    func rangeSection<Stats: View>(@ViewBuilder stats: () -> Stats) -> some View {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: Theme.Spacing.md))
+            : AnyLayout(StatColumns())
+
+        return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            SectionHeading(title: "Range", subtitle: rangeSummaryText) {
+                if selectedRange == .custom {
+                    Button {
+                        openSheet(.customRange)
+                    } label: {
+                        TextLinkLabel(title: "Edit", showsChevron: false)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
             TimeRangePillPicker(
                 options: ExportTimeRange.allCases,
                 selected: $selectedRange,
@@ -807,66 +767,24 @@ private extension ExportWorkoutsView {
             .accessibilityLabel("Export time range")
             .accessibilityValue(rangeAccessibilityValue)
 
-            HStack(spacing: Theme.Spacing.sm) {
-                Image(systemName: "calendar")
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textTertiary)
-                Text(rangeSummaryText)
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textSecondary)
-
-                Spacer()
-
-                if selectedRange == .custom {
-                    Button("Edit") {
-                        openSheet(.customRange)
-                    }
-                    .font(Theme.Typography.captionBold)
-                    .foregroundStyle(Theme.Colors.accent)
-                    .buttonStyle(.plain)
-                }
+            layout {
+                stats()
             }
+            .padding(Theme.Spacing.lg)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .softCard()
         }
     }
 
-    var scopeStats: some View {
+    @ViewBuilder
+    var workoutScopeStats: some View {
         let workouts = workoutsInSelection
-        let resolver = exerciseRelationshipManager.resolverSnapshot()
-        let totalSets = ExerciseAggregation.totalSets(for: workouts, resolver: resolver)
-        let totalExercises = Set(
-            workouts.flatMap { ExerciseAggregation.aggregateExercises(in: $0, resolver: resolver).map(\.name) }
-        ).count
+        let totalSets = workouts.reduce(0) { $0 + $1.totalSets }
+        let totalExercises = Set(workouts.flatMap { $0.exercises.map(\.name) }).count
 
-        let layout = dynamicTypeSize.isAccessibilitySize
-            ? AnyLayout(VStackLayout(spacing: Theme.Spacing.sm))
-            : AnyLayout(HStackLayout(spacing: Theme.Spacing.md))
-        return layout {
-            scopeStatTile(label: "Workouts", value: "\(workouts.count)")
-            scopeStatTile(label: "Exercises", value: "\(totalExercises)")
-            scopeStatTile(label: "Sets", value: "\(totalSets)")
-        }
-    }
-
-    func scopeStatTile(label: String, value: String) -> some View {
-        VStack(spacing: 4) {
-            Text(value)
-                .font(Theme.Typography.title4Bold)
-                .foregroundStyle(Theme.Colors.textPrimary)
-                .monospacedDigit()
-            Text(label)
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Colors.textSecondary)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, Theme.Spacing.md)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
-                .fill(Theme.Colors.surfaceRaised)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
-                .strokeBorder(Theme.Colors.border.opacity(0.4), lineWidth: 1)
-        )
+        DisplayStat(value: workouts.count.formatted(), label: workouts.count == 1 ? "workout" : "workouts")
+        DisplayStat(value: totalExercises.formatted(), label: totalExercises == 1 ? "exercise" : "exercises")
+        DisplayStat(value: totalSets.formatted(), label: totalSets == 1 ? "set" : "sets")
     }
 
     var rangeSummaryText: String {
@@ -874,30 +792,11 @@ private extension ExportWorkoutsView {
         if Calendar.current.isDate(range.start, inSameDayAs: range.endInclusive) {
             return formatDay(range.start)
         }
-        return "\(formatDay(range.start)) → \(formatDay(range.endInclusive))"
+        return "\(formatDay(range.start)) to \(formatDay(range.endInclusive))"
     }
 
-    /// A card heading. Steps in the export flow lead with their number; other cards
-    /// lead with the title alone.
-    func cardEyebrow(text: String, title: String, systemImage: String, tint: Color, help: String? = nil) -> some View {
-        let stepNumber = text.hasPrefix("Step ") ? String(text.dropFirst(5)) : nil
-        return HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.sm) {
-            if let stepNumber {
-                Text(stepNumber)
-                    .font(Theme.Typography.cardHeader)
-                    .foregroundStyle(Theme.Colors.textTertiary)
-                    .accessibilityLabel(text)
-            }
-            Text(title)
-                .font(Theme.Typography.title3)
-                .foregroundStyle(Theme.Colors.textPrimary)
-                .accessibilityAddTraits(.isHeader)
-
-            Spacer(minLength: 0)
-            if let help {
-                AppHelpButton(title: title, message: help)
-            }
-        }
+    func compactCount(_ value: Int) -> String {
+        value.formatted(.number.notation(.compactName).precision(.significantDigits(1...2)))
     }
 }
 
@@ -958,7 +857,7 @@ private extension ExportWorkoutsView {
 
 private extension ExportWorkoutsView {
     var workoutExportButtonEnabled: Bool {
-        guard !isExportingWorkouts, !selectedWorkoutColumns.isEmpty else { return false }
+        guard !isExportingWorkouts, !orderedSelectedWorkoutColumns.isEmpty else { return false }
         switch workoutMode {
         case .allWorkouts:
             return !workoutsInSelection.isEmpty
@@ -1011,7 +910,8 @@ private extension ExportWorkoutsView {
     }
 
     var orderedSelectedWorkoutColumns: [WorkoutExportColumn] {
-        WorkoutExportColumn.allCases.filter { selectedWorkoutColumns.contains($0) }
+        workoutExportFormat == .llm ? WorkoutExportColumn.allCases
+            : WorkoutExportColumn.allCases.filter { selectedWorkoutColumns.contains($0) }
     }
 
     var selectedExerciseNamesInRange: Set<String> {
@@ -1580,110 +1480,226 @@ private extension ExportWorkoutsView {
     }
 
     @MainActor
-    func startWorkoutExport() {
-        guard workoutExportButtonEnabled else { return }
+    /// Everything one workout export needs, captured on the main actor so the
+    /// document can be built off it. Export, copy, and the size estimate share it.
+    func makeWorkoutExportRequest() -> WorkoutExportRequest? {
+        let resolver = exerciseRelationshipManager.resolverSnapshot()
+        let inRange = workoutsInSelection
+        let kind: WorkoutExportRequest.Kind
+        let workouts: [Workout]
+        var selectionCount: Int?
+
+        func keeping(_ workout: Workout, where matches: (Exercise) -> Bool) -> Workout? {
+            let exercises = workout.exercises.filter(matches)
+            guard !exercises.isEmpty else { return nil }
+            return Workout(
+                id: workout.id, date: workout.date, name: workout.name,
+                duration: workout.duration, exercises: exercises
+            )
+        }
+
         switch workoutMode {
         case .allWorkouts:
-            performWorkoutAllExport()
+            kind = .workouts
+            workouts = inRange
         case .byExercise:
-            performExerciseHistoryExport()
+            kind = .exerciseHistory
+            let names = selectedExerciseNamesInRange
+            let keys = Set(names.map(ExerciseIdentityResolver.normalizedName))
+            selectionCount = names.count
+            workouts = inRange.compactMap { workout in
+                keeping(workout) { exerciseMatchesSelection($0, selectedNameKeys: keys, resolver: resolver) }
+            }
         case .byMuscle:
-            performMuscleGroupExport()
+            kind = .muscleGroup
+            let tagIds = selectedMuscleTagIdsInRange
+            selectionCount = tagIds.count
+            workouts = inRange.compactMap { workout in
+                keeping(workout) { exercise in
+                    let resolved = Set(exerciseMetadataManager.resolvedTags(for: exercise.name).map(\.id))
+                    return !resolved.isDisjoint(with: tagIds)
+                }
+            }
         case .byDate:
-            performWorkoutDatesExport()
+            kind = .workoutDates
+            let dayIds = selectedWorkoutDateIdsInRange
+            selectionCount = dayIds.count
+            workouts = inRange.filter { dayIds.contains(dayIdentifier(for: $0.date)) }
         }
+
+        guard !workouts.isEmpty else { return nil }
+        let bounds = effectiveDayRange
+        let includesBreaks = workoutExportFormat == .llm || includeBreakRangesInWorkoutExport
+        let workoutIDs = Set(workouts.map(\.id))
+        return WorkoutExportRequest(
+            kind: kind,
+            workouts: workouts,
+            start: bounds.start,
+            endInclusive: bounds.endInclusive,
+            selectionCount: selectionCount,
+            columns: orderedSelectedWorkoutColumns,
+            breaks: includesBreaks ? breakRangesInSelection : [],
+            includesBreaks: includesBreaks,
+            exerciseTagsByName: exerciseTagsByName(for: workouts),
+            exerciseMusclesByName: exerciseMusclesByName(for: workouts),
+            gymNamesByWorkoutID: gymNamesByWorkoutID(for: workouts),
+            weightUnit: weightUnit,
+            resolver: resolver,
+            calendar: Calendar.current,
+            nativeWorkouts: workoutExportFormat == .llm
+                ? logStore.workouts.filter { workoutIDs.contains($0.id) } : [],
+            exerciseCountLabelsByName: exerciseMetricManager.exportCountLabels(for: Set(workouts.flatMap { $0.exercises.map(\.name) }))
+        )
+    }
+
+    func workoutExportAnalyticsPayload(for request: WorkoutExportRequest) -> [String: String] {
+        var payload = workoutColumnAnalyticsPayload(for: request.columns)
+            .merging(
+                workoutBreakAnalyticsPayload(includeBreakRanges: request.includesBreaks, breakRanges: request.breaks)
+            ) { _, new in new }
+        if let selectionCount = request.selectionCount {
+            payload["Export.selectionCount"] = "\(selectionCount)"
+        }
+        return payload
     }
 
     @MainActor
-    func performWorkoutAllExport() {
-        let selectedColumns = orderedSelectedWorkoutColumns
+    func startWorkoutExport() {
+        guard workoutExportButtonEnabled else { return }
+        guard let request = makeWorkoutExportRequest() else {
+            showError(WorkoutExportError.noWorkoutsInRange)
+            return
+        }
         let format = workoutExportFormat
         let includeJournal = includePDFJournal
-        let calendar = Calendar.current
-        let includeBreakRanges = includeBreakRangesInWorkoutExport
-        let breakRanges = includeBreakRanges ? breakRangesInSelection : []
-        let analyticsPayload = workoutColumnAnalyticsPayload(for: selectedColumns)
-            .merging(
-                workoutBreakAnalyticsPayload(
-                    includeBreakRanges: includeBreakRanges,
-                    breakRanges: breakRanges
-                )
-            ) { _, new in new }
-        trackExportStarted(kind: "workouts", extra: analyticsPayload)
+        let kind = request.kind.rawValue
+        let analyticsPayload = workoutExportAnalyticsPayload(for: request)
+        trackExportStarted(kind: kind, extra: analyticsPayload)
 
-        workoutExportStatusMessage = nil
-        workoutExportFileURL = nil
+        clearWorkoutExportState()
         isExportingWorkouts = true
-
-        let range = effectiveDayRange
-        let start = range.start
-        let end = range.endInclusive
-
-        let workoutsSnapshot: [Workout]
-        if selectedRange == .lastWorkout {
-            workoutsSnapshot = dataManager.workouts.max(by: { $0.date < $1.date }).map { [$0] } ?? []
-        } else {
-            workoutsSnapshot = dataManager.workouts
-        }
-
-        let exerciseTagsByName = exerciseTagsByName(for: workoutsSnapshot)
-        let exerciseMusclesByName = exerciseMusclesByName(for: workoutsSnapshot)
-        let gymNamesByWorkoutID = gymNamesByWorkoutID(for: workoutsSnapshot)
         let storageSnapshot = iCloudManager.storageSnapshot()
-        let unit = weightUnit
-        let resolver = exerciseRelationshipManager.resolverSnapshot()
 
         Task.detached(priority: .userInitiated) {
             do {
                 guard let directory = storageSnapshot.url else {
                     throw iCloudError.containerNotAvailable
                 }
-
-                let fileName = try WorkoutCSVExporter.makeWorkoutExportFileName(
-                    startDate: start,
-                    endDateInclusive: end,
-                    calendar: calendar
-                )
-                let fileURL = directory.appendingPathComponent(format.fileName(from: fileName))
-
-                let document = try WorkoutExportDocument(
-                    workouts: workoutsSnapshot,
-                    startDate: start,
-                    endDateInclusive: end,
-                    exerciseTagsByName: exerciseTagsByName,
-                    exerciseMusclesByName: exerciseMusclesByName,
-                    gymNamesByWorkoutID: gymNamesByWorkoutID,
-                    selectedColumns: selectedColumns,
-                    intentionalBreaks: breakRanges,
-                    includeIntentionalBreaks: includeBreakRanges,
-                    weightUnit: unit,
-                    resolver: resolver,
-                    calendar: calendar
-                )
-                try document.write(to: fileURL, format: format, includePDFJournal: includeJournal)
+                let fileURL = directory.appendingPathComponent(format.fileName(from: try request.fileName()))
+                try request.makeDocument().write(to: fileURL, format: format, includePDFJournal: includeJournal)
 
                 await MainActor.run {
                     workoutExportFileURL = fileURL
                     workoutExportStatusMessage = storageSnapshot.isUsingLocalFallback
-                        ? "Saved on-device (iCloud unavailable)"
-                        : "Saved to iCloud Drive"
+                        ? "Saved on this iPhone. iCloud Drive is unavailable."
+                        : "Saved to iCloud Drive."
                     isExportingWorkouts = false
-                    trackExportCompleted(
-                        kind: "workouts",
-                        itemCount: workoutsSnapshot.count,
-                        extra: analyticsPayload
-                    )
+                    trackExportCompleted(kind: kind, itemCount: request.workouts.count, extra: analyticsPayload)
                     presentShare(fileURL)
                     Haptics.notify(.success)
                 }
             } catch {
                 await MainActor.run {
                     isExportingWorkouts = false
-                    trackExportFailed(kind: "workouts", error: error)
+                    isCopyingWorkoutLog = false
+                    trackExportFailed(kind: kind, error: error)
                     showError(error)
                 }
             }
         }
+    }
+
+    /// Puts the LLM log on the clipboard so it can be pasted straight into a chat.
+    @MainActor
+    func copyWorkoutLog() {
+        guard workoutExportButtonEnabled else { return }
+        guard let request = makeWorkoutExportRequest() else {
+            showError(WorkoutExportError.noWorkoutsInRange)
+            return
+        }
+        let analyticsPayload = workoutExportAnalyticsPayload(for: request)
+            .merging(["Export.destination": "clipboard"]) { _, new in new }
+        let kind = request.kind.rawValue
+        trackExportStarted(kind: kind, extra: analyticsPayload)
+        workoutCopyMessage = nil
+        isCopyingWorkoutLog = true
+        isExportingWorkouts = true
+
+        Task.detached(priority: .userInitiated) {
+            do {
+                let text = WorkoutCompactLogRenderer.render(try request.makeDocument())
+                let tokens = WorkoutCompactLogRenderer.estimatedTokenCount(characters: text.count)
+                await MainActor.run {
+                    UIPasteboard.general.string = text
+                    isExportingWorkouts = false
+                    isCopyingWorkoutLog = false
+                    workoutCopyMessage = "Copied. About \(compactCount(tokens)) tokens, ready to paste."
+                    trackExportCompleted(kind: kind, itemCount: request.workouts.count, extra: analyticsPayload)
+                    Haptics.notify(.success)
+                }
+            } catch {
+                await MainActor.run {
+                    isExportingWorkouts = false
+                    isCopyingWorkoutLog = false
+                    trackExportFailed(kind: kind, error: error)
+                    showError(error)
+                }
+            }
+        }
+    }
+
+    /// Changes whenever the LLM log's contents would. Nil while another format is selected.
+    var llmEstimateKey: Int? {
+        guard selectedCategory == .workouts, workoutExportFormat == .llm else { return nil }
+        var hasher = Hasher()
+        let range = effectiveDayRange
+        hasher.combine(range.start)
+        hasher.combine(range.endInclusive)
+        hasher.combine(selectedRange)
+        hasher.combine(workoutMode)
+        hasher.combine(selectedWorkoutColumns)
+        hasher.combine(selectedExerciseNames)
+        hasher.combine(selectedWorkoutDateIds)
+        hasher.combine(selectedMuscleTagIds)
+        hasher.combine(includeBreakRangesInWorkoutExport)
+        hasher.combine(dataManager.datasetRevision)
+        hasher.combine(exerciseMetadataManager.muscleAssignmentOverrides)
+        hasher.combine(exerciseRelationshipManager.relationships)
+        hasher.combine(exerciseMetricManager.cardioOverrides)
+        hasher.combine(annotationsManager.annotations.mapValues(\.gymProfileId))
+        hasher.combine(gymProfilesManager.gyms)
+        hasher.combine(intentionalBreaksManager.savedBreaks)
+        return hasher.finalize()
+    }
+
+    @MainActor
+    func refreshLLMEstimate() async {
+        guard llmEstimateKey != nil, !orderedSelectedWorkoutColumns.isEmpty,
+              let request = makeWorkoutExportRequest() else {
+            llmEstimate = nil
+            return
+        }
+        llmEstimate = nil
+        llmPreviewError = nil
+        // Let a burst of selection changes settle before measuring.
+        try? await Task.sleep(for: .milliseconds(200))
+        guard !Task.isCancelled else { return }
+
+        let estimate = await Task.detached(priority: .utility) { () -> LLMExportEstimate? in
+            guard let document = try? request.makeDocument() else { return nil }
+            let text = WorkoutCompactLogRenderer.render(document)
+            let lines = text.components(separatedBy: "\n")
+            return LLMExportEstimate(
+                tokens: WorkoutCompactLogRenderer.estimatedTokenCount(characters: text.count),
+                bytes: text.utf8.count,
+                jsonBytes: (try? document.jsonData().count) ?? 0,
+                preview: lines.prefix(60).joined(separator: "\n"),
+                lineCount: lines.count
+            )
+        }.value
+        guard !Task.isCancelled else { return }
+        llmEstimate = estimate
+        llmPreviewError = estimate == nil ? "No logged sets to preview in this selection." : nil
     }
 
     @MainActor
@@ -1772,317 +1788,6 @@ private extension ExportWorkoutsView {
             }
         }
     }
-
-    @MainActor
-    func performExerciseHistoryExport() {
-        let selectedNames = selectedExerciseNamesInRange
-        let selectedColumns = orderedSelectedWorkoutColumns
-        let format = workoutExportFormat
-        let includeJournal = includePDFJournal
-        let calendar = Calendar.current
-        let includeBreakRanges = includeBreakRangesInWorkoutExport
-        let breakRanges = includeBreakRanges ? breakRangesInSelection : []
-        let resolver = exerciseRelationshipManager.resolverSnapshot()
-        let selectedNameKeys = Set(selectedNames.map(ExerciseIdentityResolver.normalizedName))
-        let analyticsPayload = workoutColumnAnalyticsPayload(for: selectedColumns)
-            .merging(["Export.selectionCount": "\(selectedNames.count)"]) { _, new in new }
-            .merging(
-                workoutBreakAnalyticsPayload(
-                    includeBreakRanges: includeBreakRanges,
-                    breakRanges: breakRanges
-                )
-            ) { _, new in new }
-        trackExportStarted(kind: "exerciseHistory", extra: analyticsPayload)
-
-        workoutExportStatusMessage = nil
-        workoutExportFileURL = nil
-        isExportingWorkouts = true
-
-        let workoutsSnapshot = workoutsInSelection.compactMap { workout -> Workout? in
-            let filteredExercises = workout.exercises.filter {
-                exerciseMatchesSelection($0, selectedNameKeys: selectedNameKeys, resolver: resolver)
-            }
-            guard !filteredExercises.isEmpty else { return nil }
-            return Workout(
-                id: workout.id,
-                date: workout.date,
-                name: workout.name,
-                duration: workout.duration,
-                exercises: filteredExercises
-            )
-        }
-
-        guard !workoutsSnapshot.isEmpty else {
-            isExportingWorkouts = false
-            showError(WorkoutExportError.noWorkoutsInRange)
-            return
-        }
-        let bounds = effectiveDayRange
-
-        let exerciseTagsByName = exerciseTagsByName(for: workoutsSnapshot)
-        let exerciseMusclesByName = exerciseMusclesByName(for: workoutsSnapshot)
-        let gymNamesByWorkoutID = gymNamesByWorkoutID(for: workoutsSnapshot)
-        let storageSnapshot = iCloudManager.storageSnapshot()
-        let unit = weightUnit
-        let selectedExerciseCount = selectedNames.count
-
-        Task.detached(priority: .userInitiated) {
-            do {
-                guard let directory = storageSnapshot.url else {
-                    throw iCloudError.containerNotAvailable
-                }
-
-                let fileName = try WorkoutCSVExporter.makeExerciseHistoryExportFileName(
-                    startDate: bounds.start,
-                    endDateInclusive: bounds.endInclusive,
-                    selectedExerciseCount: selectedExerciseCount,
-                    calendar: calendar
-                )
-                let fileURL = directory.appendingPathComponent(format.fileName(from: fileName))
-
-                let document = try WorkoutExportDocument(
-                    workouts: workoutsSnapshot,
-                    startDate: bounds.start,
-                    endDateInclusive: bounds.endInclusive,
-                    exerciseTagsByName: exerciseTagsByName,
-                    exerciseMusclesByName: exerciseMusclesByName,
-                    gymNamesByWorkoutID: gymNamesByWorkoutID,
-                    selectedColumns: selectedColumns,
-                    intentionalBreaks: breakRanges,
-                    includeIntentionalBreaks: includeBreakRanges,
-                    weightUnit: unit,
-                    resolver: resolver,
-                    calendar: calendar
-                )
-                try document.write(to: fileURL, format: format, includePDFJournal: includeJournal)
-
-                await MainActor.run {
-                    workoutExportFileURL = fileURL
-                    workoutExportStatusMessage = storageSnapshot.isUsingLocalFallback
-                        ? "Saved on-device (iCloud unavailable)"
-                        : "Saved to iCloud Drive"
-                    isExportingWorkouts = false
-                    trackExportCompleted(
-                        kind: "exerciseHistory",
-                        itemCount: workoutsSnapshot.count,
-                        extra: analyticsPayload
-                    )
-                    presentShare(fileURL)
-                    Haptics.notify(.success)
-                }
-            } catch {
-                await MainActor.run {
-                    isExportingWorkouts = false
-                    trackExportFailed(kind: "exerciseHistory", error: error)
-                    showError(error)
-                }
-            }
-        }
-    }
-
-    @MainActor
-    func performMuscleGroupExport() {
-        let selectedTagIds = selectedMuscleTagIdsInRange
-        let selectedColumns = orderedSelectedWorkoutColumns
-        let format = workoutExportFormat
-        let includeJournal = includePDFJournal
-        let calendar = Calendar.current
-        let includeBreakRanges = includeBreakRangesInWorkoutExport
-        let breakRanges = includeBreakRanges ? breakRangesInSelection : []
-        let analyticsPayload = workoutColumnAnalyticsPayload(for: selectedColumns)
-            .merging(["Export.selectionCount": "\(selectedTagIds.count)"]) { _, new in new }
-            .merging(
-                workoutBreakAnalyticsPayload(
-                    includeBreakRanges: includeBreakRanges,
-                    breakRanges: breakRanges
-                )
-            ) { _, new in new }
-        trackExportStarted(kind: "muscleGroup", extra: analyticsPayload)
-
-        workoutExportStatusMessage = nil
-        workoutExportFileURL = nil
-        isExportingWorkouts = true
-
-        let workoutsSnapshot = workoutsInSelection.compactMap { workout -> Workout? in
-            let filteredExercises = workout.exercises.filter { exercise in
-                let resolvedTagIds = Set(exerciseMetadataManager.resolvedTags(for: exercise.name).map(\.id))
-                return !resolvedTagIds.isDisjoint(with: selectedTagIds)
-            }
-
-            guard !filteredExercises.isEmpty else { return nil }
-            return Workout(
-                id: workout.id,
-                date: workout.date,
-                name: workout.name,
-                duration: workout.duration,
-                exercises: filteredExercises
-            )
-        }
-
-        guard !workoutsSnapshot.isEmpty else {
-            isExportingWorkouts = false
-            showError(WorkoutExportError.noWorkoutsInRange)
-            return
-        }
-        let bounds = effectiveDayRange
-
-        let exerciseTagsByName = exerciseTagsByName(for: workoutsSnapshot)
-        let exerciseMusclesByName = exerciseMusclesByName(for: workoutsSnapshot)
-        let gymNamesByWorkoutID = gymNamesByWorkoutID(for: workoutsSnapshot)
-        let storageSnapshot = iCloudManager.storageSnapshot()
-        let unit = weightUnit
-        let selectedGroupCount = selectedTagIds.count
-        let resolver = exerciseRelationshipManager.resolverSnapshot()
-
-        Task.detached(priority: .userInitiated) {
-            do {
-                guard let directory = storageSnapshot.url else {
-                    throw iCloudError.containerNotAvailable
-                }
-
-                let fileName = try WorkoutCSVExporter.makeMuscleGroupExportFileName(
-                    startDate: bounds.start,
-                    endDateInclusive: bounds.endInclusive,
-                    selectedGroupCount: selectedGroupCount,
-                    calendar: calendar
-                )
-                let fileURL = directory.appendingPathComponent(format.fileName(from: fileName))
-
-                let document = try WorkoutExportDocument(
-                    workouts: workoutsSnapshot,
-                    startDate: bounds.start,
-                    endDateInclusive: bounds.endInclusive,
-                    exerciseTagsByName: exerciseTagsByName,
-                    exerciseMusclesByName: exerciseMusclesByName,
-                    gymNamesByWorkoutID: gymNamesByWorkoutID,
-                    selectedColumns: selectedColumns,
-                    intentionalBreaks: breakRanges,
-                    includeIntentionalBreaks: includeBreakRanges,
-                    weightUnit: unit,
-                    resolver: resolver,
-                    calendar: calendar
-                )
-                try document.write(to: fileURL, format: format, includePDFJournal: includeJournal)
-
-                await MainActor.run {
-                    workoutExportFileURL = fileURL
-                    workoutExportStatusMessage = storageSnapshot.isUsingLocalFallback
-                        ? "Saved on-device (iCloud unavailable)"
-                        : "Saved to iCloud Drive"
-                    isExportingWorkouts = false
-                    trackExportCompleted(
-                        kind: "muscleGroup",
-                        itemCount: workoutsSnapshot.count,
-                        extra: analyticsPayload
-                    )
-                    presentShare(fileURL)
-                    Haptics.notify(.success)
-                }
-            } catch {
-                await MainActor.run {
-                    isExportingWorkouts = false
-                    trackExportFailed(kind: "muscleGroup", error: error)
-                    showError(error)
-                }
-            }
-        }
-    }
-
-    @MainActor
-    func performWorkoutDatesExport() {
-        let selectedIds = selectedWorkoutDateIdsInRange
-        let selectedColumns = orderedSelectedWorkoutColumns
-        let format = workoutExportFormat
-        let includeJournal = includePDFJournal
-        let calendar = Calendar.current
-        let includeBreakRanges = includeBreakRangesInWorkoutExport
-        let breakRanges = includeBreakRanges ? breakRangesInSelection : []
-        let analyticsPayload = workoutColumnAnalyticsPayload(for: selectedColumns)
-            .merging(["Export.selectionCount": "\(selectedIds.count)"]) { _, new in new }
-            .merging(
-                workoutBreakAnalyticsPayload(
-                    includeBreakRanges: includeBreakRanges,
-                    breakRanges: breakRanges
-                )
-            ) { _, new in new }
-        trackExportStarted(kind: "workoutDates", extra: analyticsPayload)
-
-        workoutExportStatusMessage = nil
-        workoutExportFileURL = nil
-        isExportingWorkouts = true
-
-        let workoutsSnapshot = workoutsInSelection.filter { workout in
-            selectedIds.contains(dayIdentifier(for: workout.date))
-        }
-
-        guard !workoutsSnapshot.isEmpty else {
-            isExportingWorkouts = false
-            showError(WorkoutExportError.noWorkoutsInRange)
-            return
-        }
-        let bounds = effectiveDayRange
-
-        let exerciseTagsByName = exerciseTagsByName(for: workoutsSnapshot)
-        let exerciseMusclesByName = exerciseMusclesByName(for: workoutsSnapshot)
-        let gymNamesByWorkoutID = gymNamesByWorkoutID(for: workoutsSnapshot)
-        let storageSnapshot = iCloudManager.storageSnapshot()
-        let unit = weightUnit
-        let selectedDateCount = selectedIds.count
-        let resolver = exerciseRelationshipManager.resolverSnapshot()
-
-        Task.detached(priority: .userInitiated) {
-            do {
-                guard let directory = storageSnapshot.url else {
-                    throw iCloudError.containerNotAvailable
-                }
-
-                let fileName = try WorkoutCSVExporter.makeWorkoutDatesExportFileName(
-                    startDate: bounds.start,
-                    endDateInclusive: bounds.endInclusive,
-                    selectedDateCount: selectedDateCount,
-                    calendar: calendar
-                )
-                let fileURL = directory.appendingPathComponent(format.fileName(from: fileName))
-
-                let document = try WorkoutExportDocument(
-                    workouts: workoutsSnapshot,
-                    startDate: bounds.start,
-                    endDateInclusive: bounds.endInclusive,
-                    exerciseTagsByName: exerciseTagsByName,
-                    exerciseMusclesByName: exerciseMusclesByName,
-                    gymNamesByWorkoutID: gymNamesByWorkoutID,
-                    selectedColumns: selectedColumns,
-                    intentionalBreaks: breakRanges,
-                    includeIntentionalBreaks: includeBreakRanges,
-                    weightUnit: unit,
-                    resolver: resolver,
-                    calendar: calendar
-                )
-                try document.write(to: fileURL, format: format, includePDFJournal: includeJournal)
-
-                await MainActor.run {
-                    workoutExportFileURL = fileURL
-                    workoutExportStatusMessage = storageSnapshot.isUsingLocalFallback
-                        ? "Saved on-device (iCloud unavailable)"
-                        : "Saved to iCloud Drive"
-                    isExportingWorkouts = false
-                    trackExportCompleted(
-                        kind: "workoutDates",
-                        itemCount: workoutsSnapshot.count,
-                        extra: analyticsPayload
-                    )
-                    presentShare(fileURL)
-                    Haptics.notify(.success)
-                }
-            } catch {
-                await MainActor.run {
-                    isExportingWorkouts = false
-                    trackExportFailed(kind: "workoutDates", error: error)
-                    showError(error)
-                }
-            }
-        }
-    }
 }
 
 // MARK: - Helpers
@@ -2119,6 +1824,7 @@ private extension ExportWorkoutsView {
     func clearWorkoutExportState() {
         workoutExportStatusMessage = nil
         workoutExportFileURL = nil
+        workoutCopyMessage = nil
     }
 
     func clearHealthExportState() {
@@ -2417,9 +2123,102 @@ private enum HealthExportMode: String, CaseIterable, Hashable, Identifiable {
     }
 }
 
+/// A snapshot of one workout export, safe to hand to a background task.
+private nonisolated struct WorkoutExportRequest: Sendable {
+    enum Kind: String, Sendable {
+        case workouts
+        case exerciseHistory
+        case muscleGroup
+        case workoutDates
+
+        var analysisScope: String {
+            switch self {
+            case .workouts: return "all workouts in the selected date range"
+            case .exerciseHistory: return "selected exercises only; other exercises are excluded"
+            case .muscleGroup: return "selected muscle groups only; other exercises are excluded"
+            case .workoutDates: return "selected workout dates only; other dates are excluded"
+            }
+        }
+    }
+
+    let kind: Kind
+    let workouts: [Workout]
+    let start: Date
+    let endInclusive: Date
+    let selectionCount: Int?
+    let columns: [WorkoutExportColumn]
+    let breaks: [IntentionalBreakRange]
+    let includesBreaks: Bool
+    let exerciseTagsByName: [String: String]
+    let exerciseMusclesByName: [String: [WorkoutExportMuscle]]
+    let gymNamesByWorkoutID: [UUID: String]
+    let weightUnit: String
+    let resolver: ExerciseIdentityResolver
+    let calendar: Calendar
+    let nativeWorkouts: [LoggedWorkout]
+    let exerciseCountLabelsByName: [String: String]
+
+    func makeDocument() throws -> WorkoutExportDocument {
+        try WorkoutExportDocument(
+            workouts: workouts,
+            startDate: start,
+            endDateInclusive: endInclusive,
+            exerciseTagsByName: exerciseTagsByName,
+            exerciseMusclesByName: exerciseMusclesByName,
+            gymNamesByWorkoutID: gymNamesByWorkoutID,
+            selectedColumns: columns,
+            intentionalBreaks: breaks,
+            includeIntentionalBreaks: includesBreaks,
+            weightUnit: weightUnit,
+            resolver: resolver,
+            calendar: calendar,
+            nativeWorkouts: nativeWorkouts,
+            exerciseCountLabelsByName: exerciseCountLabelsByName,
+            selectionScope: kind.analysisScope
+        )
+    }
+
+    /// The CSV-style name for this export; the chosen format swaps the extension.
+    func fileName() throws -> String {
+        switch kind {
+        case .workouts:
+            return try WorkoutCSVExporter.makeWorkoutExportFileName(
+                startDate: start, endDateInclusive: endInclusive, calendar: calendar
+            )
+        case .exerciseHistory:
+            return try WorkoutCSVExporter.makeExerciseHistoryExportFileName(
+                startDate: start, endDateInclusive: endInclusive,
+                selectedExerciseCount: selectionCount ?? 0, calendar: calendar
+            )
+        case .muscleGroup:
+            return try WorkoutCSVExporter.makeMuscleGroupExportFileName(
+                startDate: start, endDateInclusive: endInclusive,
+                selectedGroupCount: selectionCount ?? 0, calendar: calendar
+            )
+        case .workoutDates:
+            return try WorkoutCSVExporter.makeWorkoutDatesExportFileName(
+                startDate: start, endDateInclusive: endInclusive,
+                selectedDateCount: selectionCount ?? 0, calendar: calendar
+            )
+        }
+    }
+}
+
+private nonisolated struct LLMExportEstimate: Equatable, Sendable {
+    let tokens: Int
+    let bytes: Int
+    let jsonBytes: Int
+    let preview: String
+    let lineCount: Int
+
+    var savingsPercent: Int {
+        guard jsonBytes > 0 else { return 0 }
+        return max(0, Int((100 * (1 - Double(bytes) / Double(jsonBytes))).rounded()))
+    }
+}
+
 private struct BackupInventoryItem: Identifiable {
     let id: String
-    let icon: String
     let title: String
     let value: String
 }
@@ -2516,16 +2315,7 @@ private struct ExportCustomRangeSheet: View {
                             range: draftStartDate...latestSelectableDate
                         )
 
-                        Button(action: applyRange) {
-                            Text("Apply range")
-                                .font(Theme.Typography.headline)
-                                .foregroundStyle(Theme.Colors.onAccent)
-                                .frame(maxWidth: .infinity)
-                                .padding(Theme.Spacing.md)
-                                .background(Theme.Colors.brandBand)
-                                .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous))
-                        }
-                        .buttonStyle(.plain)
+                        AppPrimaryButton(title: "Apply range", action: applyRange)
                     }
                     .padding(Theme.Spacing.xl)
                 }

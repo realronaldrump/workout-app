@@ -38,7 +38,7 @@ struct WorkoutEditView: View {
                                     .padding(Theme.Spacing.md)
                                     .frame(minHeight: Theme.Layout.minimumTapTarget)
                                     .background(
-                                        RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
+                                        RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
                                             .fill(Theme.Colors.surface.opacity(0.35))
                                     )
                             }
@@ -467,11 +467,11 @@ private struct LoggedSetEditorRow: View {
         }
         .padding(Theme.Spacing.md)
         .background(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
                 .fill(Theme.Colors.surface.opacity(0.20))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
                 .strokeBorder(Theme.Colors.border.opacity(0.7), lineWidth: 1)
         )
         .toolbar {
@@ -515,7 +515,7 @@ private struct LoggedSetEditorRow: View {
                 .foregroundStyle(Theme.Colors.textPrimary)
                 .padding(.horizontal, Theme.Spacing.md)
                 .frame(maxWidth: .infinity, minHeight: Theme.Layout.minimumTapTarget)
-                .background(Theme.Colors.surface.opacity(0.4), in: RoundedRectangle(cornerRadius: Theme.CornerRadius.medium))
+                .background(Theme.Colors.surface.opacity(0.4), in: RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous))
         }
         .frame(maxWidth: .infinity)
         .fixedSize(horizontal: false, vertical: true)

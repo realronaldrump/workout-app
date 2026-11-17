@@ -135,12 +135,12 @@ struct BarbellLoadView: View {
     private func layoutMetrics(width: CGFloat) -> Metrics {
         let collarX = min(76, width * 0.2)
         let firstPlateX = collarX + 18
-        let gap: CGFloat = 5
         let sleeveTail: CGFloat = 22
-        let available = max(width - firstPlateX - sleeveTail, 40)
+        let available = max(width - firstPlateX - sleeveTail, 1)
+        let gap = min(5, available / CGFloat(slotCount) * 0.2)
         let natural = (available - gap * CGFloat(slotCount - 1)) / CGFloat(slotCount)
         return Metrics(
-            plateWidth: min(30, max(natural, 10)),
+            plateWidth: min(30, max(natural, 0.5)),
             gap: gap,
             collarX: collarX,
             firstPlateX: firstPlateX,
@@ -201,7 +201,7 @@ struct BarbellLoadView: View {
                     .offset(x: isLoaded || reduceMotion ? 0 : 36)
                     .opacity(isLoaded || reduceMotion ? 1 : 0)
 
-                if showsDayLabels {
+                if showsDayLabels, metrics.plateWidth >= 20 {
                     Text(plate.date.formatted(.dateTime.weekday(.abbreviated)))
                         .font(Theme.Typography.caption2)
                         .foregroundStyle(Theme.Colors.textSecondary)
@@ -420,6 +420,34 @@ extension View {
     }
 }
 
+/// A switch on a ledger row. Green reads as "on" in both appearances; an ink
+/// track would turn chalk-white in dark mode and hide the thumb.
+struct LedgerToggleRow: View {
+    let title: String
+    var subtitle: String?
+    @Binding var isOn: Bool
+    var showsRule = true
+
+    var body: some View {
+        Toggle(isOn: $isOn) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(Theme.Typography.headline)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                if let subtitle {
+                    Text(subtitle)
+                        .font(Theme.Typography.subheadline)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .tint(Theme.Colors.success)
+        .padding(.trailing, 2)
+        .ledgerRow(showsRule: showsRule)
+    }
+}
+
 // MARK: - Lists
 
 extension View {
@@ -499,12 +527,16 @@ struct TagLabel: View {
 
 /// A screen's own title block: the display face large, with one line of context.
 struct ScreenHeader<Accessory: View>: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let title: String
     var subtitle: String?
     @ViewBuilder var accessory: () -> Accessory
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.md) {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: Theme.Spacing.sm))
+            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: Theme.Spacing.md))
+        layout {
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
                     .font(Theme.Typography.screenTitle)
@@ -518,7 +550,7 @@ struct ScreenHeader<Accessory: View>: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            Spacer(minLength: 0)
+            if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 0) }
             accessory()
         }
     }

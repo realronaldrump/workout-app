@@ -131,6 +131,7 @@ struct ExercisePickerView: View {
                             for name in selectedNames { onSelect(name) }
                             dismiss()
                         }
+                        .accessibilityIdentifier("exercise-picker-done")
                     }
                     .contentColumn(maxWidth: 640)
                     .padding(.horizontal, Theme.Layout.screenGutter)
@@ -285,6 +286,7 @@ struct ExercisePickerView: View {
             .disabled(isAdded)
             .accessibilityLabel(isAdded ? "\(name), already in this workout" : isSelected ? "Deselect \(name)" : "Add \(name)")
             .accessibilityAddTraits(isSelected ? .isSelected : [])
+            .accessibilityIdentifier("exercise-picker-\(name)")
 
             Button {
                 toggleFavorite(name)

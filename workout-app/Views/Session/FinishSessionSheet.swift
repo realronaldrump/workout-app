@@ -103,6 +103,7 @@ struct FinishSessionSheet: View {
                         Menu {
                             Button("Spreadsheet (.csv)", systemImage: "tablecells") { exportWorkout(format: .csv) }
                             Button("Structured data (.json)", systemImage: "curlybraces") { exportWorkout(format: .json) }
+                            Button("AI training log (.txt)", systemImage: "text.alignleft") { exportWorkout(format: .llm) }
                         } label: {
                             TextLinkLabel(title: "Export this workout")
                         }
@@ -139,11 +140,20 @@ struct FinishSessionSheet: View {
     private func exportWorkout(format: WorkoutExportFormat) {
         guard let savedWorkout else { return }
         do {
+            let assignments = ExerciseMetadataManager.shared.resolvedAssignmentMappings(
+                for: Set(savedWorkout.exercises.map(\.name))
+            )
             exportURL = try WorkoutCSVExporter.exportLoggedWorkout(
                 savedWorkout,
                 to: FileManager.default.temporaryDirectory.appendingPathComponent("WorkoutShares", isDirectory: true),
                 format: format,
-                gymName: gymName
+                gymName: gymName,
+                exerciseTagsByName: assignments.mapValues(MuscleContributionPolicy.exportDescription),
+                exerciseMusclesByName: assignments.mapValues { $0.map {
+                    WorkoutExportMuscle(name: $0.tag.displayName, role: $0.role.rawValue)
+                } },
+                resolver: ExerciseRelationshipManager.shared.resolverSnapshot(),
+                exerciseCountLabelsByName: ExerciseMetricManager.shared.exportCountLabels(for: Set(savedWorkout.exercises.map(\.name)))
             )
             showingShareSheet = true
             Haptics.selection()

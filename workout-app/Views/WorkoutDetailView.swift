@@ -409,6 +409,7 @@ struct WorkoutDetailView: View {
         }
         .buttonStyle(PressableCardButtonStyle())
         .accessibilityHint("Opens volume by exercise, stats, and heart rate")
+        .accessibilityIdentifier("workout-session-breakdown")
     }
 
     private func summaryStat(title: String, value: String) -> some View {

@@ -32,23 +32,14 @@ struct MultiSelectSheet<Item: Hashable & Identifiable>: View {
                 AdaptiveBackground()
 
                 VStack(spacing: 0) {
-                    HStack {
-                        Button("Select all") {
-                            localSelection = Set(items)
-                        }
-                        .foregroundStyle(Theme.Colors.accent)
-                        .font(Theme.Typography.captionBold)
-
-                        Spacer()
-
-                        Button("Deselect all") {
-                            localSelection.removeAll()
-                        }
-                        .foregroundStyle(Theme.Colors.accent)
-                        .font(Theme.Typography.captionBold)
-                    }
-                    .padding()
-                    .background(Theme.Colors.elevated)
+                    ExportSelectionToolbar(
+                        selectedCount: localSelection.count,
+                        totalCount: items.count,
+                        onSelectAll: { localSelection = Set(items) },
+                        onClear: { localSelection.removeAll() }
+                    )
+                    .padding(.horizontal, Theme.Layout.screenGutter)
+                    .padding(.vertical, Theme.Spacing.sm)
 
                     List {
                         ForEach(items) { item in
@@ -84,12 +75,12 @@ struct MultiSelectSheet<Item: Hashable & Identifiable>: View {
                                 }
                                 .padding(.vertical, Theme.Spacing.xs)
                             }
-                            .listRowBackground(Theme.Colors.elevated)
-                            .listRowSeparatorTint(Theme.Colors.border)
+                            .buttonStyle(PressableCardButtonStyle())
+                            .accessibilityAddTraits(localSelection.contains(item) ? .isSelected : [])
+                            .loadedListRow()
                         }
                     }
-                    .listStyle(.plain)
-                    .scrollContentBackground(.hidden)
+                    .loadedListStyle()
                 }
             }
             .navigationTitle(title)

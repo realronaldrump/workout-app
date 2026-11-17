@@ -49,25 +49,14 @@ struct TimeRangePillPicker<T: Hashable>: View {
             .accessibilityLabel(controlTitle)
             .accessibilityValue(label(selected))
         } else if expandsToFill {
-            HStack(spacing: 4) {
-                ForEach(options, id: \.self) { option in
-                    Button { select(option) } label: {
-                        Text(label(option))
-                            .font(Theme.Typography.subheadlineStrong)
-                            .foregroundStyle(selected == option ? Theme.Colors.onAccent : Theme.Colors.textSecondary)
-                            .frame(maxWidth: .infinity, minHeight: 44)
-                            .background(
-                                selected == option ? Theme.Colors.accent : .clear,
-                                in: Capsule(style: .continuous)
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityAddTraits(selected == option ? .isSelected : [])
-                }
-            }
-            .frame(maxWidth: 560)
-            .frame(maxWidth: .infinity)
-            .accessibilityLabel(controlTitle)
+            AppSegmentedPicker(
+                title: controlTitle,
+                selection: Binding(get: { selected }, set: { value in
+                    if isSpecialOption?(value) == true, let onCustomTap { onCustomTap() }
+                    else { selected = value }
+                }),
+                options: options.map { (label: label($0), value: $0) }
+            )
         } else {
             ScrollViewReader { proxy in
                 rangeTrack
@@ -146,7 +135,7 @@ struct TimeRangePillPicker<T: Hashable>: View {
             }
             .contentShape(Capsule())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(AppInteractionButtonStyle())
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(title)
         .accessibilityValue(isSelected ? "Selected" : "Not selected")

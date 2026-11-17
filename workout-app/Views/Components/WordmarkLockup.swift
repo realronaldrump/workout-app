@@ -72,7 +72,7 @@ struct WordmarkLockup: View {
     private func bandWord(font: Font) -> some View {
         Text("BEAUTIFUL")
             .font(font)
-            .foregroundStyle(Color.white)
+            .foregroundStyle(Theme.Colors.onAccent)
             .lineLimit(1)
             .minimumScaleFactor(0.75)
             .padding(.horizontal, 10)

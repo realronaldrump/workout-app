@@ -651,6 +651,18 @@ struct ExerciseDetailView: View {
             isLoadingExerciseDetail = true
             exerciseDetailError = nil
 
+#if DEBUG
+            // UI fixtures are transient. Keep this page on the same fixture snapshot
+            // as its source-workout links instead of mixing in saved QA sessions.
+            if AnalyticsUITestFixture.isEnabled {
+                exerciseWorkouts = dataManager.workouts
+                refreshScopedHistory()
+                initializeProgressRangeIfNeeded()
+                isLoadingExerciseDetail = false
+                scheduleProgressReviewRefresh(debounceNs: 0)
+                return
+            }
+#endif
             do {
                 let snapshot = try await WorkoutRepository.shared.exerciseDetail(name: exerciseName, scope: .all)
                 guard !Task.isCancelled else { return }
@@ -931,7 +943,10 @@ struct ExerciseDetailView: View {
 
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(spacing: Theme.Spacing.xl) {
+                    // This is a bounded set of analysis sections. Stable section
+                    // heights prevent visibility tracking from cycling through lazy
+                    // estimates while scrolling across a tall rep-range breakdown.
+                    VStack(spacing: Theme.Spacing.xl) {
                         exerciseHeader
 
                         if isLoadingExerciseDetail && scopedHistory.isEmpty {

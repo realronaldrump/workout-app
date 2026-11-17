@@ -25,7 +25,6 @@ struct WorkoutSessionView: View {
 
     @State private var showingExercisePicker = false
     @State private var requestedExerciseID: UUID?
-    @State private var didOfferExercisePicker = false
     @State private var showingSuggestions = false
     @State private var finishedWorkout: LoggedWorkout?
     @State private var showingFinishSheet = false
@@ -224,7 +223,7 @@ struct WorkoutSessionView: View {
             }
             .alert("Leave unchecked sets out?", isPresented: $showingUncheckedSetAlert) {
                 Button("Keep logging", role: .cancel) {}
-                Button("Save \(cachedSummary.completedSetCount) completed sets") {
+                Button("Save \(cachedSummary.completedSetCount) completed \(cachedSummary.completedSetCount == 1 ? "set" : "sets")") {
                     showingFinishSheet = true
                     Haptics.selection()
                 }
@@ -283,10 +282,6 @@ struct WorkoutSessionView: View {
                     weightIncrement = 2.5
                 }
                 refreshDerivedSessionState()
-                if sessionManager.activeSession?.exercises.isEmpty == true && !didOfferExercisePicker {
-                    didOfferExercisePicker = true
-                    showingExercisePicker = true
-                }
             }
             .onDisappear {
                 sessionManager.saveImmediately()
@@ -528,6 +523,7 @@ private extension WorkoutSessionView {
             .frame(maxWidth: .infinity, minHeight: Theme.Layout.primaryControlHeight)
         }
         .buttonStyle(BrandSecondaryButtonStyle())
+        .accessibilityIdentifier("session-add-exercise")
     }
 
     private func exercisesSubtitle(_ session: ActiveWorkoutSession) -> String {

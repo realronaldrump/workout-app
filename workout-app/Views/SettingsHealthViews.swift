@@ -279,7 +279,7 @@ struct HealthDataSettingsView: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, Theme.Spacing.sm)
         .background(tint.opacity(0.06))
-        .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.medium))
+        .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(value) \(label.lowercased())")
     }

@@ -640,7 +640,7 @@ struct MetricDetailView: View {
                         .padding(.horizontal, Theme.Spacing.md)
                         .padding(.vertical, Theme.Spacing.sm)
                         .background(
-                            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                                 .fill(Theme.Colors.surfaceRaised)
                         )
                     }
@@ -1504,7 +1504,7 @@ private struct CachedLongestStreaksSection: View {
                             .padding(.vertical, 6)
                             .padding(.horizontal, Theme.Spacing.md)
                             .background(
-                                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                                     .fill(
                                         selectedRunId == run.id
                                             ? Theme.Colors.accent.opacity(0.12)
@@ -1512,7 +1512,7 @@ private struct CachedLongestStreaksSection: View {
                                     )
                             )
                             .overlay(
-                                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                                     .strokeBorder(
                                         selectedRunId == run.id ? Theme.Colors.accent : Color.clear,
                                         lineWidth: 2
@@ -1611,6 +1611,7 @@ private struct HeroChip: View {
 }
 
 private struct VolumeSessionChip: View {
+    @ScaledMetric(relativeTo: .caption) private var chipWidth: CGFloat = 132
     let title: String
     let value: String
     let isSelected: Bool
@@ -1624,15 +1625,15 @@ private struct VolumeSessionChip: View {
                     .lineLimit(1)
                 Text(value)
                     .font(Theme.Typography.caption)
-                    .foregroundColor(isSelected ? .white.opacity(0.88) : Theme.Colors.textSecondary)
+                    .foregroundColor(isSelected ? Theme.Colors.onAccent : Theme.Colors.textSecondary)
                     .lineLimit(1)
             }
-            .frame(width: 132, alignment: .leading)
+            .frame(width: chipWidth, alignment: .leading)
             .padding(.horizontal, Theme.Spacing.md)
             .padding(.vertical, Theme.Spacing.sm)
-            .foregroundColor(isSelected ? .white : Theme.Colors.textPrimary)
+            .foregroundColor(isSelected ? Theme.Colors.onAccent : Theme.Colors.textPrimary)
             .background(
-                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                     .fill(
                         isSelected
                             ? AnyShapeStyle(Theme.accentGradient)
@@ -1640,7 +1641,7 @@ private struct VolumeSessionChip: View {
                     )
             )
             .overlay(
-                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                     .strokeBorder(
                         isSelected ? Theme.Colors.accent.opacity(0.3) : Theme.Colors.border.opacity(0.55),
                         lineWidth: 1
@@ -1686,11 +1687,11 @@ private struct MetricWorkoutRow: View {
         .padding(.horizontal, Theme.Spacing.md)
         .padding(.vertical, Theme.Spacing.sm)
         .background(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                 .fill(highlight ? Theme.Colors.accent.opacity(0.1) : Theme.Colors.surfaceRaised)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                 .strokeBorder(highlight ? Theme.Colors.accent.opacity(0.3) : Theme.Colors.border.opacity(0.35), lineWidth: 1)
         )
     }
@@ -1706,7 +1707,7 @@ private struct EmptyStateTile: View {
             .padding(Theme.Spacing.md)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                     .fill(Theme.Colors.surfaceRaised)
             )
     }
@@ -1755,6 +1756,12 @@ private struct SessionDayTile: View {
         return AnyShapeStyle(Theme.Colors.surfaceRaised)
     }
 
+    private var tileInk: Color {
+        guard day.hasSessions else { return Theme.Colors.textTertiary }
+        if !isSelected, day.primaryWindow == .morning { return Theme.Colors.onHeroAccent }
+        return Theme.Colors.onAccent
+    }
+
     var body: some View {
         Button(action: onTap) {
             VStack(spacing: Theme.Spacing.sm) {
@@ -1773,22 +1780,22 @@ private struct SessionDayTile: View {
                 VStack(spacing: 4) {
                     Text(day.hasSessions ? "\(day.count)" : "0")
                         .font(day.hasSessions ? Theme.Typography.monoMedium : Theme.Typography.monoSmall)
-                        .foregroundColor(day.hasSessions ? .white : Theme.Colors.textTertiary)
+                        .foregroundColor(tileInk)
 
                     Text(day.tileSubtitle)
                         .font(isCompact ? Theme.Typography.microLabel : Theme.Typography.caption2Bold)
-                        .foregroundColor(day.hasSessions ? .white.opacity(0.88) : Theme.Colors.textTertiary)
+                        .foregroundColor(tileInk)
                         .lineLimit(1)
                         .minimumScaleFactor(0.75)
                 }
                 .frame(maxWidth: .infinity)
                 .frame(height: isCompact ? 58 : 64)
                 .background(
-                    RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                    RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                         .fill(fillStyle)
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                    RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                         .strokeBorder(
                             isSelected
                                 ? Theme.Colors.accent.opacity(0.38)
@@ -1846,11 +1853,11 @@ private struct SessionTimeWindowRow: View {
         .padding(.horizontal, Theme.Spacing.sm)
         .padding(.vertical, Theme.Spacing.xs)
         .background(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                 .fill(isHighlighted ? Theme.Colors.accent.opacity(0.08) : Color.clear)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                 .strokeBorder(isHighlighted ? Theme.Colors.accent.opacity(0.24) : Color.clear, lineWidth: 1)
         )
     }

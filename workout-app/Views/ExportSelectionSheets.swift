@@ -72,7 +72,7 @@ struct ExportExerciseSelectionSheet: View {
                         }
                     }
                 }
-                .padding(Theme.Spacing.xl)
+                .padding(Theme.Layout.screenGutter)
                 .contentColumn()
                 .scrollDismissesKeyboard(.interactively)
             }
@@ -165,7 +165,7 @@ struct ExportWorkoutDateSelectionSheet: View {
                         }
                     }
                 }
-                .padding(Theme.Spacing.xl)
+                .padding(Theme.Layout.screenGutter)
                 .contentColumn()
                 .scrollDismissesKeyboard(.interactively)
             }
@@ -254,7 +254,7 @@ struct ExportMuscleGroupSelectionSheet: View {
                                             .font(Theme.Typography.calloutStrong)
                                             .frame(width: 22, height: 22)
                                             .background(tag.tint.opacity(0.12))
-                                            .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
+                                            .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small, style: .continuous))
 
                                         VStack(alignment: .leading, spacing: 2) {
                                             Text(tag.displayName)
@@ -272,7 +272,7 @@ struct ExportMuscleGroupSelectionSheet: View {
                         }
                     }
                 }
-                .padding(Theme.Spacing.xl)
+                .padding(Theme.Layout.screenGutter)
                 .contentColumn()
                 .scrollDismissesKeyboard(.interactively)
             }
@@ -409,7 +409,7 @@ struct ExportWorkoutColumnSelectionSheet: View {
                                             .font(Theme.Typography.calloutStrong)
                                             .frame(width: 22, height: 22)
                                             .background(Theme.Colors.accent.opacity(0.12))
-                                            .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
+                                            .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small, style: .continuous))
 
                                         Text(column.title)
                                             .font(Theme.Typography.bodyBold)
@@ -429,7 +429,7 @@ struct ExportWorkoutColumnSelectionSheet: View {
                             .accessibilityLabel("Select at least one field before exporting")
                     }
                 }
-                .padding(Theme.Spacing.xl)
+                .padding(Theme.Layout.screenGutter)
                 .contentColumn()
                 .scrollDismissesKeyboard(.interactively)
             }
@@ -522,7 +522,7 @@ struct ExportHealthMetricSelectionSheet: View {
                                             .font(Theme.Typography.calloutStrong)
                                             .frame(width: 22, height: 22)
                                             .background(metric.chartColor.opacity(0.12))
-                                            .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
+                                            .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small, style: .continuous))
 
                                         VStack(alignment: .leading, spacing: 2) {
                                             Text(metric.title)
@@ -540,7 +540,7 @@ struct ExportHealthMetricSelectionSheet: View {
                         }
                     }
                 }
-                .padding(Theme.Spacing.xl)
+                .padding(Theme.Layout.screenGutter)
                 .contentColumn()
                 .scrollDismissesKeyboard(.interactively)
             }

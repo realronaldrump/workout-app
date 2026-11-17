@@ -159,7 +159,11 @@ struct WorkoutCSVExporter {
         format: WorkoutExportFormat = .csv,
         gymName: String? = nil,
         weightUnit: String? = "lbs",
-        calendar: Calendar = .current
+        calendar: Calendar = .current,
+        exerciseTagsByName: [String: String] = [:],
+        exerciseMusclesByName: [String: [WorkoutExportMuscle]] = [:],
+        resolver: ExerciseIdentityResolver = .empty,
+        exerciseCountLabelsByName: [String: String] = [:]
     ) throws -> URL {
         let fileName = "workout_\(workout.id.uuidString)_\(UUID().uuidString).\(format.fileExtension)"
         let destination = directory.appendingPathComponent(fileName)
@@ -167,9 +171,15 @@ struct WorkoutCSVExporter {
             workouts: [workout.analyticsWorkout],
             startDate: workout.startedAt,
             endDateInclusive: workout.startedAt,
+            exerciseTagsByName: exerciseTagsByName,
+            exerciseMusclesByName: exerciseMusclesByName,
             gymNamesByWorkoutID: gymName.map { [workout.id: $0] } ?? [:],
             weightUnit: weightUnit,
-            calendar: calendar
+            resolver: resolver,
+            calendar: calendar,
+            nativeWorkouts: format == .llm ? [workout] : [],
+            exerciseCountLabelsByName: exerciseCountLabelsByName,
+            selectionScope: "single workout"
         )
         try document.write(to: destination, format: format)
         return destination

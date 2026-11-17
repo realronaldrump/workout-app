@@ -52,17 +52,6 @@ struct IntentionalBreaksView: View {
         calendar.startOfDay(for: Date())
     }
 
-    private var heroMetricColumns: [GridItem] {
-        if dynamicTypeSize.isAccessibilitySize {
-            return [GridItem(.flexible())]
-        }
-        return [
-            GridItem(.flexible(), spacing: Theme.Spacing.sm),
-            GridItem(.flexible(), spacing: Theme.Spacing.sm),
-            GridItem(.flexible(), spacing: Theme.Spacing.sm)
-        ]
-    }
-
     var body: some View {
         ZStack {
             AdaptiveBackground()
@@ -75,20 +64,16 @@ struct IntentionalBreaksView: View {
                     actionsSection
                         .animateOnAppear(delay: 0.04)
 
-                    suggestedSection
-                        .animateOnAppear(delay: 0.08)
-
                     savedSection
-                        .animateOnAppear(delay: 0.12)
+                    suggestedSection
                 }
                 .padding(.horizontal, Theme.Spacing.lg)
                 .padding(.vertical, Theme.Spacing.xl)
-                .frame(maxWidth: 920, alignment: .leading)
+                .frame(maxWidth: Theme.Layout.maxContentWidth, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .center)
             }
         }
-        .navigationTitle("Planned breaks")
-        .navigationBarTitleDisplayMode(.inline)
+        .collapsingTitle("Planned breaks")
         .sheet(item: $editorDraft) { draft in
             BreakEditorSheet(
                 draft: draft,
@@ -115,37 +100,23 @@ struct IntentionalBreaksView: View {
 
     private var heroCard: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-            SectionHeading(
-                title: "Breaks",
-                help: "Saved breaks protect streaks and lower weekly goals. Logged workouts still count. "
-                    + "Suggestions are gaps between workouts longer than your Rest days setting, with at least "
-                    + "\(IntentionalBreaksAnalytics.minimumSuggestedBreakDays) days off."
+            StatsPageHeader(
+                eyebrow: "Training",
+                title: "Planned breaks",
+                subtitle: "Keep time off in your training history.",
+                help: "Saved breaks protect streaks and lower weekly goals. Logged workouts still count. Suggestions are gaps longer than your Rest days setting, with at least \(IntentionalBreaksAnalytics.minimumSuggestedBreakDays) days off."
             )
-
-            LazyVGrid(
-                columns: heroMetricColumns,
-                spacing: Theme.Spacing.sm
-            ) {
-                BreakMetricChip(title: "Saved breaks", value: "\(savedBreaks.count)", tint: Theme.Colors.accent)
-                BreakMetricChip(title: "Suggested", value: "\(suggestions.count)", tint: Theme.Colors.accentSecondary)
-                BreakMetricChip(title: "Break days", value: "\(savedExcusedDayCount)", tint: Theme.Colors.success)
+            let layout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: Theme.Spacing.md))
+                : AnyLayout(StatColumns())
+            layout {
+                DisplayStat(value: savedBreaks.count.formatted(), label: "saved breaks")
+                DisplayStat(value: savedExcusedDayCount.formatted(), label: "days off")
+                DisplayStat(value: suggestions.count.formatted(), label: "suggestions")
             }
+            .padding(Theme.Spacing.lg)
+            .softCard()
         }
-        .padding(Theme.Spacing.lg)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge)
-                .fill(
-                    LinearGradient(
-                        colors: [Theme.Colors.surface, Theme.Colors.surface],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.xlarge)
-                .strokeBorder(Theme.Colors.border.opacity(0.45), lineWidth: 1)
-        )
     }
 
     private var actionsSection: some View {
@@ -297,39 +268,6 @@ struct IntentionalBreaksView: View {
     }
 }
 
-private struct BreakMetricChip: View {
-    let title: String
-    let value: String
-    let tint: Color
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(Theme.Typography.metricLabel)
-                .foregroundColor(Theme.Colors.textTertiary)
-
-            Text(value)
-                .font(Theme.Typography.monoMedium)
-                .foregroundColor(Theme.Colors.textPrimary)
-                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
-                .minimumScaleFactor(dynamicTypeSize.isAccessibilitySize ? 1 : 0.7)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, Theme.Spacing.md)
-        .padding(.vertical, Theme.Spacing.sm)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                .fill(tint.opacity(0.09))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                .strokeBorder(tint.opacity(0.22), lineWidth: 1)
-        )
-    }
-}
-
 private struct IntentionalBreakSuggestionCard: View {
     let suggestion: IntentionalBreakSuggestion
     let subtitle: String
@@ -337,8 +275,13 @@ private struct IntentionalBreakSuggestionCard: View {
     let onAdd: () -> Void
     let onDismiss: () -> Void
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
-        HStack(alignment: .center, spacing: Theme.Spacing.md) {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: Theme.Spacing.sm))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: Theme.Spacing.md))
+        layout {
             VStack(alignment: .leading, spacing: 4) {
                 Text(countLabel)
                     .font(Theme.Typography.bodyBold)
@@ -355,8 +298,7 @@ private struct IntentionalBreakSuggestionCard: View {
             }
             .layoutPriority(1)
         }
-        .padding(Theme.Spacing.lg)
-        .softCard(elevation: 1)
+        .ledgerRow()
     }
 
     private var fullWidthActions: some View {
@@ -388,8 +330,13 @@ private struct IntentionalBreakSavedCard: View {
     let onEdit: () -> Void
     let onRemove: () -> Void
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
-        HStack(alignment: .center, spacing: Theme.Spacing.md) {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: Theme.Spacing.sm))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: Theme.Spacing.md))
+        layout {
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
                     .font(Theme.Typography.bodyBold)
@@ -399,15 +346,14 @@ private struct IntentionalBreakSavedCard: View {
                     .foregroundColor(Theme.Colors.textSecondary)
             }
 
-            Spacer()
+            if !dynamicTypeSize.isAccessibilitySize { Spacer() }
 
             HStack(spacing: Theme.Spacing.xs) {
                 AppPillIconButton(systemImage: "pencil", accessibilityLabel: "Edit break", tint: Theme.Colors.accent, action: onEdit)
                 AppPillIconButton(systemImage: "trash", accessibilityLabel: "Remove break", tint: Theme.Colors.error, action: onRemove)
             }
         }
-        .padding(Theme.Spacing.lg)
-        .softCard(elevation: 1)
+        .ledgerRow()
     }
 }
 
@@ -539,7 +485,7 @@ private struct BreakEditorSheet: View {
                                 .frame(maxWidth: .infinity)
                                 .padding(Theme.Spacing.md)
                                 .background(Theme.accentGradient)
-                                .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large))
+                                .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous))
                         }
                         .buttonStyle(.plain)
                     }

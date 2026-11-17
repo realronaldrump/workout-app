@@ -293,11 +293,11 @@ private struct ConsistencyMetricPill: View {
         .padding(.horizontal, Theme.Spacing.md)
         .padding(.vertical, Theme.Spacing.sm)
         .background(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                 .fill(Theme.Colors.surface.opacity(0.55))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)
                 .strokeBorder(Theme.Colors.border.opacity(0.25), lineWidth: 1)
         )
     }
@@ -399,11 +399,11 @@ private struct WeeklyConsistencyBar: View {
     var body: some View {
         VStack(spacing: Theme.Spacing.xs) {
             ZStack(alignment: .bottom) {
-                RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.small, style: .continuous)
                     .fill(Theme.Colors.surface.opacity(0.55))
                     .frame(width: 18, height: barHeight)
 
-                RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.small, style: .continuous)
                     .fill(barColor)
                     .frame(width: 18, height: fillHeight)
 
@@ -452,7 +452,7 @@ private struct ConsistencyLegendItem: View {
 
     var body: some View {
         HStack(spacing: Theme.Spacing.xs) {
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.small, style: .continuous)
                 .fill(color)
                 .frame(width: 10, height: 10)
 
@@ -489,7 +489,7 @@ struct CalendarHeatmap: View {
             let dates = generateDateGrid()
             LazyHGrid(rows: rows, spacing: 4) {
                 ForEach(dates, id: \.self) { date in
-                    RoundedRectangle(cornerRadius: 2)
+                    RoundedRectangle(cornerRadius: 2, style: .continuous)
                         .fill(colorForDate(date))
                         .frame(width: 12, height: 12)
                 }
@@ -504,7 +504,7 @@ struct CalendarHeatmap: View {
                 .foregroundColor(Theme.Colors.textTertiary)
 
             ForEach([0.0, 0.25, 0.5, 0.75, 1.0], id: \.self) { intensity in
-                RoundedRectangle(cornerRadius: 2)
+                RoundedRectangle(cornerRadius: 2, style: .continuous)
                     .fill(Theme.Colors.success.opacity(intensity))
                     .frame(width: 12, height: 12)
             }

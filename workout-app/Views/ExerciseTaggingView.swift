@@ -24,16 +24,12 @@ struct ExerciseTaggingView: View {
             ScrollView(showsIndicators: false) {
                 LazyVStack(alignment: .leading, spacing: Theme.Spacing.xl) {
                     VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-                        HStack {
-                            Text("Muscle roles")
-                                .font(Theme.Typography.title3)
-                                .foregroundStyle(Theme.Colors.textPrimary)
-                            Spacer()
-                            AppHelpButton(
-                                title: "Muscle roles",
-                                message: "Assign primary and secondary muscles to each exercise. These roles are used in muscle charts and exports."
-                            )
-                        }
+                        StatsPageHeader(
+                            eyebrow: "Training",
+                            title: "Muscle roles",
+                            subtitle: "Give each exercise its place in your training.",
+                            help: "Assign primary and secondary muscles to each exercise. These roles are used in muscle charts and exports."
+                        )
 
                         if cachedExerciseItems.isEmpty {
                             EmptyStateCard(
@@ -62,12 +58,11 @@ struct ExerciseTaggingView: View {
                         }
                     }
                 }
-                .padding(Theme.Spacing.xl)
+                .padding(Theme.Layout.screenGutter)
                 .contentColumn()
             }
         }
-        .navigationTitle("Exercise muscle roles")
-        .navigationBarTitleDisplayMode(.inline)
+        .collapsingTitle("Muscle roles")
         .searchable(text: $searchText, prompt: "Search exercises")
         .onAppear(perform: rebuildExerciseCache)
         .task(id: searchText) {
@@ -95,12 +90,13 @@ struct ExerciseTaggingView: View {
 
     private func exerciseSection(title: String, exercises: [ExerciseTaggingItem]) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("\(title) (\(exercises.count))")
-                .font(Theme.Typography.captionBold)
-                .foregroundColor(Theme.Colors.textSecondary)
-                .padding(.horizontal, Theme.Spacing.sm)
+            SectionHeading(title: title) {
+                Text(exercises.count.formatted())
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+            }
 
-            LazyVStack(spacing: Theme.Spacing.md) {
+            LazyVStack(spacing: 0) {
                 ForEach(exercises) { item in
                     NavigationLink(destination: ExerciseTagEditorView(exerciseName: item.exerciseName)) {
                         ExerciseTaggingRow(
@@ -109,7 +105,7 @@ struct ExerciseTaggingView: View {
                             isCustomized: item.isCustomized
                         )
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(PressableCardButtonStyle())
                 }
             }
         }
@@ -163,10 +159,9 @@ private struct ExerciseTaggingRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.sm) {
                     Text(exerciseName)
-                        .font(Theme.Typography.condensed)
-                        .tracking(-0.2)
+                        .font(Theme.Typography.headline)
                         .foregroundColor(Theme.Colors.textPrimary)
-                        .lineLimit(1)
+                        .fixedSize(horizontal: false, vertical: true)
 
                     if isCustomized {
                         TagLabel(text: "Custom", tint: Theme.Colors.textPrimary)
@@ -176,7 +171,7 @@ private struct ExerciseTaggingRow: View {
                 Text(assignments.isEmpty ? "Untagged" : roleSummary)
                     .font(Theme.Typography.caption)
                     .foregroundStyle(assignments.isEmpty ? Theme.Colors.textTertiary : Theme.Colors.textSecondary)
-                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Spacer(minLength: 0)
@@ -185,7 +180,6 @@ private struct ExerciseTaggingRow: View {
                 .font(Theme.Typography.caption)
                 .foregroundStyle(Theme.Colors.textTertiary)
         }
-        .padding(Theme.Spacing.lg)
-        .softCard(elevation: 2)
+        .ledgerRow()
     }
 }

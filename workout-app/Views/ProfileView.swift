@@ -29,7 +29,7 @@ struct ProfileView: View {
             }
             .scrollDismissesKeyboard(.interactively)
         }
-        .navigationTitle("More")
+        .navigationTitle(profileName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "More" : displayName)
         .navigationBarTitleDisplayMode(.large)
         .analyticsScreen("Profile")
         .task(id: dataManager.datasetRevision) {
@@ -46,12 +46,6 @@ struct ProfileView: View {
     private var headerSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                Text(displayName)
-                    .font(Theme.Typography.displayHero)
-                    .foregroundStyle(profileName.isEmpty ? Theme.Colors.decorativeSubtle : Theme.Colors.textPrimary)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.6)
-                    .accessibilityAddTraits(.isHeader)
                 Text(memberBadge)
                     .font(Theme.Typography.callout)
                     .foregroundStyle(Theme.Colors.textSecondary)
@@ -118,11 +112,17 @@ struct ProfileView: View {
 
     private var preferencesSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            SectionHeading(title: "App")
+            SectionHeading(title: "Tools & settings")
 
             VStack(spacing: 0) {
+                NavigationLink(destination: ExportWorkoutsView(dataManager: dataManager, iCloudManager: iCloudManager)) {
+                    ExploreRow(title: "Export training log", subtitle: "AI analysis, spreadsheets, and training reports", showsRule: false)
+                }
+                .buttonStyle(PressableCardButtonStyle())
+                .accessibilityIdentifier("profile-export")
+
                 NavigationLink(destination: FeatureGuidesView(iCloudManager: iCloudManager)) {
-                    ExploreRow(title: "Feature guides", subtitle: "Walkthroughs of the main screens", showsRule: false)
+                    ExploreRow(title: "Feature guides", subtitle: "Walkthroughs of the main screens")
                 }
                 .buttonStyle(PressableCardButtonStyle())
 
@@ -166,13 +166,17 @@ struct ProfileView: View {
 }
 
 private struct ProfileFieldRow: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let title: String
     let promptText: String
     @Binding var text: String
     var keyboardType: UIKeyboardType = .default
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.md) {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: Theme.Spacing.xs))
+            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: Theme.Spacing.md))
+        layout {
             Text(title)
                 .font(Theme.Typography.subheadline)
                 .foregroundStyle(Theme.Colors.textSecondary)
@@ -188,6 +192,7 @@ private struct ProfileFieldRow: View {
                 .accessibilityHint("Saved automatically as you type")
         }
         .padding(.horizontal, Theme.Spacing.lg)
+        .padding(.vertical, dynamicTypeSize.isAccessibilitySize ? Theme.Spacing.sm : 0)
         .frame(minHeight: 52)
         .background(
             RoundedRectangle(cornerRadius: Theme.CornerRadius.medium, style: .continuous)

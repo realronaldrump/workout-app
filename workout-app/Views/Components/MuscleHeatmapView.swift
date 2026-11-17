@@ -374,7 +374,7 @@ struct MuscleDetailView: View {
     private var intensityIndicator: some View {
         HStack(spacing: 3) {
             ForEach(0..<5, id: \.self) { index in
-                RoundedRectangle(cornerRadius: 2)
+                RoundedRectangle(cornerRadius: 2, style: .continuous)
                     .fill(Double(index) / 5.0 < stats.intensity ? muscleGroup.tint : Theme.Colors.surface)
                     .frame(width: 8, height: 20)
             }
