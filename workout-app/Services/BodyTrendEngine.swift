@@ -2,14 +2,15 @@ import Foundation
 
 // MARK: - Model
 
-/// One calendar day on the trend grid. Days with a weigh-in carry the day's first reading.
+/// One calendar day on the trend grid. Days with a weigh-in carry one representative reading.
 /// Days between weigh-ins (up to two weeks apart) are filled by a straight line between the
 /// readings on either side, so the trend keeps moving through a missed day instead of stalling.
 nonisolated struct BodyTrendDay: Sendable, Identifiable, Equatable {
     let dayIndex: Int
     let day: Date
-    /// The first valid reading of the day. `nil` on a filled day.
+    /// The representative reading of the day. `nil` on a filled day.
     let reading: Double?
+    let readingID: UUID?
     let trend: Double
     /// A new segment starts after a gap of more than two weeks without a reading.
     let segment: Int
@@ -25,15 +26,24 @@ nonisolated enum BodyDayFlag: Sendable, Equatable {
     case low
 }
 
-/// The trend's weekly rate with a plus-or-minus that holds about eight times in ten.
+/// Endpoints of a visual connector across a missing stretch of weight history.
+nonisolated struct BodyTrendGap: Identifiable, Equatable {
+    let start: BodyTrendDay
+    let end: BodyTrendDay
+
+    var id: Int { end.dayIndex }
+}
+
+/// Recent pace from the recorded readings, with a noise allowance for deciding direction.
 nonisolated struct BodyRate: Sendable, Equatable {
     let perWeek: Double
     let halfWidth: Double
     let readingCount: Int
     let windowDays: Int
+    var fittedWeightAtEnd: Double?
 
-    /// The rate can't be told apart from flat.
-    var isSteady: Bool { abs(perWeek) <= halfWidth }
+    var change: Double { perWeek * Double(windowDays - 1) / 7 }
+    var isSteady: Bool { abs(perWeek) <= halfWidth || abs(change) < 0.5 }
 }
 
 nonisolated struct BodyChange: Sendable, Identifiable, Equatable {
@@ -128,12 +138,19 @@ nonisolated struct BodySeries: Sendable {
         return best
     }
 
-    /// Grid days whose day falls inside the interval, oldest first.
+    /// Calendar days in a half-open report interval, oldest first.
     func gridDays(in interval: DateInterval) -> ArraySlice<BodyTrendDay> {
-        let start = lowerBound(dayIndex(for: interval.start))
-        let end = upperBound(dayIndex(for: interval.end))
-        guard start < end else { return [] }
-        return grid[start..<end]
+        grid[dayBoundary(interval.start)..<dayBoundary(interval.end)]
+    }
+
+    /// Charts include both dates at the edges of their visible domain.
+    func gridDays(in domain: ClosedRange<Date>) -> ArraySlice<BodyTrendDay> {
+        grid[lowerBound(dayIndex(for: domain.lowerBound))..<upperBound(dayIndex(for: domain.upperBound))]
+    }
+
+    private func dayBoundary(_ date: Date) -> Int {
+        let offset = date == calendar.startOfDay(for: date) ? 0 : 1
+        return lowerBound(dayIndex(for: date) + offset)
     }
 
     func readings(on day: BodyTrendDay) -> [BodyRawSample] {
@@ -151,32 +168,37 @@ nonisolated struct BodySeries: Sendable {
 
     // MARK: Rate
 
-    /// Least-squares slope of the trend over the last `windowDays` of the current segment, with a
-    /// plus-or-minus from the raw readings' own regression. Needs eight weigh-ins over two weeks,
-    /// and a weigh-in in the last week, because a rate from less is mostly noise.
+    /// Estimate pace directly from observed days in the current segment. For less frequent
+    /// weigh-ins, use up to eight weeks so a weekly logger can still get a useful direction.
     func rate(asOf now: Date, windowDays: Int = 28) -> BodyRate? {
-        guard let latest, let segmentStart = currentSegmentStart else { return nil }
+        guard windowDays >= 14, let latest, let segmentStart = currentSegmentStart else { return nil }
         let today = dayIndex(for: now)
-        guard today - latest.dayIndex <= 7 else { return nil }
+        guard (0...7).contains(today - latest.dayIndex) else { return nil }
 
-        let windowStart = max(latest.dayIndex - (windowDays - 1), segmentStart.dayIndex)
-        guard latest.dayIndex - windowStart >= 13 else { return nil }
-        let window = grid[lowerBound(windowStart)...].prefix { $0.dayIndex <= latest.dayIndex }
-        let readingDays = window.filter(\.hasReading)
-        guard readingDays.count >= 8,
-              let first = readingDays.first, let last = readingDays.last,
-              last.dayIndex - first.dayIndex >= 13,
-              let trendFit = BodyTrendEngine.leastSquares(window.map { (Double($0.dayIndex), $0.trend) }),
-              let rawFit = BodyTrendEngine.leastSquares(readingDays.compactMap { day in
-                  day.reading.map { (Double(day.dayIndex), $0) }
-              }) else { return nil }
+        func measuredDays(inLast days: Int) -> [BodyTrendDay] {
+            let firstIndex = max(latest.dayIndex - (days - 1), segmentStart.dayIndex)
+            return grid[lowerBound(firstIndex)...].filter(\.hasReading)
+        }
 
-        let halfWidth = 1.25 * (rawFit.slopeStandardError ?? 0) * 7
+        var observations = measuredDays(inLast: windowDays)
+        var span = latest.dayIndex - (observations.first?.dayIndex ?? latest.dayIndex)
+        if observations.count < 8 || span < 13 {
+            guard windowDays == 28 else { return nil }
+            observations = measuredDays(inLast: 56)
+            span = latest.dayIndex - (observations.first?.dayIndex ?? latest.dayIndex)
+            guard observations.count >= 5, span >= 28 else { return nil }
+        }
+
+        let points = observations.compactMap { day in
+            day.reading.map { (Double(day.dayIndex - latest.dayIndex), $0) }
+        }
+        guard let fit = BodyTrendEngine.leastSquares(points) else { return nil }
         return BodyRate(
-            perWeek: trendFit.slope * 7,
-            halfWidth: halfWidth,
-            readingCount: readingDays.count,
-            windowDays: latest.dayIndex - windowStart + 1
+            perWeek: fit.slope * 7,
+            halfWidth: 1.25 * (fit.slopeStandardError ?? 0) * 7,
+            readingCount: observations.count,
+            windowDays: span + 1,
+            fittedWeightAtEnd: fit.intercept
         )
     }
 
@@ -249,7 +271,10 @@ nonisolated struct BodySeries: Sendable {
 
     /// The average daily reading in `interval` minus the average in the equal stretch before it.
     func changeFromPreviousPeriod(_ interval: DateInterval) -> Double? {
-        let previous = DateInterval(start: interval.start.addingTimeInterval(-interval.duration), end: interval.start)
+        let days = dayIndex(for: interval.end) - dayIndex(for: interval.start)
+        guard days > 0,
+              let previousStart = calendar.date(byAdding: .day, value: -days, to: interval.start) else { return nil }
+        let previous = DateInterval(start: previousStart, end: interval.start)
         let current = gridDays(in: interval).compactMap(\.reading)
         let prior = gridDays(in: previous).compactMap(\.reading)
         guard current.count >= 4, prior.count >= 4 else { return nil }
@@ -302,19 +327,21 @@ nonisolated enum BodyTrendEngine {
     /// Each day the trend moves a tenth of the way toward that day's weight (The Hacker's Diet).
     /// It lags a real change by about nine days and settles 90% of a step in about three weeks.
     static let smoothing = 0.1
-    /// Longer gaps restart the trend instead of drawing a straight line across them.
+    /// Longer gaps restart the trend instead of filling in daily estimates.
     static let maxInterpolatedGapDays = 14
     static let settlingDays = 7
 
     static func build(
         samples: [BodyRawSample],
         kind: BodyCompositionMetricKind,
+        preferredSampleIDs: Set<UUID> = [],
         calendar: Calendar = .current
     ) -> BodySeries {
         let plausible = samples.filter { isPlausible($0.value, kind: kind) }
         let representatives = BodyCompositionAnalytics.dailyRepresentatives(
             from: plausible,
             metricKind: kind,
+            preferredSampleIDs: preferredSampleIDs,
             calendar: calendar
         )
         let readings = representatives.flatMap(\.samples)
@@ -351,6 +378,7 @@ nonisolated enum BodyTrendEngine {
                             dayIndex: filledIndex,
                             day: date(forDayIndex: filledIndex, calendar: calendar),
                             reading: nil,
+                            readingID: nil,
                             trend: trend,
                             segment: segment,
                             isSettling: filledIndex - segmentStartIndex < settlingDays
@@ -369,6 +397,7 @@ nonisolated enum BodyTrendEngine {
                 dayIndex: index,
                 day: representative.dayStart,
                 reading: value,
+                readingID: representative.sample.id,
                 trend: trend,
                 segment: segment,
                 isSettling: index - segmentStartIndex < settlingDays
@@ -481,6 +510,14 @@ nonisolated enum BodyTrendEngine {
         return LineFit(slope: slope, intercept: intercept, slopeStandardError: standardError)
     }
 
+    /// Chart-only connections between visible sections of the trend. Thinning preserves both endpoints.
+    static func chartGaps(in days: [BodyTrendDay]) -> [BodyTrendGap] {
+        zip(days, days.dropFirst()).compactMap { start, end in
+            guard start.segment != end.segment else { return nil }
+            return BodyTrendGap(start: start, end: end)
+        }
+    }
+
     /// Keeps at most about `limit` days for drawing, always keeping each segment's first and last day.
     static func thinned(_ days: ArraySlice<BodyTrendDay>, limit: Int) -> [BodyTrendDay] {
         let days = Array(days)
@@ -532,7 +569,7 @@ nonisolated struct BodyGoalStatus: Sendable, Equatable {
     static func make(goal: Double, start: Double, current: Double, rate: BodyRate?, now: Date, calendar: Calendar = .current) -> BodyGoalStatus {
         let distance = goal - current
         var arrival = Arrival.noEstimate
-        if let rate, abs(distance) > 1e-6 {
+        if let rate, !rate.isSteady, abs(distance) > 1e-6 {
             let towardGoal = (distance < 0 && rate.perWeek < 0) || (distance > 0 && rate.perWeek > 0)
             let pace = abs(rate.perWeek)
             let margin = rate.halfWidth

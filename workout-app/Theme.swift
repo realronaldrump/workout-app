@@ -67,7 +67,7 @@ private enum ThemeDisplayWeight {
     }
 }
 
-/// Centralized theme system: Loaded.
+/// Theme system for Big Beautiful Workout App.
 ///
 /// The working surface is monochrome (ink on concrete, chalk on rubber) and flat:
 /// no drop shadows, gradients, or glows. Color is reserved for meaning: bumper-plate

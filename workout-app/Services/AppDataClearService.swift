@@ -5,6 +5,7 @@ enum AppDataClearCategory: String, CaseIterable, Identifiable, Sendable {
     case gymProfiles
     case gymAssignments
     case healthData
+    case weighIns
     case intentionalBreaks
     case exerciseCustomization
     case profileAndPreferences
@@ -24,6 +25,8 @@ enum AppDataClearCategory: String, CaseIterable, Identifiable, Sendable {
             return "Gym assignments"
         case .healthData:
             return "Health data"
+        case .weighIns:
+            return "Saved weigh-ins"
         case .intentionalBreaks:
             return "Planned breaks"
         case .exerciseCustomization:
@@ -49,6 +52,8 @@ enum AppDataClearCategory: String, CaseIterable, Identifiable, Sendable {
             return "Gym tags on workouts. Gym profiles and workouts stay."
         case .healthData:
             return "Cached workout Health metrics, daily Health history, coverage, and sync metadata."
+        case .weighIns:
+            return "Weights and corrections you saved in the app."
         case .intentionalBreaks:
             return "Saved break ranges and dismissed break suggestions."
         case .exerciseCustomization:
@@ -110,6 +115,7 @@ struct AppDataClearContext {
     var intentionalBreaksManager: IntentionalBreaksManager
     var annotationsManager: WorkoutAnnotationsManager
     var gymProfilesManager: GymProfilesManager
+    var bodyStore: BodyStore? = nil
     var exerciseMetadataManager: ExerciseMetadataManager = .shared
     var exerciseMetricManager: ExerciseMetricManager = .shared
     var exerciseRelationshipManager: ExerciseRelationshipManager = .shared
@@ -137,6 +143,10 @@ enum AppDataClearService {
             clearHealthPreferences(healthManager: context.healthManager, userDefaults: context.userDefaults)
         } else if categories.contains(.workoutHistory) {
             try await context.healthManager.clearAllWorkoutHealthData().value
+        }
+
+        if categories.contains(.weighIns) {
+            try context.bodyStore?.clearSavedWeighIns()
         }
 
         if categories.contains(.gymProfiles) {
@@ -209,6 +219,7 @@ enum AppDataClearService {
             .gymProfiles,
             .gymAssignments,
             .healthData,
+            .weighIns,
             .intentionalBreaks,
             .exerciseCustomization,
             .profileAndPreferences,

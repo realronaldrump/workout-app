@@ -120,57 +120,89 @@ struct BodyGoalSheet: View {
 
 /// Every reading on one day, which one the trend used, and how the day sat against the trend.
 struct BodyDayDetail: View {
-    let series: BodySeries
-    let day: BodyTrendDay
+    @EnvironmentObject private var store: BodyStore
+    @State private var date: Date
+    @State private var editRequest: BodyWeighInRequest?
+
+    init(date: Date) {
+        _date = State(initialValue: date)
+    }
+
+    private var series: BodySeries { store.weight }
 
     var body: some View {
-        let readings = series.readings(on: day)
         ScrollView {
-            VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(BodyFormat.weekdayDate(day.day))
-                        .font(Theme.Typography.screenTitle)
-                        .foregroundStyle(Theme.Colors.textPrimary)
-                    Text("Trend \(BodyFormat.weight(day.trend))" + (day.reading.map { ", scale \(BodyFormat.versusTrend($0 - day.trend))" } ?? ""))
-                        .font(Theme.Typography.callout)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                }
-
-                if let flag = series.flags[day.dayIndex], let residual = series.residuals[day.dayIndex] {
-                    Text(BodyFormat.flagExplanation(flag, difference: residual))
-                        .font(Theme.Typography.callout)
-                        .foregroundStyle(Theme.Colors.textPrimary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                VStack(spacing: 0) {
-                    ForEach(Array(readings.enumerated()), id: \.element.id) { index, reading in
-                        HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.md) {
-                            Text(reading.timestamp.formatted(date: .omitted, time: .shortened))
-                                .font(Theme.Typography.callout)
-                                .foregroundStyle(Theme.Colors.textPrimary)
-                            if index == 0 {
-                                TagLabel(text: "Used for trend")
-                            }
-                            Spacer(minLength: Theme.Spacing.sm)
-                            Text(BodyFormat.value(reading.value, kind: series.kind))
-                                .font(Theme.Typography.numberSmall)
-                                .foregroundStyle(Theme.Colors.textPrimary)
-                        }
-                        .ledgerRow(showsRule: index > 0, verticalPadding: Theme.Spacing.sm)
-                        .accessibilityElement(children: .combine)
-                    }
-                }
-
-                Text("The trend uses the first reading of each day.")
-                    .font(Theme.Typography.subheadline)
-                    .foregroundStyle(Theme.Colors.textSecondary)
+            if let day = series.gridDay(at: series.dayIndex(for: date)), day.hasReading {
+                dayContent(day)
+                    .padding(.horizontal, Theme.Layout.screenGutter)
+                    .padding(.vertical, Theme.Spacing.md)
+            } else {
+                ContentUnavailableView("No weigh-ins on this day", systemImage: "scalemass")
             }
-            .padding(.horizontal, Theme.Layout.screenGutter)
-            .padding(.vertical, Theme.Spacing.md)
         }
         .background(AdaptiveBackground())
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(item: $editRequest) { request in
+            BodyWeighInEditor(request: request) { date = $0 }
+        }
+    }
+
+    private func dayContent(_ day: BodyTrendDay) -> some View {
+        let readings = series.readings(on: day)
+        return VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(BodyFormat.weekdayDate(day.day))
+                    .font(Theme.Typography.screenTitle)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                Text("Trend \(BodyFormat.weight(day.trend))" + (day.reading.map { ", scale \(BodyFormat.versusTrend($0 - day.trend))" } ?? ""))
+                    .font(Theme.Typography.callout)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+            }
+
+            if let flag = series.flags[day.dayIndex], let residual = series.residuals[day.dayIndex] {
+                Text(BodyFormat.flagExplanation(flag, difference: residual))
+                    .font(Theme.Typography.callout)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            VStack(spacing: 0) {
+                ForEach(Array(readings.enumerated()), id: \.element.id) { index, reading in
+                    Button {
+                        editRequest = .edit(reading)
+                    } label: {
+                        readingRow(reading, isRepresentative: reading.id == day.readingID)
+                            .ledgerRow(showsRule: index > 0, verticalPadding: Theme.Spacing.sm)
+                            .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityHint("Edit this weigh-in")
+                }
+            }
+        }
+    }
+
+    private func readingRow(_ reading: BodyRawSample, isRepresentative: Bool) -> some View {
+        let entry = store.savedWeighIn(id: reading.id)
+        let source = entry.map { $0.isHealthCorrection ? "Edited here" : "Logged here" } ?? "Apple Health"
+        return HStack(spacing: Theme.Spacing.md) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(reading.timestamp.formatted(date: .omitted, time: .shortened))
+                    .font(Theme.Typography.callout)
+                Text(isRepresentative ? "\(source) · Used for trend" : source)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+            }
+            Spacer(minLength: Theme.Spacing.sm)
+            Text(BodyFormat.weight(reading.value))
+                .font(Theme.Typography.numberSmall)
+            Image(systemName: "pencil")
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.Colors.textSecondary)
+                .accessibilityHidden(true)
+        }
+        .foregroundStyle(Theme.Colors.textPrimary)
     }
 }
 
@@ -181,26 +213,24 @@ struct BodyMethodSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     private let entries: [(String, String)] = [
-        ("Daily reading", "The first weigh-in of each day. Later readings that day stay in the log but don't move the trend."),
+        ("Daily reading", "For each day, we use your latest app weigh-in. Days with only Apple Health readings use the first one."),
         (
             "Trend weight",
             "Each day the trend moves a tenth of the way toward that day's reading. Missed days up to two weeks apart "
-                + "are filled on a straight line; a longer gap restarts the trend. It runs about 9 days behind a real change."
+                + "are filled on a straight line. A longer gap restarts the trend, and a thin line connects the two ends on "
+                + "the chart. The trend runs about 9 days behind a real change."
         ),
         (
             "Weekly pace",
-            "The slope of the trend over the last 4 weeks. It needs 8 weigh-ins over 2 weeks. The plus-or-minus holds "
-                + "about 8 times in 10; when it includes zero, the pace reads as holding steady."
+            "Recent recorded weigh-ins show the direction. We look back up to 8 weeks when you weigh in less often."
         ),
         (
             "Goal dates",
-            "Distance to the goal divided by the pace, plus and minus its uncertainty, so you see a range. "
-                + "Loss usually slows as weight drops, so dates tend to run early."
+            "A range of dates if your recent pace continues. The estimate updates as your pace changes."
         ),
         (
             "Usual range",
-            "The pale band holds about 8 in 10 normal readings. Readings well outside it are marked as high or low days, "
-                + "usually water, salt, or food, not fat."
+            "The pale band shows how much recent readings typically moved around your trend. Larger swings are marked in the log."
         ),
         ("Change", "Each row compares trend weight now with trend weight that many days ago."),
         ("Body fat", "A scale estimate that hydration moves. Lean and fat mass split trend weight by trend body fat."),
@@ -261,8 +291,9 @@ struct BodyMethodSheet: View {
 
 /// The whole log, newest first, one section per month with that month's average and range.
 struct BodyReadingsLog: View {
-    let series: BodySeries
+    @EnvironmentObject private var store: BodyStore
     @Environment(\.dismiss) private var dismiss
+    private var series: BodySeries { store.weight }
 
     private struct Month: Identifiable {
         let start: Date
@@ -290,7 +321,7 @@ struct BodyReadingsLog: View {
                             VStack(spacing: 0) {
                                 ForEach(Array(month.days.enumerated()), id: \.element.id) { index, day in
                                     NavigationLink {
-                                        BodyDayDetail(series: series, day: day)
+                                        BodyDayDetail(date: day.day)
                                     } label: {
                                         BodyReadingRow(series: series, day: day, showsRule: index > 0)
                                     }

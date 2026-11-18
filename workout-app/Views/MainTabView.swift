@@ -163,7 +163,7 @@ struct MainTabView: View {
     @StateObject private var similarityEngine = WorkoutSimilarityEngine()
     @StateObject private var migrationManager = LegacyDataMigrationManager()
     @StateObject private var changelogStore = ChangelogStore()
-    @StateObject private var bodyStore = BodyStore()
+    @StateObject private var bodyStore = BodyStore.shared
     @ObservedObject private var relationshipManager = ExerciseRelationshipManager.shared
     @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
     @State private var showingOnboarding = false
@@ -504,7 +504,8 @@ struct MainTabView: View {
                 healthManager: healthManager,
                 annotationsManager: annotationsManager,
                 gymProfilesManager: gymProfilesManager,
-                intentionalBreaksManager: intentionalBreaksManager
+                intentionalBreaksManager: intentionalBreaksManager,
+                bodyStore: bodyStore
             )
             AppBackupService.persistNativeBackupSourceSignature(signature)
             if !dataManager.workouts.isEmpty {

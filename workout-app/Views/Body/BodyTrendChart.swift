@@ -19,6 +19,7 @@ struct BodyTrendChart: View {
 
     private let days: [BodyTrendDay]
     private let readingDays: [BodyTrendDay]
+    private let gaps: [BodyTrendGap]
     private let yDomain: ClosedRange<Double>
     private let goalInView: Bool
 
@@ -41,8 +42,10 @@ struct BodyTrendChart: View {
         self.height = height
         _selection = selection
 
-        let visible = series.gridDays(in: DateInterval(start: domain.lowerBound, end: domain.upperBound))
-        days = BodyTrendEngine.thinned(visible, limit: 420)
+        let visible = series.gridDays(in: domain)
+        let chartDays = BodyTrendEngine.thinned(visible, limit: 420)
+        days = chartDays
+        gaps = series.kind == .weight ? BodyTrendEngine.chartGaps(in: chartDays) : []
         readingDays = visible.filter(\.hasReading)
 
         var values = visible.map(\.trend)
@@ -112,6 +115,7 @@ struct BodyTrendChart: View {
             }
             tickMarks
             if showsReadings { readingMarks }
+            gapMarks
             trendMarks
             endMarks
             selectionMarks
@@ -204,9 +208,24 @@ struct BodyTrendChart: View {
     }
 
     @ChartContentBuilder
+    private var gapMarks: some ChartContent {
+        ForEach(gaps) { gap in
+            ForEach([gap.start, gap.end]) { day in
+                LineMark(
+                    x: .value("Day", day.day),
+                    y: .value("Trend", day.trend),
+                    series: .value("Segment", "gap-\(gap.id)")
+                )
+                .foregroundStyle(tint.opacity(0.75))
+                .lineStyle(StrokeStyle(lineWidth: 1.75, lineCap: .round))
+                .interpolationMethod(.linear)
+            }
+        }
+    }
+
+    @ChartContentBuilder
     private var trendMarks: some ChartContent {
-        // Settled stretches are solid; a segment's first week is dashed while it settles.
-        ForEach(days.filter { !$0.isSettling }) { day in
+        ForEach(series.kind == .weight ? days : days.filter { !$0.isSettling }) { day in
             LineMark(
                 x: .value("Day", day.day),
                 y: .value("Trend", day.trend),
@@ -216,15 +235,17 @@ struct BodyTrendChart: View {
             .lineStyle(StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
             .interpolationMethod(.monotone)
         }
-        ForEach(settlingDays) { day in
-            LineMark(
-                x: .value("Day", day.day),
-                y: .value("Trend", day.trend),
-                series: .value("Segment", "settling-\(day.segment)")
-            )
-            .foregroundStyle(tint.opacity(0.8))
-            .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, dash: [4, 4]))
-            .interpolationMethod(.monotone)
+        if series.kind != .weight {
+            ForEach(settlingDays) { day in
+                LineMark(
+                    x: .value("Day", day.day),
+                    y: .value("Trend", day.trend),
+                    series: .value("Segment", "settling-\(day.segment)")
+                )
+                .foregroundStyle(tint.opacity(0.8))
+                .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, dash: [4, 4]))
+                .interpolationMethod(.monotone)
+            }
         }
     }
 
@@ -365,6 +386,9 @@ struct BodyTrendChart: View {
             "Trend from \(BodyFormat.number(first.trend)) to \(BodyFormat.number(last.trend)) \(unit)",
             "\(readingDays.count) weigh-ins"
         ]
+        if !gaps.isEmpty {
+            parts.append("Thin lines mark gaps longer than two weeks between weigh-ins")
+        }
         if let selection {
             parts.insert("Selected \(BodyFormat.weekdayDate(selection.day)), trend \(BodyFormat.number(selection.trend))", at: 0)
         }

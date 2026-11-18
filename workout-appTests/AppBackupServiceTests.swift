@@ -191,10 +191,13 @@ final class AppBackupServiceTests: XCTestCase {
     }
 
     func testStreamingBackupExportRoundTripPreservesPayloadSections() throws {
+        let weighIn = BodyWeighIn(id: UUID(), timestamp: Date(timeIntervalSince1970: 1_761_000_000),
+                                 pounds: 181.5, isHealthCorrection: true)
         let backup = BigBeautifulWorkoutBackup(
             appVersion: "1.0.0",
             appBuild: "7",
             payload: AppBackupPayload(
+                bodyWeighIns: [weighIn],
                 exerciseMuscleAssignmentOverrides: [
                     "Row": [.primary(.builtIn(.back)), .secondary(.builtIn(.biceps))]
                 ],
@@ -213,6 +216,7 @@ final class AppBackupServiceTests: XCTestCase {
         XCTAssertEqual(decoded.appVersion, backup.appVersion)
         XCTAssertEqual(decoded.appBuild, backup.appBuild)
         XCTAssertEqual(decoded.payload.favoriteExercises, backup.payload.favoriteExercises)
+        XCTAssertEqual(decoded.payload.bodyWeighIns, [weighIn])
         XCTAssertEqual(
             decoded.payload.exerciseMuscleAssignmentOverrides,
             backup.payload.exerciseMuscleAssignmentOverrides

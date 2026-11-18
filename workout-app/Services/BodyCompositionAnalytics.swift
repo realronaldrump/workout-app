@@ -175,11 +175,12 @@ nonisolated struct ReportBucket: Sendable, Identifiable {
 nonisolated enum BodyCompositionAnalytics {
     nonisolated struct DailyRepresentative: Sendable, Identifiable, Equatable {
         let dayStart: Date
-        let timestamp: Date
-        let value: Double
+        let sample: BodyRawSample
         let samples: [BodyRawSample]
 
         var id: Date { dayStart }
+        var timestamp: Date { sample.timestamp }
+        var value: Double { sample.value }
     }
 
     static func bufferedAnalysisRange(
@@ -196,11 +197,13 @@ nonisolated enum BodyCompositionAnalytics {
         return metricKind != .bodyFat || value <= 100
     }
 
-    /// Keep one earliest valid reading per day so repeated weigh-ins do not receive extra weight.
+    /// Keep one reading per day so repeat weigh-ins do not receive extra weight.
+    /// When the Body log supplies preferred IDs, use the latest app-saved reading for that day.
     /// All distinct readings are retained for the logbook; "first" does not imply a morning reading.
     static func dailyRepresentatives(
         from samples: [BodyRawSample],
         metricKind: BodyCompositionMetricKind? = nil,
+        preferredSampleIDs: Set<UUID> = [],
         calendar: Calendar = .current
     ) -> [DailyRepresentative] {
         var seenIDs: Set<UUID> = []
@@ -218,8 +221,7 @@ nonisolated enum BodyCompositionAnalytics {
             guard let first = daySamples.first else { return nil }
             return DailyRepresentative(
                 dayStart: dayStart,
-                timestamp: first.timestamp,
-                value: first.value,
+                sample: daySamples.last { preferredSampleIDs.contains($0.id) } ?? first,
                 samples: daySamples
             )
         }

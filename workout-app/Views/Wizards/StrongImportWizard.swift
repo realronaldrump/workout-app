@@ -931,7 +931,8 @@ struct StrongImportWizard: View {
             healthManager: healthManager,
             annotationsManager: annotationsManager,
             gymProfilesManager: gymProfilesManager,
-            intentionalBreaksManager: intentionalBreaksManager
+            intentionalBreaksManager: intentionalBreaksManager,
+            bodyStore: .shared
         )
         AppBackupService.persistNativeBackupSourceSignature(
             AppBackupService.importSourceSignature(for: savedURL)
@@ -960,6 +961,7 @@ struct StrongImportWizard: View {
             + result.skippedAnnotations
             + result.skippedWorkoutHealthEntries
             + result.skippedDailyHealthEntries
+            + result.skippedWeighIns
         importStats = ImportSummary(
             workouts: insertedWorkoutCount,
             exercises: stats.totalExercises,

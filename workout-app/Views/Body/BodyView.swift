@@ -35,8 +35,7 @@ enum BodyChartRange: String, CaseIterable, Identifiable {
     var showsReadings: Bool { self != .year && self != .all }
 }
 
-/// Weight and body composition on one scroll: trend weight and pace up top, the chart, how much it
-/// has changed, the goal, body fat, lifts against weight, and the weigh-in log.
+/// A quick check-in with a separate Progress screen for the longer history.
 struct BodyView: View {
     var isTabRoot = false
 
@@ -61,6 +60,7 @@ struct BodyView: View {
     @State private var showingGoal = false
     @State private var showingMethod = false
     @State private var showingLog = false
+    @State private var weighInRequest: BodyWeighInRequest?
     @State private var detailDay: BodyTrendDay?
     @State private var selectedExercise: ExerciseSelection?
     @State private var liftRows: [BodyLiftRow] = []
@@ -72,12 +72,36 @@ struct BodyView: View {
     private var bodyFat: BodySeries { store.bodyFat }
 
     var body: some View {
+        let now = Date()
+        let rate = weight.rate(asOf: now)
+
         ScrollView {
-            VStack(alignment: .leading, spacing: Theme.Spacing.section) {
-                content
+            VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
+                overviewHeadline(now: now, rate: rate)
+                if let latest = weight.readings.last {
+                    latestWeighIn(latest, now: now)
+                }
+                overviewChart(now: now, rate: rate)
+
+                NavigationLink {
+                    progressScreen
+                } label: {
+                    Text("Progress")
+                        .font(Theme.Typography.headline)
+                        .frame(maxWidth: .infinity, minHeight: Theme.Layout.minimumTapTarget)
+                }
+                .buttonStyle(BrandSecondaryButtonStyle())
+                .accessibilityIdentifier("body-open-progress")
+
+                if let message = store.logErrorMessage ?? authorizationError {
+                    Text(message)
+                        .font(Theme.Typography.callout)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                }
+                healthConnection
             }
             .padding(.horizontal, Theme.Layout.screenGutter)
-            .padding(.top, Theme.Spacing.sm)
+            .padding(.top, Theme.Spacing.md)
             .padding(.bottom, Theme.Spacing.xxl)
             .contentColumn()
         }
@@ -86,6 +110,146 @@ struct BodyView: View {
         .navigationTitle("Body")
         .navigationBarTitleDisplayMode(isTabRoot ? .large : .inline)
         .accessibilityIdentifier("body-composition")
+        .toolbar {
+            AppToolbarItem(placement: .topBarTrailing) {
+                AppToolbarIconButton(systemImage: "plus", accessibilityLabel: "Log weight", variant: .subtle) {
+                    weighInRequest = .new
+                }
+                .accessibilityIdentifier("body-log-weight")
+            }
+        }
+        .sheet(item: $weighInRequest) { request in
+            BodyWeighInEditor(request: request)
+        }
+        .task { refreshIfNeeded() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { refreshIfNeeded(maxAge: 60) }
+        }
+        .onChange(of: healthManager.authorizationStatus) { _, status in
+            if status == .authorized { store.refresh(from: healthManager) }
+        }
+        .onChange(of: healthManager.dailyDataRevision) { _, _ in store.refresh(from: healthManager) }
+        .onChange(of: store.snapshot.revision, initial: true) { _, _ in
+            recordGoalReachedIfNeeded()
+        }
+    }
+
+    private func overviewHeadline(now: Date, rate: BodyRate?) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            Text(overviewTitle(now: now, rate: rate))
+                .font(Theme.Typography.screenTitle)
+                .foregroundStyle(Theme.Colors.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+            if let rate {
+                Text(BodyFormat.window(days: rate.windowDays))
+                    .font(Theme.Typography.callout)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+            } else if let error = store.errorMessage, weight.isEmpty {
+                Text(error)
+                    .font(Theme.Typography.callout)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("body-latest-measurement")
+    }
+
+    private func overviewTitle(now: Date, rate: BodyRate?) -> String {
+        if let rate {
+            if rate.isSteady {
+                return abs(rate.change) < 0.5 ? "Weight looks about the same" : "No clear weight change"
+            }
+            let rounded = (abs(rate.change) * 2).rounded() / 2
+            let amount = rounded.formatted(.number.precision(.fractionLength(0...1)))
+            return "\(rate.change < 0 ? "Down" : "Up") about \(amount) lb"
+        }
+        guard let latest = weight.latest else {
+            return store.isLoading ? "Getting your weigh-ins…" : "Log your first weigh-in"
+        }
+        return weight.dayIndex(for: now) - latest.dayIndex > 7
+            ? "Ready for a new weigh-in"
+            : "More weigh-ins will show a trend"
+    }
+
+    private func latestWeighIn(_ reading: BodyRawSample, now: Date) -> some View {
+        Button {
+            weighInRequest = .edit(reading)
+        } label: {
+            HStack(spacing: Theme.Spacing.md) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Last weigh-in")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                    Text(BodyFormat.weight(reading.value))
+                        .font(Theme.Typography.title3)
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                    Text(BodyFormat.whenWeighed(reading.timestamp, now: now, calendar: weight.calendar))
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                }
+                Spacer(minLength: Theme.Spacing.sm)
+                Text("Edit")
+                    .font(Theme.Typography.subheadlineStrong)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+            }
+            .padding(.vertical, Theme.Spacing.xs)
+            .frame(minHeight: Theme.Layout.minimumTapTarget)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("body-edit-latest-weigh-in")
+    }
+
+    @ViewBuilder
+    private func overviewChart(now: Date, rate: BodyRate?) -> some View {
+        let calendar = weight.calendar
+        let today = calendar.startOfDay(for: now)
+        let last = weight.latest?.day ?? today
+        let start = rate == nil ? today : last
+        let numberOfDays = rate?.windowDays ?? 28
+        if let first = calendar.date(byAdding: .day, value: 1 - numberOfDays, to: start) {
+            let domain = first...today
+            let days = weight.gridDays(in: domain).filter(\.hasReading)
+            if days.count > 1 {
+                BodyRecentChart(days: days, domain: domain, rate: rate, calendar: calendar)
+                    .padding(Theme.Spacing.sm)
+                    .softCard()
+            }
+        }
+    }
+
+    private var progressScreen: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: Theme.Spacing.section) {
+                if weight.isEmpty {
+                    Text("Your progress will appear after your first weigh-in.")
+                        .font(Theme.Typography.callout)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                } else {
+                    page
+                }
+            }
+            .padding(.horizontal, Theme.Layout.screenGutter)
+            .padding(.top, Theme.Spacing.sm)
+            .padding(.bottom, Theme.Spacing.xxl)
+            .contentColumn()
+        }
+        .background(AdaptiveBackground())
+        .refreshable { await store.reload(from: healthManager) }
+        .navigationTitle("Progress")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if !weight.isEmpty {
+                AppToolbarItem(placement: .topBarTrailing) {
+                    AppToolbarButton(title: "Weigh-ins", systemImage: "list.bullet", variant: .subtle) {
+                        showingLog = true
+                    }
+                    .accessibilityIdentifier("body-weigh-in-history")
+                }
+            }
+        }
         .sheet(isPresented: $showingGoal) {
             BodyGoalSheet(
                 trend: weight.latest?.trend,
@@ -98,11 +262,11 @@ struct BodyView: View {
             BodyMethodSheet(ignoredReadingCount: weight.ignoredReadingCount + bodyFat.ignoredReadingCount)
         }
         .sheet(isPresented: $showingLog) {
-            BodyReadingsLog(series: weight)
+            BodyReadingsLog()
         }
         .sheet(item: $detailDay) { day in
             NavigationStack {
-                BodyDayDetail(series: weight, day: day)
+                BodyDayDetail(date: day.day)
             }
             .presentationDetents([.medium, .large])
         }
@@ -114,41 +278,8 @@ struct BodyView: View {
                 gymProfilesManager: gymProfilesManager
             )
         }
-        .task { refreshIfNeeded() }
-        .onChange(of: scenePhase) { _, phase in
-            if phase == .active { refreshIfNeeded(maxAge: 60) }
-        }
-        .onChange(of: healthManager.authorizationStatus) { _, status in
-            if status == .authorized { store.refresh(from: healthManager) }
-        }
-        .onChange(of: healthManager.dailyDataRevision) { _, _ in store.refresh(from: healthManager) }
-        .onChange(of: store.snapshot.loadedAt) { _, _ in recordGoalReachedIfNeeded() }
-        .task(id: LiftRefreshKey(revision: dataManager.datasetRevision, loadedAt: store.snapshot.loadedAt, favorites: favoriteExercisesData)) {
+        .task(id: LiftRefreshKey(revision: dataManager.datasetRevision, bodyRevision: store.snapshot.revision, favorites: favoriteExercisesData)) {
             await refreshLifts()
-        }
-    }
-
-    // MARK: Content
-
-    @ViewBuilder
-    private var content: some View {
-        if healthManager.authorizationStatus == .unavailable {
-            messageBlock(
-                title: "Apple Health isn't available here.",
-                body: "Weight and body fat come from Apple Health, which this device doesn't have."
-            )
-        } else if healthManager.authorizationStatus != .authorized {
-            accessBlock
-        } else if !store.hasLoaded {
-            if let error = store.errorMessage {
-                errorBlock(error)
-            } else {
-                loadingBlock
-            }
-        } else if weight.isEmpty {
-            emptyBlock
-        } else {
-            page
         }
     }
 
@@ -319,76 +450,22 @@ struct BodyView: View {
 
     // MARK: States
 
-    private var accessBlock: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text(healthManager.authorizationStatus == .denied ? "Health access is off." : "See your weight trend.")
-                .font(Theme.Typography.displayHeroCompact)
-                .foregroundStyle(Theme.Colors.textPrimary)
-                .fixedSize(horizontal: false, vertical: true)
-            Text("Connect Apple Health to chart your weight and body fat. This app only reads them.")
-                .font(Theme.Typography.body)
-                .foregroundStyle(Theme.Colors.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-            if let authorizationError {
-                Text(authorizationError)
-                    .font(Theme.Typography.subheadline)
-                    .foregroundStyle(Theme.Colors.error)
-                    .fixedSize(horizontal: false, vertical: true)
+    @ViewBuilder
+    private var healthConnection: some View {
+        if healthManager.authorizationStatus == .denied {
+            AppPillButton(title: "Apple Health settings", systemImage: "gear", variant: .subtle) {
+                guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+                openURL(url)
             }
-            if healthManager.authorizationStatus == .denied {
-                AppPrimaryButton(title: "Open Settings", systemImage: "gear") {
-                    guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
-                    openURL(url)
-                }
-            } else {
-                AppPrimaryButton(
-                    title: isRequestingAuthorization ? "Waiting for Apple Health…" : "Connect Apple Health",
-                    isEnabled: !isRequestingAuthorization,
-                    action: requestAuthorization
-                )
-            }
+        } else if healthManager.authorizationStatus == .notDetermined {
+            AppPillButton(
+                title: isRequestingAuthorization ? "Waiting for Apple Health…" : "Connect Apple Health",
+                systemImage: "heart",
+                variant: .subtle,
+                action: requestAuthorization
+            )
+            .disabled(isRequestingAuthorization)
         }
-    }
-
-    private var emptyBlock: some View {
-        messageBlock(
-            title: "No weight in Apple Health yet.",
-            body: "Weigh in on a connected scale, or add a reading in Health under Browse, Body Measurements, Weight. It shows up here after the next sync."
-        )
-    }
-
-    private var loadingBlock: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            SkeletonRect(width: 120, height: 14)
-            SkeletonRect(width: 220, height: 84, cornerRadius: Theme.CornerRadius.medium)
-            SkeletonRect(width: 200, height: 18)
-            SkeletonRect(height: 280, cornerRadius: Theme.CornerRadius.xlarge)
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Loading weight")
-    }
-
-    private func errorBlock(_ message: String) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            messageBlock(title: "Couldn't load readings.", body: message)
-            AppPrimaryButton(title: "Try again", systemImage: "arrow.clockwise") {
-                store.refresh(from: healthManager)
-            }
-        }
-    }
-
-    private func messageBlock(title: String, body: String) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text(title)
-                .font(Theme.Typography.displayHeroCompact)
-                .foregroundStyle(Theme.Colors.textPrimary)
-                .fixedSize(horizontal: false, vertical: true)
-            Text(body)
-                .font(Theme.Typography.body)
-                .foregroundStyle(Theme.Colors.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: Ranges
@@ -456,7 +533,6 @@ struct BodyView: View {
     // MARK: Loading
 
     private func refreshIfNeeded(maxAge: TimeInterval = 300) {
-        guard healthManager.authorizationStatus == .authorized else { return }
         if let loadedAt = store.snapshot.loadedAt, Date().timeIntervalSince(loadedAt) < maxAge { return }
         store.refresh(from: healthManager)
     }
@@ -479,12 +555,12 @@ struct BodyView: View {
 
     private struct LiftRefreshKey: Equatable {
         let revision: UInt64
-        let loadedAt: Date?
+        let bodyRevision: UInt64
         let favorites: String
     }
 
     private func refreshLifts() async {
-        guard store.hasLoaded else { return }
+        guard !weight.isEmpty else { return }
         let workouts = dataManager.workouts
         let resolver = ExerciseRelationshipManager.shared.resolverSnapshot()
         let favorites = (try? JSONDecoder().decode([String].self, from: Data(favoriteExercisesData.utf8))) ?? []

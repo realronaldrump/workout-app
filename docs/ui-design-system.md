@@ -1,4 +1,4 @@
-# Loaded interface
+# Big Beautiful Workout App design system
 
 The app uses a training-log vocabulary: condensed display type for titles and values, Barlow for controls and explanations, neutral paper/rubber surfaces, ruled rows, and color reserved for meaningful training or Health categories. Existing redesign work is extended through the secondary screens rather than introducing another competing visual system.
 

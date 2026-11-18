@@ -62,7 +62,7 @@ enum BodyFormat {
     }
 
     static func rateHeadline(_ rate: BodyRate, kind: BodyCompositionMetricKind = .weight) -> String {
-        if rate.isSteady { return "Holding steady" }
+        if rate.isSteady { return abs(rate.change) < 0.5 ? "Holding steady" : "No clear pace" }
         let unit = kind == .weight ? "lb" : "pts"
         return "\(rate.perWeek < 0 ? "Down" : "Up") \(number(abs(rate.perWeek))) \(unit) a week"
     }

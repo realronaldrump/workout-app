@@ -181,8 +181,11 @@ final class AnalyticsDrilldownUITests: XCTestCase {
         XCTAssertTrue(element("body-latest-measurement").exists)
         XCTAssertTrue(element("body-weight-chart").exists)
         XCTAssertFalse(app.staticTexts["Chart options"].exists)
-        let history = app.buttons["body-all-readings"]
-        scrollUntilVisible(history)
+        let progress = app.buttons["body-open-progress"]
+        XCTAssertTrue(progress.isHittable)
+        progress.tap()
+        let history = app.buttons["body-weigh-in-history"]
+        XCTAssertTrue(history.waitForExistence(timeout: 5))
         history.tap()
         XCTAssertTrue(element("body-measurement-history").waitForExistence(timeout: 5))
         attachScreenshot(named: "Weight History")
@@ -200,6 +203,86 @@ final class AnalyticsDrilldownUITests: XCTestCase {
         XCTAssertTrue(heartRateVariability.exists)
         heartRateVariability.tap()
         XCTAssertTrue(element("health-metric-detail-heartRateVariability").waitForExistence(timeout: 8))
+    }
+
+    func testBodyOverviewLogsAndEditsAnEntryAndShowsProgressOnDemand() {
+        app.tabBars.buttons["Body"].tap()
+        let log = app.buttons["body-log-weight"]
+        let latest = app.buttons["body-edit-latest-weigh-in"]
+        let progress = app.buttons["body-open-progress"]
+
+        XCTAssertTrue(latest.waitForExistence(timeout: 8))
+        XCTAssertTrue(log.isHittable)
+        XCTAssertEqual(log.label, "Log weight")
+        XCTAssertTrue(progress.isHittable)
+        XCTAssertFalse(app.staticTexts["Lean mass"].exists)
+        attachScreenshot(named: "Body Overview")
+
+        log.tap()
+        let weight = app.textFields["body-weigh-in-value"]
+        let save = app.buttons["body-save-weigh-in"]
+        XCTAssertTrue(weight.waitForExistence(timeout: 5))
+        weight.tap()
+        weight.typeText("181.5")
+        save.tap()
+        XCTAssertTrue(latest.waitForExistence(timeout: 5))
+        XCTAssertTrue(latest.label.contains("181.5"), latest.label)
+
+        latest.tap()
+        XCTAssertTrue(weight.waitForExistence(timeout: 5))
+        let oldValue = weight.value as? String ?? ""
+        XCTAssertEqual(oldValue, "181.5")
+        weight.tap()
+        weight.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: oldValue.count) + "181.7")
+        save.tap()
+        XCTAssertTrue(latest.waitForExistence(timeout: 5))
+        XCTAssertTrue(latest.label.contains("181.7"), latest.label)
+
+        progress.tap()
+        XCTAssertTrue(app.navigationBars["Progress"].waitForExistence(timeout: 5))
+        XCTAssertTrue(element("body-weight-chart").exists)
+        attachScreenshot(named: "Body Progress")
+    }
+
+    func testBodyCanCorrectAndRestoreAnAppleHealthWeighIn() {
+        app.tabBars.buttons["Body"].tap()
+        let latest = app.buttons["body-edit-latest-weigh-in"]
+        XCTAssertTrue(latest.waitForExistence(timeout: 8))
+        let originalLabel = latest.label
+        latest.tap()
+
+        let weight = app.textFields["body-weigh-in-value"]
+        XCTAssertTrue(weight.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["This correction applies in your workout app."].exists)
+        let oldValue = weight.value as? String ?? ""
+        XCTAssertFalse(oldValue.isEmpty)
+        weight.tap()
+        weight.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: oldValue.count) + "180.6")
+        app.buttons["body-save-weigh-in"].tap()
+        XCTAssertTrue(latest.waitForExistence(timeout: 5))
+        XCTAssertTrue(latest.label.contains("180.6"), latest.label)
+
+        latest.tap()
+        let restore = app.buttons["Restore Apple Health reading"]
+        XCTAssertTrue(restore.waitForExistence(timeout: 5))
+        restore.tap()
+        let confirmation = app.sheets.buttons["Restore Apple Health reading"]
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))
+        confirmation.tap()
+        XCTAssertTrue(latest.waitForExistence(timeout: 5))
+        XCTAssertEqual(latest.label, originalLabel)
+    }
+
+    func testSettingsShowsTheWorkoutAppName() {
+        app.tabBars.buttons["More"].tap()
+        let settings = app.staticTexts["Settings"]
+        scrollUntilVisible(settings)
+        XCTAssertTrue(settings.isHittable)
+        settings.tap()
+
+        let name = app.staticTexts["Davis's Big Beautiful Workout App"]
+        scrollUntilVisible(name)
+        XCTAssertTrue(name.isHittable)
     }
 
     func testConsistencyExplanationIsAvailableOnlyOnRequest() {

@@ -12,6 +12,8 @@
 	<string>CFF42D6B-1F35-4388-9085-77CCE65D7890</string>
 	<key>BBWTelemetryDeckNamespace</key>
 	<string>com.bigbeautifulworkoutapp</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>NSHealthShareUsageDescription</key>
 	<string>Davis's Big Beautiful Workout App reads your Apple Health data, such as workouts, sleep, activity, cardio, and recovery metrics, to power workout insights and training history.</string>
 	<key>NSHealthUpdateUsageDescription</key>

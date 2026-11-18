@@ -79,6 +79,21 @@ final class BodyTrendEngineTests: XCTestCase {
         XCTAssertEqual(built.readingDayCount, 2)
     }
 
+    func testAnAppWeighInCanRepresentTheDayWithoutDroppingTheScaleReading() {
+        let scale = BodyRawSample(timestamp: date(0, hour: 6), value: 180)
+        let manual = BodyRawSample(timestamp: date(0, hour: 7), value: 181)
+        let built = BodyTrendEngine.build(
+            samples: [scale, manual],
+            kind: .weight,
+            preferredSampleIDs: [manual.id],
+            calendar: calendar
+        )
+
+        XCTAssertEqual(built.latest?.readingID, manual.id)
+        XCTAssertEqual(built.latest?.reading, 181)
+        XCTAssertEqual(built.readings, [scale, manual])
+    }
+
     func testDaylightSavingDoesNotSkipOrRepeatADay() {
         // Clocks spring forward in Denver on March 8, 2026.
         let springStart = calendar.date(from: DateComponents(year: 2026, month: 3, day: 6, hour: 7))!
@@ -131,6 +146,23 @@ final class BodyTrendEngineTests: XCTestCase {
         XCTAssertTrue(rate.isSteady, "Rate \(rate.perWeek) ± \(rate.halfWidth) should include zero")
     }
 
+    func testFlatMonthDoesNotInheritThePaceOfAnEarlierLoss() throws {
+        let readings = (0..<56).map { day in (day, 200 - 0.2 * Double(min(day, 27))) }
+        let rate = try XCTUnwrap(series(readings).rate(asOf: date(55)))
+
+        XCTAssertEqual(rate.perWeek, 0, accuracy: 1e-9)
+        XCTAssertTrue(rate.isSteady)
+    }
+
+    func testWeeklyWeighInsCanEstablishPaceWithoutFillingInMissingDays() throws {
+        let readings = (0...8).map { week in (week * 7, 200 - Double(week)) }
+        let rate = try XCTUnwrap(series(readings).rate(asOf: date(56)))
+
+        XCTAssertEqual(rate.perWeek, -1, accuracy: 1e-9)
+        XCTAssertEqual(rate.readingCount, 8)
+        XCTAssertEqual(rate.windowDays, 50)
+    }
+
     // MARK: Change
 
     func testChangeComparesTrendValuesAndNeedsEnoughReadings() throws {
@@ -157,6 +189,13 @@ final class BodyTrendEngineTests: XCTestCase {
         XCTAssertEqual(stats.lightest.reading, 180)
         XCTAssertEqual(stats.average, 182, accuracy: 1e-9)
         XCTAssertEqual(stats.readingDayCount, 4)
+    }
+
+    func testPreviousPeriodDoesNotIncludeTheFirstDayOfTheCurrentPeriod() throws {
+        let built = series((0..<8).map { ($0, 100 + 10 * Double($0)) })
+        let current = DateInterval(start: date(4, hour: 0), end: date(8, hour: 0))
+
+        XCTAssertEqual(try XCTUnwrap(built.changeFromPreviousPeriod(current)), 40, accuracy: 1e-9)
     }
 
     func testWeighInsPerWeekCountsDaysNotReadings() {
@@ -232,6 +271,22 @@ final class BodyTrendEngineTests: XCTestCase {
     }
 
     // MARK: Drawing
+
+    func testWeightChartConnectsThinnedSegmentsAndAnIsolatedLatestWeighIn() {
+        let built = series([(0, 200), (5, 198), (38, 195), (52, 194), (80, 192)])
+        let visible = built.grid[...]
+        let chartDays = BodyTrendEngine.thinned(visible, limit: 4)
+        let gaps = BodyTrendEngine.chartGaps(in: chartDays)
+
+        // Preserve the actual plotted trend at both ends, even with downsampling.
+        XCTAssertEqual(gaps.map(\.start), [built.readingDays[1], built.readingDays[3]])
+        XCTAssertEqual(gaps.map(\.end), [built.readingDays[2], built.readingDays[4]])
+        XCTAssertNil(built.gridDay(at: built.dayIndex(for: date(79))))
+        XCTAssertNil(built.rate(asOf: date(80)))
+
+        let lastOnly = built.gridDays(in: DateInterval(start: date(70), end: date(81)))
+        XCTAssertTrue(BodyTrendEngine.chartGaps(in: Array(lastOnly)).isEmpty)
+    }
 
     func testThinningKeepsSegmentEndsAndCapsTheCount() {
         var readings = (0..<300).map { ($0, 200 - Double($0) * 0.02) }

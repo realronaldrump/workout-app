@@ -80,11 +80,8 @@ struct BodyHero: View {
                     Image(systemName: BodyFormat.directionSymbol(for: rate))
                         .font(Theme.Typography.headline)
                         .accessibilityHidden(true)
-                    // One Text, so the margin wraps with the headline instead of stranding mid-line.
-                    let margin = Text("± \(BodyFormat.number(rate.halfWidth))")
-                        .font(Theme.Typography.subheadline)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                    Text("\(Text(BodyFormat.rateHeadline(rate)).font(Theme.Typography.title4)) \(margin)")
+                    Text(BodyFormat.rateHeadline(rate))
+                        .font(Theme.Typography.title4)
                 }
                 .foregroundStyle(Theme.Colors.textPrimary)
                 Text("\(BodyFormat.window(days: rate.windowDays)), \(SharedFormatters.count(rate.readingCount, "weigh-in"))")
@@ -97,25 +94,17 @@ struct BodyHero: View {
                 .foregroundStyle(Theme.Colors.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         } else {
-            Text(rateNeedsMoreText)
+            Text("More weigh-ins will show your pace.")
                 .font(Theme.Typography.callout)
                 .foregroundStyle(Theme.Colors.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
 
-    private var rateNeedsMoreText: String {
-        guard let latest else { return "" }
-        let recent = series.grid.filter {
-            $0.hasReading && $0.segment == latest.segment && latest.dayIndex - $0.dayIndex < 28
-        }.count
-        return "A weekly pace needs 8 weigh-ins over 2 weeks. You have \(recent)."
-    }
-
     @ViewBuilder
     private var readout: some View {
         if let latest, let reading = latest.reading {
-            let time = series.readings(on: latest).first?.timestamp ?? latest.day
+            let time = series.readings(on: latest).first(where: { $0.id == latest.readingID })?.timestamp ?? latest.day
             VStack(alignment: .leading, spacing: 2) {
                 Text("Scale \(BodyFormat.weight(reading)), \(BodyFormat.whenWeighed(time, now: now))")
                     .font(Theme.Typography.callout)
@@ -342,7 +331,7 @@ enum BodyGoalText {
         case .beyondAYear:
             return "More than a year at this pace."
         case .noEstimate:
-            return "No date yet. The 4-week pace isn't clearly toward the goal."
+            return "A goal date appears when your trend is clearly moving toward it."
         }
     }
 
@@ -608,8 +597,8 @@ struct BodyReadingRow: View {
     }
 
     private func readingDetail(_ readings: [BodyRawSample]) -> String {
-        guard let first = readings.first else { return "" }
-        let time = first.timestamp.formatted(date: .omitted, time: .shortened)
+        guard let selected = readings.first(where: { $0.id == day.readingID }) else { return "" }
+        let time = selected.timestamp.formatted(date: .omitted, time: .shortened)
         return readings.count > 1 ? "\(time), \(readings.count) readings" : time
     }
 }

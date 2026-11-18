@@ -14,6 +14,7 @@ struct SelectiveDataClearSheet: View {
     @ObservedObject var annotationsManager: WorkoutAnnotationsManager
     @ObservedObject var gymProfilesManager: GymProfilesManager
     @Binding var hasSeenOnboarding: Bool
+    @ObservedObject private var bodyStore = BodyStore.shared
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -238,7 +239,8 @@ struct SelectiveDataClearSheet: View {
                         healthManager: healthManager,
                         intentionalBreaksManager: intentionalBreaksManager,
                         annotationsManager: annotationsManager,
-                        gymProfilesManager: gymProfilesManager
+                        gymProfilesManager: gymProfilesManager,
+                        bodyStore: bodyStore
                     ),
                     setHasSeenOnboarding: { hasSeenOnboarding = $0 }
                 )
@@ -294,6 +296,9 @@ struct SelectiveDataClearSheet: View {
                 count: workoutCount + dailyCount + coverageCount,
                 detail: "\(workoutCount) workout, \(dailyCount) daily, \(coverageCount) coverage"
             )
+        case .weighIns:
+            let count = bodyStore.savedWeighInCount
+            return DataClearCategoryPreview(count: count, detail: SharedFormatters.count(count, "saved weigh-in"))
         case .intentionalBreaks:
             let savedCount = intentionalBreaksManager.savedBreaks.count
             let dismissedCount = intentionalBreaksManager.dismissedSuggestionRanges.count
@@ -489,6 +494,8 @@ private extension AppDataClearCategory {
             return "tag.fill"
         case .healthData:
             return "heart.fill"
+        case .weighIns:
+            return "scalemass"
         case .intentionalBreaks:
             return "calendar.badge.minus"
         case .exerciseCustomization:
@@ -514,6 +521,8 @@ private extension AppDataClearCategory {
             return Theme.Colors.accentTertiary
         case .healthData:
             return Theme.Colors.error
+        case .weighIns:
+            return BodyFormat.weightTint
         case .intentionalBreaks:
             return Theme.Colors.warning
         case .exerciseCustomization:

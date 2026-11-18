@@ -1178,7 +1178,8 @@ private extension ExportWorkoutsView {
                 healthManager: healthManager,
                 annotationsManager: annotationsManager,
                 gymProfilesManager: gymProfilesManager,
-                intentionalBreaksManager: intentionalBreaksManager
+                intentionalBreaksManager: intentionalBreaksManager,
+                bodyStore: .shared
             )
             let fileName = AppBackupService.makeBackupFileName(exportedAt: backup.exportedAt)
             let storageSnapshot = iCloudManager.storageSnapshot()
@@ -1955,6 +1956,7 @@ private extension ExportWorkoutsView {
         backup.payload.workoutAnnotations.count +
         backup.payload.workoutHealthData.count +
         backup.payload.dailyHealthData.count +
+        backup.payload.bodyWeighIns.count +
         max(
             backup.payload.exerciseMuscleAssignmentOverrides.count,
             backup.payload.exerciseTagOverrides.count

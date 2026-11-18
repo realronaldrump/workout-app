@@ -36,6 +36,8 @@ nonisolated struct AppBackupImportResult {
     var skippedWorkoutHealthEntries = 0
     var insertedDailyHealthEntries = 0
     var skippedDailyHealthEntries = 0
+    var insertedWeighIns = 0
+    var skippedWeighIns = 0
     var settingsFilled = 0
     var warnings: [String] = []
 
@@ -45,7 +47,8 @@ nonisolated struct AppBackupImportResult {
         insertedGyms +
         insertedAnnotations +
         insertedWorkoutHealthEntries +
-        insertedDailyHealthEntries
+        insertedDailyHealthEntries +
+        insertedWeighIns
     }
 }
 
@@ -86,6 +89,7 @@ nonisolated struct AppBackupPayload: Codable {
     var workoutHealthData: [WorkoutHealthData]
     var dailyHealthData: [DailyHealthData]
     var dailyHealthCoverage: [Date]
+    var bodyWeighIns: [BodyWeighIn]
     /// Flat tags retained as a fallback compatibility view for older backup readers and migrations.
     var exerciseTagOverrides: [String: [MuscleTag]]
     var exerciseMuscleAssignmentOverrides: [String: [ExerciseMuscleAssignment]]
@@ -107,6 +111,7 @@ nonisolated struct AppBackupPayload: Codable {
         workoutHealthData: [WorkoutHealthData] = [],
         dailyHealthData: [DailyHealthData] = [],
         dailyHealthCoverage: [Date] = [],
+        bodyWeighIns: [BodyWeighIn] = [],
         exerciseTagOverrides: [String: [MuscleTag]] = [:],
         exerciseMuscleAssignmentOverrides: [String: [ExerciseMuscleAssignment]] = [:],
         exerciseMetricPreferences: [String: ExerciseCardioMetricPreferences] = [:],
@@ -126,6 +131,7 @@ nonisolated struct AppBackupPayload: Codable {
         self.workoutHealthData = workoutHealthData
         self.dailyHealthData = dailyHealthData
         self.dailyHealthCoverage = dailyHealthCoverage
+        self.bodyWeighIns = bodyWeighIns
         self.exerciseTagOverrides = exerciseTagOverrides
         self.exerciseMuscleAssignmentOverrides = exerciseMuscleAssignmentOverrides
         self.exerciseMetricPreferences = exerciseMetricPreferences
@@ -148,6 +154,7 @@ nonisolated struct AppBackupPayload: Codable {
         workoutHealthData = try container.decodeIfPresent([WorkoutHealthData].self, forKey: .workoutHealthData) ?? []
         dailyHealthData = try container.decodeIfPresent([DailyHealthData].self, forKey: .dailyHealthData) ?? []
         dailyHealthCoverage = try container.decodeIfPresent([Date].self, forKey: .dailyHealthCoverage) ?? []
+        bodyWeighIns = try container.decodeIfPresent([BodyWeighIn].self, forKey: .bodyWeighIns) ?? []
         exerciseTagOverrides = try container.decodeIfPresent(
             [String: [MuscleTag]].self,
             forKey: .exerciseTagOverrides
@@ -219,6 +226,7 @@ enum AppBackupService {
         annotationsManager: WorkoutAnnotationsManager,
         gymProfilesManager: GymProfilesManager,
         intentionalBreaksManager: IntentionalBreaksManager,
+        bodyStore: BodyStore? = nil,
         exerciseMetadataManager: ExerciseMetadataManager? = nil,
         exerciseMetricManager: ExerciseMetricManager? = nil,
         exerciseRelationshipManager: ExerciseRelationshipManager? = nil,
@@ -243,6 +251,7 @@ enum AppBackupService {
             workoutHealthData: Array(healthManager.healthDataStore.values),
             dailyHealthData: Array(healthManager.dailyHealthStore.values),
             dailyHealthCoverage: Array(healthManager.dailyHealthCoverage).sorted(),
+            bodyWeighIns: try bodyStore?.weighInsForBackup() ?? [],
             exerciseTagOverrides: exerciseMetadataManager.muscleTagOverrides,
             exerciseMuscleAssignmentOverrides: exerciseMetadataManager.muscleAssignmentOverrides,
             exerciseMetricPreferences: exerciseMetricManager.cardioOverrides,
@@ -349,6 +358,9 @@ enum AppBackupService {
 
         private func writePayload(_ payload: AppBackupPayload) throws {
             try writeObject {
+                try $0.field("bodyWeighIns") {
+                    try writeArray(payload.bodyWeighIns)
+                }
                 try $0.field("completedFeatureGuideIDs") {
                     try writeArray(payload.completedFeatureGuideIDs)
                 }
@@ -549,6 +561,7 @@ enum AppBackupImporter {
         annotationsManager: WorkoutAnnotationsManager,
         gymProfilesManager: GymProfilesManager,
         intentionalBreaksManager: IntentionalBreaksManager,
+        bodyStore: BodyStore? = nil,
         exerciseMetadataManager: ExerciseMetadataManager? = nil,
         exerciseMetricManager: ExerciseMetricManager? = nil,
         exerciseRelationshipManager: ExerciseRelationshipManager? = nil,
@@ -626,6 +639,10 @@ enum AppBackupImporter {
             backup.payload.dismissedIntentionalBreakSuggestions
         )
         _ = featureGuideManager.mergeCompletedGuideIDs(backup.payload.completedFeatureGuideIDs)
+        if let bodyStore {
+            result.insertedWeighIns = try bodyStore.mergeWeighInsFromBackup(backup.payload.bodyWeighIns)
+            result.skippedWeighIns = backup.payload.bodyWeighIns.count - result.insertedWeighIns
+        }
         result.settingsFilled += mergeFavoriteExercises(backup.payload.favoriteExercises, userDefaults: userDefaults)
         result.settingsFilled += mergeSettings(
             backup.payload.settings,
