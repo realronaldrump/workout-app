@@ -168,10 +168,14 @@ enum AnalyticsUITestFixture {
     static let bodySamples: [HealthMetric: [HealthMetricSample]] = {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
+        let sparseHistory = ProcessInfo.processInfo.environment["WORKOUT_APP_SPARSE_BODY_HISTORY"] == "1"
+        let recentReadingDays: Set<Int> = [1, 17, 25, 27]
         var mass: [HealthMetricSample] = []
         var fat: [HealthMetricSample] = []
         for daysAgo in stride(from: 420, through: 0, by: -1) {
-            let skipped = daysAgo > 0 && (fixtureNoise(daysAgo, salt: 1) < -0.72 || (118..<139).contains(daysAgo))
+            let skipped = sparseHistory && daysAgo < 62
+                ? !recentReadingDays.contains(daysAgo)
+                : daysAgo > 0 && (fixtureNoise(daysAgo, salt: 1) < -0.72 || (118..<139).contains(daysAgo))
             guard !skipped,
                   let day = calendar.date(byAdding: .day, value: -daysAgo, to: today),
                   let morning = calendar.date(
@@ -179,7 +183,7 @@ enum AnalyticsUITestFixture {
                       value: 400 + Int(30 * fixtureNoise(daysAgo, salt: 3)),
                       to: day
                   ) else { continue }
-            let pounds = fixtureMorningWeight(daysAgo: daysAgo)
+            let pounds = sparseHistory ? 180 + Double(daysAgo) * 0.05 : fixtureMorningWeight(daysAgo: daysAgo)
             mass.append(HealthMetricSample(id: fixtureSampleID(daysAgo, tag: 1), timestamp: morning, value: pounds / 2.20462))
             if daysAgo % 11 == 4 {
                 mass.append(HealthMetricSample(

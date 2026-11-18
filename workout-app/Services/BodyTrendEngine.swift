@@ -34,7 +34,7 @@ nonisolated struct BodyTrendGap: Identifiable, Equatable {
     var id: Int { end.dayIndex }
 }
 
-/// Recent pace from the recorded readings, with a noise allowance for deciding direction.
+/// Pace over a period of recorded readings, with a noise allowance for deciding direction.
 nonisolated struct BodyRate: Sendable, Equatable {
     let perWeek: Double
     let halfWidth: Double
@@ -175,20 +175,41 @@ nonisolated struct BodySeries: Sendable {
         let today = dayIndex(for: now)
         guard (0...7).contains(today - latest.dayIndex) else { return nil }
 
-        func measuredDays(inLast days: Int) -> [BodyTrendDay] {
-            let firstIndex = max(latest.dayIndex - (days - 1), segmentStart.dayIndex)
-            return grid[lowerBound(firstIndex)...].filter(\.hasReading)
+        let start = max(latest.dayIndex - windowDays + 1, segmentStart.dayIndex)
+        if let rate = fittedRate(recordedDays(since: start), minimumDays: 8, minimumSpan: 13) {
+            return rate
         }
+        guard windowDays == 28 else { return nil }
+        let extendedStart = max(latest.dayIndex - 55, segmentStart.dayIndex)
+        return fittedRate(recordedDays(since: extendedStart), minimumDays: 5, minimumSpan: 28)
+    }
 
-        var observations = measuredDays(inLast: windowDays)
-        var span = latest.dayIndex - (observations.first?.dayIndex ?? latest.dayIndex)
-        if observations.count < 8 || span < 13 {
-            guard windowDays == 28 else { return nil }
-            observations = measuredDays(inLast: 56)
-            span = latest.dayIndex - (observations.first?.dayIndex ?? latest.dayIndex)
-            guard observations.count >= 5, span >= 28 else { return nil }
+    /// The Body screen can describe recorded history even after a break. Chart segments govern
+    /// which days are interpolated, while this fit only uses actual weigh-ins at their dates.
+    /// Goal estimates continue to use the recent pace from rate(asOf:).
+    func displayTrend(asOf now: Date) -> BodyRate? {
+        if let recent = rate(asOf: now) { return recent }
+        guard let latest, latest.dayIndex <= dayIndex(for: now) else { return nil }
+
+        for window in [56, 90, 180, 365] {
+            let observations = recordedDays(since: latest.dayIndex - window + 1)
+            if let trend = fittedRate(observations, minimumDays: 5, minimumSpan: 28) {
+                return trend
+            }
         }
+        return fittedRate(readingDays, minimumDays: 4, minimumSpan: 21)
+    }
 
+    private func recordedDays(since dayIndex: Int) -> [BodyTrendDay] {
+        grid[lowerBound(dayIndex)...].filter(\.hasReading)
+    }
+
+    private func fittedRate(_ observations: [BodyTrendDay], minimumDays: Int, minimumSpan: Int) -> BodyRate? {
+        guard observations.count >= minimumDays, let first = observations.first, let latest = observations.last else {
+            return nil
+        }
+        let span = latest.dayIndex - first.dayIndex
+        guard span >= minimumSpan else { return nil }
         let points = observations.compactMap { day in
             day.reading.map { (Double(day.dayIndex - latest.dayIndex), $0) }
         }

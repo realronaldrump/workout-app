@@ -74,7 +74,8 @@ struct BodyHero: View {
 
     @ViewBuilder
     private var rateLine: some View {
-        if let rate, !isSparse {
+        if let rate, let latest {
+            let period = BodyFormat.trendPeriod(days: rate.windowDays, through: latest.day, now: now, calendar: series.calendar)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.xs) {
                     Image(systemName: BodyFormat.directionSymbol(for: rate))
@@ -84,7 +85,7 @@ struct BodyHero: View {
                         .font(Theme.Typography.title4)
                 }
                 .foregroundStyle(Theme.Colors.textPrimary)
-                Text("\(BodyFormat.window(days: rate.windowDays)), \(SharedFormatters.count(rate.readingCount, "weigh-in"))")
+                Text("\(period), \(SharedFormatters.count(rate.readingCount, "weigh-in"))")
                     .font(Theme.Typography.subheadline)
                     .foregroundStyle(Theme.Colors.textSecondary)
             }

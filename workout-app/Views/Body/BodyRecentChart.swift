@@ -33,7 +33,7 @@ struct BodyRecentChart: View {
         .chartYScale(domain: weightDomain)
         .chartXAxis {
             AxisMarks(values: tickDates) { _ in
-                AxisValueLabel(format: .dateTime.month(.abbreviated).day())
+                AxisValueLabel(format: axisDateFormat)
                     .font(Theme.Typography.caption2)
                     .foregroundStyle(Theme.Colors.textSecondary)
             }
@@ -48,7 +48,7 @@ struct BodyRecentChart: View {
         }
         .frame(height: 125)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Recent weight chart")
+        .accessibilityLabel("Weight trend chart")
         .accessibilityValue(SharedFormatters.count(days.count, "weigh-in"))
         .accessibilityIdentifier("body-weight-chart")
     }
@@ -58,6 +58,13 @@ struct BodyRecentChart: View {
         return [days / 5, days / 2, 4 * days / 5].compactMap {
             calendar.date(byAdding: .day, value: $0, to: domain.lowerBound)
         }
+    }
+
+    private var axisDateFormat: Date.FormatStyle {
+        if domain.upperBound.timeIntervalSince(domain.lowerBound) > 365 * 86_400 {
+            return .dateTime.month(.abbreviated).year(.twoDigits)
+        }
+        return .dateTime.month(.abbreviated).day()
     }
 
     private var weightDomain: ClosedRange<Double> {

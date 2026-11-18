@@ -244,6 +244,24 @@ final class AnalyticsDrilldownUITests: XCTestCase {
         attachScreenshot(named: "Body Progress")
     }
 
+    func testBodyShowsATrendWhenRecentWeighInsAreSparse() {
+        app.terminate()
+        app.launchEnvironment["WORKOUT_APP_INITIAL_TAB"] = "body"
+        app.launchEnvironment["WORKOUT_APP_SPARSE_BODY_HISTORY"] = "1"
+        app.launch()
+
+        let heading = app.descendants(matching: .any).matching(NSPredicate(
+            format: "identifier == %@ AND label CONTAINS %@", "body-latest-measurement", "Down about"
+        )).firstMatch
+        XCTAssertTrue(heading.waitForExistence(timeout: 10))
+        XCTAssertTrue(heading.label.contains(" – "), heading.label)
+        let chart = element("body-weight-chart")
+        XCTAssertTrue(chart.exists)
+        let count = (chart.value as? String)?.split(separator: " ").first.flatMap { Int($0) }
+        XCTAssertGreaterThan(count ?? 0, 4)
+        attachScreenshot(named: "Body Trend After a Gap")
+    }
+
     func testBodyCanCorrectAndRestoreAnAppleHealthWeighIn() {
         app.tabBars.buttons["Body"].tap()
         let latest = app.buttons["body-edit-latest-weigh-in"]

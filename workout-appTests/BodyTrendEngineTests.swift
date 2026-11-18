@@ -163,6 +163,41 @@ final class BodyTrendEngineTests: XCTestCase {
         XCTAssertEqual(rate.windowDays, 50)
     }
 
+    func testOverviewTrendLooksPastASparseMonthAndAChartGap() throws {
+        let recentDays = [292, 294, 302, 318]
+        let days = Array(0..<250) + recentDays
+        let built = series(days.map { ($0, 210 - Double($0) * 0.05) })
+        let now = date(319)
+
+        XCTAssertEqual(built.readingDayCount, 254)
+        XCTAssertNil(built.rate(asOf: now), "A lone recent reading doesn't support a goal date")
+        let trend = try XCTUnwrap(built.displayTrend(asOf: now))
+        XCTAssertEqual(trend.windowDays, 90)
+        XCTAssertEqual(trend.readingCount, 25)
+        XCTAssertEqual(trend.perWeek, -0.35, accuracy: 1e-9)
+    }
+
+    func testOverviewTrendCanUseFourReadingDaysAcrossSeveralWeeks() throws {
+        let readings = [(0, 200.0), (2, 199.8), (10, 199.0), (26, 197.4)]
+        let built = series(readings)
+        let trend = try XCTUnwrap(built.displayTrend(asOf: date(27)))
+
+        XCTAssertEqual(trend.readingCount, 4)
+        XCTAssertEqual(trend.windowDays, 27)
+        XCTAssertEqual(trend.perWeek, -0.7, accuracy: 1e-9)
+        XCTAssertNil(series(Array(readings.prefix(3))).displayTrend(asOf: date(27)))
+    }
+
+    func testOverviewRetainsHistoricalTrendWhenTheLastReadingIsOld() throws {
+        let built = series((0..<40).map { ($0, 200 - Double($0) * 0.1) })
+        let now = date(80)
+
+        XCTAssertNil(built.rate(asOf: now))
+        let trend = try XCTUnwrap(built.displayTrend(asOf: now))
+        XCTAssertEqual(trend.windowDays, 40)
+        XCTAssertEqual(trend.perWeek, -0.7, accuracy: 1e-9)
+    }
+
     // MARK: Change
 
     func testChangeComparesTrendValuesAndNeedsEnoughReadings() throws {

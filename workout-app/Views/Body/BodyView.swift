@@ -73,7 +73,7 @@ struct BodyView: View {
 
     var body: some View {
         let now = Date()
-        let rate = weight.rate(asOf: now)
+        let rate = weight.displayTrend(asOf: now)
 
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
@@ -141,8 +141,8 @@ struct BodyView: View {
                 .foregroundStyle(Theme.Colors.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
-            if let rate {
-                Text(BodyFormat.window(days: rate.windowDays))
+            if let rate, let last = weight.latest {
+                Text(BodyFormat.trendPeriod(days: rate.windowDays, through: last.day, now: now, calendar: weight.calendar))
                     .font(Theme.Typography.callout)
                     .foregroundStyle(Theme.Colors.textSecondary)
             } else if let error = store.errorMessage, weight.isEmpty {
@@ -207,10 +207,10 @@ struct BodyView: View {
         let calendar = weight.calendar
         let today = calendar.startOfDay(for: now)
         let last = weight.latest?.day ?? today
-        let start = rate == nil ? today : last
+        let end = rate == nil ? today : last
         let numberOfDays = rate?.windowDays ?? 28
-        if let first = calendar.date(byAdding: .day, value: 1 - numberOfDays, to: start) {
-            let domain = first...today
+        if let first = calendar.date(byAdding: .day, value: 1 - numberOfDays, to: end) {
+            let domain = first...end
             let days = weight.gridDays(in: domain).filter(\.hasReading)
             if days.count > 1 {
                 BodyRecentChart(days: days, domain: domain, rate: rate, calendar: calendar)
@@ -286,8 +286,8 @@ struct BodyView: View {
     @ViewBuilder
     private var page: some View {
         let now = Date()
-        let rate = weight.rate(asOf: now)
-        let goalStatus = goalStatus(rate: rate, now: now)
+        let rate = weight.displayTrend(asOf: now)
+        let goalStatus = goalStatus(rate: weight.rate(asOf: now), now: now)
 
         if let error = store.errorMessage {
             Text("Couldn't refresh from Apple Health. Showing the last loaded readings. \(error)")

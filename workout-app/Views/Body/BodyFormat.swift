@@ -56,6 +56,14 @@ enum BodyFormat {
         days.isMultiple(of: 7) ? "Last \(days / 7) weeks" : "Last \(days) days"
     }
 
+    static func trendPeriod(days: Int, through end: Date, now: Date, calendar: Calendar) -> String {
+        let age = calendar.dateComponents([.day], from: end, to: calendar.startOfDay(for: now)).day ?? 0
+        guard (days > 28 || age > 7), let start = calendar.date(byAdding: .day, value: 1 - days, to: end) else {
+            return window(days: days)
+        }
+        return "\(shortDate(start, calendar: calendar)) – \(shortDate(end, calendar: calendar))"
+    }
+
     static func directionSymbol(for rate: BodyRate) -> String {
         if rate.isSteady { return "arrow.right" }
         return rate.perWeek < 0 ? "arrow.down.right" : "arrow.up.right"

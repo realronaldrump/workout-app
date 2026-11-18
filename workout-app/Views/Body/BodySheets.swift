@@ -222,7 +222,7 @@ struct BodyMethodSheet: View {
         ),
         (
             "Weekly pace",
-            "Recent recorded weigh-ins show the direction. We look back up to 8 weeks when you weigh in less often."
+            "The overview looks farther back when weigh-ins are spread out. The dates show which readings inform the trend."
         ),
         (
             "Goal dates",
