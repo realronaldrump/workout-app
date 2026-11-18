@@ -308,14 +308,12 @@ struct BodyView: View {
 
         chartBlock(now: now)
 
-        if weight.readingDayCount >= 8 {
-            BodyChangeSection(
-                series: weight,
-                range: interval(for: range, now: now),
-                rangeName: range.name,
-                comparesPreviousPeriod: range != .all
-            )
-        }
+        BodyChangeSection(
+            series: weight,
+            range: interval(for: range, now: now),
+            rangeName: range.name,
+            comparesPreviousPeriod: range != .all
+        )
 
         BodyGoalSection(
             status: goalStatus,

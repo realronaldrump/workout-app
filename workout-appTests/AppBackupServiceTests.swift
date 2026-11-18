@@ -202,7 +202,7 @@ final class AppBackupServiceTests: XCTestCase {
                     "Row": [.primary(.builtIn(.back)), .secondary(.builtIn(.biceps))]
                 ],
                 favoriteExercises: ["Bench Press", "Row"],
-                settings: AppBackupSettings(profileName: "Streamed")
+                settings: AppBackupSettings(profileName: "Streamed", bodyComparisonStartDate: "2026-09-12")
             )
         )
 
@@ -222,6 +222,7 @@ final class AppBackupServiceTests: XCTestCase {
             backup.payload.exerciseMuscleAssignmentOverrides
         )
         XCTAssertEqual(decoded.payload.settings.profileName, "Streamed")
+        XCTAssertEqual(decoded.payload.settings.bodyComparisonStartDate, "2026-09-12")
     }
 
     func testVersionThreeBackupWithoutRolesStillDecodesFlatTags() throws {

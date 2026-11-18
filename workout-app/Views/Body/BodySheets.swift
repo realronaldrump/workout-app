@@ -1,5 +1,67 @@
 import SwiftUI
 
+struct BodyComparisonStartSheet: View {
+    let calendar: Calendar
+    let allowedDates: ClosedRange<Date>
+    let hasStart: Bool
+    let onSave: (Date?) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var selection: Date
+
+    init(series: BodySeries, start: Date?, onSave: @escaping (Date?) -> Void) {
+        let calendar = series.calendar
+        let today = calendar.startOfDay(for: Date())
+        let earliest = min(series.grid.first?.day ?? today, start ?? today, today)
+        let latest = min(series.latest?.day ?? today, today)
+        let suggested = calendar.date(byAdding: .month, value: -3, to: latest) ?? latest
+        self.calendar = calendar
+        self.allowedDates = earliest...today
+        self.hasStart = start != nil
+        self.onSave = onSave
+        _selection = State(initialValue: min(max(start ?? suggested, earliest), today))
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    DatePicker("Start date", selection: $selection, in: allowedDates, displayedComponents: .date)
+                        .datePickerStyle(.wheel)
+                        .labelsHidden()
+                        .accessibilityIdentifier("body-comparison-date-picker")
+                } footer: {
+                    Text("Uses the first weigh-in on or after your start date.")
+                }
+                if hasStart {
+                    Button("Clear start date", role: .destructive) {
+                        onSave(nil)
+                        dismiss()
+                    }
+                    .accessibilityIdentifier("body-clear-comparison-start")
+                }
+            }
+            .environment(\.calendar, calendar)
+            .environment(\.timeZone, calendar.timeZone)
+            .navigationTitle("Comparison start date")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                AppToolbarItem(placement: .cancellationAction) {
+                    AppToolbarButton(title: "Cancel", systemImage: "xmark", variant: .subtle) { dismiss() }
+                }
+                AppToolbarItem(placement: .confirmationAction) {
+                    AppToolbarButton(title: "Save", systemImage: "checkmark", variant: .accent) {
+                        onSave(selection)
+                        dismiss()
+                    }
+                    .accessibilityIdentifier("body-save-comparison-start")
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+}
+
 // MARK: - Goal
 
 struct BodyGoalSheet: View {

@@ -215,6 +215,32 @@ final class BodyTrendEngineTests: XCTestCase {
         XCTAssertNil(sparse.change(days: 7), "Three readings in the last week is not enough")
     }
 
+    func testChosenStartUsesTheFirstRecordedDayAfterIt() throws {
+        let built = series([(0, 90), (35, 190), (40, 184), (44, 188)])
+        let requested = date(37)
+        let chosenDay = try XCTUnwrap(built.gridDay(at: built.dayIndex(for: requested)))
+        XCTAssertFalse(chosenDay.hasReading)
+
+        let change = try XCTUnwrap(built.change(since: requested))
+        let baseline = try XCTUnwrap(built.gridDay(at: built.dayIndex(for: date(40))))
+        let latest = try XCTUnwrap(built.latest)
+        XCTAssertEqual(change.baselineDate, baseline.day)
+        XCTAssertEqual(change.delta, latest.trend - baseline.trend, accuracy: 1e-9)
+        XCTAssertNil(built.change(since: date(44)), "One recorded day cannot show a change")
+        XCTAssertNil(built.change(since: date(45)))
+    }
+
+    func testComparisonStartDateKeepsItsCalendarDayAcrossTimeZones() throws {
+        let value = BodyComparisonStartDate.encode(date(0), calendar: calendar)
+        var tokyo = calendar
+        tokyo.timeZone = try XCTUnwrap(TimeZone(identifier: "Asia/Tokyo"))
+        let restored = try XCTUnwrap(BodyComparisonStartDate.decode(value, calendar: tokyo))
+        let day = tokyo.dateComponents([.year, .month, .day], from: restored)
+
+        XCTAssertEqual(day, DateComponents(year: 2026, month: 1, day: 5))
+        XCTAssertNil(BodyComparisonStartDate.decode("2026-11-31", calendar: calendar))
+    }
+
     func testRangeStatsUseOneReadingPerDay() throws {
         let built = series([(0, 182), (1, 180), (2, 185), (3, 181)])
         let interval = DateInterval(start: date(0, hour: 0), end: date(4, hour: 0))

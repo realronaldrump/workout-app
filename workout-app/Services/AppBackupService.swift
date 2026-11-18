@@ -212,6 +212,7 @@ nonisolated struct AppBackupSettings: Codable {
     var bodyGoalStartDate: Double?
     var bodyGoalReachedDate: Double?
     var bodyRange: String?
+    var bodyComparisonStartDate: String?
 }
 
 enum AppBackupService {
@@ -545,7 +546,8 @@ enum AppBackupService {
             bodyGoalStartWeightLb: userDefaults.object(forKey: "bodyGoalStartWeightLb") as? Double,
             bodyGoalStartDate: userDefaults.object(forKey: "bodyGoalStartDate") as? Double,
             bodyGoalReachedDate: userDefaults.object(forKey: "bodyGoalReachedDate") as? Double,
-            bodyRange: userDefaults.string(forKey: "bodyRange")
+            bodyRange: userDefaults.string(forKey: "bodyRange"),
+            bodyComparisonStartDate: userDefaults.string(forKey: BodyComparisonStartDate.key)
         )
     }
 }
@@ -742,6 +744,12 @@ enum AppBackupImporter {
         filled += setIfMissing(
             settings.bodyRange,
             forKey: "bodyRange",
+            userDefaults: userDefaults,
+            persistedValues: persistedValues
+        )
+        filled += setIfMissing(
+            settings.bodyComparisonStartDate,
+            forKey: BodyComparisonStartDate.key,
             userDefaults: userDefaults,
             persistedValues: persistedValues
         )

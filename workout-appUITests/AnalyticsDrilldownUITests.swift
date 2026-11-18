@@ -262,6 +262,44 @@ final class AnalyticsDrilldownUITests: XCTestCase {
         attachScreenshot(named: "Body Trend After a Gap")
     }
 
+    func testBodyChangeRemembersTheSelectedStartDate() {
+        app.tabBars.buttons["Body"].tap()
+        let progress = app.buttons["body-open-progress"]
+        let comparison = app.buttons["body-change-start-date"]
+        XCTAssertTrue(progress.waitForExistence(timeout: 8))
+        progress.tap()
+        XCTAssertTrue(app.navigationBars["Progress"].waitForExistence(timeout: 5))
+        scrollUntilVisible(comparison)
+        XCTAssertTrue(comparison.isHittable)
+        if comparison.label.hasPrefix("Since ") {
+            comparison.tap()
+            app.buttons["body-clear-comparison-start"].tap()
+        }
+        XCTAssertEqual(comparison.label, "Set start date")
+        comparison.tap()
+        XCTAssertTrue(element("body-comparison-date-picker").waitForExistence(timeout: 5))
+        let save = app.buttons["body-save-comparison-start"]
+        XCTAssertTrue(save.isHittable)
+        save.tap()
+        XCTAssertTrue(comparison.waitForExistence(timeout: 5))
+        let summary = comparison.label
+        XCTAssertTrue(summary.hasPrefix("Since "), summary)
+        XCTAssertTrue(summary.contains("lb"), summary)
+        attachScreenshot(named: "Comparison Start Date")
+
+        app.terminate()
+        app.launchEnvironment["WORKOUT_APP_INITIAL_TAB"] = "body"
+        app.launch()
+        XCTAssertTrue(progress.waitForExistence(timeout: 8))
+        progress.tap()
+        XCTAssertTrue(app.navigationBars["Progress"].waitForExistence(timeout: 5))
+        scrollUntilVisible(comparison)
+        XCTAssertEqual(comparison.label, summary)
+        comparison.tap()
+        app.buttons["body-clear-comparison-start"].tap()
+        XCTAssertEqual(comparison.label, "Set start date")
+    }
+
     func testBodyCanCorrectAndRestoreAnAppleHealthWeighIn() {
         app.tabBars.buttons["Body"].tap()
         let latest = app.buttons["body-edit-latest-weigh-in"]

@@ -362,6 +362,7 @@ struct SelectiveDataClearSheet: View {
             Haptics.preferenceKey,
             "bodyGoalWeightLb",
             "bodyRange",
+            BodyComparisonStartDate.key,
             healthManager.preferredSleepSourceKey,
             healthManager.preferredSleepSourceNameKey
         ]

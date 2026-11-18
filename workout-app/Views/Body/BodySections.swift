@@ -172,11 +172,15 @@ struct BodyChangeSection: View {
     let rangeName: String
     let comparesPreviousPeriod: Bool
 
+    @AppStorage(BodyComparisonStartDate.key) private var savedStart = ""
+    @State private var showingStartDate = false
+
     var body: some View {
-        let changes = [series.change(days: 7), series.change(days: 30), series.change(days: 90), series.change(days: 365), series.changeSinceStart()]
-            .compactMap { $0 }
-        let stats = series.stats(in: range)
-        let previous = comparesPreviousPeriod ? series.changeFromPreviousPeriod(range) : nil
+        let showsRangeStats = series.readingDayCount >= 8
+        let changes = showsRangeStats ? [7, 30, 90, 365].compactMap { series.change(days: $0) } : []
+        let stats = showsRangeStats ? series.stats(in: range) : nil
+        let previous = showsRangeStats && comparesPreviousPeriod ? series.changeFromPreviousPeriod(range) : nil
+        let start = BodyComparisonStartDate.decode(savedStart, calendar: series.calendar)
 
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
             SectionHeading(
@@ -191,18 +195,13 @@ struct BodyChangeSection: View {
                             .font(Theme.Typography.callout)
                             .foregroundStyle(Theme.Colors.textPrimary)
                         Spacer(minLength: Theme.Spacing.sm)
-                        Text(BodyFormat.signedWeight(change.delta))
-                            .font(Theme.Typography.numberSmall)
-                            .foregroundStyle(Theme.Colors.textPrimary)
-                        Text(BodyFormat.signed(change.percent) + "%")
-                            .font(Theme.Typography.subheadline)
-                            .monospacedDigit()
-                            .foregroundStyle(Theme.Colors.textSecondary)
-                            .frame(minWidth: 58, alignment: .trailing)
+                        changeValues(change)
                     }
                     .ledgerRow(showsRule: index > 0, verticalPadding: Theme.Spacing.sm)
                     .accessibilityElement(children: .combine)
                 }
+
+                startDateRow(start, showsRule: !changes.isEmpty)
 
                 if let stats {
                     statRow(
@@ -222,6 +221,78 @@ struct BodyChangeSection: View {
                 }
             }
         }
+        .sheet(isPresented: $showingStartDate) {
+            BodyComparisonStartSheet(series: series, start: start) { chosen in
+                savedStart = chosen.map { BodyComparisonStartDate.encode($0, calendar: series.calendar) } ?? ""
+            }
+        }
+    }
+
+    private func startDateRow(_ start: Date?, showsRule: Bool) -> some View {
+        let change = start.flatMap { series.change(since: $0) }
+        let title = change?.label ?? (start.map { "Since \(BodyFormat.shortDate($0, calendar: series.calendar))" } ?? "Set start date")
+        return Button {
+            showingStartDate = true
+        } label: {
+            HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.md) {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: Theme.Spacing.xs) {
+                        Text(title)
+                            .font(Theme.Typography.callout)
+                            .foregroundStyle(Theme.Colors.textPrimary)
+                        if start != nil {
+                            Image(systemName: "pencil")
+                                .font(Theme.Typography.caption2)
+                                .foregroundStyle(Theme.Colors.textSecondary)
+                                .accessibilityHidden(true)
+                        }
+                    }
+                    if let start {
+                        if let change {
+                            if !series.calendar.isDate(change.baselineDate, inSameDayAs: start) {
+                                startDateDetail("First weigh-in \(BodyFormat.shortDate(change.baselineDate, calendar: series.calendar))")
+                            }
+                        } else {
+                            startDateDetail("Compare after two weigh-ins")
+                        }
+                    }
+                }
+                Spacer(minLength: Theme.Spacing.sm)
+                if let change {
+                    changeValues(change)
+                } else if start == nil {
+                    Image(systemName: "chevron.right")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                        .accessibilityHidden(true)
+                }
+            }
+            .ledgerRow(showsRule: showsRule, verticalPadding: Theme.Spacing.sm)
+            .frame(minHeight: Theme.Layout.minimumTapTarget)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityHint("Choose the start date for this comparison")
+        .accessibilityIdentifier("body-change-start-date")
+    }
+
+    @ViewBuilder
+    private func changeValues(_ change: BodyChange) -> some View {
+        Text(BodyFormat.signedWeight(change.delta))
+            .font(Theme.Typography.numberSmall)
+            .foregroundStyle(Theme.Colors.textPrimary)
+        Text(BodyFormat.signed(change.percent) + "%")
+            .font(Theme.Typography.subheadline)
+            .monospacedDigit()
+            .foregroundStyle(Theme.Colors.textSecondary)
+            .frame(minWidth: 58, alignment: .trailing)
+    }
+
+    private func startDateDetail(_ detail: String) -> some View {
+        Text(detail)
+            .font(Theme.Typography.caption)
+            .foregroundStyle(Theme.Colors.textSecondary)
     }
 
     private func statRow(_ title: String, value: String, detail: String?) -> some View {

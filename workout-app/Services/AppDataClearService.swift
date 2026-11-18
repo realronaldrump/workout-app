@@ -261,7 +261,8 @@ enum AppDataClearService {
             "bodyGoalStartWeightLb",
             "bodyGoalStartDate",
             "bodyGoalReachedDate",
-            "bodyRange"
+            "bodyRange",
+            BodyComparisonStartDate.key
         ].forEach { userDefaults.removeObject(forKey: $0) }
 
         clearHealthPreferences(healthManager: healthManager, userDefaults: userDefaults)

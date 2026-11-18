@@ -57,6 +57,25 @@ nonisolated struct BodyChange: Sendable, Identifiable, Equatable {
     var percent: Double { baseline != 0 ? delta / baseline * 100 : 0 }
 }
 
+/// A calendar day stays the same when the device time zone changes.
+nonisolated enum BodyComparisonStartDate {
+    static let key = "bodyComparisonStartDate"
+
+    static func encode(_ date: Date, calendar: Calendar) -> String {
+        date.formatted(format(in: calendar))
+    }
+
+    static func decode(_ value: String, calendar: Calendar) -> Date? {
+        let style = format(in: calendar)
+        guard let date = try? style.parse(value), date.formatted(style) == value else { return nil }
+        return date
+    }
+
+    private static func format(in calendar: Calendar) -> Date.ISO8601FormatStyle {
+        Date.ISO8601FormatStyle(dateSeparator: .dash, timeZone: calendar.timeZone).year().month().day()
+    }
+}
+
 nonisolated struct BodyRangeStats: Sendable, Equatable {
     let heaviest: BodyTrendDay
     let lightest: BodyTrendDay
@@ -258,14 +277,15 @@ nonisolated struct BodySeries: Sendable {
         )
     }
 
-    /// The whole history: the trend now against the first reading.
-    func changeSinceStart() -> BodyChange? {
-        guard let latest, let first = grid.first,
-              readingDayCount >= 8, latest.dayIndex - first.dayIndex >= 14 else { return nil }
-        let sameYear = calendar.isDate(first.day, equalTo: latest.day, toGranularity: .year)
+    /// Compare trend weights using the first recorded day on or after the chosen start.
+    func change(since startDate: Date) -> BodyChange? {
+        let start = lowerBound(dayIndex(for: startDate))
+        guard let first = grid[start...].first(where: \.hasReading),
+              let latest, first.dayIndex < latest.dayIndex else { return nil }
+        let sameYear = calendar.isDate(startDate, equalTo: latest.day, toGranularity: .year)
         let dateText = sameYear
-            ? first.day.formatted(.dateTime.month(.abbreviated).day())
-            : first.day.formatted(.dateTime.month(.abbreviated).day().year())
+            ? startDate.formatted(.dateTime.month(.abbreviated).day())
+            : startDate.formatted(.dateTime.month(.abbreviated).day().year())
         return BodyChange(
             id: "start",
             label: "Since \(dateText)",
