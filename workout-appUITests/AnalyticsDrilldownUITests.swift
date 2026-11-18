@@ -266,6 +266,7 @@ final class AnalyticsDrilldownUITests: XCTestCase {
         app.tabBars.buttons["Body"].tap()
         let progress = app.buttons["body-open-progress"]
         let comparison = app.buttons["body-change-start-date"]
+        let dateRange = app.buttons["Date range"]
         XCTAssertTrue(progress.waitForExistence(timeout: 8))
         progress.tap()
         XCTAssertTrue(app.navigationBars["Progress"].waitForExistence(timeout: 5))
@@ -287,12 +288,31 @@ final class AnalyticsDrilldownUITests: XCTestCase {
         XCTAssertTrue(summary.contains("lb"), summary)
         attachScreenshot(named: "Comparison Start Date")
 
+        scrollUntilVisible(dateRange)
+        XCTAssertTrue(dateRange.isHittable)
+        let since = dateRange.value as? String ?? ""
+        XCTAssertTrue(since.hasPrefix("Since "), since)
+        let chart = element("body-weight-chart")
+        let sinceChart = chart.value as? String
+        XCTAssertNotNil(sinceChart)
+        attachScreenshot(named: "Progress Chart Since Start")
+
+        dateRange.tap()
+        let twoWeeks = app.buttons["14 days"]
+        XCTAssertTrue(twoWeeks.waitForExistence(timeout: 5))
+        twoWeeks.tap()
+        XCTAssertEqual(dateRange.value as? String, "14 days")
+        XCTAssertNotEqual(chart.value as? String, sinceChart)
+
         app.terminate()
         app.launchEnvironment["WORKOUT_APP_INITIAL_TAB"] = "body"
         app.launch()
         XCTAssertTrue(progress.waitForExistence(timeout: 8))
         progress.tap()
         XCTAssertTrue(app.navigationBars["Progress"].waitForExistence(timeout: 5))
+        scrollUntilVisible(dateRange)
+        XCTAssertEqual(dateRange.value as? String, since)
+        XCTAssertEqual(chart.value as? String, sinceChart)
         scrollUntilVisible(comparison)
         XCTAssertEqual(comparison.label, summary)
         comparison.tap()

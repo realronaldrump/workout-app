@@ -1,40 +1,6 @@
 import SwiftUI
 import UIKit
 
-enum BodyChartRange: String, CaseIterable, Identifiable {
-    case fourWeeks = "4W"
-    case threeMonths = "3M"
-    case sixMonths = "6M"
-    case year = "1Y"
-    case all = "All"
-
-    var id: String { rawValue }
-
-    var days: Int? {
-        switch self {
-        case .fourWeeks: return 28
-        case .threeMonths: return 91
-        case .sixMonths: return 182
-        case .year: return 365
-        case .all: return nil
-        }
-    }
-
-    /// Used in sentences such as "Average, 3 months".
-    var name: String {
-        switch self {
-        case .fourWeeks: return "4 weeks"
-        case .threeMonths: return "3 months"
-        case .sixMonths: return "6 months"
-        case .year: return "year"
-        case .all: return "all time"
-        }
-    }
-
-    /// Past six months the dots crowd out the line, so only the trend and band are drawn.
-    var showsReadings: Bool { self != .year && self != .all }
-}
-
 /// A quick check-in with a separate Progress screen for the longer history.
 struct BodyView: View {
     var isTabRoot = false
@@ -49,12 +15,15 @@ struct BodyView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @AppStorage("bodyRange") private var rangeRaw = BodyChartRange.threeMonths.rawValue
+    @AppStorage(BodyComparisonStartDate.key) private var savedStart = ""
     @AppStorage("bodyGoalWeightLb") private var goalWeight: Double = 0
     @AppStorage("bodyGoalStartWeightLb") private var goalStartWeight: Double = 0
     @AppStorage("bodyGoalStartDate") private var goalStartDate: Double = 0
     @AppStorage("bodyGoalReachedDate") private var goalReachedDate: Double = 0
     @AppStorage("favoriteExercises") private var favoriteExercisesData = "[]"
 
+    @State private var showingProgress = false
+    @State private var rangeOverride: BodyChartRange?
     @State private var weightSelection: BodyTrendDay?
     @State private var fatSelection: BodyTrendDay?
     @State private var showingGoal = false
@@ -67,9 +36,15 @@ struct BodyView: View {
     @State private var isRequestingAuthorization = false
     @State private var authorizationError: String?
 
-    private var range: BodyChartRange { BodyChartRange(rawValue: rangeRaw) ?? .threeMonths }
     private var weight: BodySeries { store.weight }
     private var bodyFat: BodySeries { store.bodyFat }
+    private var comparisonStart: Date? { BodyComparisonStartDate.decode(savedStart, calendar: weight.calendar) }
+    private var range: BodyChartRange {
+        if let rangeOverride { return rangeOverride }
+        if comparisonStart != nil { return .sinceStart }
+        let saved = BodyChartRange(rawValue: rangeRaw) ?? .threeMonths
+        return saved == .sinceStart ? .threeMonths : saved
+    }
 
     var body: some View {
         let now = Date()
@@ -83,8 +58,9 @@ struct BodyView: View {
                 }
                 overviewChart(now: now, rate: rate)
 
-                NavigationLink {
-                    progressScreen
+                Button {
+                    selectRange(nil)
+                    showingProgress = true
                 } label: {
                     Text("Progress")
                         .font(Theme.Typography.headline)
@@ -110,6 +86,7 @@ struct BodyView: View {
         .navigationTitle("Body")
         .navigationBarTitleDisplayMode(isTabRoot ? .large : .inline)
         .accessibilityIdentifier("body-composition")
+        .navigationDestination(isPresented: $showingProgress) { progressScreen }
         .toolbar {
             AppToolbarItem(placement: .topBarTrailing) {
                 AppToolbarIconButton(systemImage: "plus", accessibilityLabel: "Log weight", variant: .subtle) {
@@ -129,6 +106,7 @@ struct BodyView: View {
             if status == .authorized { store.refresh(from: healthManager) }
         }
         .onChange(of: healthManager.dailyDataRevision) { _, _ in store.refresh(from: healthManager) }
+        .onChange(of: savedStart) { _, _ in selectRange(nil) }
         .onChange(of: store.snapshot.revision, initial: true) { _, _ in
             recordGoalReachedIfNeeded()
         }
@@ -288,6 +266,8 @@ struct BodyView: View {
         let now = Date()
         let rate = weight.displayTrend(asOf: now)
         let goalStatus = goalStatus(rate: weight.rate(asOf: now), now: now)
+        let interval = chartInterval(for: weight, now: now)
+        let showsReadings = range.showsReadings(in: interval, calendar: weight.calendar)
 
         if let error = store.errorMessage {
             Text("Couldn't refresh from Apple Health. Showing the last loaded readings. \(error)")
@@ -306,13 +286,13 @@ struct BodyView: View {
             compositionRow(now: now)
         }
 
-        chartBlock(now: now)
+        chartBlock(interval: interval, now: now, showsReadings: showsReadings)
 
         BodyChangeSection(
             series: weight,
-            range: interval(for: range, now: now),
-            rangeName: range.name,
-            comparesPreviousPeriod: range != .all
+            range: interval,
+            chartRange: range,
+            savedStart: $savedStart
         )
 
         BodyGoalSection(
@@ -325,8 +305,8 @@ struct BodyView: View {
             BodyCompositionSection(
                 weight: weight,
                 bodyFat: bodyFat,
-                domain: domain(for: range, series: bodyFat, now: now),
-                showsReadings: range.showsReadings,
+                domain: chartDomain(range == .all ? chartInterval(for: bodyFat, now: now) : interval, now: now),
+                showsReadings: showsReadings,
                 selection: $fatSelection
             )
         }
@@ -368,50 +348,58 @@ struct BodyView: View {
         }
     }
 
-    private func chartBlock(now: Date) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+    private func chartBlock(interval: DateInterval, now: Date, showsReadings: Bool) -> some View {
+        let readings = weight.gridDays(in: interval).filter(\.hasReading)
+        let start = comparisonStart
+        let options = BodyChartRange.allCases.filter { $0 != .sinceStart || start != nil }.map { option in
+            let label = option == .sinceStart
+                ? start.map { "Since \(BodyFormat.shortDate($0, calendar: weight.calendar))" } ?? option.title
+                : option.title
+            return (label: label, value: option)
+        }
+        return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             AppSegmentedPicker(
-                title: "Range",
-                selection: Binding(
-                    get: { range },
-                    set: { newValue in
-                        weightSelection = nil
-                        rangeRaw = newValue.rawValue
-                    }
-                ),
-                options: BodyChartRange.allCases.map { (label: $0.rawValue, value: $0) }
+                title: "Date range",
+                selection: Binding(get: { range }, set: { selectRange($0) }),
+                options: options
             )
 
             VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                BodyChartReadout(series: weight, selection: weightSelection, summary: chartSummary(now: now))
-                BodyTrendChart(
-                    series: weight,
-                    domain: domain(for: range, series: weight, now: now),
-                    showsReadings: range.showsReadings,
-                    goal: goalWeight > 0 ? goalWeight : nil,
-                    workoutDays: workoutDays(in: domain(for: range, series: weight, now: now)),
-                    tint: BodyFormat.weightTint,
-                    selection: $weightSelection
-                )
-                .accessibilityIdentifier("body-weight-chart")
-                legend
+                if readings.isEmpty {
+                    Text("No weigh-ins in this range")
+                        .font(Theme.Typography.callout)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    BodyChartReadout(series: weight, selection: weightSelection, summary: chartSummary(readings))
+                    BodyTrendChart(
+                        series: weight,
+                        domain: chartDomain(interval, now: now),
+                        showsReadings: showsReadings,
+                        goal: goalWeight > 0 ? goalWeight : nil,
+                        workoutDays: workoutDays(in: interval),
+                        tint: BodyFormat.weightTint,
+                        selection: $weightSelection
+                    )
+                    .accessibilityIdentifier("body-weight-chart")
+                    legend(showsReadings: showsReadings)
+                }
             }
             .padding(Theme.Spacing.md)
             .softCard()
         }
     }
 
-    private func chartSummary(now: Date) -> String {
-        let days = weight.gridDays(in: interval(for: range, now: now))
-        let count = days.reduce(0) { $0 + ($1.hasReading ? 1 : 0) }
-        guard let first = days.first, let last = days.last else { return "No weigh-ins in this range" }
+    private func chartSummary(_ readings: [BodyTrendDay]) -> String {
+        let count = SharedFormatters.count(readings.count, "weigh-in")
+        guard readings.count > 1, let first = readings.first, let last = readings.last else { return count }
         let change = last.trend - first.trend
-        return "\(SharedFormatters.count(count, "weigh-in")), trend \(BodyFormat.signedWeight(change))"
+        return "\(count), trend \(BodyFormat.signedWeight(change))"
     }
 
-    private var legend: some View {
+    private func legend(showsReadings: Bool) -> some View {
         HStack(spacing: Theme.Spacing.md) {
-            if range.showsReadings {
+            if showsReadings {
                 legendKey("Scale") {
                     Circle().fill(Theme.Colors.textSecondary.opacity(0.55)).frame(width: 6, height: 6)
                 }
@@ -468,34 +456,33 @@ struct BodyView: View {
 
     // MARK: Ranges
 
-    private func interval(for range: BodyChartRange, now: Date) -> DateInterval {
-        let calendar = Calendar.current
-        let end = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now)) ?? now
-        guard let days = range.days,
-              let start = calendar.date(byAdding: .day, value: -days, to: end) else {
-            let first = weight.grid.first?.day ?? calendar.startOfDay(for: now)
-            return DateInterval(start: min(first, end), end: end)
+    private func selectRange(_ selection: BodyChartRange?) {
+        rangeOverride = selection
+        if let selection, selection != .sinceStart {
+            rangeRaw = selection.rawValue
         }
-        return DateInterval(start: start, end: end)
+        weightSelection = nil
+        fatSelection = nil
     }
 
-    /// The chart's x span: the range, ending today so a stretch with no weigh-ins stays visible.
-    private func domain(for range: BodyChartRange, series: BodySeries, now: Date) -> ClosedRange<Date> {
-        let calendar = Calendar.current
-        let end = calendar.startOfDay(for: now)
-        guard let days = range.days,
-              let start = calendar.date(byAdding: .day, value: -(days - 1), to: end) else {
-            let first = series.grid.first?.day ?? end
-            return min(first, end)...end
-        }
-        return start...end
+    private func chartInterval(for series: BodySeries, now: Date) -> DateInterval {
+        range.interval(reference: now, earliest: series.grid.first?.day, comparisonStart: comparisonStart, calendar: series.calendar)
     }
 
-    private func workoutDays(in domain: ClosedRange<Date>) -> [Date] {
-        let calendar = Calendar.current
+    /// End at today's tick, leaving a full day for a chart that starts today.
+    private func chartDomain(_ interval: DateInterval, now: Date) -> ClosedRange<Date> {
+        let today = weight.calendar.startOfDay(for: now)
+        return interval.start...(interval.start < today ? today : interval.end)
+    }
+
+    private func workoutDays(in interval: DateInterval) -> [Date] {
+        let calendar = weight.calendar
         var days = Set<Date>()
-        for workout in dataManager.workouts where domain.contains(calendar.startOfDay(for: workout.date)) {
-            days.insert(calendar.startOfDay(for: workout.date))
+        for workout in dataManager.workouts {
+            let day = calendar.startOfDay(for: workout.date)
+            if interval.start <= day && day < interval.end {
+                days.insert(day)
+            }
         }
         return days.sorted()
     }

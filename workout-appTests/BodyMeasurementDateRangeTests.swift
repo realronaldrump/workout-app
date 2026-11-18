@@ -139,6 +139,35 @@ final class BodyMeasurementDateRangeTests: XCTestCase {
         XCTAssertEqual(daylightCalendar.component(.day, from: range.end), 9)
     }
 
+    func testProgressChartStartsOnTheSelectedCalendarDate() {
+        let now = date(year: 2026, month: 11, day: 17, hour: 16)
+        let start = date(year: 2026, month: 9, day: 12, hour: 18)
+        let interval = BodyChartRange.sinceStart.interval(
+            reference: now,
+            earliest: date(year: 2011, month: 8, day: 9),
+            comparisonStart: start,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(interval.start, date(year: 2026, month: 9, day: 12))
+        XCTAssertEqual(interval.end, date(year: 2026, month: 11, day: 18))
+        XCTAssertFalse(BodyChartRange.sinceStart.comparesPreviousPeriod)
+    }
+
+    func testProgressChartExtraPresetsUseCalendarBoundaries() {
+        let now = date(year: 2026, month: 11, day: 17, hour: 16)
+        let presets: [(BodyChartRange, Int)] = [(.week, 7), (.twoWeeks, 14), (.eightWeeks, 56), (.twoYears, 730)]
+        for (preset, dayCount) in presets {
+            let interval = preset.interval(reference: now, earliest: nil, comparisonStart: nil, calendar: calendar)
+            XCTAssertEqual(calendar.dateComponents([.day], from: interval.start, to: interval.end).day, dayCount)
+        }
+        let yearToDate = BodyChartRange.yearToDate.interval(
+            reference: now, earliest: nil, comparisonStart: nil, calendar: calendar
+        )
+        XCTAssertEqual(yearToDate.start, date(year: 2026, month: 1, day: 1))
+        XCTAssertEqual(yearToDate.end, date(year: 2026, month: 11, day: 18))
+    }
+
     private var calendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? .current

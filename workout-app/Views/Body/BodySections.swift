@@ -169,17 +169,16 @@ struct BodyChartReadout: View {
 struct BodyChangeSection: View {
     let series: BodySeries
     let range: DateInterval
-    let rangeName: String
-    let comparesPreviousPeriod: Bool
+    let chartRange: BodyChartRange
 
-    @AppStorage(BodyComparisonStartDate.key) private var savedStart = ""
+    @Binding var savedStart: String
     @State private var showingStartDate = false
 
     var body: some View {
         let showsRangeStats = series.readingDayCount >= 8
         let changes = showsRangeStats ? [7, 30, 90, 365].compactMap { series.change(days: $0) } : []
         let stats = showsRangeStats ? series.stats(in: range) : nil
-        let previous = showsRangeStats && comparesPreviousPeriod ? series.changeFromPreviousPeriod(range) : nil
+        let previous = showsRangeStats && chartRange.comparesPreviousPeriod ? series.changeFromPreviousPeriod(range) : nil
         let start = BodyComparisonStartDate.decode(savedStart, calendar: series.calendar)
 
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
@@ -214,10 +213,13 @@ struct BodyChangeSection: View {
                         value: BodyFormat.weight(stats.lightest.reading ?? 0),
                         detail: BodyFormat.shortDate(stats.lightest.day)
                     )
-                    statRow("Average, \(rangeName)", value: BodyFormat.weight(stats.average), detail: nil)
+                    let title = chartRange == .sinceStart
+                        ? "Average since \(BodyFormat.shortDate(range.start, calendar: series.calendar))"
+                        : "Average, \(chartRange.title.lowercased())"
+                    statRow(title, value: BodyFormat.weight(stats.average), detail: nil)
                 }
                 if let previous {
-                    statRow("Average vs. the \(rangeName) before", value: BodyFormat.signedWeight(previous), detail: nil)
+                    statRow("Average vs. the \(chartRange.title.lowercased()) before", value: BodyFormat.signedWeight(previous), detail: nil)
                 }
             }
         }
