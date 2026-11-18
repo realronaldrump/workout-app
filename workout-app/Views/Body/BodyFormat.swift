@@ -42,13 +42,14 @@ enum BodyFormat {
             : date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day().year())
     }
 
-    /// "today, 7:42 AM", "yesterday, 7:42 AM", or "Oct 3, 19 days ago".
+    /// Recent timestamps or the date alone for older readings.
     static func whenWeighed(_ date: Date, now: Date = .now, calendar: Calendar = .current) -> String {
         let time = date.formatted(date: .omitted, time: .shortened)
-        if calendar.isDateInToday(date) { return "today, \(time)" }
-        if calendar.isDateInYesterday(date) { return "yesterday, \(time)" }
-        let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: date), to: calendar.startOfDay(for: now)).day ?? 0
-        return "\(shortDate(date, calendar: calendar)), \(days) days ago"
+        if calendar.isDate(date, inSameDayAs: now) { return "today, \(time)" }
+        if let yesterday = calendar.date(byAdding: .day, value: -1, to: now), calendar.isDate(date, inSameDayAs: yesterday) {
+            return "yesterday, \(time)"
+        }
+        return shortDate(date, calendar: calendar)
     }
 
     /// "Last 4 weeks" for whole weeks, otherwise "Last 18 days".
@@ -70,24 +71,9 @@ enum BodyFormat {
     }
 
     static func rateHeadline(_ rate: BodyRate, kind: BodyCompositionMetricKind = .weight) -> String {
-        if rate.isSteady { return abs(rate.change) < 0.5 ? "Holding steady" : "No clear pace" }
+        if rate.isSteady { return abs(rate.change) < 0.5 ? "Steady" : "No clear change" }
         let unit = kind == .weight ? "lb" : "pts"
         return "\(rate.perWeek < 0 ? "Down" : "Up") \(number(abs(rate.perWeek))) \(unit) a week"
     }
 
-    /// How a reading sits against the trend: "0.7 above trend".
-    static func versusTrend(_ difference: Double, kind: BodyCompositionMetricKind = .weight) -> String {
-        let amount = number(abs(difference))
-        if amount == number(0) { return "on trend" }
-        return "\(amount) \(difference > 0 ? "above" : "below") trend"
-    }
-
-    static func flagExplanation(_ flag: BodyDayFlag, difference: Double) -> String {
-        switch flag {
-        case .high:
-            return "\(number(abs(difference))) lb above trend. Usually water or food still in the gut, not fat."
-        case .low:
-            return "\(number(abs(difference))) lb below trend. Usually fluid, not fat."
-        }
-    }
 }

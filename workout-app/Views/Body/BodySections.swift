@@ -2,12 +2,10 @@ import SwiftUI
 
 // MARK: - Hero
 
-/// Trend weight at poster size, which way it's moving and how fast, and the latest scale reading
-/// against the trend.
+/// Moving average, weekly change, and the latest weigh-in.
 struct BodyHero: View {
     let series: BodySeries
     let rate: BodyRate?
-    let goalLine: String?
     let now: Date
 
     private var latest: BodyTrendDay? { series.latest }
@@ -15,14 +13,6 @@ struct BodyHero: View {
     private var daysSinceLatest: Int {
         guard let latest else { return 0 }
         return series.dayIndex(for: now) - latest.dayIndex
-    }
-
-    private var label: String {
-        guard let latest else { return "Trend weight" }
-        if isSparse { return "Last weigh-in" }
-        if daysSinceLatest > 14 { return "Trend weight as of \(BodyFormat.shortDate(latest.day))" }
-        if latest.isSettling { return "Trend weight, settling" }
-        return "Trend weight"
     }
 
     private var headlineValue: Double? {
@@ -35,7 +25,7 @@ struct BodyHero: View {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: Theme.Spacing.sm) {
                     TintMark(tint: BodyFormat.weightTint)
-                    Text(label)
+                    Text(isSparse ? "Last weigh-in" : "Moving average")
                         .font(Theme.Typography.subheadlineStrong)
                         .foregroundStyle(Theme.Colors.textSecondary)
                 }
@@ -59,13 +49,6 @@ struct BodyHero: View {
                 .padding(.vertical, Theme.Spacing.xs)
 
             readout
-
-            if let goalLine {
-                Text(goalLine)
-                    .font(Theme.Typography.callout)
-                    .foregroundStyle(Theme.Colors.textPrimary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
@@ -85,20 +68,10 @@ struct BodyHero: View {
                         .font(Theme.Typography.title4)
                 }
                 .foregroundStyle(Theme.Colors.textPrimary)
-                Text("\(period), \(SharedFormatters.count(rate.readingCount, "weigh-in"))")
+                Text(period)
                     .font(Theme.Typography.subheadline)
                     .foregroundStyle(Theme.Colors.textSecondary)
             }
-        } else if daysSinceLatest > 7 {
-            Text("Last weigh-in \(daysSinceLatest) days ago. Weigh in to update the pace.")
-                .font(Theme.Typography.callout)
-                .foregroundStyle(Theme.Colors.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-        } else {
-            Text("More weigh-ins will show your pace.")
-                .font(Theme.Typography.callout)
-                .foregroundStyle(Theme.Colors.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -106,22 +79,15 @@ struct BodyHero: View {
     private var readout: some View {
         if let latest, let reading = latest.reading {
             let time = series.readings(on: latest).first(where: { $0.id == latest.readingID })?.timestamp ?? latest.day
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Scale \(BodyFormat.weight(reading)), \(BodyFormat.whenWeighed(time, now: now))")
-                    .font(Theme.Typography.callout)
-                    .foregroundStyle(Theme.Colors.textPrimary)
-                if !isSparse {
-                    let versus = BodyFormat.versusTrend(reading - latest.trend)
-                    Text(versus.prefix(1).uppercased() + versus.dropFirst())
-                        .font(Theme.Typography.subheadline)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                }
-            }
+            let date = BodyFormat.whenWeighed(time, now: now, calendar: series.calendar)
+            Text(isSparse ? date : "Last weigh-in \(BodyFormat.weight(reading)) · \(date)")
+                .font(Theme.Typography.callout)
+                .foregroundStyle(Theme.Colors.textSecondary)
         }
     }
 }
 
-/// Reads the day under your finger: date, scale and trend, and why a reading sat far from the trend.
+/// Recorded value and moving average for the selected date.
 struct BodyChartReadout: View {
     let series: BodySeries
     let selection: BodyTrendDay?
@@ -134,32 +100,18 @@ struct BodyChartReadout: View {
                     .font(Theme.Typography.headline)
                     .foregroundStyle(Theme.Colors.textPrimary)
                 if let reading = selection.reading {
-                    Text(
-                        "Scale \(BodyFormat.value(reading, kind: series.kind)), trend \(BodyFormat.value(selection.trend, kind: series.kind)), "
-                            + BodyFormat.versusTrend(reading - selection.trend, kind: series.kind)
-                    )
+                    Text("Recorded \(BodyFormat.value(reading, kind: series.kind)) · Avg. \(BodyFormat.value(selection.trend, kind: series.kind))")
                     .font(Theme.Typography.subheadline)
                     .monospacedDigit()
                     .foregroundStyle(Theme.Colors.textPrimary)
-                }
-                if series.kind == .weight,
-                   let flag = series.flags[selection.dayIndex],
-                   let residual = series.residuals[selection.dayIndex] {
-                    Text(BodyFormat.flagExplanation(flag, difference: residual))
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
                 }
             } else {
                 Text(summary)
                     .font(Theme.Typography.subheadlineStrong)
                     .foregroundStyle(Theme.Colors.textPrimary)
-                Text("Drag across the chart to read any day.")
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textSecondary)
             }
         }
-        .frame(maxWidth: .infinity, minHeight: 58, alignment: .topLeading)
+        .frame(maxWidth: .infinity, minHeight: 42, alignment: .topLeading)
         .accessibilityElement(children: .combine)
     }
 }
@@ -184,7 +136,7 @@ struct BodyChangeSection: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
             SectionHeading(
                 title: "Change",
-                help: "Each row compares trend weight now with trend weight that many days ago, so one heavy or light day doesn't swing it."
+                help: "Changes use the moving average."
             )
 
             VStack(spacing: 0) {
@@ -255,7 +207,7 @@ struct BodyChangeSection: View {
                                 startDateDetail("First weigh-in \(BodyFormat.shortDate(change.baselineDate, calendar: series.calendar))")
                             }
                         } else {
-                            startDateDetail("Compare after two weigh-ins")
+                            startDateDetail("Needs two weigh-ins")
                         }
                     }
                 }
@@ -323,104 +275,55 @@ struct BodyChangeSection: View {
 // MARK: - Goal
 
 struct BodyGoalSection: View {
-    let status: BodyGoalStatus?
+    let status: BodyGoalStatus
     let reachedDate: Date?
     let onEdit: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            if let status {
-                SectionHeading(title: "Goal") {
-                    Button(action: onEdit) {
-                        TextLinkLabel(title: "Edit", showsChevron: false)
-                    }
-                    .buttonStyle(.plain)
-                }
-
-                BarbellLoadView(
-                    plates: (0..<status.platesLoaded).map { index in
-                        LoadedPlate(id: Self.plateIDs[index], date: .distantPast, category: .fullBody)
-                    },
-                    goal: 10,
-                    plateHeight: 56,
-                    showsDayLabels: false
-                )
-                .accessibilityLabel("\(status.platesLoaded) of 10 plates loaded toward \(BodyFormat.weight(status.goal))")
-
-                HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.sm) {
-                    if status.isReached {
-                        PRTag(text: "Goal reached")
-                    }
-                    Text(summary(status))
-                        .font(Theme.Typography.callout)
-                        .foregroundStyle(Theme.Colors.textPrimary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            } else {
-                SectionHeading(title: "Goal")
+            SectionHeading(title: "Goal \(BodyFormat.weight(status.goal))") {
                 Button(action: onEdit) {
-                    HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.md) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Set a goal weight")
-                                .font(Theme.Typography.headline)
-                                .foregroundStyle(Theme.Colors.textPrimary)
-                            Text("Track progress as plates on a bar, with a date range at your current pace.")
-                                .font(Theme.Typography.subheadline)
-                                .foregroundStyle(Theme.Colors.textSecondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        Spacer(minLength: Theme.Spacing.sm)
-                        Image(systemName: "chevron.right")
-                            .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.Colors.textTertiary)
-                            .accessibilityHidden(true)
-                    }
-                    .ledgerRow()
-                    .contentShape(.rect)
+                    TextLinkLabel(title: "Edit", showsChevron: false)
                 }
-                .buttonStyle(PressableCardButtonStyle())
+                .buttonStyle(.plain)
+                .accessibilityLabel("Edit weight goal")
+                .accessibilityIdentifier("body-edit-weight-goal")
+            }
+
+            GoalBarbellView(progress: status.progress)
+
+            HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.sm) {
+                if status.isReached {
+                    PRTag(text: "Goal reached")
+                }
+                Text(summary)
+                    .font(Theme.Typography.callout)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
 
-    private static let plateIDs = (0..<10).map { _ in UUID() }
-
-    private func summary(_ status: BodyGoalStatus) -> String {
+    private var summary: String {
         if status.isReached {
             if let reachedDate { return "Reached \(BodyFormat.shortDate(reachedDate)). Trend weight \(BodyFormat.weight(status.current))." }
             return "Trend weight \(BodyFormat.weight(status.current))."
         }
-        let toGo = "\(BodyFormat.number(abs(status.remaining))) lb to go, \(status.platesLoaded) of 10 plates."
-        return "\(toGo) \(BodyGoalText.arrival(status.arrival))"
+        let progress = status.progress.formatted(.percent.precision(.fractionLength(0)).rounded(rule: .down))
+        let toGo = "\(BodyFormat.number(abs(status.remaining))) lb to go, \(progress) toward goal."
+        return [toGo, arrivalText].compactMap { $0 }.joined(separator: " ")
     }
-}
 
-enum BodyGoalText {
-    static func arrival(_ arrival: BodyGoalStatus.Arrival) -> String {
-        switch arrival {
+    private var arrivalText: String? {
+        switch status.arrival {
         case let .between(early, late):
-            return "At this pace: \(BodyFormat.shortDate(early)) to \(BodyFormat.shortDate(late))."
+            return "At this pace, \(BodyFormat.shortDate(early))–\(BodyFormat.shortDate(late))."
         case let .from(early):
-            return "At this pace: \(BodyFormat.shortDate(early)) at the earliest."
+            return "\(BodyFormat.shortDate(early)) at the earliest."
         case .beyondAYear:
             return "More than a year at this pace."
         case .noEstimate:
-            return "A goal date appears when your trend is clearly moving toward it."
-        }
-    }
-
-    /// The short version for the hero.
-    static func heroLine(goal: Double, status: BodyGoalStatus) -> String {
-        if status.isReached { return "Goal \(BodyFormat.weight(goal)) reached." }
-        switch status.arrival {
-        case let .between(early, late):
-            return "Goal \(BodyFormat.weight(goal)), \(BodyFormat.shortDate(early)) to \(BodyFormat.shortDate(late))"
-        case let .from(early):
-            return "Goal \(BodyFormat.weight(goal)), \(BodyFormat.shortDate(early)) at the earliest"
-        case .beyondAYear:
-            return "Goal \(BodyFormat.weight(goal)), more than a year at this pace"
-        case .noEstimate:
-            return "Goal \(BodyFormat.weight(goal)), \(BodyFormat.number(abs(status.remaining))) lb to go"
+            return nil
         }
     }
 }
@@ -438,20 +341,20 @@ struct BodyCompositionSection: View {
         let latest = BodyComposition.latest(weight: weight, bodyFat: bodyFat)
         let month = BodyComposition.change(days: 30, weight: weight, bodyFat: bodyFat)
         let quarter = BodyComposition.change(days: 90, weight: weight, bodyFat: bodyFat)
+        let visibleCount = bodyFat.gridDays(in: domain).lazy.filter(\.hasReading).count
 
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             SectionHeading(
                 title: "Body fat",
-                help: "Scale body fat is an estimate that hydration moves. Lean and fat mass split trend weight "
-                    + "by trend body fat, so compare them over weeks, not days."
+                help: "Hydration can affect scale estimates."
             )
 
-            if bodyFat.readingDayCount >= 2 {
+            if visibleCount > 0 && bodyFat.readingDayCount >= 2 {
                 VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                     BodyChartReadout(
                         series: bodyFat,
                         selection: selection,
-                        summary: "\(SharedFormatters.count(bodyFat.readingDayCount, "reading")) of body fat"
+                        summary: SharedFormatters.count(visibleCount, "reading")
                     )
                     BodyTrendChart(
                         series: bodyFat,
@@ -536,8 +439,7 @@ struct BodyLiftsSection: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
             SectionHeading(
                 title: "Lifts vs. weight",
-                help: "Best estimated 1-rep max in the last 4 weeks against the 4 weeks ending 3 months ago "
-                    + "(Epley, sets of 10 reps or fewer). The multiple divides it by trend weight."
+                help: "Estimated max compared with 3 months ago."
             )
 
             if let summary {
@@ -597,20 +499,14 @@ struct BodyLiftsSection: View {
 
 struct BodyWeighInsSection: View {
     let series: BodySeries
-    let now: Date
     let onSelectDay: (BodyTrendDay) -> Void
     let onShowAll: () -> Void
 
     var body: some View {
-        let perWeek = series.weighInsPerWeek(asOf: now)
         let recent = Array(series.readingDays.suffix(6).reversed())
 
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            SectionHeading(
-                title: "Weigh-ins",
-                subtitle: "\(BodyFormat.number(perWeek)) a week over the last 4 weeks"
-                    + (perWeek < 3 ? ". Three or more a week gives a steadier trend." : "")
-            )
+            SectionHeading(title: "Recent weigh-ins")
 
             VStack(spacing: 0) {
                 ForEach(Array(recent.enumerated()), id: \.element.id) { index, day in
@@ -622,7 +518,7 @@ struct BodyWeighInsSection: View {
             }
 
             Button(action: onShowAll) {
-                TextLinkLabel(title: "All readings")
+                TextLinkLabel(title: "All weigh-ins")
                     .frame(minHeight: Theme.Layout.minimumTapTarget)
             }
             .buttonStyle(.plain)
@@ -631,7 +527,7 @@ struct BodyWeighInsSection: View {
     }
 }
 
-/// One day of the log: when, the scale reading, and how it sits against the trend.
+/// Recent weigh-in preview.
 struct BodyReadingRow: View {
     let series: BodySeries
     let day: BodyTrendDay
@@ -639,7 +535,6 @@ struct BodyReadingRow: View {
 
     var body: some View {
         let readings = series.readings(on: day)
-        let flag = series.flags[day.dayIndex]
 
         HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.md) {
             VStack(alignment: .leading, spacing: 2) {
@@ -651,18 +546,10 @@ struct BodyReadingRow: View {
                     .foregroundStyle(Theme.Colors.textSecondary)
             }
             Spacer(minLength: Theme.Spacing.sm)
-            if let flag {
-                TagLabel(text: flag == .high ? "High day" : "Low day")
-            }
-            VStack(alignment: .trailing, spacing: 2) {
-                Text(day.reading.map { BodyFormat.number($0) } ?? "--")
+            if let reading = day.reading {
+                Text(BodyFormat.weight(reading))
                     .font(Theme.Typography.numberSmall)
                     .foregroundStyle(Theme.Colors.textPrimary)
-                if let reading = day.reading {
-                    Text(BodyFormat.versusTrend(reading - day.trend))
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                }
             }
         }
         .ledgerRow(showsRule: showsRule, verticalPadding: Theme.Spacing.sm)

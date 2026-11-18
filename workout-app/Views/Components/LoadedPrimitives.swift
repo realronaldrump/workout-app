@@ -254,6 +254,76 @@ struct BarbellLoadView: View {
     }
 }
 
+/// Goal progress loads matched plate pairs around the central grip.
+struct GoalBarbellView: View {
+    let progress: Double
+
+    var body: some View {
+        GeometryReader { proxy in
+            let width = min(proxy.size.width, 460)
+            let end = sleeve(plateWidth: width * 0.043, tipWidth: width * 0.055)
+
+            ZStack {
+                Capsule()
+                    .fill(Theme.Colors.panelStrong)
+                    .frame(height: 8)
+
+                HStack(spacing: 0) {
+                    end.scaleEffect(x: -1, y: 1)
+                    KnurlPattern()
+                        .frame(height: 8)
+                        .clipShape(Capsule())
+                        .padding(.horizontal, Theme.Spacing.sm)
+                    end
+                }
+            }
+            .frame(width: width, height: proxy.size.height)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .frame(height: 56)
+        .accessibilityHidden(true)
+    }
+
+    private func sleeve(plateWidth: CGFloat, tipWidth: CGFloat) -> some View {
+        HStack(spacing: 0) {
+            RoundedRectangle(cornerRadius: 2)
+                .fill(Theme.Colors.textMuted)
+                .frame(width: 6, height: 24)
+                .padding(.trailing, 3)
+
+            HStack(spacing: 2) {
+                ForEach(0..<5, id: \.self) { index in
+                    plate(index, width: plateWidth)
+                }
+            }
+
+            Color.clear.frame(width: tipWidth, height: 12)
+        }
+        .background {
+            Capsule()
+                .fill(Theme.Colors.decorativeSubtle)
+                .frame(height: 12)
+        }
+    }
+
+    private func plate(_ index: Int, width: CGFloat) -> some View {
+        let height = 54 - CGFloat(index) * 4
+        let fill = min(1, max(0, progress * 5 - Double(index)))
+        let edge = RoundedRectangle(cornerRadius: 3, style: .continuous)
+
+        return edge
+            .fill(Theme.Colors.panelStrong)
+            .frame(width: width, height: height)
+            .overlay(alignment: .bottom) {
+                Rectangle()
+                    .fill(Theme.Colors.plateGreen)
+                    .frame(height: height * CGFloat(fill))
+            }
+            .clipShape(edge)
+            .overlay { edge.strokeBorder(Theme.Colors.ink.opacity(0.22), lineWidth: 1) }
+    }
+}
+
 /// Diamond knurling, drawn once with a Canvas.
 private struct KnurlPattern: View {
     var body: some View {

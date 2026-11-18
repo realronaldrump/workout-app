@@ -72,7 +72,6 @@ struct BodyGoalSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var text = ""
-    @FocusState private var isFocused: Bool
 
     private var goal: Double? {
         Double(text.replacingOccurrences(of: ",", with: "."))
@@ -81,8 +80,10 @@ struct BodyGoalSheet: View {
     private var validationMessage: String? {
         guard let goal else { return nil }
         guard let trend else { return nil }
-        if goal < trend * 0.5 || goal > trend * 1.5 { return "Enter a goal within half to one and a half times your trend weight." }
-        if abs(goal - trend) / trend > 0.2 { return "That's a large change. A doctor can help set a safe pace." }
+        if goal < trend * 0.5 || goal > trend * 1.5 {
+            return "Enter \(BodyFormat.number(trend * 0.5))–\(BodyFormat.number(trend * 1.5)) lb."
+        }
+        if abs(goal - trend) / trend > 0.2 { return "Goal is over 20% from your moving average." }
         return nil
     }
 
@@ -94,15 +95,14 @@ struct BodyGoalSheet: View {
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                AdaptiveBackground()
-                VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: Theme.Spacing.md) {
                     VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                         Text("Goal weight")
                             .font(Theme.Typography.screenTitle)
                             .foregroundStyle(Theme.Colors.textPrimary)
                         if let trend {
-                            Text(trendLine(trend))
+                            Text("Moving average \(BodyFormat.weight(trend))")
                                 .font(Theme.Typography.subheadline)
                                 .foregroundStyle(Theme.Colors.textSecondary)
                         }
@@ -112,14 +112,14 @@ struct BodyGoalSheet: View {
                         TextField("Goal", text: $text)
                             .font(Theme.Typography.metricLarge)
                             .keyboardType(.decimalPad)
-                            .focused($isFocused)
                             .accessibilityLabel("Goal weight in pounds")
+                            .accessibilityIdentifier("body-goal-input")
                         Text("lb")
                             .font(Theme.Typography.title3)
                             .foregroundStyle(Theme.Colors.textSecondary)
                     }
                     .padding(.horizontal, Theme.Spacing.lg)
-                    .frame(minHeight: 84)
+                    .frame(minHeight: 64)
                     .background(
                         RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous)
                             .fill(Theme.Colors.panelInset)
@@ -138,24 +138,22 @@ struct BodyGoalSheet: View {
                         dismiss()
                     }
 
-                    if currentGoal != nil {
-                        Button(role: .destructive) {
-                            onRemove()
-                            dismiss()
-                        } label: {
-                            Text("Remove goal")
-                                .font(Theme.Typography.subheadlineStrong)
-                                .foregroundStyle(Theme.Colors.error)
-                                .frame(maxWidth: .infinity, minHeight: Theme.Layout.minimumTapTarget)
-                        }
-                        .buttonStyle(.plain)
+                    Button(role: currentGoal == nil ? nil : .destructive) {
+                        if currentGoal != nil { onRemove() }
+                        dismiss()
+                    } label: {
+                        Text("Track without a goal")
+                            .font(Theme.Typography.subheadlineStrong)
+                            .foregroundStyle(currentGoal == nil ? Theme.Colors.textSecondary : Theme.Colors.error)
+                            .frame(maxWidth: .infinity, minHeight: Theme.Layout.minimumTapTarget)
                     }
-
-                    Spacer(minLength: 0)
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("body-track-without-goal")
                 }
                 .padding(.horizontal, Theme.Layout.screenGutter)
                 .padding(.top, Theme.Spacing.md)
             }
+            .background(AdaptiveBackground())
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 AppToolbarItem(placement: .cancellationAction) {
@@ -164,23 +162,16 @@ struct BodyGoalSheet: View {
             }
             .onAppear {
                 if let currentGoal { text = BodyFormat.number(currentGoal) }
-                isFocused = true
             }
         }
         .presentationDetents([.medium, .large])
     }
 
-    private func trendLine(_ trend: Double) -> String {
-        guard let goal, goal > 0 else { return "Trend weight is \(BodyFormat.weight(trend))." }
-        let difference = goal - trend
-        if abs(difference) < 0.05 { return "Trend weight is \(BodyFormat.weight(trend)). That's your goal already." }
-        return "Trend weight is \(BodyFormat.weight(trend)). \(BodyFormat.number(abs(difference))) lb to \(difference < 0 ? "lose" : "gain")."
-    }
 }
 
 // MARK: - Day
 
-/// Every reading on one day, which one the trend used, and how the day sat against the trend.
+/// The average and recorded weigh-ins for a day.
 struct BodyDayDetail: View {
     @EnvironmentObject private var store: BodyStore
     @State private var date: Date
@@ -216,16 +207,9 @@ struct BodyDayDetail: View {
                 Text(BodyFormat.weekdayDate(day.day))
                     .font(Theme.Typography.screenTitle)
                     .foregroundStyle(Theme.Colors.textPrimary)
-                Text("Trend \(BodyFormat.weight(day.trend))" + (day.reading.map { ", scale \(BodyFormat.versusTrend($0 - day.trend))" } ?? ""))
+                Text("Moving average \(BodyFormat.weight(day.trend))")
                     .font(Theme.Typography.callout)
                     .foregroundStyle(Theme.Colors.textSecondary)
-            }
-
-            if let flag = series.flags[day.dayIndex], let residual = series.residuals[day.dayIndex] {
-                Text(BodyFormat.flagExplanation(flag, difference: residual))
-                    .font(Theme.Typography.callout)
-                    .foregroundStyle(Theme.Colors.textPrimary)
-                    .fixedSize(horizontal: false, vertical: true)
             }
 
             VStack(spacing: 0) {
@@ -233,7 +217,7 @@ struct BodyDayDetail: View {
                     Button {
                         editRequest = .edit(reading)
                     } label: {
-                        readingRow(reading, isRepresentative: reading.id == day.readingID)
+                        readingRow(reading, isRepresentative: readings.count > 1 && reading.id == day.readingID)
                             .ledgerRow(showsRule: index > 0, verticalPadding: Theme.Spacing.sm)
                             .contentShape(.rect)
                     }
@@ -252,7 +236,7 @@ struct BodyDayDetail: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(reading.timestamp.formatted(date: .omitted, time: .shortened))
                     .font(Theme.Typography.callout)
-                Text(isRepresentative ? "\(source) · Used for trend" : source)
+                Text(isRepresentative ? "\(source) · Used in average" : source)
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Colors.textSecondary)
             }
@@ -275,36 +259,17 @@ struct BodyMethodSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     private let entries: [(String, String)] = [
-        ("Daily reading", "For each day, we use your latest app weigh-in. Days with only Apple Health readings use the first one."),
-        (
-            "Trend weight",
-            "Each day the trend moves a tenth of the way toward that day's reading. Missed days up to two weeks apart "
-                + "are filled on a straight line. A longer gap restarts the trend, and a thin line connects the two ends on "
-                + "the chart. The trend runs about 9 days behind a real change."
-        ),
-        (
-            "Weekly pace",
-            "The overview looks farther back when weigh-ins are spread out. The dates show which readings inform the trend."
-        ),
-        (
-            "Goal dates",
-            "A range of dates if your recent pace continues. The estimate updates as your pace changes."
-        ),
-        (
-            "Usual range",
-            "The pale band shows how much recent readings typically moved around your trend. Larger swings are marked in the log."
-        ),
-        ("Change", "Each row compares trend weight now with trend weight that many days ago."),
-        ("Body fat", "A scale estimate that hydration moves. Lean and fat mass split trend weight by trend body fat."),
-        ("Lifts", "Best estimated 1-rep max (Epley, sets of 10 reps or fewer), divided by trend weight for the multiple."),
-        ("Water weight", "A new diet, a change in carbs, or creatine can move weight 1 to 3 lb in a week or two without changing fat.")
+        ("Moving average", "Recent readings count more."),
+        ("Weekly change", "The log uses readings through each entry’s date."),
+        ("Usual range", "The shaded band shows typical variation in readings."),
+        ("Gaps", "Thin lines connect readings more than two weeks apart.")
     ]
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-                    Text("How this is calculated")
+                    Text("Chart details")
                         .font(Theme.Typography.screenTitle)
                         .foregroundStyle(Theme.Colors.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -326,10 +291,7 @@ struct BodyMethodSheet: View {
                     }
 
                     if ignoredReadingCount > 0 {
-                        Text(
-                            "\(SharedFormatters.count(ignoredReadingCount, "reading")) ignored because the value "
-                                + "isn't plausible for a person, usually a unit mix-up."
-                        )
+                        Text("\(SharedFormatters.count(ignoredReadingCount, "reading")) outside the supported range.")
                             .font(Theme.Typography.subheadline)
                             .foregroundStyle(Theme.Colors.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -349,47 +311,50 @@ struct BodyMethodSheet: View {
     }
 }
 
-// MARK: - All readings
+// MARK: - Logbook
 
-/// The whole log, newest first, one section per month with that month's average and range.
 struct BodyReadingsLog: View {
     @EnvironmentObject private var store: BodyStore
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     private var series: BodySeries { store.weight }
 
     private struct Month: Identifiable {
         let start: Date
-        let days: [BodyTrendDay]
+        let entries: [BodyLogbookEntry]
         var id: Date { start }
     }
 
     private var months: [Month] {
         let calendar = series.calendar
-        let grouped = Dictionary(grouping: series.readingDays) { day in
-            calendar.dateInterval(of: .month, for: day.day)?.start ?? day.day
+        let grouped = Dictionary(grouping: series.logbookEntries) { entry in
+            calendar.dateInterval(of: .month, for: entry.day.day)?.start ?? entry.day.day
         }
         return grouped
-            .map { Month(start: $0.key, days: $0.value.sorted { $0.dayIndex > $1.dayIndex }) }
+            .map { Month(start: $0.key, entries: Array($0.value.reversed())) }
             .sorted { $0.start > $1.start }
     }
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: Theme.Spacing.section, pinnedViews: []) {
+                LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
                     ForEach(months) { month in
-                        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                            SectionHeading(title: month.start.formatted(.dateTime.month(.wide).year()), subtitle: summary(month))
-                            VStack(spacing: 0) {
-                                ForEach(Array(month.days.enumerated()), id: \.element.id) { index, day in
-                                    NavigationLink {
-                                        BodyDayDetail(date: day.day)
-                                    } label: {
-                                        BodyReadingRow(series: series, day: day, showsRule: index > 0)
-                                    }
-                                    .buttonStyle(PressableCardButtonStyle())
+                        Section {
+                            ForEach(Array(month.entries.enumerated()), id: \.element.id) { index, entry in
+                                NavigationLink {
+                                    BodyDayDetail(date: entry.day.day)
+                                } label: {
+                                    entryRow(entry)
+                                        .ledgerRow(showsRule: index > 0, verticalPadding: Theme.Spacing.sm)
+                                        .frame(minHeight: Theme.Layout.minimumTapTarget)
                                 }
+                                .buttonStyle(PressableCardButtonStyle())
+                                .accessibilityLabel(entryLabel(entry))
                             }
+                        } header: {
+                            monthHeader(month.start)
                         }
                     }
                 }
@@ -397,7 +362,7 @@ struct BodyReadingsLog: View {
                 .padding(.vertical, Theme.Spacing.md)
             }
             .background(AdaptiveBackground())
-            .navigationTitle("All readings")
+            .navigationTitle("Weigh-in log")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 AppToolbarItem(placement: .confirmationAction) {
@@ -408,11 +373,112 @@ struct BodyReadingsLog: View {
         .accessibilityIdentifier("body-measurement-history")
     }
 
-    private func summary(_ month: Month) -> String {
-        let readings = month.days.compactMap(\.reading)
-        guard let low = readings.min(), let high = readings.max() else { return "" }
-        let average = readings.reduce(0, +) / Double(readings.count)
-        let spread = "\(BodyFormat.number(low)) to \(BodyFormat.number(high))"
-        return "Average \(BodyFormat.number(average)), \(spread), \(SharedFormatters.count(readings.count, "day"))"
+    private func monthHeader(_ start: Date) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            Text(start.formatted(.dateTime.month(.wide).year()))
+                .font(Theme.Typography.title4)
+                .foregroundStyle(Theme.Colors.textPrimary)
+                .accessibilityAddTraits(.isHeader)
+            if !dynamicTypeSize.isAccessibilitySize {
+                HStack(spacing: Theme.Spacing.sm) {
+                    Text("Date").frame(maxWidth: .infinity, alignment: .leading)
+                    Text("Weight (lb)").frame(maxWidth: .infinity, alignment: .trailing)
+                    Text("Moving avg.").frame(maxWidth: .infinity, alignment: .trailing)
+                    Text("lb/week").frame(maxWidth: .infinity, alignment: .trailing)
+                }
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.Colors.textSecondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, Theme.Spacing.lg)
+        .padding(.bottom, Theme.Spacing.sm)
+        .background(Theme.Colors.ground)
+    }
+
+    private func entryRow(_ entry: BodyLogbookEntry) -> some View {
+        let day = entry.day
+        let weight = day.reading.map { BodyFormat.number($0) } ?? "—"
+        let average = BodyFormat.number(day.trend)
+
+        return VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            if dynamicTypeSize.isAccessibilitySize {
+                Text(BodyFormat.weekdayDate(day.day))
+                    .font(Theme.Typography.headline)
+                Text("Weight \(weight) lb · Average \(average) lb")
+                    .font(Theme.Typography.callout)
+                weeklyChange(entry.weeklyChange, showUnit: true)
+            } else {
+                HStack(spacing: Theme.Spacing.sm) {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(day.day.formatted(.dateTime.day()))
+                            .font(Theme.Typography.subheadlineStrong)
+                        Text(day.day.formatted(.dateTime.weekday(.abbreviated)))
+                            .font(Theme.Typography.caption2)
+                            .foregroundStyle(Theme.Colors.textSecondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Text(weight)
+                        .font(Theme.Typography.callout)
+                        .monospacedDigit()
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                    Text(average)
+                        .font(Theme.Typography.callout)
+                        .monospacedDigit()
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                    weeklyChange(entry.weeklyChange, showUnit: false)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                }
+            }
+
+            if let milestone = entry.milestone {
+                let tint = milestone.isLow ? Theme.Colors.plateYellow : Theme.Colors.plateBlue
+                Label(milestoneLabel(milestone), systemImage: "flag.fill")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(tint)
+                    .padding(.horizontal, Theme.Spacing.sm)
+                    .padding(.vertical, Theme.Spacing.xs)
+                    .background(tint.opacity(0.12), in: Capsule())
+            }
+        }
+        .foregroundStyle(Theme.Colors.textPrimary)
+    }
+
+    @ViewBuilder
+    private func weeklyChange(_ value: Double?, showUnit: Bool) -> some View {
+        if let value {
+            let rounded = (value * 10).rounded() / 10
+            let tint = rounded == 0 ? Theme.Colors.textSecondary
+                : (rounded < 0 ? Theme.Colors.plateYellow : Theme.Colors.plateBlue)
+            HStack(spacing: 3) {
+                if rounded != 0 {
+                    Image(systemName: rounded < 0 ? "arrow.down" : "arrow.up")
+                }
+                Text(BodyFormat.number(abs(rounded)) + (showUnit ? " lb/week" : ""))
+                    .monospacedDigit()
+            }
+            .font(Theme.Typography.captionBold)
+            .foregroundStyle(tint)
+        } else if !showUnit {
+            Text("—")
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.Colors.textSecondary)
+        }
+    }
+
+    private func milestoneLabel(_ milestone: BodyLogbookEntry.Milestone) -> String {
+        "\(milestone.isLow ? "Lowest" : "Highest") since \(BodyFormat.shortDate(milestone.since, calendar: series.calendar))"
+    }
+
+    private func entryLabel(_ entry: BodyLogbookEntry) -> String {
+        let day = entry.day
+        return [
+            BodyFormat.weekdayDate(day.day),
+            day.reading.map { "Weight \(BodyFormat.weight($0))" },
+            "Moving average \(BodyFormat.weight(day.trend))",
+            entry.weeklyChange.map { "\(BodyFormat.signedWeight($0)) per week" },
+            entry.milestone.map(milestoneLabel)
+        ].compactMap { $0 }.joined(separator: ", ")
     }
 }

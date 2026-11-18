@@ -320,6 +320,92 @@ final class AnalyticsDrilldownUITests: XCTestCase {
         XCTAssertEqual(comparison.label, "Set start date")
     }
 
+    func testBodyFatTrendConnectsAcrossLongGaps() {
+        app.terminate()
+        app.launchEnvironment["WORKOUT_APP_INITIAL_TAB"] = "body"
+        app.launchArguments += ["-bodyGoalWeightLb", "200", "-bodyGoalStartWeightLb", "169", "-appearanceMode", "2"]
+        app.launch()
+
+        let progress = app.buttons["body-open-progress"]
+        XCTAssertTrue(progress.waitForExistence(timeout: 8))
+        progress.tap()
+        let range = app.buttons["Date range"]
+        scrollUntilVisible(range)
+        XCTAssertTrue(range.isHittable)
+        range.tap()
+        let allTime = app.buttons["All time"]
+        XCTAssertTrue(allTime.waitForExistence(timeout: 5))
+        allTime.tap()
+
+        let goal = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "toward goal")).firstMatch
+        scrollUntilVisible(goal)
+        XCTAssertTrue(goal.isHittable)
+        attachScreenshot(named: "Weight Goal Barbell")
+
+        let chart = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label == %@", "Body fat trend chart")
+        ).firstMatch
+        scrollUntilVisible(chart)
+        XCTAssertTrue(chart.exists)
+        attachScreenshot(named: "Body Fat Trend Across Gaps")
+        let detail = chart.value as? String ?? ""
+        XCTAssertTrue(detail.contains("Thin lines mark gaps longer than two weeks"), detail)
+
+        app.buttons["body-weigh-in-history"].tap()
+        XCTAssertTrue(element("body-measurement-history").waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Moving avg."].exists)
+        XCTAssertTrue(app.staticTexts["lb/week"].exists)
+        let milestone = app.buttons.matching(NSPredicate(
+            format: "label CONTAINS %@ OR label CONTAINS %@", "Lowest since", "Highest since"
+        )).firstMatch
+        scrollUntilVisible(milestone)
+        XCTAssertTrue(milestone.isHittable)
+        XCTAssertTrue(milestone.label.contains("per week"))
+        attachScreenshot(named: "Weigh-in Log")
+    }
+
+    func testWeightTrackingCanContinueAfterClearingAGoal() {
+        app.tabBars.buttons["Body"].tap()
+        let progress = app.buttons["body-open-progress"]
+        XCTAssertTrue(progress.waitForExistence(timeout: 8))
+        progress.tap()
+
+        let setGoal = app.buttons["body-set-weight-goal"]
+        let editGoal = app.buttons["body-edit-weight-goal"]
+        let trackOnly = app.buttons["body-track-without-goal"]
+        let chart = element("body-weight-chart")
+        XCTAssertTrue(setGoal.waitForExistence(timeout: 5))
+        XCTAssertFalse(editGoal.exists)
+        XCTAssertTrue(chart.exists)
+        setGoal.tap()
+        XCTAssertTrue(trackOnly.waitForExistence(timeout: 5))
+        XCTAssertTrue(trackOnly.isHittable)
+        trackOnly.tap()
+        XCTAssertTrue(setGoal.waitForExistence(timeout: 5))
+        XCTAssertTrue(chart.exists)
+
+        setGoal.tap()
+        let input = app.textFields["body-goal-input"]
+        XCTAssertTrue(input.waitForExistence(timeout: 5))
+        input.tap()
+        input.typeText("200")
+        let save = app.buttons["Save goal"]
+        scrollUntilVisible(save, maximumSwipes: 5)
+        XCTAssertTrue(save.isHittable)
+        save.tap()
+        scrollUntilVisible(editGoal)
+        XCTAssertTrue(editGoal.isHittable)
+        editGoal.tap()
+        XCTAssertTrue(trackOnly.waitForExistence(timeout: 5))
+        trackOnly.tap()
+
+        XCTAssertTrue(setGoal.waitForExistence(timeout: 5))
+        XCTAssertFalse(editGoal.exists)
+        XCTAssertTrue(chart.exists)
+        app.buttons["body-weigh-in-history"].tap()
+        XCTAssertTrue(element("body-measurement-history").waitForExistence(timeout: 5))
+    }
+
     func testBodyCanCorrectAndRestoreAnAppleHealthWeighIn() {
         app.tabBars.buttons["Body"].tap()
         let latest = app.buttons["body-edit-latest-weigh-in"]

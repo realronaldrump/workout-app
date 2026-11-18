@@ -45,7 +45,7 @@ struct BodyTrendChart: View {
         let visible = series.gridDays(in: domain)
         let chartDays = BodyTrendEngine.thinned(visible, limit: 420)
         days = chartDays
-        gaps = series.kind == .weight ? BodyTrendEngine.chartGaps(in: chartDays) : []
+        gaps = BodyTrendEngine.chartGaps(in: chartDays)
         readingDays = visible.filter(\.hasReading)
 
         var values = visible.map(\.trend)
@@ -225,7 +225,7 @@ struct BodyTrendChart: View {
 
     @ChartContentBuilder
     private var trendMarks: some ChartContent {
-        ForEach(series.kind == .weight ? days : days.filter { !$0.isSettling }) { day in
+        ForEach(days) { day in
             LineMark(
                 x: .value("Day", day.day),
                 y: .value("Trend", day.trend),
@@ -235,33 +235,6 @@ struct BodyTrendChart: View {
             .lineStyle(StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
             .interpolationMethod(.monotone)
         }
-        if series.kind != .weight {
-            ForEach(settlingDays) { day in
-                LineMark(
-                    x: .value("Day", day.day),
-                    y: .value("Trend", day.trend),
-                    series: .value("Segment", "settling-\(day.segment)")
-                )
-                .foregroundStyle(tint.opacity(0.8))
-                .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, dash: [4, 4]))
-                .interpolationMethod(.monotone)
-            }
-        }
-    }
-
-    /// A segment's settling days plus its first settled day, so the dashed and solid lines meet.
-    private var settlingDays: [BodyTrendDay] {
-        var result: [BodyTrendDay] = []
-        var previous: BodyTrendDay?
-        for day in days {
-            if day.isSettling {
-                result.append(day)
-            } else if let previous, previous.isSettling, previous.segment == day.segment {
-                result.append(day)
-            }
-            previous = day
-        }
-        return result
     }
 
     @ChartContentBuilder
@@ -382,12 +355,13 @@ struct BodyTrendChart: View {
     private var accessibilitySummary: String {
         guard let first = days.first, let last = days.last else { return "No readings in this range" }
         let unit = series.kind == .weight ? "pounds" : "percent"
+        let reading = series.kind == .weight ? "weigh-in" : "reading"
         var parts = [
             "Trend from \(BodyFormat.number(first.trend)) to \(BodyFormat.number(last.trend)) \(unit)",
-            "\(readingDays.count) weigh-ins"
+            SharedFormatters.count(readingDays.count, reading)
         ]
         if !gaps.isEmpty {
-            parts.append("Thin lines mark gaps longer than two weeks between weigh-ins")
+            parts.append("Thin lines mark gaps longer than two weeks between readings")
         }
         if let selection {
             parts.insert("Selected \(BodyFormat.weekdayDate(selection.day)), trend \(BodyFormat.number(selection.trend))", at: 0)

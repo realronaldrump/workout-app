@@ -14,8 +14,6 @@ nonisolated struct BodyTrendDay: Sendable, Identifiable, Equatable {
     let trend: Double
     /// A new segment starts after a gap of more than two weeks without a reading.
     let segment: Int
-    /// The first week of a segment, while the trend is still mostly the first few readings.
-    let isSettling: Bool
 
     var id: Int { dayIndex }
     var hasReading: Bool { reading != nil }
@@ -44,6 +42,19 @@ nonisolated struct BodyRate: Sendable, Equatable {
 
     var change: Double { perWeek * Double(windowDays - 1) / 7 }
     var isSteady: Bool { abs(perWeek) <= halfWidth || abs(change) < 0.5 }
+}
+
+nonisolated struct BodyLogbookEntry: Identifiable, Sendable {
+    nonisolated struct Milestone: Sendable, Equatable {
+        let since: Date
+        let isLow: Bool
+    }
+
+    let day: BodyTrendDay
+    let weeklyChange: Double?
+    let milestone: Milestone?
+
+    var id: Int { day.dayIndex }
 }
 
 nonisolated struct BodyChange: Sendable, Identifiable, Equatable {
@@ -219,8 +230,9 @@ nonisolated struct BodySeries: Sendable {
         return fittedRate(readingDays, minimumDays: 4, minimumSpan: 21)
     }
 
-    private func recordedDays(since dayIndex: Int) -> [BodyTrendDay] {
-        grid[lowerBound(dayIndex)...].filter(\.hasReading)
+    private func recordedDays(since dayIndex: Int, through end: Int? = nil) -> [BodyTrendDay] {
+        let upper = end.map(upperBound) ?? grid.endIndex
+        return grid[lowerBound(dayIndex)..<upper].filter(\.hasReading)
     }
 
     private func fittedRate(_ observations: [BodyTrendDay], minimumDays: Int, minimumSpan: Int) -> BodyRate? {
@@ -240,6 +252,59 @@ nonisolated struct BodySeries: Sendable {
             windowDays: span + 1,
             fittedWeightAtEnd: fit.intercept
         )
+    }
+
+    /// Oldest first. Each weekly estimate uses only the readings available on that day.
+    var logbookEntries: [BodyLogbookEntry] {
+        let days = readingDays
+        guard let first = days.first else { return [] }
+        var lows: [(day: BodyTrendDay, weight: Int)] = []
+        var highs: [(day: BodyTrendDay, weight: Int)] = []
+        var previousWeight: Int?
+        var lastLow: Int?
+        var lastHigh: Int?
+
+        return days.compactMap { day in
+            guard let reading = day.reading else { return nil }
+            let weight = Int((reading * 10).rounded())
+            // Keep the most recent prior reading at least as low or high, at display precision.
+            while let last = lows.last, last.weight > weight { lows.removeLast() }
+            while let last = highs.last, last.weight < weight { highs.removeLast() }
+            defer {
+                lows.append((day, weight))
+                highs.append((day, weight))
+                previousWeight = weight
+            }
+
+            let lowSince = lows.last?.day ?? first
+            let highSince = highs.last?.day ?? first
+            let milestone: BodyLogbookEntry.Milestone?
+            if let previousWeight, weight < previousWeight,
+               day.dayIndex - lowSince.dayIndex >= 30,
+               lastLow.map({ day.dayIndex - $0 >= 14 }) ?? true {
+                milestone = .init(since: lowSince.day, isLow: true)
+                lastLow = day.dayIndex
+            } else if let previousWeight, weight > previousWeight,
+                      day.dayIndex - highSince.dayIndex >= 30,
+                      lastHigh.map({ day.dayIndex - $0 >= 14 }) ?? true {
+                milestone = .init(since: highSince.day, isLow: false)
+                lastHigh = day.dayIndex
+            } else {
+                milestone = nil
+            }
+
+            return BodyLogbookEntry(day: day, weeklyChange: logbookRate(through: day.dayIndex), milestone: milestone)
+        }
+    }
+
+    private func logbookRate(through dayIndex: Int) -> Double? {
+        for window in [28, 56, 90] {
+            let readings = recordedDays(since: dayIndex - window + 1, through: dayIndex)
+            if let rate = fittedRate(readings, minimumDays: 4, minimumSpan: window == 28 ? 14 : 21) {
+                return rate.perWeek
+            }
+        }
+        return nil
     }
 
     // MARK: Change
@@ -322,15 +387,6 @@ nonisolated struct BodySeries: Sendable {
         return current.reduce(0, +) / Double(current.count) - prior.reduce(0, +) / Double(prior.count)
     }
 
-    /// Distinct weigh-in days in the last four weeks, per week.
-    func weighInsPerWeek(asOf now: Date) -> Double {
-        let today = dayIndex(for: now)
-        let count = grid[lowerBound(today - 27)...]
-            .prefix { $0.dayIndex <= today }
-            .reduce(0) { $0 + ($1.hasReading ? 1 : 0) }
-        return Double(count) / 4
-    }
-
     // MARK: Binary search
 
     private func position(of dayIndex: Int) -> Int? {
@@ -370,7 +426,6 @@ nonisolated enum BodyTrendEngine {
     static let smoothing = 0.1
     /// Longer gaps restart the trend instead of filling in daily estimates.
     static let maxInterpolatedGapDays = 14
-    static let settlingDays = 7
 
     static func build(
         samples: [BodyRawSample],
@@ -399,7 +454,6 @@ nonisolated enum BodyTrendEngine {
         grid.reserveCapacity(representatives.count * 2)
         var residuals: [Int: Double] = [:]
         var segment = 0
-        var segmentStartIndex = 0
         var trend = 0.0
         var previous: (index: Int, value: Double)?
 
@@ -421,8 +475,7 @@ nonisolated enum BodyTrendEngine {
                             reading: nil,
                             readingID: nil,
                             trend: trend,
-                            segment: segment,
-                            isSettling: filledIndex - segmentStartIndex < settlingDays
+                            segment: segment
                         ))
                     }
                 }
@@ -430,7 +483,6 @@ nonisolated enum BodyTrendEngine {
                 trend += smoothing * (value - trend)
             } else {
                 if previous != nil { segment += 1 }
-                segmentStartIndex = index
                 trend = value
             }
 
@@ -440,8 +492,7 @@ nonisolated enum BodyTrendEngine {
                 reading: value,
                 readingID: representative.sample.id,
                 trend: trend,
-                segment: segment,
-                isSettling: index - segmentStartIndex < settlingDays
+                segment: segment
             ))
             previous = (index, value)
         }
@@ -603,7 +654,6 @@ nonisolated struct BodyGoalStatus: Sendable, Equatable {
         return min(1, max(0, (start - current) / span))
     }
 
-    var platesLoaded: Int { Int((progress * 10).rounded(.down)) }
     var isReached: Bool { progress >= 1 }
     var remaining: Double { goal - current }
 

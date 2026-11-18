@@ -54,7 +54,6 @@ final class BodyTrendEngineTests: XCTestCase {
 
         XCTAssertEqual(latest.trend, 180, accuracy: 1e-9)
         XCTAssertEqual(latest.segment, 1)
-        XCTAssertTrue(latest.isSettling)
         XCTAssertEqual(built.grid.count, 3, "No days are drawn across the gap")
         XCTAssertEqual(built.currentSegmentStart?.dayIndex, latest.dayIndex)
     }
@@ -259,12 +258,27 @@ final class BodyTrendEngineTests: XCTestCase {
         XCTAssertEqual(try XCTUnwrap(built.changeFromPreviousPeriod(current)), 40, accuracy: 1e-9)
     }
 
-    func testWeighInsPerWeekCountsDaysNotReadings() {
-        var samples = (0..<28).filter { $0.isMultiple(of: 2) }.map { BodyRawSample(timestamp: date($0), value: 180) }
-        samples.append(BodyRawSample(timestamp: date(26, hour: 20), value: 181))
-        let built = BodyTrendEngine.build(samples: samples, kind: .weight, calendar: calendar)
+    func testLogbookWeeklyChangeUsesOnlyReadingsThroughTheEntry() throws {
+        let history: [(Int, Double)] = [(0, 180), (5, 181), (10, 182), (15, 183)]
+        let initial = series(history).logbookEntries
+        let extended = series(history + [(16, 190)]).logbookEntries
 
-        XCTAssertEqual(built.weighInsPerWeek(asOf: date(27)), 3.5, accuracy: 1e-9)
+        XCTAssertNil(initial.first?.weeklyChange)
+        let earlierRate = try XCTUnwrap(initial.last?.weeklyChange)
+        XCTAssertEqual(earlierRate, 1.4, accuracy: 1e-9)
+        XCTAssertEqual(extended[3].weeklyChange, earlierRate)
+    }
+
+    func testLogbookMilestonesUseComparableReadingsAndAvoidRepeats() {
+        let entries = series([
+            (0, 168), (5, 170), (10, 180), (20, 179), (40, 174),
+            (41, 173), (42, 173.01), (50, 183)
+        ]).logbookEntries
+
+        XCTAssertEqual(entries[4].milestone, .init(since: calendar.startOfDay(for: date(5)), isLow: true))
+        XCTAssertNil(entries[5].milestone)
+        XCTAssertNil(entries[6].milestone)
+        XCTAssertEqual(entries[7].milestone, .init(since: calendar.startOfDay(for: date(0)), isLow: false))
     }
 
     // MARK: Noise
@@ -289,7 +303,6 @@ final class BodyTrendEngineTests: XCTestCase {
         let status = BodyGoalStatus.make(goal: 180, start: 200, current: 190, rate: rate, now: now, calendar: calendar)
 
         XCTAssertEqual(status.progress, 0.5, accuracy: 1e-9)
-        XCTAssertEqual(status.platesLoaded, 5)
         XCTAssertFalse(status.isReached)
         let startOfToday = calendar.startOfDay(for: now)
         XCTAssertEqual(
@@ -317,7 +330,6 @@ final class BodyTrendEngineTests: XCTestCase {
 
         XCTAssertEqual(status.progress, 1)
         XCTAssertTrue(status.isReached)
-        XCTAssertEqual(status.platesLoaded, 10)
     }
 
     // MARK: Composition

@@ -52,7 +52,9 @@ struct BodyView: View {
 
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-                overviewHeadline(now: now, rate: rate)
+                if rate != nil || weight.isEmpty {
+                    overviewHeadline(now: now, rate: rate)
+                }
                 if let latest = weight.readings.last {
                     latestWeighIn(latest, now: now)
                 }
@@ -114,7 +116,7 @@ struct BodyView: View {
 
     private func overviewHeadline(now: Date, rate: BodyRate?) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            Text(overviewTitle(now: now, rate: rate))
+            Text(overviewTitle(rate: rate))
                 .font(Theme.Typography.screenTitle)
                 .foregroundStyle(Theme.Colors.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -123,31 +125,23 @@ struct BodyView: View {
                 Text(BodyFormat.trendPeriod(days: rate.windowDays, through: last.day, now: now, calendar: weight.calendar))
                     .font(Theme.Typography.callout)
                     .foregroundStyle(Theme.Colors.textSecondary)
-            } else if let error = store.errorMessage, weight.isEmpty {
-                Text(error)
-                    .font(Theme.Typography.callout)
-                    .foregroundStyle(Theme.Colors.textSecondary)
             }
         }
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("body-latest-measurement")
     }
 
-    private func overviewTitle(now: Date, rate: BodyRate?) -> String {
+    private func overviewTitle(rate: BodyRate?) -> String {
         if let rate {
             if rate.isSteady {
-                return abs(rate.change) < 0.5 ? "Weight looks about the same" : "No clear weight change"
+                return abs(rate.change) < 0.5 ? "Weight is steady" : "No clear change"
             }
             let rounded = (abs(rate.change) * 2).rounded() / 2
             let amount = rounded.formatted(.number.precision(.fractionLength(0...1)))
             return "\(rate.change < 0 ? "Down" : "Up") about \(amount) lb"
         }
-        guard let latest = weight.latest else {
-            return store.isLoading ? "Getting your weigh-ins…" : "Log your first weigh-in"
-        }
-        return weight.dayIndex(for: now) - latest.dayIndex > 7
-            ? "Ready for a new weigh-in"
-            : "More weigh-ins will show a trend"
+        if store.isLoading { return "Loading weigh-ins…" }
+        return store.errorMessage == nil ? "No weigh-ins yet" : "Couldn’t load weigh-ins"
     }
 
     private func latestWeighIn(_ reading: BodyRawSample, now: Date) -> some View {
@@ -202,7 +196,7 @@ struct BodyView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.Spacing.section) {
                 if weight.isEmpty {
-                    Text("Your progress will appear after your first weigh-in.")
+                    Text("No weigh-ins yet")
                         .font(Theme.Typography.callout)
                         .foregroundStyle(Theme.Colors.textSecondary)
                 } else {
@@ -220,7 +214,13 @@ struct BodyView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if !weight.isEmpty {
-                AppToolbarItem(placement: .topBarTrailing) {
+                AppToolbarItemGroup(placement: .topBarTrailing) {
+                    if goalWeight <= 0 {
+                        AppToolbarIconButton(systemImage: "target", accessibilityLabel: "Set weight goal", variant: .subtle) {
+                            showingGoal = true
+                        }
+                        .accessibilityIdentifier("body-set-weight-goal")
+                    }
                     AppToolbarButton(title: "Weigh-ins", systemImage: "list.bullet", variant: .subtle) {
                         showingLog = true
                     }
@@ -269,8 +269,8 @@ struct BodyView: View {
         let interval = chartInterval(for: weight, now: now)
         let showsReadings = range.showsReadings(in: interval, calendar: weight.calendar)
 
-        if let error = store.errorMessage {
-            Text("Couldn't refresh from Apple Health. Showing the last loaded readings. \(error)")
+        if store.errorMessage != nil {
+            Text("Couldn’t refresh Apple Health.")
                 .font(Theme.Typography.subheadline)
                 .foregroundStyle(Theme.Colors.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -280,7 +280,6 @@ struct BodyView: View {
             BodyHero(
                 series: weight,
                 rate: rate,
-                goalLine: goalStatus.map { BodyGoalText.heroLine(goal: goalWeight, status: $0) },
                 now: now
             )
             compositionRow(now: now)
@@ -295,11 +294,13 @@ struct BodyView: View {
             savedStart: $savedStart
         )
 
-        BodyGoalSection(
-            status: goalStatus,
-            reachedDate: goalReachedDate > 0 ? Date(timeIntervalSince1970: goalReachedDate) : nil,
-            onEdit: { showingGoal = true }
-        )
+        if let goalStatus {
+            BodyGoalSection(
+                status: goalStatus,
+                reachedDate: goalReachedDate > 0 ? Date(timeIntervalSince1970: goalReachedDate) : nil,
+                onEdit: { showingGoal = true }
+            )
+        }
 
         if !bodyFat.isEmpty {
             BodyCompositionSection(
@@ -321,13 +322,12 @@ struct BodyView: View {
 
         BodyWeighInsSection(
             series: weight,
-            now: now,
             onSelectDay: { detailDay = $0 },
             onShowAll: { showingLog = true }
         )
 
         Button { showingMethod = true } label: {
-            TextLinkLabel(title: "How this is calculated")
+            TextLinkLabel(title: "Chart details")
                 .frame(minHeight: Theme.Layout.minimumTapTarget)
         }
         .buttonStyle(.plain)
@@ -394,7 +394,7 @@ struct BodyView: View {
         let count = SharedFormatters.count(readings.count, "weigh-in")
         guard readings.count > 1, let first = readings.first, let last = readings.last else { return count }
         let change = last.trend - first.trend
-        return "\(count), trend \(BodyFormat.signedWeight(change))"
+        return "\(count) · Avg. change \(BodyFormat.signedWeight(change))"
     }
 
     private func legend(showsReadings: Bool) -> some View {
@@ -404,7 +404,7 @@ struct BodyView: View {
                     Circle().fill(Theme.Colors.textSecondary.opacity(0.55)).frame(width: 6, height: 6)
                 }
             }
-            legendKey("Trend") {
+            legendKey("Avg.") {
                 Capsule().fill(BodyFormat.weightTint).frame(width: 14, height: 3)
             }
             if weight.residualSigma != nil {
